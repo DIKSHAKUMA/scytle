@@ -16,19 +16,31 @@ export interface SitemapEdge {
 
 // Constants for layout spacing - Relume-style spacing
 const LAYOUT = {
-    NODE_WIDTH: 200,
-    NODE_BASE_HEIGHT: 80,      // Base height without sections
-    SECTION_HEIGHT: 24,        // Height per section
-    HORIZONTAL_GAP: 60,        // Gap between sibling nodes (larger for cleaner connectors)
-    VERTICAL_GAP: 120,         // Gap between levels (larger to avoid overlapping lines)
+    NODE_WIDTH: 280,           // Wider to accommodate section descriptions
+    NODE_BASE_HEIGHT: 60,      // Base height (header)
+    SECTION_HEIGHT: 50,        // Height per section (name + description + padding)
+    SECTION_GAP_HEIGHT: 12,    // Height for gap between sections (+ button area)
+    HORIZONTAL_GAP: 80,        // Gap between sibling nodes (larger for cleaner connectors)
+    VERTICAL_GAP: 80,          // Gap between levels
     PROJECT_HEIGHT: 50,
+    ADD_SECTION_BUTTON_HEIGHT: 40, // Height for "Add Section" button at bottom
 }
 
 // Calculate estimated node height based on sections
 const estimateNodeHeight = (node: Node): number => {
     if (node.type === 'project') return LAYOUT.PROJECT_HEIGHT
-    const sections = (node.data as { sections?: string[] })?.sections || []
-    return LAYOUT.NODE_BASE_HEIGHT + (sections.length * LAYOUT.SECTION_HEIGHT)
+    const sections = (node.data as { sections?: (string | SectionData)[] })?.sections || []
+    const sectionCount = sections.length
+    
+    if (sectionCount === 0) {
+        // Just the header + empty state add button
+        return LAYOUT.NODE_BASE_HEIGHT + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
+    }
+    
+    // Header + sections + gaps between sections + add button
+    const sectionsHeight = sectionCount * LAYOUT.SECTION_HEIGHT
+    const gapsHeight = Math.max(0, sectionCount - 1) * LAYOUT.SECTION_GAP_HEIGHT
+    return LAYOUT.NODE_BASE_HEIGHT + sectionsHeight + gapsHeight + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
 }
 
 // Tree layout helper - calculates proper positions for sitemap hierarchy
@@ -134,6 +146,11 @@ interface SitemapState {
     isPanning: boolean
     selectedNodeId: string | null
 
+    // Section picker state
+    sectionPickerOpen: boolean
+    sectionPickerTargetPageId: string | null
+    sectionPickerInsertIndex: number | null
+
     // ReactFlow instance reference for zoom control
     reactFlowZoom: ((zoom: number) => void) | null
     reactFlowFitView: (() => void) | null
@@ -161,6 +178,13 @@ interface SitemapState {
     addEdge: (edge: Edge) => void
     deleteEdge: (id: string) => void
 
+    // Section actions
+    openSectionPicker: (pageId: string, insertIndex: number) => void
+    closeSectionPicker: () => void
+    addSectionToPage: (pageId: string, section: SectionData, atIndex: number) => void
+    removeSectionFromPage: (pageId: string, sectionIndex: number) => void
+    moveSectionInPage: (pageId: string, fromIndex: number, toIndex: number) => void
+
     undo: () => void
     redo: () => void
     saveToHistory: () => void
@@ -176,12 +200,18 @@ interface SitemapState {
     clearSitemap: () => void
 }
 
-// AI-generated page structure
+// AI-generated page structure - supports both legacy string[] and new object format
+interface SectionData {
+    id?: string
+    name: string
+    description?: string
+}
+
 interface AIGeneratedPage {
     id: string
     label: string
     slug: string
-    sections: string[]
+    sections: (string | SectionData)[]
     children?: AIGeneratedPage[]
 }
 
@@ -251,6 +281,9 @@ export const useSitemapStore = create<SitemapState>()(
         zoomLevel: 100,
         isPanning: false,
         selectedNodeId: null,
+        sectionPickerOpen: false,
+        sectionPickerTargetPageId: null,
+        sectionPickerInsertIndex: null,
         reactFlowZoom: null,
         reactFlowFitView: null,
         history: [{ nodes: defaultNodes, edges: defaultEdges }],
@@ -383,6 +416,75 @@ export const useSitemapStore = create<SitemapState>()(
             if (reactFlowZoom) {
                 reactFlowZoom(1)
             }
+        },
+
+        // Section picker actions
+        openSectionPicker: (pageId, insertIndex) => {
+            set({
+                sectionPickerOpen: true,
+                sectionPickerTargetPageId: pageId,
+                sectionPickerInsertIndex: insertIndex,
+            })
+        },
+
+        closeSectionPicker: () => {
+            set({
+                sectionPickerOpen: false,
+                sectionPickerTargetPageId: null,
+                sectionPickerInsertIndex: null,
+            })
+        },
+
+        addSectionToPage: (pageId, section, atIndex) => {
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    // Insert section at the specified index
+                    sections.splice(atIndex, 0, {
+                        id: `${pageId}-${section.id}-${Date.now()}`,
+                        name: section.name,
+                        description: section.description,
+                    })
+                    node.data = { ...node.data, sections }
+                }
+            })
+            // Recalculate layout after adding section (node height changed)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+            get().closeSectionPicker()
+        },
+
+        removeSectionFromPage: (pageId, sectionIndex) => {
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    sections.splice(sectionIndex, 1)
+                    node.data = { ...node.data, sections }
+                }
+            })
+            // Recalculate layout after removing section (node height changed)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+        },
+
+        moveSectionInPage: (pageId, fromIndex, toIndex) => {
+            if (fromIndex === toIndex) return
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    const [movedSection] = sections.splice(fromIndex, 1)
+                    sections.splice(toIndex, 0, movedSection)
+                    node.data = { ...node.data, sections }
+                }
+            })
+            get().saveToHistory()
         },
 
         loadSitemap: (pages, projectName = 'My Project') => {

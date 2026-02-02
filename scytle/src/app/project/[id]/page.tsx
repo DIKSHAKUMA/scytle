@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useSitemapStore, CanvasTool } from '@/store/sitemap-store'
-import { SitemapView, LeftSidebar } from '@/components/canvas'
+import { SitemapView, LeftSidebar, SectionPickerPanel } from '@/components/canvas'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -54,6 +54,11 @@ export default function ProjectEditorPage() {
         history,
         selectedNodeId,
         setSelectedNodeId,
+        sectionPickerOpen,
+        sectionPickerTargetPageId,
+        sectionPickerInsertIndex,
+        closeSectionPicker,
+        addSectionToPage,
     } = useSitemapStore()
 
     const [activeView, setActiveView] = useState<CanvasView>('sitemap')
@@ -176,11 +181,28 @@ export default function ProjectEditorPage() {
                     <div className="flex-1 flex flex-col bg-muted/30 h-full overflow-hidden relative">
                         {/* Left Sidebar (overlays canvas when open) */}
                         <LeftSidebar
-                            isOpen={isSidebarOpen && activeView === 'sitemap' && !isDevMode}
+                            isOpen={isSidebarOpen && activeView === 'sitemap' && !isDevMode && !sectionPickerOpen}
                             onCloseAction={() => {
                                 setIsSidebarOpen(false)
                                 setSelectedNodeId(null)
                             }}
+                        />
+
+                        {/* Section Picker Panel (overlays canvas when open) */}
+                        <SectionPickerPanel
+                            isOpen={sectionPickerOpen}
+                            onClose={closeSectionPicker}
+                            onSelectSection={(section) => {
+                                if (sectionPickerTargetPageId !== null && sectionPickerInsertIndex !== null) {
+                                    addSectionToPage(
+                                        sectionPickerTargetPageId,
+                                        section,
+                                        sectionPickerInsertIndex
+                                    )
+                                }
+                            }}
+                            targetPageId={sectionPickerTargetPageId}
+                            insertAtIndex={sectionPickerInsertIndex}
                         />
 
                         {/* Top Bar - View Switcher */}

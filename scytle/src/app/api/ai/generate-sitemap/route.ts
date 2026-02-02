@@ -22,21 +22,35 @@ const GenerateSitemapSchema = z.object({
     message: 'Either projectDescription or description is required',
 })
 
+// Section type with name and description (Relume-style)
+interface SectionData {
+    id: string
+    name: string
+    description: string
+}
+
 // Sitemap node type
 interface SitemapNode {
     id: string
     label: string
     slug: string
-    sections: string[]
+    sections: SectionData[]
     children?: SitemapNode[]
 }
+
+// Section schema
+const SectionSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+})
 
 // Sitemap response schema for validation
 const SitemapNodeSchema: z.ZodType<SitemapNode> = z.object({
     id: z.string(),
     label: z.string(),
     slug: z.string(),
-    sections: z.array(z.string()),
+    sections: z.array(SectionSchema),
     children: z.lazy(() => z.array(SitemapNodeSchema)).optional(),
 })
 
@@ -129,56 +143,94 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. Generate sitemap using AI
-        const systemPrompt = `You are an expert web designer and information architect. Your task is to generate a comprehensive sitemap structure for a website based on the project description.
+        const systemPrompt = `You are an expert product designer and information architect with comprehensive knowledge of every industry.
 
-INSTRUCTIONS:
-1. Analyze the project description and create a logical page hierarchy
-2. For each page, suggest relevant sections that would typically be included
-3. Use clear, descriptive page names and URL-friendly slugs
-4. Create a structure that follows modern web design best practices
-5. Include essential pages like Home, About, Contact, and specific pages based on the project type
-6. Generate between ${minPages} and ${maxPages} pages
+YOUR APPROACH:
+1. First, ANALYZE the product type from the description:
+   - What industry is this? (SaaS, e-commerce, marketplace, portfolio, restaurant, healthcare, fintech, etc.)
+   - What are the major competitors in this space? (Use your training knowledge)
+   - What's the typical end-to-end user journey for this type of product?
 
-RESPONSE FORMAT (JSON ONLY):
+2. Then, GENERATE a sitemap that reflects industry best practices:
+   - Include all pages that competitors typically have
+   - Use section names that are SPECIFIC to this industry
+   - Think about what users expect when visiting this type of website
+
+INDUSTRY-SPECIFIC EXAMPLES:
+
+For "food delivery app":
+- Pages: Home, Restaurants, Restaurant Page, Cart, Checkout, Order Tracking, Blog, Contact
+- Sections should reference: location search, cuisine filters, restaurant cards with ratings/delivery time, menu categories, order summary
+
+For "SaaS CRM":
+- Pages: Home, Features, Pricing, Integrations, About, Blog, Contact, Login, Demo
+- Sections should reference: feature comparison, pricing tiers, integration logos, customer testimonials, ROI calculator
+
+For "architecture firm":
+- Pages: Home, Projects, Project Detail, Services, About, Team, Contact, Blog
+- Sections should reference: project gallery, before/after, design philosophy, awards, process timeline
+
+RULES:
+- Generate between ${minPages} and ${maxPages} pages
+- Each page should have 4-7 relevant sections
+- Each section MUST have an id, name, and description
+- Section names should be DESCRIPTIVE and industry-specific
+- Section descriptions should explain what UI elements and content the section contains
+- Always start with "Navbar" section and end with "Footer" section on each page
+- Always include Home as the first page with slug "/"
+- Include logical child pages where appropriate (e.g., Blog -> Blog Post)
+- Use lowercase slugs with hyphens
+
+RESPONSE FORMAT (JSON ONLY, no markdown):
 {
   "pages": [
     {
       "id": "home",
       "label": "Home",
       "slug": "/",
-      "sections": ["Hero", "Features", "Testimonials", "CTA"],
-      "children": []
-    },
-    {
-      "id": "about",
-      "label": "About",
-      "slug": "/about",
-      "sections": ["Our Story", "Team", "Values"],
+      "sections": [
+        {
+          "id": "home-navbar",
+          "name": "Navbar",
+          "description": "Main navigation with logo, menu links, and call-to-action button"
+        },
+        {
+          "id": "home-hero",
+          "name": "Hero Header Section",
+          "description": "Eye-catching introduction with headline, subheadline, and primary CTA"
+        },
+        {
+          "id": "home-footer",
+          "name": "Footer",
+          "description": "Site footer with links, social media, and copyright"
+        }
+      ],
       "children": []
     }
   ]
-}
+}`
 
-IMPORTANT:
-- Always include a Home page as the first page
-- Keep section names concise and descriptive
-- Use lowercase slugs with hyphens
-- Generate between ${minPages} and ${maxPages} main pages
-- Each page should have 3-6 relevant sections
-- Only respond with valid JSON, no markdown or explanation`
+        const userMessage = `Generate a comprehensive sitemap for the following product:
 
-        const userMessage = `Generate a sitemap for the following project:
+PRODUCT DESCRIPTION: ${finalDescription}
 
-PROJECT DESCRIPTION: ${finalDescription}
-${language ? `LANGUAGE: ${language}` : ''}
-${industry ? `INDUSTRY: ${industry}` : ''}
-${targetAudience ? `TARGET AUDIENCE: ${targetAudience}` : ''}
-${features?.length ? `KEY FEATURES: ${features.join(', ')}` : ''}
+REQUIREMENTS:
+- Number of pages: ${minPages}-${maxPages}
+${language ? `- Language/Region: ${language}` : ''}
+${industry ? `- Industry: ${industry}` : ''}
+${targetAudience ? `- Target Audience: ${targetAudience}` : ''}
+${features?.length ? `- Key Features to highlight: ${features.join(', ')}` : ''}
 
-Generate a comprehensive sitemap structure with ${minPages}-${maxPages} pages and appropriate sections.`
+Think step by step:
+1. What type of product/business is this?
+2. Who are the competitors and what pages do they typically have?
+3. What's the user journey from discovery to conversion?
+4. What sections would each page need?
+
+Generate the sitemap JSON now.`
 
         const aiResponse = await generate(userMessage, [], {
-            model: 'fast',
+            model: 'balanced',  // Use better model for sitemap generation
             systemPrompt,
             temperature: 0.7,
         })
@@ -199,35 +251,60 @@ Generate a comprehensive sitemap structure with ${minPages}-${maxPages} pages an
             console.error('🤖 Failed to parse AI response:', parseError)
             console.error('🤖 Raw response:', aiResponse)
 
-            // Return a default sitemap structure
+            // Return a default sitemap structure with Relume-style sections
             sitemapData = {
                 pages: [
                     {
                         id: 'home',
                         label: 'Home',
                         slug: '/',
-                        sections: ['Hero', 'Features', 'About', 'CTA'],
+                        sections: [
+                            { id: 'home-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
+                            { id: 'home-hero', name: 'Hero', description: 'Main hero section with headline and CTA' },
+                            { id: 'home-features', name: 'Features', description: 'Key features and benefits overview' },
+                            { id: 'home-about', name: 'About', description: 'Brief company introduction' },
+                            { id: 'home-cta', name: 'CTA', description: 'Call to action section' },
+                            { id: 'home-footer', name: 'Footer', description: 'Site footer with links and contact info' },
+                        ],
                         children: [],
                     },
                     {
                         id: 'about',
                         label: 'About',
                         slug: '/about',
-                        sections: ['Our Story', 'Team', 'Values'],
+                        sections: [
+                            { id: 'about-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
+                            { id: 'about-story', name: 'Our Story', description: 'Company history and mission' },
+                            { id: 'about-team', name: 'Team', description: 'Team members showcase' },
+                            { id: 'about-values', name: 'Values', description: 'Core company values' },
+                            { id: 'about-footer', name: 'Footer', description: 'Site footer with links and contact info' },
+                        ],
                         children: [],
                     },
                     {
                         id: 'services',
                         label: 'Services',
                         slug: '/services',
-                        sections: ['Overview', 'Service List', 'Process'],
+                        sections: [
+                            { id: 'services-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
+                            { id: 'services-overview', name: 'Overview', description: 'Services introduction' },
+                            { id: 'services-list', name: 'Service List', description: 'Detailed list of all services' },
+                            { id: 'services-process', name: 'Process', description: 'How we work with clients' },
+                            { id: 'services-footer', name: 'Footer', description: 'Site footer with links and contact info' },
+                        ],
                         children: [],
                     },
                     {
                         id: 'contact',
                         label: 'Contact',
                         slug: '/contact',
-                        sections: ['Contact Form', 'Map', 'Info'],
+                        sections: [
+                            { id: 'contact-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
+                            { id: 'contact-form', name: 'Contact Form', description: 'Main contact form for inquiries' },
+                            { id: 'contact-map', name: 'Map', description: 'Location map and directions' },
+                            { id: 'contact-info', name: 'Info', description: 'Contact details and hours' },
+                            { id: 'contact-footer', name: 'Footer', description: 'Site footer with links and contact info' },
+                        ],
                         children: [],
                     },
                 ],
