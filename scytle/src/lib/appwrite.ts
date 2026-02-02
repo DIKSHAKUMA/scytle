@@ -1,0 +1,177 @@
+'use client'
+
+import { Client, Account, Databases, Storage, Avatars, OAuthProvider } from 'appwrite'
+
+/**
+ * Appwrite Client SDK
+ * Used in client components for authentication and data fetching
+ */
+
+const endpoint = process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1'
+const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || ''
+
+if (!projectId) {
+    console.warn('⚠️ NEXT_PUBLIC_APPWRITE_PROJECT_ID is not set')
+}
+
+// Initialize client
+const client = new Client()
+    .setEndpoint(endpoint)
+    .setProject(projectId)
+
+// Export services
+export const account = new Account(client)
+export const databases = new Databases(client)
+export const storage = new Storage(client)
+export const avatars = new Avatars(client)
+
+// Export client for advanced usage
+export { client }
+
+// Database and collection IDs
+export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || 'scytle_db'
+
+export const COLLECTIONS = {
+    USERS: 'users',
+    PROJECTS: 'projects',
+    PAGES: 'pages',
+    SECTIONS: 'sections',
+    STYLE_GUIDES: 'style_guides',
+    RESEARCH_DATA: 'research_data',
+    AI_CONVERSATIONS: 'ai_conversations',
+} as const
+
+// Storage bucket IDs
+export const BUCKETS = {
+    AVATARS: 'avatars',
+    PROJECT_ASSETS: 'project_assets',
+    EXPORTS: 'exports',
+} as const
+
+/**
+ * Get current session
+ */
+export async function getSession() {
+    try {
+        return await account.getSession('current')
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Get current user
+ */
+export async function getUser() {
+    try {
+        return await account.get()
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Create JWT for API authentication
+ */
+export async function createJWT() {
+    try {
+        return await account.createJWT()
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Login with email and password
+ */
+export async function login(email: string, password: string) {
+    try {
+        // Check if there's an existing session and delete it first
+        try {
+            const existingSession = await account.getSession('current')
+            if (existingSession) {
+                await account.deleteSession('current')
+                console.log('🔄 Cleared existing session before login')
+            }
+        } catch {
+            // No existing session, that's fine
+        }
+
+        const session = await account.createEmailPasswordSession(email, password)
+        console.log('✅ Logged in successfully')
+        return { success: true, session }
+    } catch (error) {
+        console.error('❌ Login failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Login failed' }
+    }
+}
+
+/**
+ * Sign up with email and password
+ */
+export async function signup(email: string, password: string, name: string) {
+    try {
+        // Check if there's an existing session and delete it first
+        try {
+            const existingSession = await account.getSession('current')
+            if (existingSession) {
+                await account.deleteSession('current')
+                console.log('🔄 Cleared existing session before signup')
+            }
+        } catch {
+            // No existing session, that's fine
+        }
+
+        // Create account
+        const user = await account.create('unique()', email, password, name)
+
+        // Create session
+        await account.createEmailPasswordSession(email, password)
+
+        console.log('✅ Account created successfully')
+        return { success: true, user }
+    } catch (error) {
+        console.error('❌ Signup failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Signup failed' }
+    }
+}
+
+/**
+ * Logout current session
+ */
+export async function logout() {
+    try {
+        await account.deleteSession('current')
+        console.log('✅ Logged out successfully')
+        return { success: true }
+    } catch (error) {
+        console.error('❌ Logout failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Logout failed' }
+    }
+}
+
+/**
+ * Login with OAuth provider
+ */
+export function loginWithOAuth(provider: 'google' | 'github') {
+    const successUrl = `${window.location.origin}/dashboard`
+    const failureUrl = `${window.location.origin}/login?error=oauth_failed`
+
+    const oauthProvider = provider === 'google' ? OAuthProvider.Google : OAuthProvider.Github
+    account.createOAuth2Session(oauthProvider, successUrl, failureUrl)
+}
+
+/**
+ * Send password reset email
+ */
+export async function resetPassword(email: string) {
+    try {
+        const resetUrl = `${window.location.origin}/reset-password`
+        await account.createRecovery(email, resetUrl)
+        console.log('✅ Password reset email sent')
+        return { success: true }
+    } catch (error) {
+        console.error('❌ Password reset failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Reset failed' }
+    }
+}
