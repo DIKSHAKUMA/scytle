@@ -455,13 +455,13 @@
 ### **Detailed Tasks:**
 
 #### 4.1 Canvas Layout Structure
-- [ ] **4.1.1** Create canvas container
+- [x] **4.1.1** Create canvas container ✅
   - `components/canvas/canvas-workspace.tsx` - Main 2/3 container
   - Full-height, scrollable
   - Background: Light gray (#F8F9FA)
   - Border-left to separate from chat
 
-- [ ] **4.1.2** Build top bar (Relume-style)
+- [x] **4.1.2** Build top bar (Relume-style) ✅
   - `components/canvas/top-bar.tsx` - View switcher
   - Tabs: [Sitemap] [Wireframe] [Style Guide] [Design]
   - Active tab indicator (underline, blue)
@@ -469,14 +469,14 @@
   - When Dev Mode: [Code] [Preview] [Deploy] [Analytics]
   - Smooth tab transitions
 
-- [ ] **4.1.3** Create bottom toolbar (Figma-style)
+- [x] **4.1.3** Create bottom toolbar (Figma-style) ✅
   - `components/canvas/bottom-toolbar.tsx` - Tool palette
   - Always visible, sticky to bottom
   - Tools: [✋ Hand] [➤ Select] [⊕ Add] [🔍 Zoom] [⟲ Undo] [⟳ Redo]
   - Keyboard shortcuts tooltip on hover
   - Context-specific tools appear based on active view
 
-- [ ] **4.1.4** Implement view state management
+- [x] **4.1.4** Implement view state management ✅
   - `store/canvas-store.ts` using Zustand
   - State:
     - `activeView` - 'sitemap' | 'wireframe' | 'style-guide' | 'design'
@@ -492,14 +492,14 @@
     - `resetView()` - Reset zoom and pan
 
 #### 4.2 ReactFlow Sitemap Editor
-- [ ] **4.2.1** Set up ReactFlow
+- [x] **4.2.1** Set up ReactFlow ✅
   - Install: `npm install reactflow`
   - `components/canvas/views/sitemap-view.tsx` - Main sitemap canvas
   - Configure ReactFlow with custom node types
   - Set up MiniMap, Controls, Background components
   - Custom styling to match Scytle theme
 
-- [ ] **4.2.2** Create custom node components
+- [x] **4.2.2** Create custom node components ✅
   - `components/canvas/nodes/page-node.tsx` - Page node
     - Display: Page name, icon, section count
     - Hover: Show edit, delete, add child buttons
@@ -512,7 +512,7 @@
     - Connection handle at bottom only
     - Non-deletable, non-editable position
 
-- [ ] **4.2.3** Implement node interactions
+- [x] **4.2.3** Implement node interactions ✅
   - Click node: Select (highlight, show details panel)
   - Double-click: Edit node name inline
   - Drag: Move node position
@@ -520,14 +520,14 @@
   - Delete key: Remove selected nodes
   - Hover: Show quick action buttons
 
-- [ ] **4.2.4** Build edge (connection) system
+- [x] **4.2.4** Build edge (connection) system ✅
   - Custom edge component: Curved, animated
   - Color: Gray (default), blue (selected)
   - Arrow marker at end
   - Click edge: Select, show delete button
   - Prevent circular connections (validation)
 
-- [ ] **4.2.5** Add sitemap features
+- [x] **4.2.5** Add sitemap features ✅
   - Auto-layout button: Organize nodes in tree structure
   - Zoom to fit: Center all nodes in viewport
   - Add page button in toolbar: Create new node
@@ -535,13 +535,13 @@
   - Export sitemap as JSON or image (PNG)
 
 #### 4.3 Node Details Panel
-- [ ] **4.3.1** Create side panel
+- [x] **4.3.1** Create side panel ✅
   - `components/canvas/details-panel.tsx` - Right-side drawer
   - Slide out when node selected
   - Close button, or click outside to close
   - Tabs: Details, Sections, SEO
 
-- [ ] **4.3.2** Build Details tab
+- [x] **4.3.2** Build Details tab ✅
   - Page name (editable input)
   - Page slug (auto-generated from name)
   - Parent page (dropdown selector)
@@ -549,7 +549,7 @@
   - Description textarea
   - Save button
 
-- [ ] **4.3.3** Build Sections tab
+- [x] **4.3.3** Build Sections tab ✅
   - List of sections on this page
   - Drag to reorder sections
   - Add section button: Opens section picker
@@ -564,7 +564,7 @@
   - Robots meta (index/noindex)
 
 #### 4.4 Sitemap State Management
-- [ ] **4.4.1** Create sitemap store
+- [x] **4.4.1** Create sitemap store ✅
   - `store/sitemap-store.ts` using Zustand with immer
   - State:
     - `nodes` - Array of ReactFlow nodes
@@ -586,37 +586,37 @@
   - Conflict resolution: Last write wins
 
 #### 4.5 Toolbar Tools Implementation
-- [ ] **4.5.1** Hand tool (Pan)
+- [x] **4.5.1** Hand tool (Pan) ✅
   - Activate: Click hand icon or press H
   - Drag canvas to pan
   - Cursor: grab (default), grabbing (dragging)
   - Deactivate: Click another tool
 
-- [ ] **4.5.2** Select tool
+- [x] **4.5.2** Select tool ✅
   - Activate: Click select icon or press V
   - Click nodes/edges to select
   - Drag to create selection rectangle
   - Multi-select with Ctrl/Cmd
 
-- [ ] **4.5.3** Add tool
+- [x] **4.5.3** Add tool ✅
   - Activate: Click add icon or press A
   - Shows dropdown: Add Page, Add Connection
   - Click canvas to place new page node
   - Connects to nearest node automatically (optional)
 
-- [ ] **4.5.4** Zoom controls
+- [x] **4.5.4** Zoom controls ✅
   - Zoom in: Ctrl/Cmd + Plus
   - Zoom out: Ctrl/Cmd + Minus
   - Zoom to fit: Ctrl/Cmd + 0
   - Zoom percentage display: 50%, 75%, 100%, 125%, 150%, 200%
 
-- [ ] **4.5.5** Undo/Redo
+- [x] **4.5.5** Undo/Redo ✅
   - Undo: Ctrl/Cmd + Z
   - Redo: Ctrl/Cmd + Shift + Z
   - History stack: Store last 50 actions
   - Action types: Add, delete, move, edit, connect
 
-### **Deliverables Phase 4:**
+### **Deliverables Phase 4:** ✅ COMPLETE
 - ✅ Full canvas workspace with top/bottom bars
 - ✅ Interactive ReactFlow sitemap editor
 - ✅ Custom page nodes with hover actions
@@ -625,408 +625,219 @@
 - ✅ Undo/redo functionality
 - ✅ Auto-layout algorithm
 
-### **Time Estimate:** 12-14 days
+### **Time Estimate:** 12-14 days ✅ DONE
 
 ---
 
-## Phase 5: AI Agents & Background Processing (Week 9-10)
+## Phase 5: AI Sitemap Generation (COMPLETE)
 
 ### **Goals:**
-- Integrate OpenClaw or build custom agent system
-- Create phase-specific AI agents
-- Implement background research and generation
-- Build progress tracking UI
+- AI-powered sitemap generation from project description
+- Auto-populate canvas with pages and sections
 
-### **Detailed Tasks:**
+### **Completed Tasks:**
 
-#### 5.1 Agent Architecture Setup
-- [ ] **5.1.1** Decide on approach
-  - **Option A:** Integrate OpenClaw (if available)
-  - **Option B:** Build custom agent system (recommended for MVP)
-  - Decision: Build custom lightweight agent system
-
-- [ ] **5.1.2** Create agent framework
-  - `lib/agents/base-agent.ts` - Abstract Agent class
-    ```typescript
-    abstract class Agent {
-      abstract name: string
-      abstract run(input: any, context: any): Promise<any>
-      protected callAI(prompt: string): Promise<string>
-      protected updateProgress(percent: number, message: string): void
-    }
-    ```
-
-- [ ] **5.1.3** Set up agent registry
-  - `lib/agents/registry.ts` - Agent manager
-  - Register all agents: Think, Research, Define, Flow, Design, Build
-  - `getAgent(name)` - Retrieve agent by name
-  - `runAgent(name, input, context)` - Execute agent
-
-- [ ] **5.1.4** Implement progress tracking
-  - `store/progress-store.ts` - Track agent progress
-  - State: `{ agentName, progress: 0-100, message, status }`
-  - WebSocket or polling to update UI in real-time
-  - Show progress bar in chat area
-
-#### 5.2 Think Agent (Idea Clarification)
-- [ ] **5.2.1** Create Think Agent
-  - `lib/agents/think-agent.ts`
-  - Input: User's initial idea (raw text)
-  - Process:
-    1. Analyze idea for clarity and completeness
-    2. Identify missing information (target users, features, etc.)
-    3. Generate 2-3 clarifying questions
-    4. Wait for user responses or use smart defaults
-  - Output: Refined idea summary + key attributes
-
-- [ ] **5.2.2** Build question generator
-  - Use AI to create contextual questions
-  - Question types: Multiple choice, short answer
-  - Example questions:
-    - "Who is your target audience?"
-    - "What's your main goal?"
-    - "Any key features in mind?"
-
-- [ ] **5.2.3** Implement default inference
-  - If user skips questions, infer answers from idea
-  - Use AI to make educated guesses
-  - Mark inferred data as "assumed" (can be edited later)
-
-#### 5.3 Research Agent (Competitor Analysis)
-- [ ] **5.3.1** Create Research Agent
-  - `lib/agents/research-agent.ts`
-  - Input: Refined idea, product type
-  - Process:
-    1. Generate search queries based on product
-    2. Scrape web for competitors (Google search)
-    3. Extract competitor data (name, URL, features, pricing)
-    4. Analyze patterns and gaps
-    5. Identify opportunities
-  - Output: Competitor list, market insights, USP suggestions
-
-- [ ] **5.3.2** Build web scraper
-  - `lib/scraper/index.ts` - Web scraping utility
-  - Use Cheerio or Puppeteer for scraping
-  - Rate limit: Max 10 requests per minute
-  - Handle errors gracefully (timeout, 404, etc.)
-  - Extract: Title, description, pricing, features from competitor sites
-
-- [ ] **5.3.3** Create data analyzer
-  - `lib/agents/research-analyzer.ts`
-  - Analyze competitor data with AI
-  - Find common features across competitors
-  - Identify pricing patterns (average, min, max)
-  - Suggest unique positioning
-
-- [ ] **5.3.4** Build research UI components
-  - `components/research/competitor-card.tsx` - Display competitor info
-  - `components/research/insights-panel.tsx` - Show key insights
-  - `components/research/opportunity-badge.tsx` - Highlight gaps
-
-#### 5.4 Define Agent (USP & Personas)
-- [ ] **5.4.1** Create Define Agent
-  - `lib/agents/define-agent.ts`
-  - Input: Idea summary, research data
-  - Process:
-    1. Generate unique value proposition (USP)
-    2. Create 2-3 user personas
-    3. Define key features based on research
-    4. Suggest product positioning
-  - Output: USP statement, persona cards, feature list
-
-- [ ] **5.4.2** Build USP generator
-  - Use AI to craft compelling USP
-  - Format: "[Product Name] - [One-liner]"
-  - Include: Target audience, key benefit, differentiator
-  - Example: "DogWalk - Fair marketplace for dog walking with 15% lower commission"
-
-- [ ] **5.4.3** Create persona generator
-  - Generate 2-3 detailed personas
-  - Include: Name, age, job, goals, pain points, motivations
-  - Use stock photos for persona images
-  - Store in `research_data` collection
-
-- [ ] **5.4.4** Build UI for Define phase
-  - `components/define/usp-card.tsx` - Editable USP display
-  - `components/define/persona-card.tsx` - Persona profile card
-  - `components/define/feature-list.tsx` - Prioritized feature list
-
-#### 5.5 Flow Agent (Sitemap Generation)
-- [ ] **5.5.1** Create Flow Agent
-  - `lib/agents/flow-agent.ts`
-  - Input: USP, personas, features
-  - Process:
-    1. Determine site structure based on product type
-    2. Generate page hierarchy (Home, Features, Pricing, etc.)
-    3. Define sections for each page
-    4. Create page connections
+#### 5.1 Sitemap Generation
+- [x] **5.1.1** Create sitemap generator API ✅
+  - `app/api/ai/generate-sitemap/route.ts`
+  - Input: Project description, page count, language
+  - Process: AI generates page hierarchy with sections
   - Output: Sitemap nodes and edges for ReactFlow
 
-- [ ] **5.5.2** Build sitemap generator
-  - Use predefined templates for common site types
-  - Templates: E-commerce, SaaS, Portfolio, Blog, Restaurant
-  - Customize based on specific features
-  - Generate: Page name, slug, parent, sections
-
-- [ ] **5.5.3** Create section generator
+- [x] **5.1.2** Build section generator ✅
   - For each page, generate appropriate sections
-  - Example Home page: Hero, Features, How It Works, Testimonials, CTA
-  - Section types: Hero, Feature Grid, Testimonial, Pricing Table, FAQ, Contact Form
-  - Store section config: Layout, content placeholders
+  - Section types: Hero, Features, Testimonials, FAQ, CTA, etc.
+  - Each section has name + description (Relume-style)
 
-- [ ] **5.5.4** Auto-apply to canvas
-  - After generation, automatically populate ReactFlow canvas
+- [x] **5.1.3** Auto-apply to canvas ✅
+  - After generation, populate ReactFlow canvas
   - Position nodes in tree layout
   - Create edges between parent/child pages
   - Auto-zoom to fit all nodes
 
-#### 5.6 Design Agent (Style Guide & Mockups)
-- [ ] **5.6.1** Create Design Agent
-  - `lib/agents/design-agent.ts`
-  - Input: Project info, sitemap, brand preferences
-  - Process:
-    1. Generate style guide (colors, fonts, spacing)
-    2. Create wireframes for each page
-    3. Generate high-fidelity mockups (3 variations)
-    4. Export design tokens
-  - Output: Style guide, wireframes, mockups
+- [x] **5.1.4** Generate page API ✅
+  - `app/api/ai/generate-page/route.ts`
+  - Generate individual pages with sections
 
-- [ ] **5.6.2** Build style guide generator
-  - Use AI to suggest color palette (5-6 colors)
-  - Primary, secondary, accent, neutral colors
-  - Ensure WCAG AA contrast compliance
-  - Suggest font pairings (heading + body)
-  - Define spacing scale (4px, 8px, 16px, 24px, 32px, 48px, 64px)
-
-- [ ] **5.6.3** Integrate design API
-  - **Option 1:** Use Ideogram API for image generation
-  - **Option 2:** Use Figma API + AI prompt
-  - **Option 3:** Use Replicate for Stable Diffusion
-  - Generate: Hero images, icons, backgrounds
-
-- [ ] **5.6.4** Create design variations
-  - Generate 3 design styles: Modern, Minimal, Playful
-  - Each variation: Different color scheme, font choice
-  - Allow user to select or mix & match
-
-#### 5.7 Build Agent (Code Generation)
-- [ ] **5.7.1** Create Build Agent
-  - `lib/agents/build-agent.ts`
-  - Input: Sitemap, design, style guide
-  - Process:
-    1. Generate file structure
-    2. Create component files for each section
-    3. Generate page files with component imports
-    4. Create global styles and config
-    5. Add package.json with dependencies
-  - Output: Complete Next.js project codebase
-
-- [ ] **5.7.2** Build code generator
-  - Use AI (GPT-4 or Claude) for code generation
-  - Templates for common components
-  - Output format: `{ path, content }` for each file
-  - Ensure: TypeScript, Tailwind classes, proper imports
-
-- [ ] **5.7.3** Implement code formatter
-  - Use Prettier to format generated code
-  - Ensure consistent style
-  - Validate syntax before returning
-
-### **Deliverables Phase 5:**
-- ✅ Complete agent system working
-- ✅ Think → Research → Define → Flow agents functional
+### **Deliverables Phase 5:** ✅ COMPLETE
 - ✅ AI-powered sitemap generation
-- ✅ Competitor research automation
-- ✅ Progress tracking UI
-- ✅ Error handling and retries
+- ✅ Section generation per page
+- ✅ Auto-layout on canvas
+- ✅ Integrated with chat sidebar
 
-### **Time Estimate:** 12-14 days
+### **Time Estimate:** 3-4 days ✅ DONE
 
 ---
 
-## Phase 6: Design Views & Code Editor (Week 11-12)
+## ✅ Backend Sync (COMPLETE)
+
+**Implemented:** Sitemap data now persists to Appwrite database.
+
+### **Tasks:**
+- [x] **Save sitemap to Appwrite** on changes (debounced 2s)
+- [x] **Load sitemap from database** when project opens
+- [x] **Update project.updatedAt** on save
+
+### **Implementation Details:**
+- Added `saveSitemap()` to sitemap-store with debounced auto-save
+- Modified `saveToHistory()` to trigger debounced saves
+- Updated `UpdateProjectSchema` to accept sitemapData
+- Set `projectId` when project loads for save context
+
+---
+
+## Phase 6: Wireframe Canvas (Week 9-10) 🚧 CURRENT FOCUS
 
 ### **Goals:**
-- Build Wireframe view
-- Create Style Guide editor
-- Implement Design mockup view
-- Add Code Editor with Monaco
-- Create Preview mode
+- Build wireframe view for visual page editing
+- Display low-fidelity section blocks for each page
+- Enable drag-drop section reordering
+- Click to edit section content
 
 ### **Detailed Tasks:**
 
-#### 6.1 Wireframe View
-- [ ] **6.1.1** Create wireframe canvas
+#### 6.1 Wireframe View Setup
+- [ ] **6.1.1** Create wireframe canvas component
   - `components/canvas/views/wireframe-view.tsx`
-  - Display low-fidelity blocks for each section
-  - Drag-and-drop to reorder sections
-  - Click section to edit content
+  - Display selected page from sitemap
+  - Show sections as stacked blocks (mobile-first)
+  - Device preview: Desktop, Tablet, Mobile frames
 
-- [ ] **6.1.2** Build section library
-  - `components/wireframe/section-library.tsx` - Section picker
-  - Categories: Hero, Features, Content, Social Proof, CTA
-  - Thumbnail preview of each section type
-  - Drag from library to canvas to add
+- [ ] **6.1.2** Build page selector
+  - Dropdown or sidebar to select which page to wireframe
+  - Show page name and section count
+  - Quick navigation between pages
+  - Sync with sitemap selection
 
 - [ ] **6.1.3** Create section block components
   - `components/wireframe/section-block.tsx` - Generic block
-  - Props: `type`, `title`, `config`
-  - Visual: Gray box with section icon and name
-  - Hover: Show edit, delete, duplicate buttons
+  - Props: `type`, `name`, `description`, `config`
+  - Visual: Gray/white box with section icon, name, description
+  - Hover: Show edit, delete, duplicate, move buttons
+  - Selected state: Blue border, show resize handles
 
-- [ ] **6.1.4** Implement section editor
-  - Modal or side panel to edit section
-  - Fields based on section type:
-    - Hero: Headline, subheadline, CTA text, image URL
-    - Features: Title, feature list (array of { title, description, icon })
-    - Testimonial: Quote, author name, author photo, rating
-  - Save changes to project database
+#### 6.2 Section Block Library
+- [ ] **6.2.1** Create section type registry
+  - `lib/wireframe/section-types.ts`
+  - Define all section types with default layouts
+  - Each type: icon, default height, editable fields
+  
+- [ ] **6.2.2** Build section block variants
+  - `components/wireframe/blocks/hero-block.tsx`
+  - `components/wireframe/blocks/features-block.tsx`
+  - `components/wireframe/blocks/testimonials-block.tsx`
+  - `components/wireframe/blocks/cta-block.tsx`
+  - `components/wireframe/blocks/faq-block.tsx`
+  - `components/wireframe/blocks/footer-block.tsx`
+  - Each block: Placeholder content, low-fi styling
 
-#### 6.2 Style Guide View
-- [ ] **6.2.1** Create style guide editor
-  - `components/canvas/views/style-guide-view.tsx`
-  - Sections: Colors, Typography, Spacing, Components
+- [ ] **6.2.3** Add section thumbnails
+  - Small preview images for each section type
+  - Used in section picker and library panel
 
-- [ ] **6.2.2** Build color picker
-  - `components/style-guide/color-picker.tsx`
-  - Show primary, secondary, accent, neutral colors
-  - Click to edit: Opens color picker modal
-  - Hex input field
-  - Real-time preview of color changes
-  - AI suggestion button: "Generate new palette"
+#### 6.3 Drag & Drop Functionality
+- [ ] **6.3.1** Implement section reordering
+  - Use `@dnd-kit` (already installed)
+  - Drag sections up/down to reorder
+  - Visual feedback: Drop indicator, ghost element
+  - Update sitemap store on drop
 
-- [ ] **6.2.3** Build typography editor
-  - `components/style-guide/typography-editor.tsx`
-  - Heading font selector (Google Fonts dropdown)
-  - Body font selector
-  - Font size scale (h1 to h6, body, small)
-  - Line height, letter spacing sliders
-  - Live preview of font changes
+- [ ] **6.3.2** Add section from library
+  - Drag from section library panel
+  - Drop into wireframe canvas
+  - Insert at drop position
+  - Sync with sitemap sections
 
-- [ ] **6.2.4** Build spacing editor
-  - `components/style-guide/spacing-editor.tsx`
-  - Define spacing scale (xs, sm, md, lg, xl, 2xl)
-  - Visual ruler showing pixel values
-  - Used in: Padding, margin, gap throughout site
+- [ ] **6.3.3** Delete section
+  - Delete button on hover
+  - Keyboard: Delete/Backspace key
+  - Confirmation for accidental deletes (optional)
 
-- [ ] **6.2.5** Add export functionality
-  - Export as Figma design tokens (JSON)
-  - Export as Tailwind config
-  - Export as CSS variables
-  - Download button with format selector
+#### 6.4 Section Editor Panel
+- [ ] **6.4.1** Create section editor sidebar
+  - `components/wireframe/section-editor.tsx`
+  - Opens when section is clicked
+  - Shows editable fields based on section type
 
-#### 6.3 Design Mockup View
-- [ ] **6.3.1** Create design canvas
-  - `components/canvas/views/design-view.tsx`
-  - Display high-fidelity mockups
-  - Zoom and pan controls
-  - Device selector: Desktop, Tablet, Mobile
+- [ ] **6.4.2** Build field editors
+  - Text input for headlines, descriptions
+  - Image picker for hero images
+  - List editor for features (add/remove/reorder)
+  - Color picker for backgrounds (optional)
 
-- [ ] **6.3.2** Build design gallery
-  - `components/design/design-gallery.tsx`
-  - Show 3 design variations side-by-side
-  - Click to expand full-screen
-  - Select design button
-  - Regenerate button (calls Design Agent again)
+- [ ] **6.4.3** Content placeholders
+  - Default placeholder text for each field
+  - "Click to edit" indicators
+  - Lorem ipsum generator for quick fills
 
-- [ ] **6.3.3** Implement design viewer
-  - `components/design/design-viewer.tsx`
-  - Full-screen modal to view single design
-  - Scroll through all pages
-  - Zoom in/out
-  - Download as PNG or PDF
-  - "Use This Design" button
+#### 6.5 Device Preview
+- [ ] **6.5.1** Add device frame selector
+  - Desktop (1440px), Tablet (768px), Mobile (375px)
+  - Show device frame around wireframe
+  - Scale content to fit viewport
 
-- [ ] **6.3.4** Add design customization
-  - Click any element to edit
-  - Change text, images, colors
-  - Swap sections
-  - Save customizations to project
+- [ ] **6.5.2** Responsive section layouts
+  - Sections adapt to device width
+  - Stack columns on mobile
+  - Adjust font sizes and spacing
 
-#### 6.4 Code Editor (Development Mode)
-- [ ] **6.4.1** Integrate Monaco Editor
-  - Install: `npm install @monaco-editor/react`
-  - `components/canvas/views/code-view.tsx`
-  - Configure Monaco with TypeScript, JSX support
-  - Syntax highlighting for Next.js, React, Tailwind
-  - Auto-complete, IntelliSense
+#### 6.6 Wireframe State Management
+- [ ] **6.6.1** Create wireframe store
+  - `store/wireframe-store.ts`
+  - State: selectedPageId, sections, editingSection, deviceMode
+  - Sync with sitemap-store sections
 
-- [ ] **6.4.2** Build file tree sidebar
-  - `components/code/file-tree.tsx`
-  - Show project file structure
-  - Collapsible folders
-  - Click file to open in editor
-  - Icons for file types (ts, tsx, css, json)
-  - Search files (Ctrl/Cmd + P)
-
-- [ ] **6.4.3** Implement tabs system
-  - `components/code/editor-tabs.tsx`
-  - Open multiple files in tabs
-  - Click tab to switch
-  - Close button per tab
-  - Unsaved indicator (dot) if file modified
-  - Max 10 tabs open
-
-- [ ] **6.4.4** Add code features
-  - Format code button (Prettier)
-  - Run ESLint (show errors inline)
-  - Search and replace (Ctrl/Cmd + F)
-  - Go to definition (Ctrl/Cmd + Click)
-  - Undo/redo per file
-
-- [ ] **6.4.5** Implement code sync
-  - Save changes to database (debounced, every 2 seconds)
-  - Load code from database on open
-  - Lock files if another user editing (future)
-
-#### 6.5 Preview Mode
-- [ ] **6.5.1** Create preview iframe
-  - `components/canvas/views/preview-view.tsx`
-  - Embed generated site in iframe
-  - Responsive preview: Desktop, tablet, mobile
-  - Device frame selector at top
-  - Refresh button to reload
-
-- [ ] **6.5.2** Build preview server
-  - `app/api/preview/route.ts` - Serve preview HTML
-  - Compile Next.js code to static HTML (simplified)
-  - Inject styles from style guide
-  - Return HTML in response
-  - Cache preview for 5 minutes
-
-- [ ] **6.5.3** Add preview features
-  - Click elements to highlight in code
-  - Inspect mode: Show HTML structure
-  - Console output (show errors, logs)
-  - Network tab (show requests)
-
-#### 6.6 Bottom Toolbar Updates
-- [ ] **6.6.1** Context-specific tools
-  - Wireframe view: [📦 Add Section] [📋 Templates] [⬆️⬇️ Reorder]
-  - Style Guide: [🎨 Pick Color] [📝 Add Font] [📏 Spacing]
-  - Design view: [🖼️ Add Image] [T Text] [🔲 Shape] [📱 Device]
-  - Code view: [▶️ Run] [🐛 Debug] [📤 Export] [🔄 Format]
-
-- [ ] **6.6.2** Implement tool actions
-  - Each tool triggers specific modal or action
-  - Example: Click "Add Section" → Opens section library
-  - Example: Click "Pick Color" → Opens color picker
-  - Example: Click "Format" → Formats current code file
+- [ ] **6.6.2** Integrate with top bar
+  - Wireframe tab in view switcher
+  - Shows when clicking a page in sitemap
 
 ### **Deliverables Phase 6:**
-- ✅ Wireframe editor with section library
-- ✅ Style guide editor with color/font pickers
-- ✅ Design mockup viewer
-- ✅ Full code editor with Monaco
-- ✅ File tree and tabs
-- ✅ Live preview iframe
-- ✅ Context-specific toolbar tools
+- ✅ Wireframe canvas with section blocks
+- ✅ Drag-drop section reordering
+- ✅ Section editor panel
+- ✅ Device preview (Desktop/Tablet/Mobile)
+- ✅ Sync with sitemap data
 
-### **Time Estimate:** 12-14 days
+### **Time Estimate:** 10-12 days
 
 ---
 
-## Phase 7: Export, Deploy & Polish (Week 13-14)
+## Phase 7: Style Guide & Design (Week 11-12) - FUTURE
+
+### **Goals:**
+- Create Style Guide editor (colors, fonts, spacing)
+- Design mockup view (future - may use external tools)
+
+### **Tasks (Deferred):**
+
+#### 7.1 Style Guide View
+- [ ] **7.1.1** Create style guide editor
+  - `components/canvas/views/style-guide-view.tsx`
+  - Sections: Colors, Typography, Spacing
+
+- [ ] **7.1.2** Build color picker
+  - Primary, secondary, accent, neutral colors
+  - AI suggestion: "Generate palette from description"
+
+- [ ] **7.1.3** Build typography editor
+  - Heading + body font selectors (Google Fonts)
+  - Font size scale, line heights
+
+- [ ] **7.1.4** Export design tokens
+  - Export as Tailwind config
+  - Export as CSS variables
+
+### **Time Estimate:** 5-7 days (deferred)
+
+---
+
+## Phase 8: Code Editor & Preview (Week 13-14) - FUTURE
+
+### **Goals:**
+- Monaco code editor for generated code
+- Live preview of generated site
+
+### **Tasks (Deferred):**
 
 ### **Goals:**
 - Implement export functionality (Figma, GitHub)
@@ -1034,6 +845,8 @@
 - Polish UI/UX
 - Add onboarding flow
 - Performance optimization
+
+> **Note:** This phase is future work. Focus on Phase 6 (Wireframe) first.
 
 ### **Detailed Tasks:**
 
@@ -1224,7 +1037,7 @@
 
 ---
 
-## Phase 8: Launch Preparation (Week 15-16)
+## Phase 8: Launch Preparation (Week 15-16) - FUTURE
 
 ### **Goals:**
 - Set up marketing site
@@ -1232,6 +1045,8 @@
 - Add payment integration (Stripe)
 - Set up analytics
 - Prepare for launch
+
+> **Note:** This phase is future work. Complete Phases 6-7 first.
 
 ### **Detailed Tasks:**
 
@@ -1385,18 +1200,20 @@
 
 ## Summary Timeline
 
-| Phase | Duration | Key Deliverables |
-|-------|----------|------------------|
-| Phase 1: Foundation | 8-10 days | Auth, Database, Design System |
-| Phase 2: Dashboard | 8-10 days | Project CRUD, Dashboard UI |
-| Phase 3: Chat & AI | 10-12 days | Chat interface, AI integration |
-| Phase 4: Canvas | 12-14 days | Sitemap editor, Toolbar |
-| Phase 5: AI Agents | 12-14 days | All agents, Background processing |
-| Phase 6: Design & Code | 12-14 days | Wireframe, Style Guide, Code Editor |
-| Phase 7: Export & Polish | 10-12 days | Export, Deploy, Optimization |
-| Phase 8: Launch | 10-12 days | Marketing site, Stripe, Launch |
+| Phase | Duration | Status | Key Deliverables |
+|-------|----------|--------|------------------|
+| Phase 1: Foundation | 8-10 days | ✅ COMPLETE | Auth, Database, Design System |
+| Phase 2: Dashboard | 8-10 days | ✅ COMPLETE | Project CRUD, Dashboard UI |
+| Phase 3: Chat & AI | 10-12 days | ✅ COMPLETE | Chat interface, AI streaming |
+| Phase 4: Canvas | 12-14 days | ✅ COMPLETE | Sitemap editor, ReactFlow, Toolbar |
+| Phase 5: AI Sitemap | 5-7 days | ✅ COMPLETE | AI sitemap generation |
+| **Phase 6: Wireframe** | 10-12 days | 🔄 IN PROGRESS | Wireframe canvas, section blocks |
+| Phase 7: Style Guide | 5-7 days | ⏳ FUTURE | Design tokens, typography |
+| Phase 8: Code Editor | 7-10 days | ⏳ FUTURE | Monaco editor, live preview |
+| Phase 9: Export & Polish | 10-12 days | ⏳ FUTURE | Export, Deploy, Optimization |
+| Phase 10: Launch | 10-12 days | ⏳ FUTURE | Marketing site, Stripe, Launch |
 
-**Total: 82-98 days (12-14 weeks, ~3-3.5 months)**
+**Completed: 6-8 weeks | Remaining: 6-8 weeks | Total: ~12-16 weeks**
 
 ---
 
@@ -1444,24 +1261,24 @@
 
 ---
 
-## MVP Scope (If Time-Constrained)
+## MVP Scope (Current Status)
 
-**Priority 1 (Must Have - 6-8 weeks):**
-- Phase 1: Foundation ✅
-- Phase 2: Dashboard ✅
-- Phase 3: Chat & AI ✅
-- Phase 4: Canvas (Sitemap only) ✅
-- Phase 5: Think + Research + Flow agents ✅
-- Export as JSON
+**✅ Completed (Phase 1-5):**
+- Foundation: Auth, Database, Design System
+- Dashboard: Project CRUD, Templates
+- Chat & AI: Streaming, History, Context
+- Canvas: Sitemap editor with ReactFlow
+- AI Sitemap Generation: Gemini-powered
 
-**Priority 2 (Should Have - 8-10 weeks):**
-- Phase 6: Wireframe + Style Guide
-- Phase 5: Design agent
-- Export to GitHub
+**🔄 In Progress (Phase 6):**
+- Wireframe Canvas: Section blocks, drag-drop, device preview
 
-**Priority 3 (Nice to Have - 10-14 weeks):**
-- Phase 6: Code editor
-- Phase 7: Deploy integration
-- Phase 8: Full launch
+**⏳ Future (Phase 7-10):**
+- Style Guide: Colors, fonts, spacing editor
+- Code Editor: Monaco, live preview
+- Export: Figma, GitHub, ZIP
+- Deploy: Vercel, Netlify integration
+- Launch: Marketing, Stripe, Analytics
 
-**Start with Priority 1, launch MVP, gather feedback, then add Priority 2/3 features.**
+**⚠️ Critical Pending:**
+- ~~Backend Sync: Save sitemap to Appwrite~~ ✅ DONE

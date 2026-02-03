@@ -11,11 +11,23 @@ import { useProjectStore } from '@/store'
 import { createJWT } from '@/lib/appwrite'
 import { toast } from 'sonner'
 
+// Section can be either a string (legacy) or an object with name/description
+interface SectionData {
+    id?: string
+    name: string
+    description?: string
+}
+
 interface PageNodeData {
     label?: string
     slug?: string
     description?: string
-    sections?: string[]
+    sections?: (string | SectionData)[]
+}
+
+// Helper to get section display name
+function getSectionName(section: string | SectionData): string {
+    return typeof section === 'string' ? section : section.name
 }
 
 interface PagePanelProps {
@@ -154,24 +166,6 @@ export function PagePanel({ nodeId }: PagePanelProps) {
                     </button>
                 </div>
             </div>
-
-            {/* Sections Preview */}
-            {nodeData?.sections && nodeData.sections.length > 0 && (
-                <div className="space-y-2">
-                    <Label className="text-sm">Sections</Label>
-                    <div className="space-y-1">
-                        {nodeData.sections.map((section: string, index: number) => (
-                            <div
-                                key={index}
-                                className="text-xs px-2 py-1.5 bg-muted rounded flex items-center gap-2"
-                            >
-                                <span className="text-muted-foreground">{index + 1}.</span>
-                                {section}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
 
             {/* Generate Button */}
             <Button

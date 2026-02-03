@@ -16,6 +16,22 @@ export const UserSchema = z.object({
 // Project Status
 export const ProjectStatusSchema = z.enum(['draft', 'in-progress', 'completed'])
 
+// Sitemap Section Schema
+export const SitemapSectionSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+})
+
+// Sitemap Page Schema (for stored data)
+export const SitemapPageSchema = z.object({
+    id: z.string(),
+    label: z.string(),
+    slug: z.string(),
+    sections: z.array(SitemapSectionSchema),
+    children: z.array(z.lazy((): z.ZodTypeAny => SitemapPageSchema)).optional(),
+})
+
 // Project
 export const ProjectSchema = z.object({
     projectId: z.string(),
@@ -25,6 +41,7 @@ export const ProjectSchema = z.object({
     status: ProjectStatusSchema.default('draft'),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
+    sitemapData: z.array(SitemapPageSchema).nullable().optional(),
 })
 
 export const CreateProjectSchema = z.object({
@@ -36,6 +53,7 @@ export const UpdateProjectSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.optional(),
+    sitemapData: z.string().optional(), // JSON stringified sitemap pages
 })
 
 // Page

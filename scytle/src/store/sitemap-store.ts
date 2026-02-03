@@ -1,8 +1,41 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { Node, Edge, applyNodeChanges, applyEdgeChanges, NodeChange, EdgeChange } from '@xyflow/react'
+import { createJWT } from '@/lib/appwrite'
 
 export type CanvasTool = 'select' | 'hand' | 'add'
+
+// Track if a save is already in progress to prevent concurrent saves
+let isSaveInProgress = false
+let pendingSave = false
+
+// Immediate save function - saves right away, queues if another save is in progress
+async function triggerSave() {
+    if (isSaveInProgress) {
+        pendingSave = true
+        return
+    }
+
+    isSaveInProgress = true
+    try {
+        await useSitemapStore.getState().saveSitemap()
+    } finally {
+        isSaveInProgress = false
+        // If another save was requested while we were saving, do it now
+        if (pendingSave) {
+            pendingSave = false
+            triggerSave()
+        }
+    }
+}
+
+// Force immediate save (used before page unload)
+export function flushPendingSave() {
+    if (pendingSave || isSaveInProgress) {
+        // Synchronous save attempt for beforeunload
+        useSitemapStore.getState().saveSitemap()
+    }
+}
 
 // Export edge type for components
 export interface SitemapEdge {
@@ -16,19 +49,31 @@ export interface SitemapEdge {
 
 // Constants for layout spacing - Relume-style spacing
 const LAYOUT = {
-    NODE_WIDTH: 200,
-    NODE_BASE_HEIGHT: 80,      // Base height without sections
-    SECTION_HEIGHT: 24,        // Height per section
-    HORIZONTAL_GAP: 60,        // Gap between sibling nodes (larger for cleaner connectors)
-    VERTICAL_GAP: 120,         // Gap between levels (larger to avoid overlapping lines)
+    NODE_WIDTH: 280,           // Wider to accommodate section descriptions
+    NODE_BASE_HEIGHT: 60,      // Base height (header)
+    SECTION_HEIGHT: 50,        // Height per section (name + description + padding)
+    SECTION_GAP_HEIGHT: 12,    // Height for gap between sections (+ button area)
+    HORIZONTAL_GAP: 80,        // Gap between sibling nodes (larger for cleaner connectors)
+    VERTICAL_GAP: 80,          // Gap between levels
     PROJECT_HEIGHT: 50,
+    ADD_SECTION_BUTTON_HEIGHT: 40, // Height for "Add Section" button at bottom
 }
 
 // Calculate estimated node height based on sections
 const estimateNodeHeight = (node: Node): number => {
     if (node.type === 'project') return LAYOUT.PROJECT_HEIGHT
-    const sections = (node.data as { sections?: string[] })?.sections || []
-    return LAYOUT.NODE_BASE_HEIGHT + (sections.length * LAYOUT.SECTION_HEIGHT)
+    const sections = (node.data as { sections?: (string | SectionData)[] })?.sections || []
+    const sectionCount = sections.length
+
+    if (sectionCount === 0) {
+        // Just the header + empty state add button
+        return LAYOUT.NODE_BASE_HEIGHT + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
+    }
+
+    // Header + sections + gaps between sections + add button
+    const sectionsHeight = sectionCount * LAYOUT.SECTION_HEIGHT
+    const gapsHeight = Math.max(0, sectionCount - 1) * LAYOUT.SECTION_GAP_HEIGHT
+    return LAYOUT.NODE_BASE_HEIGHT + sectionsHeight + gapsHeight + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
 }
 
 // Tree layout helper - calculates proper positions for sitemap hierarchy
@@ -134,6 +179,11 @@ interface SitemapState {
     isPanning: boolean
     selectedNodeId: string | null
 
+    // Section picker state
+    sectionPickerOpen: boolean
+    sectionPickerTargetPageId: string | null
+    sectionPickerInsertIndex: number | null
+
     // ReactFlow instance reference for zoom control
     reactFlowZoom: ((zoom: number) => void) | null
     reactFlowFitView: (() => void) | null
@@ -161,6 +211,14 @@ interface SitemapState {
     addEdge: (edge: Edge) => void
     deleteEdge: (id: string) => void
 
+    // Section actions
+    openSectionPicker: (pageId: string, insertIndex: number) => void
+    closeSectionPicker: () => void
+    addSectionToPage: (pageId: string, section: SectionData, atIndex: number) => void
+    removeSectionFromPage: (pageId: string, sectionIndex: number) => void
+    moveSectionInPage: (pageId: string, fromIndex: number, toIndex: number) => void
+    updateSectionInPage: (pageId: string, sectionIndex: number, updates: { name?: string; description?: string }) => void
+
     undo: () => void
     redo: () => void
     saveToHistory: () => void
@@ -174,14 +232,27 @@ interface SitemapState {
     loadSitemap: (pages: AIGeneratedPage[], projectName?: string) => void
     loadRawSitemap: (nodes: Node[], edges: SitemapEdge[]) => void
     clearSitemap: () => void
+
+    // Backend sync
+    currentProjectId: string | null
+    setProjectId: (projectId: string | null) => void
+    saveSitemap: () => Promise<void>
+    isSaving: boolean
+    lastSavedAt: Date | null
 }
 
-// AI-generated page structure
+// AI-generated page structure - supports both legacy string[] and new object format
+interface SectionData {
+    id?: string
+    name: string
+    description?: string
+}
+
 interface AIGeneratedPage {
     id: string
     label: string
     slug: string
-    sections: string[]
+    sections: (string | SectionData)[]
     children?: AIGeneratedPage[]
 }
 
@@ -251,10 +322,20 @@ export const useSitemapStore = create<SitemapState>()(
         zoomLevel: 100,
         isPanning: false,
         selectedNodeId: null,
+        sectionPickerOpen: false,
+        sectionPickerTargetPageId: null,
+        sectionPickerInsertIndex: null,
         reactFlowZoom: null,
         reactFlowFitView: null,
         history: [{ nodes: defaultNodes, edges: defaultEdges }],
         historyIndex: 0,
+
+        // Backend sync state
+        currentProjectId: null,
+        isSaving: false,
+        lastSavedAt: null,
+
+        setProjectId: (projectId) => set({ currentProjectId: projectId }),
 
         setNodes: (nodes) => set({ nodes }),
         setEdges: (edges) => set({ edges }),
@@ -328,6 +409,9 @@ export const useSitemapStore = create<SitemapState>()(
                 state.history = newHistory
                 state.historyIndex = newHistory.length - 1
             })
+
+            // Trigger immediate save to backend
+            triggerSave()
         },
 
         undo: () => {
@@ -383,6 +467,102 @@ export const useSitemapStore = create<SitemapState>()(
             if (reactFlowZoom) {
                 reactFlowZoom(1)
             }
+        },
+
+        // Section picker actions
+        openSectionPicker: (pageId, insertIndex) => {
+            set({
+                sectionPickerOpen: true,
+                sectionPickerTargetPageId: pageId,
+                sectionPickerInsertIndex: insertIndex,
+            })
+        },
+
+        closeSectionPicker: () => {
+            set({
+                sectionPickerOpen: false,
+                sectionPickerTargetPageId: null,
+                sectionPickerInsertIndex: null,
+            })
+        },
+
+        addSectionToPage: (pageId, section, atIndex) => {
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    // Insert section at the specified index
+                    sections.splice(atIndex, 0, {
+                        id: `${pageId}-${section.id}-${Date.now()}`,
+                        name: section.name,
+                        description: section.description,
+                    })
+                    node.data = { ...node.data, sections }
+                }
+            })
+            // Recalculate layout after adding section (node height changed)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+            get().closeSectionPicker()
+        },
+
+        removeSectionFromPage: (pageId, sectionIndex) => {
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    sections.splice(sectionIndex, 1)
+                    node.data = { ...node.data, sections }
+                }
+            })
+            // Recalculate layout after removing section (node height changed)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+        },
+
+        moveSectionInPage: (pageId, fromIndex, toIndex) => {
+            if (fromIndex === toIndex) return
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    const [movedSection] = sections.splice(fromIndex, 1)
+                    sections.splice(toIndex, 0, movedSection)
+                    node.data = { ...node.data, sections }
+                }
+            })
+            get().saveToHistory()
+        },
+
+        updateSectionInPage: (pageId, sectionIndex, updates) => {
+            set((state) => {
+                const node = state.nodes.find(n => n.id === pageId)
+                if (node && node.data) {
+                    const sections = [...((node.data as { sections?: SectionData[] }).sections || [])]
+                    if (sections[sectionIndex]) {
+                        const existingSection = sections[sectionIndex]
+                        // Handle both string and object formats
+                        if (typeof existingSection === 'string') {
+                            sections[sectionIndex] = {
+                                id: `${pageId}-section-${sectionIndex}`,
+                                name: updates.name || existingSection,
+                                description: updates.description,
+                            }
+                        } else {
+                            sections[sectionIndex] = {
+                                ...existingSection,
+                                ...updates,
+                            }
+                        }
+                        node.data = { ...node.data, sections }
+                    }
+                }
+            })
+            get().saveToHistory()
         },
 
         loadSitemap: (pages, projectName = 'My Project') => {
@@ -506,7 +686,63 @@ export const useSitemapStore = create<SitemapState>()(
                 state.selectedNodeId = null
                 state.history = []
                 state.historyIndex = -1
+                state.currentProjectId = null
             })
+        },
+
+        // Save sitemap to backend
+        saveSitemap: async () => {
+            const { nodes, currentProjectId, isSaving } = get()
+
+            // Skip if no project ID or already saving
+            if (!currentProjectId || isSaving) {
+                console.log('⏭️ Skipping save:', { currentProjectId, isSaving })
+                return
+            }
+
+            // Convert nodes to pages format for storage
+            const pages = nodes
+                .filter(n => n.type === 'page')
+                .map(node => ({
+                    id: node.id,
+                    label: (node.data as { label?: string }).label || 'Untitled',
+                    slug: (node.data as { slug?: string }).slug || '/',
+                    sections: (node.data as { sections?: SectionData[] }).sections || [],
+                }))
+
+            console.log('💾 Saving sitemap with pages:', JSON.stringify(pages, null, 2))
+
+            set({ isSaving: true })
+
+            try {
+                const jwt = await createJWT()
+                if (!jwt) {
+                    console.error('❌ Not authenticated, cannot save sitemap')
+                    return
+                }
+
+                const response = await fetch(`/api/projects/${currentProjectId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${jwt.jwt}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sitemapData: JSON.stringify(pages),
+                    }),
+                })
+
+                if (response.ok) {
+                    set({ lastSavedAt: new Date() })
+                    console.log('✅ Sitemap saved to database')
+                } else {
+                    console.error('❌ Failed to save sitemap:', await response.text())
+                }
+            } catch (error) {
+                console.error('❌ Error saving sitemap:', error)
+            } finally {
+                set({ isSaving: false })
+            }
         },
     }))
 )

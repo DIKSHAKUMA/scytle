@@ -196,10 +196,11 @@ export const useChatStore = create<ChatState>()(
                 const data = await response.json()
 
                 if (data.success && data.sitemap) {
-                    // Load sitemap into the canvas store
+                    // Load sitemap into the canvas store using pages data
+                    // This will apply proper tree layout automatically
                     useSitemapStore.getState().loadSitemap(
-                        data.sitemap.nodes,
-                        data.sitemap.edges
+                        data.sitemap.pages,
+                        get().currentProjectId || 'My Project'
                     )
 
                     // Add success message
