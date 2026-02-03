@@ -33,6 +33,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
+        // Parse sitemapData if it exists
+        let sitemapData = null
+        if (doc.sitemapData) {
+            try {
+                sitemapData = JSON.parse(doc.sitemapData)
+            } catch {
+                console.error('Failed to parse sitemapData')
+            }
+        }
+
         const project = {
             projectId: doc.$id,
             userId: doc.userId,
@@ -41,6 +51,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             status: doc.status,
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
+            sitemapData,
         }
 
         return NextResponse.json({ project })

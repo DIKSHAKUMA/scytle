@@ -52,6 +52,7 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         setActiveTool,
         setReactFlowFunctions,
         addNode,
+        closeSectionPicker,
     } = useSitemapStore()
 
     // Register ReactFlow zoom functions for toolbar controls
@@ -135,6 +136,9 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
 
     // Handle pane click - deselect or add new node in add mode
     const onPaneClick = useCallback((event: React.MouseEvent) => {
+        // Always close section picker when clicking on canvas
+        closeSectionPicker()
+
         if (activeTool === 'add') {
             // Get click position in flow coordinates
             const reactFlowBounds = containerRef.current?.getBoundingClientRect()
@@ -165,7 +169,7 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         } else {
             setSelectedNodeId(null)
         }
-    }, [activeTool, reactFlowInstance, addNode, setSelectedNodeId, setActiveTool])
+    }, [activeTool, reactFlowInstance, addNode, setSelectedNodeId, setActiveTool, closeSectionPicker])
 
     // Determine cursor and pan mode
     const shouldPan = isPanning || activeTool === 'hand'

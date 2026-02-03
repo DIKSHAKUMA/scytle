@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState, useCallback } from 'react'
+import { memo, useState, useCallback, useRef, useEffect } from 'react'
 import { Handle, Position, NodeProps } from '@xyflow/react'
 import {
     DndContext,
@@ -73,10 +73,12 @@ export const PageNode = memo(function PageNode({
     const sections = rawSections.map((s, i) => normalizeSection(s, i, id))
     const isHomePage = id === 'home' || data.slug === '/'
     const [menuSearch, setMenuSearch] = useState('')
-    const [hoveredGapIndex, setHoveredGapIndex] = useState<number | null>(null)
+    const [isEditingTitle, setIsEditingTitle] = useState(false)
+    const [editTitle, setEditTitle] = useState(data.label)
+    const titleInputRef = useRef<HTMLInputElement>(null)
 
     // Store actions
-    const { openSectionPicker, removeSectionFromPage, moveSectionInPage } = useSitemapStore()
+    const { openSectionPicker, removeSectionFromPage, moveSectionInPage, updateSectionInPage, updateNode } = useSitemapStore()
 
     const PageIcon = isHomePage ? Home : FileText
 
@@ -92,6 +94,34 @@ export const PageNode = memo(function PageNode({
 
     const handleDeleteSection = (index: number) => {
         removeSectionFromPage(id, index)
+    }
+
+    const handleUpdateSection = (index: number, name: string, description?: string) => {
+        updateSectionInPage(id, index, { name, description })
+    }
+
+    // Title editing handlers
+    useEffect(() => {
+        if (isEditingTitle && titleInputRef.current) {
+            titleInputRef.current.focus()
+            titleInputRef.current.select()
+        }
+    }, [isEditingTitle])
+
+    const handleTitleBlur = () => {
+        setIsEditingTitle(false)
+        if (editTitle.trim() && editTitle !== data.label) {
+            updateNode(id, { label: editTitle.trim() })
+        }
+    }
+
+    const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleTitleBlur()
+        } else if (e.key === 'Escape') {
+            setIsEditingTitle(false)
+            setEditTitle(data.label)
+        }
     }
 
     // Drag and drop sensors
@@ -113,7 +143,7 @@ export const PageNode = memo(function PageNode({
         if (over && active.id !== over.id) {
             const oldIndex = sections.findIndex(s => s.id === active.id)
             const newIndex = sections.findIndex(s => s.id === over.id)
-            
+
             if (oldIndex !== -1 && newIndex !== -1) {
                 moveSectionInPage(id, oldIndex, newIndex)
             }
@@ -142,7 +172,28 @@ export const PageNode = memo(function PageNode({
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                     <PageIcon className="w-4 h-4 text-muted-foreground/70 shrink-0" />
                     <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm truncate">{data.label}</h3>
+                        {isEditingTitle ? (
+                            <input
+                                ref={titleInputRef}
+                                type="text"
+                                value={editTitle}
+                                onChange={(e) => setEditTitle(e.target.value)}
+                                onBlur={handleTitleBlur}
+                                onKeyDown={handleTitleKeyDown}
+                                className="w-full font-semibold text-sm bg-transparent border-none outline-none ring-1 ring-primary rounded px-1 -mx-1"
+                            />
+                        ) : (
+                            <h3
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditTitle(data.label)
+                                    setIsEditingTitle(true)
+                                }}
+                                className="font-semibold text-sm truncate cursor-default select-none"
+                            >
+                                {data.label}
+                            </h3>
+                        )}
                     </div>
                 </div>
 
@@ -217,7 +268,7 @@ export const PageNode = memo(function PageNode({
             </div>
 
             {/* Sections list with drag and drop */}
-            <div className="p-2 nodrag">
+            <div className="p-2 pl-6 nodrag">
                 {sections.length > 0 ? (
                     <DndContext
                         sensors={sensors}
@@ -228,82 +279,35 @@ export const PageNode = memo(function PageNode({
                             items={sections.map(s => s.id)}
                             strategy={verticalListSortingStrategy}
                         >
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                                 {sections.map((section, index) => (
-                                    <div key={section.id}>
-                                        {/* Gap with + button (between sections) */}
-                                        {index > 0 && (
-                                            <div
-                                                className="relative h-2 -my-0.5 flex items-center justify-center"
-                                                onMouseEnter={() => setHoveredGapIndex(index)}
-                                                onMouseLeave={() => setHoveredGapIndex(null)}
-                                            >
-                                                {/* Hover line */}
-                                                <div
-                                                    className={cn(
-                                                        'absolute inset-x-2 h-0.5 rounded-full transition-all duration-150',
-                                                        hoveredGapIndex === index
-                                                            ? 'bg-primary/40'
-                                                            : 'bg-transparent'
-                                                    )}
-                                                />
-                                                {/* Add button */}
-                                                <button
-                                                    className={cn(
-                                                        'absolute z-10 w-5 h-5 rounded-full',
-                                                        'bg-primary text-primary-foreground',
-                                                        'flex items-center justify-center',
-                                                        'shadow-md hover:scale-110 transition-all duration-150',
-                                                        hoveredGapIndex === index
-                                                            ? 'opacity-100 scale-100'
-                                                            : 'opacity-0 scale-75 pointer-events-none'
-                                                    )}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        handleAddSection(index)
-                                                    }}
-                                                >
-                                                    <Plus className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Draggable section */}
-                                        <DraggableSection
-                                            section={section}
-                                            index={index}
-                                            isGlobal={isGlobalSection(section.name)}
-                                            onEdit={() => console.log('Edit section:', section.name)}
-                                            onDelete={() => handleDeleteSection(index)}
-                                        />
-                                    </div>
+                                    <DraggableSection
+                                        key={section.id}
+                                        section={section}
+                                        index={index}
+                                        isGlobal={isGlobalSection(section.name)}
+                                        onUpdate={(name, description) => handleUpdateSection(index, name, description)}
+                                        onAddSection={() => handleAddSection(index + 1)}
+                                    />
                                 ))}
                             </div>
                         </SortableContext>
                     </DndContext>
-                ) : null}
-
-                {/* Add section button at end */}
-                <div
-                    className="mt-1"
-                    onMouseEnter={() => setHoveredGapIndex(sections.length)}
-                    onMouseLeave={() => setHoveredGapIndex(null)}
-                >
+                ) : (
+                    /* Add section button when empty */
                     <button
                         className={cn(
                             'w-full flex items-center justify-center gap-1.5 py-2',
                             'rounded-md border-2 border-dashed',
                             'text-xs transition-all duration-150',
-                            hoveredGapIndex === sections.length || sections.length === 0
-                                ? 'border-primary/40 text-primary bg-primary/5'
-                                : 'border-muted-foreground/20 text-muted-foreground'
+                            'border-primary/40 text-primary bg-primary/5 hover:bg-primary/10'
                         )}
-                        onClick={() => handleAddSection(sections.length)}
+                        onClick={() => handleAddSection(0)}
                     >
                         <Plus className="w-3.5 h-3.5" />
                         Add Section
                     </button>
-                </div>
+                )}
             </div>
 
             {/* Bottom handle */}

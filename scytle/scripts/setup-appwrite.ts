@@ -57,6 +57,7 @@ async function createCollections() {
                 { key: 'name', type: 'string', size: 255, required: true },
                 { key: 'description', type: 'string', size: 2000, required: false },
                 { key: 'status', type: 'enum', elements: ['draft', 'in-progress', 'completed'], default: 'draft' },
+                { key: 'sitemapData', type: 'string', size: 100000, required: false }, // JSON string for sitemap pages
                 { key: 'createdAt', type: 'datetime', required: true },
                 { key: 'updatedAt', type: 'datetime', required: true },
             ],

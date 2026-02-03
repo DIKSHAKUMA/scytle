@@ -311,16 +311,30 @@ Generate the sitemap JSON now.`
             }
         }
 
-        // 6. Convert to ReactFlow nodes and edges format
-        const { nodes, edges } = convertToReactFlowFormat(sitemapData.pages, projectName)
+        // 6. Save sitemap to project in database (if projectId provided)
+        if (projectId) {
+            try {
+                await databases.updateDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.PROJECTS,
+                    projectId,
+                    {
+                        sitemapData: JSON.stringify(sitemapData.pages),
+                        updatedAt: new Date().toISOString(),
+                    }
+                )
+                console.log('📦 Sitemap saved to project')
+            } catch (saveError) {
+                console.error('📦 Failed to save sitemap to project:', saveError)
+                // Continue even if save fails - user can still use the generated sitemap
+            }
+        }
 
         // 7. Return the sitemap structure
         return NextResponse.json({
             success: true,
             sitemap: {
                 pages: sitemapData.pages,
-                nodes,
-                edges,
             },
         })
     } catch (error) {

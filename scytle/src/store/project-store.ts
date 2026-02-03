@@ -12,7 +12,7 @@ interface ProjectState {
 
     // Actions
     fetchProjects: () => Promise<void>
-    fetchProject: (id: string) => Promise<void>
+    fetchProject: (id: string) => Promise<Project | null>
     createProject: (data: CreateProjectInput) => Promise<Project | null>
     updateProject: (id: string, data: UpdateProjectInput) => Promise<boolean>
     deleteProject: (id: string) => Promise<boolean>
@@ -95,11 +95,14 @@ export const useProjectStore = create<ProjectState>()(
                     state.currentProject = data.project
                     state.isLoading = false
                 })
+
+                return data.project as Project
             } catch (error) {
                 set(state => {
                     state.error = error instanceof Error ? error.message : 'Failed to fetch project'
                     state.isLoading = false
                 })
+                return null
             }
         },
 

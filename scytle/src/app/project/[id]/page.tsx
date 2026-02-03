@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
-import { useSitemapStore, CanvasTool } from '@/store/sitemap-store'
+import { useSitemapStore, CanvasTool, flushPendingSave } from '@/store/sitemap-store'
 import { SitemapView, LeftSidebar, SectionPickerPanel } from '@/components/canvas'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
@@ -116,6 +116,16 @@ export default function ProjectEditorPage() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [setActiveTool, undo, redo, zoomIn, zoomOut, resetZoom, setSelectedNodeId])
 
+    // Flush pending saves before page unload (prevents data loss on refresh)
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            console.log('🔄 Page unloading, flushing pending saves...')
+            flushPendingSave()
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [])
+
     // Open sidebar when a node is selected, close when deselected
     useEffect(() => {
         if (selectedNodeId) {
@@ -141,7 +151,32 @@ export default function ProjectEditorPage() {
                 setAuthChecked(true)
 
                 // Load project
-                await fetchProject(projectId)
+                const project = await fetchProject(projectId)
+
+                // Set project ID for sitemap auto-save
+                useSitemapStore.getState().setProjectId(projectId)
+
+                // Load saved sitemap if it exists
+                // sitemapData is stored as a JSON string in the database
+                if (project?.sitemapData) {
+                    try {
+                        // Parse the JSON string to get the pages array
+                        const parsedSitemap = typeof project.sitemapData === 'string'
+                            ? JSON.parse(project.sitemapData)
+                            : project.sitemapData
+
+                        if (Array.isArray(parsedSitemap) && parsedSitemap.length > 0) {
+                            console.log('📦 Loading saved sitemap from database:', JSON.stringify(parsedSitemap, null, 2))
+                            useSitemapStore.getState().loadSitemap(parsedSitemap, project.name)
+                        } else {
+                            console.log('📦 Sitemap data is empty, using default')
+                        }
+                    } catch (parseError) {
+                        console.error('❌ Failed to parse sitemap data:', parseError)
+                    }
+                } else {
+                    console.log('📦 No saved sitemap found, using default')
+                }
             } catch (error) {
                 console.error('🔴 Failed to initialize editor:', error)
                 router.push('/dashboard')
