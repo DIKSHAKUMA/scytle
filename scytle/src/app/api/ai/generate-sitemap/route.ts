@@ -330,11 +330,12 @@ Generate the sitemap JSON now.`
             }
         }
 
-        // 7. Return the sitemap structure
+        // 7. Return the sitemap structure with project name
         return NextResponse.json({
             success: true,
             sitemap: {
                 pages: sitemapData.pages,
+                projectName,
             },
         })
     } catch (error) {

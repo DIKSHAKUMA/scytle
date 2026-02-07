@@ -32,6 +32,58 @@ export const SitemapPageSchema = z.object({
     children: z.array(z.lazy((): z.ZodTypeAny => SitemapPageSchema)).optional(),
 })
 
+// Wireframe Section Content Schema (for persistence)
+export const WireframeSectionContentSchema = z.object({
+    heading: z.string().optional(),
+    subheading: z.string().optional(),
+    body: z.string().optional(),
+    buttonPrimary: z.object({
+        text: z.string(),
+        href: z.string().optional(),
+    }).optional(),
+    buttonSecondary: z.object({
+        text: z.string(),
+        href: z.string().optional(),
+    }).optional(),
+    image: z.object({
+        src: z.string(),
+        alt: z.string(),
+    }).optional(),
+    items: z.array(z.object({
+        id: z.string(),
+        heading: z.string().optional(),
+        body: z.string().optional(),
+        icon: z.string().optional(),
+    })).optional(),
+})
+
+// Wireframe Section Schema (for persistence)
+export const WireframeSectionSchema = z.object({
+    id: z.string(),
+    type: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    componentId: z.string(),
+    isGlobal: z.boolean(),
+    order: z.number(),
+    content: WireframeSectionContentSchema,
+    controls: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+})
+
+// Wireframe Page Schema (for persistence)
+export const WireframePageSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+    description: z.string().optional(),
+    parentId: z.string().nullable().optional(),
+    order: z.number(),
+    sections: z.array(WireframeSectionSchema),
+})
+
+// Wireframe Data Schema (for project storage)
+export const WireframeDataSchema = z.array(WireframePageSchema)
+
 // Project
 export const ProjectSchema = z.object({
     projectId: z.string(),
@@ -42,6 +94,7 @@ export const ProjectSchema = z.object({
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     sitemapData: z.array(SitemapPageSchema).nullable().optional(),
+    wireframeData: z.string().nullable().optional(), // JSON stringified wireframe pages
 })
 
 export const CreateProjectSchema = z.object({
@@ -54,6 +107,7 @@ export const UpdateProjectSchema = z.object({
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.optional(),
     sitemapData: z.string().optional(), // JSON stringified sitemap pages
+    wireframeData: z.string().optional(), // JSON stringified wireframe pages
 })
 
 // Page
@@ -221,6 +275,63 @@ export interface CanvasEdge {
     source: string
     target: string
     type?: 'smoothstep' | 'straight' | 'bezier'
+}
+
+// ============================================
+// Wireframe Types
+// ============================================
+
+// Section content - editable text/media in wireframe
+export interface WireframeSectionContent {
+    heading?: string
+    subheading?: string
+    body?: string
+    buttonPrimary?: { text: string; href?: string }
+    buttonSecondary?: { text: string; href?: string }
+    image?: { src: string; alt: string }
+    items?: Array<{
+        id: string
+        heading?: string
+        body?: string
+        icon?: string
+    }>
+}
+
+// Section controls - dynamic per section type
+export type WireframeSectionControls = Record<string, string | number | boolean>
+
+// Wireframe section - extends sitemap section with component info
+export interface WireframeSection {
+    id: string
+    type: string // 'hero', 'features', 'testimonial', etc.
+    name: string
+    description?: string
+    componentId: string // e.g., 'header-145', 'testimonial-7'
+    layoutVariant?: string // e.g., 'split', 'centered', 'with-image'
+    isGlobal: boolean
+    order: number
+    content: WireframeSectionContent
+    controls: WireframeSectionControls
+}
+
+// Wireframe page - extends sitemap page
+export interface WireframePage {
+    id: string
+    name: string
+    slug: string
+    description?: string
+    parentId?: string | null
+    order: number
+    sections: WireframeSection[]
+}
+
+// Viewport mode for dual display
+export type ViewportMode = 'dual' | 'desktop' | 'mobile'
+
+// Device visibility toggles
+export interface DeviceVisibility {
+    desktop: boolean
+    mobile: boolean
 }
 
 // ============================================

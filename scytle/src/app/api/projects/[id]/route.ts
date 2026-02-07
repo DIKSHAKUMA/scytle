@@ -52,6 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
             sitemapData,
+            wireframeData: doc.wireframeData || null,
         }
 
         return NextResponse.json({ project })
@@ -101,16 +102,51 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
-        // Update project
-        const doc = await databases.updateDocument(
-            DATABASE_ID,
-            COLLECTIONS.PROJECTS,
-            id,
-            {
-                ...validation.data,
-                updatedAt: new Date().toISOString(),
+        // Extract wireframeData separately - it may not exist in Appwrite yet
+        const { wireframeData, ...updateData } = validation.data
+
+        // Build the update payload with only fields that exist in Appwrite
+        const updatePayload: Record<string, unknown> = {
+            ...updateData,
+            updatedAt: new Date().toISOString(),
+        }
+
+        // Only include wireframeData if the attribute exists in Appwrite
+        // To enable: Add 'wireframeData' string attribute to projects collection in Appwrite console
+        if (wireframeData !== undefined) {
+            try {
+                // Try to include wireframeData - will work if attribute exists
+                updatePayload.wireframeData = wireframeData
+            } catch {
+                console.warn('⚠️ wireframeData attribute not configured in Appwrite - skipping')
             }
-        )
+        }
+
+        // Update project
+        let doc
+        try {
+            doc = await databases.updateDocument(
+                DATABASE_ID,
+                COLLECTIONS.PROJECTS,
+                id,
+                updatePayload
+            )
+        } catch (error: unknown) {
+            // If wireframeData causes the error, retry without it
+            if (error instanceof Error && error.message?.includes('wireframeData')) {
+                console.warn('⚠️ wireframeData attribute not in Appwrite schema - saving without it')
+                console.warn('   To enable: Add "wireframeData" (string, optional) to projects collection')
+                delete updatePayload.wireframeData
+                doc = await databases.updateDocument(
+                    DATABASE_ID,
+                    COLLECTIONS.PROJECTS,
+                    id,
+                    updatePayload
+                )
+            } else {
+                throw error
+            }
+        }
 
         const project = {
             projectId: doc.$id,
@@ -120,6 +156,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             status: doc.status,
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
+            wireframeData: doc.wireframeData || null,
         }
 
         console.log('✅ Project updated:', project.projectId)

@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { Message, MessageRole } from '@/types'
 import { createJWT } from '@/lib/appwrite'
-import { useSitemapStore } from './sitemap-store'
+import { useUnifiedStore } from './unified-store'
+import { useProjectStore } from './project-store'
 
 interface ChatState {
     // State
@@ -196,11 +197,15 @@ export const useChatStore = create<ChatState>()(
                 const data = await response.json()
 
                 if (data.success && data.sitemap) {
-                    // Load sitemap into the canvas store using pages data
+                    // Load sitemap into the unified store using pages data
                     // This will apply proper tree layout automatically
-                    useSitemapStore.getState().loadSitemap(
+                    // Get project name from the sitemap response or project store
+                    const projectName = data.sitemap.projectName ||
+                        useProjectStore.getState().currentProject?.name ||
+                        'My Project'
+                    useUnifiedStore.getState().loadFromAI(
                         data.sitemap.pages,
-                        get().currentProjectId || 'My Project'
+                        projectName
                     )
 
                     // Add success message

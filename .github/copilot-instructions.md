@@ -1,4 +1,14 @@
-# Scytle - AI Product Studio
+# Multi-Project Workspace Instructions
+
+This workspace contains **two major projects**:
+1. **Scytle** (`scytle/`) - AI-powered product development platform
+2. **OpenClaw** (`openclaw/`) - Personal AI assistant CLI/gateway
+
+**Critical**: Always check which project context you're working in. Use `cd scytle` or `cd openclaw` before running commands.
+
+---
+
+# Scytle (`scytle/`) - AI Product Studio
 
 ## Overview
 
@@ -14,15 +24,14 @@
 - **Validation**: Zod schemas for all data structures
 - **UI**: Radix UI primitives (shadcn/ui pattern)
 
-
 ---
 
-## Project Structure
+## Scytle Project Structure
 
 ```
 scytle/
 ├── src/
-│   ├── app/
+│   ├── app/                             # Next.js App Router
 │   │   ├── api/                         # JWT-authenticated API routes
 │   │   │   ├── chat/route.ts            # AI streaming responses
 │   │   │   ├── projects/route.ts        # Project CRUD
@@ -45,16 +54,21 @@ scytle/
 │   │   ├── appwrite.ts                  # Client SDK (auth)
 │   │   ├── appwrite-server.ts           # Server SDK (admin operations)
 │   │   └── utils.ts                     # cn(), formatDate(), etc.
-│   ├── store/
+│   ├── store/                           # Zustand stores (with immer)
 │   │   ├── auth-store.ts                # User session
 │   │   ├── project-store.ts             # Current project state
 │   │   ├── chat-store.ts                # Conversation history
 │   │   └── sitemap-store.ts             # Canvas state (zoom, nodes, edges)
 │   └── types/
 │       └── index.ts                     # Zod schemas + TypeScript types
-└── docs/
-    ├── SCYTLE-BUILD-PHASES.md           # 8-phase implementation plan
-    └── SCYTLE-UX-FLOW.md                # Complete UX scenarios
+├── public/                              # Static assets
+└── scripts/                             # Build/utility scripts
+
+docs/ (workspace root)
+├── SCYTLE-BUILD-PHASES.md               # 8-phase implementation plan (295 tasks)
+├── SCYTLE-UX-FLOW.md                    # Complete UX scenarios
+├── SITEMAP-RELUME-SPEC.md               # Sitemap generation spec
+└── WIREFRAME-SPEC.md                    # Wireframe generation spec
 ```
 
 ---
@@ -841,11 +855,12 @@ export default function ProjectEditorPage() {
 
 ---
 
-## Development Workflow
+## Scytle Development Workflow
 
-### Running the Project
+### Running Scytle
 
 ```bash
+cd scytle                # ALWAYS navigate to scytle directory first
 npm run dev              # Start dev server (localhost:3000)
 npm run build            # TypeScript strict build
 npm run lint             # ESLint validation
@@ -853,7 +868,7 @@ npm run lint             # ESLint validation
 
 ### Environment Setup
 
-Required environment variables in `.env.local`:
+Create `.env.local` in `scytle/` directory:
 ```bash
 # Appwrite
 NEXT_PUBLIC_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
@@ -869,7 +884,7 @@ GEMINI_API_KEY=<gemini-api-key>
 
 Database ID: `scytle_db`
 
-Collections (see [src/lib/appwrite.ts](scytle/src/lib/appwrite.ts)):
+Collections structure (see [scytle/src/lib/appwrite.ts](scytle/src/lib/appwrite.ts)):
 - `users` - User profiles
 - `projects` - Project metadata
 - `pages` - Page hierarchy (sitemap nodes)
@@ -989,20 +1004,22 @@ console.warn('⚠️ APPWRITE_API_KEY not set')
 
 ---
 
-## Key Documentation
+## Scytle Key Documentation
 
-- **Build Plan**: [docs/SCYTLE-BUILD-PHASES.md](scytle/docs/SCYTLE-BUILD-PHASES.md) - 8-phase implementation roadmap
-- **UX Flows**: [docs/SCYTLE-UX-FLOW.md](scytle/docs/SCYTLE-UX-FLOW.md) - Complete user scenarios
-- **Type Definitions**: [src/types/index.ts](scytle/src/types/index.ts) - All Zod schemas
+- **Build Plan**: [docs/SCYTLE-BUILD-PHASES.md](docs/SCYTLE-BUILD-PHASES.md) - 8-phase implementation roadmap (295 tasks)
+- **UX Flows**: [docs/SCYTLE-UX-FLOW.md](docs/SCYTLE-UX-FLOW.md) - Complete user scenarios
+- **Sitemap Spec**: [docs/SITEMAP-RELUME-SPEC.md](docs/SITEMAP-RELUME-SPEC.md) - Relume-style sitemap generation
+- **Wireframe Spec**: [docs/WIREFRAME-SPEC.md](docs/WIREFRAME-SPEC.md) - Wireframe generation patterns
+- **Type Definitions**: [scytle/src/types/index.ts](scytle/src/types/index.ts) - All Zod schemas
 
 ---
 
-## Common Tasks
+## Scytle Common Tasks
 
 ### Adding a New Zustand Store
 
 ```typescript
-// store/new-feature-store.ts
+// scytle/src/store/new-feature-store.ts
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 
@@ -1037,14 +1054,14 @@ export const useNewFeatureStore = create<NewFeatureState>()(
     }))
 )
 
-// Export from store/index.ts
+// Export from scytle/src/store/index.ts
 export { useNewFeatureStore } from './new-feature-store'
 ```
 
 ### Creating a New API Endpoint
 
 ```typescript
-// app/api/new-endpoint/route.ts
+// scytle/src/app/api/new-endpoint/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromJWT, createAdminClient, DATABASE_ID } from '@/lib/appwrite-server'
 import { NewInputSchema } from '@/types'
@@ -1081,7 +1098,7 @@ export async function POST(request: NextRequest) {
 
 ### Adding AI Prompts
 
-Edit [src/lib/ai/config.ts](scytle/src/lib/ai/config.ts):
+Edit [scytle/src/lib/ai/config.ts](scytle/src/lib/ai/config.ts):
 ```typescript
 export const SYSTEM_PROMPTS = {
     // ... existing prompts
@@ -1097,157 +1114,21 @@ export type SystemPromptKey = keyof typeof SYSTEM_PROMPTS
 
 ---
 
-## Testing Strategy
+## Scytle Quick Reference
 
-Currently in development phase. Future testing approach:
-- **Unit**: Jest for utility functions, Zod schema validation
-- **Component**: React Testing Library for UI components
-- **Integration**: API route testing with mock Appwrite client
-- **E2E**: Playwright for critical user flows
-
----
-
-## Architecture Decisions
-
-### Why Appwrite?
-- **Client-side auth**: No server session management needed
-- **Real-time subscriptions**: For collaborative features (future)
-- **Storage included**: For project assets and exports
-- **Built-in user management**: Email/OAuth out of the box
-
-### Why Zustand + Immer?
-- **Minimal boilerplate**: Less verbose than Redux
-- **Immer integration**: Direct state mutation with immutability
-- **TypeScript-first**: Excellent type inference
-- **No providers**: Direct hook access, simpler component tree
-
-### Why ReactFlow?
-- **Built for diagrams**: Perfect for sitemap visualization
-- **Customizable**: Custom nodes, edges, handles
-- **Performance**: Optimized for large graphs
-- **TypeScript support**: Full type safety
-
-### Why Gemini?
-- **Cost-effective**: Lower pricing than GPT-4
-- **Fast**: `gemini-2.0-flash` optimized for speed
-- **Streaming**: Native support for token streaming
-- **Context window**: 32K tokens for conversations
-
----
-
-## Quick Reference
-
-**Start developing**: `npm run dev` → Open http://localhost:3000  
-**Add UI component**: Use pattern from [src/components/ui/button.tsx](scytle/src/components/ui/button.tsx)  
-**Create API route**: Follow [src/app/api/chat/route.ts](scytle/src/app/api/chat/route.ts) authentication pattern  
-**Add Zustand store**: Use immer middleware like [src/store/project-store.ts](scytle/src/store/project-store.ts)  
-**Define types**: Add Zod schema in [src/types/index.ts](scytle/src/types/index.ts), infer TS type with `z.infer<>`
+**Start developing**: `cd scytle && npm run dev` → Open http://localhost:3000  
+**Add UI component**: Use pattern from [scytle/src/components/ui/button.tsx](scytle/src/components/ui/button.tsx)  
+**Create API route**: Follow [scytle/src/app/api/chat/route.ts](scytle/src/app/api/chat/route.ts) authentication pattern  
+**Add Zustand store**: Use immer middleware like [scytle/src/store/project-store.ts](scytle/src/store/project-store.ts)  
+**Define types**: Add Zod schema in [scytle/src/types/index.ts](scytle/src/types/index.ts), infer TS type with `z.infer<>`
 
 **Project Status**: Phase 1 complete (foundation, auth, canvas). Currently implementing AI chat and sitemap generation features.
-- SEO: 90+
-
-**Core Web Vitals:**
-- LCP (Largest Contentful Paint): < 2.5s
-- FID (First Input Delay): < 100ms
-- CLS (Cumulative Layout Shift): < 0.1
-
-**Bundle Size:**
-- Initial JS: < 300KB (gzipped)
-- Initial CSS: < 50KB (gzipped)
-- Total page weight: < 1MB
 
 ---
 
-## Deployment
+# OpenClaw (`openclaw/`) - Personal AI Assistant
 
-**Production Environment:**
-- Hosting: Vercel
-- Database: Appwrite Cloud
-- CDN: Cloudflare
-- Domain: scytle.ai
-
-**Environment Variables:**
-```bash
-# Appwrite
-NEXT_PUBLIC_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
-NEXT_PUBLIC_APPWRITE_PROJECT_ID=xxx
-APPWRITE_API_KEY=xxx
-
-# AI
-OPENROUTER_API_KEY=xxx
-GEMINI_API_KEY=xxx
-
-# Stripe
-STRIPE_SECRET_KEY=xxx
-STRIPE_WEBHOOK_SECRET=xxx
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=xxx
-
-# Analytics
-NEXT_PUBLIC_GA_ID=xxx
-SENTRY_DSN=xxx
-```
-
----
-
-## Resources
-
-**Documentation:**
-- [UX Flow](./docs/SCYTLE-UX-FLOW.md) - Complete user flow scenarios
-- [Build Phases](./docs/SCYTLE-BUILD-PHASES.md) - 8-phase plan with 295 tasks
-- [Skills Guide](https://www.anthropic.com/engineering/skills) - How skills work
-
-**External References:**
-- [Next.js Docs](https://nextjs.org/docs)
-- [Appwrite Docs](https://appwrite.io/docs)
-- [ReactFlow Docs](https://reactflow.dev)
-- [Shadcn/ui](https://ui.shadcn.com)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-
-**Inspiration:**
-- [Relume](https://relume.io) - Sitemap → Wireframe workflow
-- [v0.dev](https://v0.dev) - AI UI generation
-- [Bolt.new](https://bolt.new) - Full-stack code generation
-
----
-
-## Agent Behavior Guidelines
-
-### When to Load Skills
-**Frontend Task:** Load `frontend_aesthetics` + `scytle_patterns`
-**Code Review:** Load `react_best_practices` + `web_design_guidelines`  
-**Building Components:** Load `composition_patterns`
-**Unfamiliar Task:** Ask user which skills to load
-
-### Communication Style
-- **Be concise**: 1-3 sentences for simple answers
-- **Be specific**: Reference exact file paths, line numbers
-- **Be proactive**: Suggest improvements, not just fixes
-- **Be transparent**: Explain trade-offs, not just solutions
-
-### Error Handling
-- Always provide actionable error messages
-- Include stack trace in development
-- Log errors to Sentry in production
-- Never expose sensitive data in errors
-
-### Code Generation
-- Generate complete, runnable code (no `// TODO` comments)
-- Include TypeScript types
-- Add JSDoc comments for public APIs
-- Follow existing patterns in codebase
-- Optimize for readability first, performance second
-
----
-
-**Last Updated**: February 2, 2026  
-**Version**: 3.0 (Multi-project workspace)  
-**Maintainer**: Scytle Team
-
----
-
-# OpenClaw (openclaw/)
-
-> **For full details**, see `openclaw/CLAUDE.md` and `openclaw/AGENTS.md`.
+> **For full details**, see [openclaw/CLAUDE.md](openclaw/CLAUDE.md) and [openclaw/AGENTS.md](openclaw/AGENTS.md).
 
 ## Overview
 

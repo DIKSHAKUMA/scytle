@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { useProjectStore, useAuthStore } from '@/store'
+import { useProjectStore, useAuthStore, useUnifiedStore } from '@/store'
 import { useSitemapStore, CanvasTool, flushPendingSave } from '@/store/sitemap-store'
+import { flushPendingSave as flushUnifiedSave } from '@/store/unified-store'
 import { SitemapView, LeftSidebar, SectionPickerPanel } from '@/components/canvas'
+import { WireframeView } from '@/components/wireframe/wireframe-view'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -121,9 +123,47 @@ export default function ProjectEditorPage() {
         const handleBeforeUnload = () => {
             console.log('🔄 Page unloading, flushing pending saves...')
             flushPendingSave()
+            flushUnifiedSave()
         }
         window.addEventListener('beforeunload', handleBeforeUnload)
         return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [])
+
+    // Sync wireframe (unified store) section changes back to sitemap store in real-time
+    useEffect(() => {
+        const unsub = useUnifiedStore.subscribe(
+            (state) => state.pages,
+            (pages) => {
+                // When unified store pages change, update the corresponding sitemap nodes
+                const sitemapState = useSitemapStore.getState()
+                if (!sitemapState.nodes.length || !pages.length) return
+
+                pages.forEach((page) => {
+                    const node = sitemapState.nodes.find(n => n.id === page.id)
+                    if (!node) return
+
+                    // Convert WireframeSection[] to the simpler format sitemap uses
+                    const sitemapSections = page.sections.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        description: s.description,
+                    }))
+
+                    // Only update if sections actually changed
+                    const currentSections = (node.data as { sections?: Array<{ id?: string; name: string }> }).sections || []
+                    const currentIds = currentSections.map((s: string | { id?: string; name: string }) => typeof s === 'string' ? s : s.id).join(',')
+                    const newIds = sitemapSections.map(s => s.id).join(',')
+
+                    if (currentIds !== newIds) {
+                        useSitemapStore.getState().updateNode(page.id, {
+                            sections: sitemapSections,
+                        })
+                    }
+                })
+            },
+            { equalityFn: (a, b) => a === b } // Only fire on reference change (immer produces new refs)
+        )
+        return () => unsub()
     }, [])
 
     // Open sidebar when a node is selected, close when deselected
@@ -153,21 +193,61 @@ export default function ProjectEditorPage() {
                 // Load project
                 const project = await fetchProject(projectId)
 
-                // Set project ID for sitemap auto-save
+                // Set project ID for both stores' auto-save
                 useSitemapStore.getState().setProjectId(projectId)
+                useUnifiedStore.getState().setProjectId(projectId)
 
                 // Load saved sitemap if it exists
                 // sitemapData is stored as a JSON string in the database
                 if (project?.sitemapData) {
                     try {
-                        // Parse the JSON string to get the pages array
-                        const parsedSitemap = typeof project.sitemapData === 'string'
+                        // Parse the JSON string - could be array (sitemap format) or {pages, projectName} (unified format)
+                        const parsed = typeof project.sitemapData === 'string'
                             ? JSON.parse(project.sitemapData)
                             : project.sitemapData
 
-                        if (Array.isArray(parsedSitemap) && parsedSitemap.length > 0) {
-                            console.log('📦 Loading saved sitemap from database:', JSON.stringify(parsedSitemap, null, 2))
-                            useSitemapStore.getState().loadSitemap(parsedSitemap, project.name)
+                        // Handle both formats: flat array or {pages, projectName} object
+                        let sitemapPages: typeof parsed
+                        let savedProjectName = project.name
+
+                        if (Array.isArray(parsed)) {
+                            // Sitemap store format: flat array of AIGeneratedPage
+                            sitemapPages = parsed
+                        } else if (parsed?.pages && Array.isArray(parsed.pages)) {
+                            // Unified store format: { pages: UnifiedPage[], projectName }
+                            sitemapPages = parsed.pages
+                            savedProjectName = parsed.projectName || project.name
+                        } else {
+                            sitemapPages = []
+                        }
+
+                        if (sitemapPages.length > 0) {
+                            // Check if data is in unified format (has 'name' field) vs sitemap format (has 'label' field)
+                            const isUnifiedFormat = sitemapPages[0].name && !sitemapPages[0].label
+
+                            if (isUnifiedFormat) {
+                                // Convert unified pages to sitemap format for loadSitemap
+                                const aiPages = sitemapPages.map((p: { id: string; name: string; slug: string; sections: Array<{ name: string; description?: string; id?: string }> }) => ({
+                                    id: p.id,
+                                    label: p.name,
+                                    slug: p.slug,
+                                    sections: p.sections.map((s: { name: string; description?: string; id?: string }) => ({
+                                        id: s.id,
+                                        name: s.name,
+                                        description: s.description,
+                                    })),
+                                    children: [],
+                                }))
+                                console.log('📦 Loading unified format data into both stores')
+                                useSitemapStore.getState().loadSitemap(aiPages, savedProjectName)
+                                useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName)
+                            } else {
+                                // Already in AI/sitemap format
+                                console.log('📦 Loading sitemap format data into both stores')
+                                useSitemapStore.getState().loadSitemap(sitemapPages, savedProjectName)
+                                useUnifiedStore.getState().loadFromAI(sitemapPages, savedProjectName)
+                            }
+                            console.log('📦 Both stores loaded -', 'sitemap nodes:', useSitemapStore.getState().nodes.length, 'unified pages:', useUnifiedStore.getState().pages.length)
                         } else {
                             console.log('📦 Sitemap data is empty, using default')
                         }
@@ -291,12 +371,16 @@ export default function ProjectEditorPage() {
                                 <SitemapView projectName={currentProject.name} />
                             )}
 
-                            {/* Placeholder for other views */}
-                            {(activeView !== 'sitemap' || isDevMode) && (
+                            {/* Wireframe View */}
+                            {activeView === 'wireframe' && !isDevMode && (
+                                <WireframeView projectId={projectId as string} />
+                            )}
+
+                            {/* Placeholder for design/code views and dev mode */}
+                            {((activeView === 'design') || isDevMode) && (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="text-center text-muted-foreground">
                                         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                                            {activeView === 'wireframe' && <Layout className="w-8 h-8" />}
                                             {activeView === 'design' && <Palette className="w-8 h-8" />}
                                             {isDevMode && <Code className="w-8 h-8" />}
                                         </div>
@@ -304,7 +388,6 @@ export default function ProjectEditorPage() {
                                             {isDevMode ? 'Dev Mode' : activeView.charAt(0).toUpperCase() + activeView.slice(1)}
                                         </h3>
                                         <p className="text-sm max-w-xs">
-                                            {activeView === 'wireframe' && 'Wireframes will appear here once sitemap is created'}
                                             {activeView === 'design' && 'Design variations will be displayed here'}
                                             {isDevMode && 'Code editor and preview will be available here'}
                                         </p>
