@@ -93,11 +93,11 @@ export const ProjectNode = memo(function ProjectNode({
                 </button>
             </div>
 
-            {/* Bottom handle only - root node receives no connections */}
+            {/* Bottom handle - invisible, only for edge connections */}
             <Handle
                 type="source"
                 position={Position.Bottom}
-                className="!w-3 !h-3 !bg-primary !border-2 !border-background !-bottom-1.5"
+                className="!w-0 !h-0 !bg-transparent !border-0 !min-w-0 !min-h-0 !bottom-0"
             />
         </div>
     )

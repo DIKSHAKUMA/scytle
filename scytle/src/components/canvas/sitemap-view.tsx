@@ -11,6 +11,7 @@ import {
     EdgeTypes,
     ReactFlowProvider,
     ConnectionLineType,
+    Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -53,6 +54,9 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         setReactFlowFunctions,
         addNode,
         closeSectionPicker,
+        handleNodeDragStart,
+        handleNodeDrag,
+        handleNodeDragStop,
     } = useSitemapStore()
 
     // Register ReactFlow zoom functions for toolbar controls
@@ -171,6 +175,19 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         }
     }, [activeTool, reactFlowInstance, addNode, setSelectedNodeId, setActiveTool, closeSectionPicker])
 
+    // Handle node drag lifecycle - Relume-style: live shuffle preview + snap to tree layout
+    const onNodeDragStart = useCallback((_: React.MouseEvent, node: Node) => {
+        handleNodeDragStart(node.id)
+    }, [handleNodeDragStart])
+
+    const onNodeDrag = useCallback((_: React.MouseEvent, node: Node) => {
+        handleNodeDrag(node.id)
+    }, [handleNodeDrag])
+
+    const onNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
+        handleNodeDragStop(node.id)
+    }, [handleNodeDragStop])
+
     // Determine cursor and pan mode
     const shouldPan = isPanning || activeTool === 'hand'
     const cursorClass = shouldPan
@@ -186,7 +203,14 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
                     cursor: default !important;
                 }
                 .react-flow__node {
-                    cursor: pointer !important;
+                    cursor: ${activeTool === 'select' ? 'grab' : 'pointer'} !important;
+                    transition: transform 0.25s ease;
+                }
+                .react-flow__node.dragging {
+                    cursor: grabbing !important;
+                    transition: none;
+                    opacity: 0.7;
+                    z-index: 1000 !important;
                 }
                 .react-flow__edge-path {
                     cursor: pointer;
@@ -200,16 +224,20 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
+                onNodeDragStart={onNodeDragStart}
+                onNodeDrag={onNodeDrag}
+                onNodeDragStop={onNodeDragStop}
                 onMove={onMove}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
+                nodesDraggable={activeTool === 'select'}
                 fitView
                 fitViewOptions={{
                     padding: 0.2,
                     duration: 400,
                 }}
                 panOnDrag={shouldPan}
-                selectionOnDrag={!shouldPan}
+                selectionOnDrag={false}
                 // Figma-style: two-finger scroll to pan, pinch to zoom
                 panOnScroll={true}
                 panOnScrollSpeed={0.8}

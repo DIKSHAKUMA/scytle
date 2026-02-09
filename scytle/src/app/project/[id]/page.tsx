@@ -68,6 +68,11 @@ export default function ProjectEditorPage() {
     const [authChecked, setAuthChecked] = useState(false)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
+    // Reset project store loading state on mount (prevents stuck spinner after HMR)
+    useEffect(() => {
+        useProjectStore.setState({ isLoading: false })
+    }, [])
+
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -177,10 +182,14 @@ export default function ProjectEditorPage() {
 
     // Check authentication and load project
     useEffect(() => {
+        let cancelled = false
+
         const init = async () => {
             try {
                 const { getUser } = await import('@/lib/appwrite')
                 const currentUser = await getUser()
+
+                if (cancelled) return
 
                 if (!currentUser) {
                     window.location.href = `/login?redirect=/project/${projectId}`
@@ -193,6 +202,8 @@ export default function ProjectEditorPage() {
                 // Load project
                 const project = await fetchProject(projectId)
 
+                if (cancelled) return
+
                 // Set project ID for both stores' auto-save
                 useSitemapStore.getState().setProjectId(projectId)
                 useUnifiedStore.getState().setProjectId(projectId)
@@ -201,55 +212,83 @@ export default function ProjectEditorPage() {
                 // sitemapData is stored as a JSON string in the database
                 if (project?.sitemapData) {
                     try {
-                        // Parse the JSON string - could be array (sitemap format) or {pages, projectName} (unified format)
+                        // Parse the JSON string
                         const parsed = typeof project.sitemapData === 'string'
                             ? JSON.parse(project.sitemapData)
                             : project.sitemapData
 
-                        // Handle both formats: flat array or {pages, projectName} object
-                        let sitemapPages: typeof parsed
-                        let savedProjectName = project.name
+                        // v2 format: { version: 2, nodes: [...], edges: [...] }
+                        // Preserves full tree hierarchy including parent-child edges
+                        if (parsed?.version === 2 && parsed.nodes && parsed.edges) {
+                            console.log('📦 Loading v2 sitemap format (nodes + edges)')
+                            const rawNodes = parsed.nodes.map((n: { id: string; type: string; data: Record<string, unknown> }) => ({
+                                id: n.id,
+                                type: n.type,
+                                position: { x: 0, y: 0 },
+                                data: n.data,
+                                ...(n.type === 'project' ? { draggable: false } : {}),
+                            }))
+                            const rawEdges = parsed.edges.map((e: { id: string; source: string; target: string; type?: string }) => ({
+                                id: e.id,
+                                source: e.source,
+                                target: e.target,
+                                type: e.type || 'sitemap',
+                            }))
+                            useSitemapStore.getState().loadRawSitemap(rawNodes, rawEdges)
 
-                        if (Array.isArray(parsed)) {
-                            // Sitemap store format: flat array of AIGeneratedPage
-                            sitemapPages = parsed
-                        } else if (parsed?.pages && Array.isArray(parsed.pages)) {
-                            // Unified store format: { pages: UnifiedPage[], projectName }
-                            sitemapPages = parsed.pages
-                            savedProjectName = parsed.projectName || project.name
-                        } else {
-                            sitemapPages = []
-                        }
-
-                        if (sitemapPages.length > 0) {
-                            // Check if data is in unified format (has 'name' field) vs sitemap format (has 'label' field)
-                            const isUnifiedFormat = sitemapPages[0].name && !sitemapPages[0].label
-
-                            if (isUnifiedFormat) {
-                                // Convert unified pages to sitemap format for loadSitemap
-                                const aiPages = sitemapPages.map((p: { id: string; name: string; slug: string; sections: Array<{ name: string; description?: string; id?: string }> }) => ({
-                                    id: p.id,
-                                    label: p.name,
-                                    slug: p.slug,
-                                    sections: p.sections.map((s: { name: string; description?: string; id?: string }) => ({
-                                        id: s.id,
-                                        name: s.name,
-                                        description: s.description,
-                                    })),
+                            // Also load into unified store (convert nodes to page format)
+                            const aiPages = rawNodes
+                                .filter((n: { type: string }) => n.type === 'page')
+                                .map((n: { id: string; data: { label?: string; name?: string; slug?: string; sections?: Array<{ id?: string; name: string; description?: string }> } }) => ({
+                                    id: n.id,
+                                    label: n.data.label || n.data.name || 'Untitled',
+                                    slug: n.data.slug || '/',
+                                    sections: n.data.sections || [],
                                     children: [],
                                 }))
-                                console.log('📦 Loading unified format data into both stores')
-                                useSitemapStore.getState().loadSitemap(aiPages, savedProjectName)
-                                useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName)
-                            } else {
-                                // Already in AI/sitemap format
-                                console.log('📦 Loading sitemap format data into both stores')
-                                useSitemapStore.getState().loadSitemap(sitemapPages, savedProjectName)
-                                useUnifiedStore.getState().loadFromAI(sitemapPages, savedProjectName)
-                            }
-                            console.log('📦 Both stores loaded -', 'sitemap nodes:', useSitemapStore.getState().nodes.length, 'unified pages:', useUnifiedStore.getState().pages.length)
+                            useUnifiedStore.getState().loadFromAI(aiPages, project.name)
+                            console.log('📦 Both stores loaded -', 'sitemap nodes:', rawNodes.length, 'edges:', rawEdges.length, 'unified pages:', useUnifiedStore.getState().pages.length)
                         } else {
-                            console.log('📦 Sitemap data is empty, using default')
+                            // Legacy format: flat array or {pages, projectName}
+                            let sitemapPages: typeof parsed
+                            let savedProjectName = project.name
+
+                            if (Array.isArray(parsed)) {
+                                sitemapPages = parsed
+                            } else if (parsed?.pages && Array.isArray(parsed.pages)) {
+                                sitemapPages = parsed.pages
+                                savedProjectName = parsed.projectName || project.name
+                            } else {
+                                sitemapPages = []
+                            }
+
+                            if (sitemapPages.length > 0) {
+                                const isUnifiedFormat = sitemapPages[0].name && !sitemapPages[0].label
+
+                                if (isUnifiedFormat) {
+                                    const aiPages = sitemapPages.map((p: { id: string; name: string; slug: string; sections: Array<{ name: string; description?: string; id?: string }> }) => ({
+                                        id: p.id,
+                                        label: p.name,
+                                        slug: p.slug,
+                                        sections: p.sections.map((s: { name: string; description?: string; id?: string }) => ({
+                                            id: s.id,
+                                            name: s.name,
+                                            description: s.description,
+                                        })),
+                                        children: [],
+                                    }))
+                                    console.log('📦 Loading legacy unified format')
+                                    useSitemapStore.getState().loadSitemap(aiPages, savedProjectName)
+                                    useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName)
+                                } else {
+                                    console.log('📦 Loading legacy sitemap format')
+                                    useSitemapStore.getState().loadSitemap(sitemapPages, savedProjectName)
+                                    useUnifiedStore.getState().loadFromAI(sitemapPages, savedProjectName)
+                                }
+                                console.log('📦 Legacy load complete -', 'sitemap nodes:', useSitemapStore.getState().nodes.length)
+                            } else {
+                                console.log('📦 Sitemap data is empty, using default')
+                            }
                         }
                     } catch (parseError) {
                         console.error('❌ Failed to parse sitemap data:', parseError)
@@ -258,12 +297,17 @@ export default function ProjectEditorPage() {
                     console.log('📦 No saved sitemap found, using default')
                 }
             } catch (error) {
+                if (cancelled) return
                 console.error('🔴 Failed to initialize editor:', error)
                 router.push('/dashboard')
             }
         }
 
         init()
+
+        return () => {
+            cancelled = true
+        }
     }, [projectId, setUser, fetchProject, router])
 
     const canUndo = historyIndex > 0

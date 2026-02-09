@@ -5,6 +5,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSitemapStore } from '@/store/sitemap-store'
 
 // Note: Parent must have 'nodrag' class to prevent ReactFlow from capturing drag events
 
@@ -35,6 +36,7 @@ export function DraggableSection({
     const [editDesc, setEditDesc] = useState(section.description || '')
     const nameInputRef = useRef<HTMLInputElement>(null)
     const descInputRef = useRef<HTMLTextAreaElement>(null)
+    const zoomLevel = useSitemapStore(state => state.zoomLevel)
 
     const {
         attributes,
@@ -137,12 +139,8 @@ export function DraggableSection({
 
                 {/* Section content */}
                 <div className="flex-1 px-3 py-2.5 min-w-0 cursor-default select-none">
-                    {/* Section name - double click to edit */}
-                    <div className="flex items-center gap-2">
-                        <div className={cn(
-                            'w-1.5 h-1.5 rounded-full shrink-0',
-                            isGlobal ? 'bg-emerald-500' : 'bg-primary'
-                        )} />
+                    {/* Section name - click to edit */}
+                    <div className="flex items-center">
                         {isEditingName ? (
                             <input
                                 ref={nameInputRef}
@@ -161,15 +159,15 @@ export function DraggableSection({
                                     setEditName(section.name)
                                     setIsEditingName(true)
                                 }}
-                                className="text-sm font-medium text-foreground truncate cursor-default"
+                                className="text-sm font-medium text-foreground cursor-default"
                             >
                                 {section.name}
                             </span>
                         )}
                     </div>
 
-                    {/* Section description - double click to edit */}
-                    {isEditingDesc ? (
+                    {/* Section description - click to edit (hidden for global sections like Navbar/Footer) */}
+                    {!isGlobal && isEditingDesc ? (
                         <textarea
                             ref={descInputRef}
                             value={editDesc}
@@ -177,40 +175,45 @@ export function DraggableSection({
                             onBlur={handleDescBlur}
                             onKeyDown={handleDescKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-full text-xs text-muted-foreground mt-1 pl-3.5 bg-transparent border-none outline-none ring-1 ring-primary rounded px-1 resize-none cursor-text select-text"
-                            rows={2}
+                            className="w-full text-xs text-muted-foreground mt-1 bg-transparent border-none outline-none ring-1 ring-primary rounded px-1 resize-none cursor-text select-text"
+                            rows={3}
                             placeholder="Add a description..."
                         />
-                    ) : section.description ? (
+                    ) : !isGlobal && section.description ? (
                         <p
                             onClick={(e) => {
                                 e.stopPropagation()
                                 setEditDesc(section.description || '')
                                 setIsEditingDesc(true)
                             }}
-                            className="text-xs text-muted-foreground mt-1 line-clamp-2 pl-3.5 cursor-default"
+                            className="text-xs text-muted-foreground mt-1 line-clamp-3 cursor-default"
                         >
                             {section.description}
                         </p>
                     ) : null}
                 </div>
 
-                {/* Add section button - appears on hover */}
+                {/* Add section button - appears on hover, scales inversely with zoom */}
                 <button
                     className={cn(
                         'absolute -bottom-3 left-1/2 -translate-x-1/2 z-10',
-                        'w-5 h-5 rounded-full',
+                        'rounded-full',
                         'bg-primary text-primary-foreground',
                         'flex items-center justify-center',
                         'shadow-md hover:scale-110 transition-all duration-150',
                         'opacity-0 group-hover/section:opacity-100'
                     )}
+                    style={{
+                        // Inverse zoom: button gets bigger when zoomed out to stay usable
+                        width: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                        height: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                    }}
                     onClick={(e) => {
                         e.stopPropagation()
                         onAddSection()
                     }}
                 >
-                    <Plus className="w-3 h-3" />
+                    <Plus style={{ width: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px`, height: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px` }} />
                 </button>
             </div>
         </div>

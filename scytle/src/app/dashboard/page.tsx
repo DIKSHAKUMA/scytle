@@ -57,10 +57,16 @@ export default function DashboardPage() {
 
     // Check authentication on mount using direct Appwrite call
     useEffect(() => {
+        let cancelled = false
+
+        // Reset loading state on mount (prevents stuck spinner after HMR)
+        useProjectStore.setState({ isLoading: false })
+
         const verifyAuth = async () => {
             try {
                 const { getUser } = await import('@/lib/appwrite')
                 const currentUser = await getUser()
+                if (cancelled) return
                 console.log('📊 Dashboard auth check:', currentUser?.email || 'no user')
                 if (currentUser) {
                     setIsAuthenticated(true)
@@ -73,12 +79,17 @@ export default function DashboardPage() {
                     window.location.href = '/login?redirect=/dashboard'
                 }
             } catch (error) {
+                if (cancelled) return
                 console.log('📊 Auth check failed:', error)
                 setAuthChecked(true)
                 window.location.href = '/login?redirect=/dashboard'
             }
         }
         verifyAuth()
+
+        return () => {
+            cancelled = true
+        }
     }, [setUser, fetchProjects])
 
     // Filter and search projects

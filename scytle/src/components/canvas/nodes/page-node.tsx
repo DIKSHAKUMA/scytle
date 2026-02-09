@@ -77,10 +77,19 @@ export const PageNode = memo(function PageNode({
     const [editTitle, setEditTitle] = useState(data.label)
     const titleInputRef = useRef<HTMLInputElement>(null)
 
-    // Store actions
-    const { openSectionPicker, removeSectionFromPage, moveSectionInPage, updateSectionInPage, updateNode } = useSitemapStore()
+    // Store actions & state
+    const {
+        openSectionPicker, removeSectionFromPage, moveSectionInPage,
+        updateSectionInPage, updateNode, deleteNode, addSiblingPage, addChildPage,
+        edges, zoomLevel,
+    } = useSitemapStore()
 
     const PageIcon = isHomePage ? Home : FileText
+
+    // Check if this node has children (outgoing edges)
+    const hasChildren = edges.some(e => e.source === id)
+    // Check if this node has a parent (not root-level / project)
+    const hasParent = edges.some(e => e.target === id && e.source !== 'project')
 
     // Check if section is a global section (Navbar/Footer)
     const isGlobalSection = (name: string) => {
@@ -160,18 +169,18 @@ export const PageNode = memo(function PageNode({
                     : 'border-border hover:border-primary/40 hover:shadow-lg'
             )}
         >
-            {/* Top handle */}
+            {/* Top handle - invisible, only for edge connections */}
             <Handle
                 type="target"
                 position={Position.Top}
-                className="!w-3 !h-3 !bg-primary !border-2 !border-background !-top-1.5"
+                className="!w-0 !h-0 !bg-transparent !border-0 !min-w-0 !min-h-0 !top-0"
             />
 
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/50 bg-muted/30">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                     <PageIcon className="w-4 h-4 text-muted-foreground/70 shrink-0" />
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0">
                         {isEditingTitle ? (
                             <input
                                 ref={titleInputRef}
@@ -180,11 +189,13 @@ export const PageNode = memo(function PageNode({
                                 onChange={(e) => setEditTitle(e.target.value)}
                                 onBlur={handleTitleBlur}
                                 onKeyDown={handleTitleKeyDown}
-                                className="w-full font-semibold text-sm bg-transparent border-none outline-none ring-1 ring-primary rounded px-1 -mx-1"
+                                size={Math.max(1, editTitle.length)}
+                                className="font-semibold text-sm bg-transparent border-none outline-none ring-1 ring-primary rounded px-1 -mx-1"
+                                style={{ width: `${Math.max(20, editTitle.length * 8 + 12)}px` }}
                             />
                         ) : (
                             <h3
-                                onClick={(e) => {
+                                onDoubleClick={(e) => {
                                     e.stopPropagation()
                                     setEditTitle(data.label)
                                     setIsEditingTitle(true)
@@ -244,7 +255,10 @@ export const PageNode = memo(function PageNode({
                             <Copy className="w-4 h-4 mr-2" />
                             Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive focus:text-destructive">
+                        <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => deleteNode(id)}
+                        >
                             <Trash2 className="w-4 h-4 mr-2" />
                             Delete
                         </DropdownMenuItem>
@@ -310,12 +324,87 @@ export const PageNode = memo(function PageNode({
                 )}
             </div>
 
-            {/* Bottom handle */}
+            {/* Bottom handle - invisible, only for edge connections */}
             <Handle
                 type="source"
                 position={Position.Bottom}
-                className="!w-3 !h-3 !bg-primary !border-2 !border-background !-bottom-1.5"
+                className="!w-0 !h-0 !bg-transparent !border-0 !min-w-0 !min-h-0 !bottom-0"
             />
+
+            {/* Relume-style + buttons around the node */}
+            {/* Left + button (add sibling to the left) - near the title */}
+            {hasParent && (
+                <button
+                    className={cn(
+                        'nodrag absolute z-20',
+                        'rounded-full bg-white text-black border border-border/60',
+                        'flex items-center justify-center',
+                        'shadow-sm hover:shadow-md hover:scale-110 transition-all duration-150',
+                        'opacity-0 group-hover:opacity-100'
+                    )}
+                    style={{
+                        top: '14px',
+                        left: `${-Math.max(24, Math.min(36, 2400 / zoomLevel))}px`,
+                        width: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                        height: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        addSiblingPage(id, 'left')
+                    }}
+                >
+                    <Plus style={{ width: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px`, height: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px` }} />
+                </button>
+            )}
+
+            {/* Right + button (add sibling to the right) - near the title */}
+            {hasParent && (
+                <button
+                    className={cn(
+                        'nodrag absolute z-20',
+                        'rounded-full bg-white text-black border border-border/60',
+                        'flex items-center justify-center',
+                        'shadow-sm hover:shadow-md hover:scale-110 transition-all duration-150',
+                        'opacity-0 group-hover:opacity-100'
+                    )}
+                    style={{
+                        top: '14px',
+                        right: `${-Math.max(24, Math.min(36, 2400 / zoomLevel))}px`,
+                        width: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                        height: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        addSiblingPage(id, 'right')
+                    }}
+                >
+                    <Plus style={{ width: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px`, height: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px` }} />
+                </button>
+            )}
+
+            {/* Bottom + button (add child page) - shown only if node has NO children */}
+            {!hasChildren && (
+                <button
+                    className={cn(
+                        'nodrag absolute left-1/2 -translate-x-1/2 z-20',
+                        'rounded-full bg-white text-black border border-border/60',
+                        'flex items-center justify-center',
+                        'shadow-sm hover:shadow-md hover:scale-110 transition-all duration-150',
+                        'opacity-0 group-hover:opacity-100'
+                    )}
+                    style={{
+                        bottom: `${-Math.max(24, Math.min(36, 2400 / zoomLevel))}px`,
+                        width: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                        height: `${Math.max(20, Math.min(32, 2000 / zoomLevel))}px`,
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        addChildPage(id)
+                    }}
+                >
+                    <Plus style={{ width: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px`, height: `${Math.max(12, Math.min(18, 1200 / zoomLevel))}px` }} />
+                </button>
+            )}
         </div>
     )
 })

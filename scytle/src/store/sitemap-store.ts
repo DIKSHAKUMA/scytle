@@ -48,15 +48,21 @@ export interface SitemapEdge {
 }
 
 // Constants for layout spacing - Relume-style spacing
+// Heights are measured from actual Tailwind rendering in page-node.tsx / draggable-section.tsx
 const LAYOUT = {
-    NODE_WIDTH: 280,           // Wider to accommodate section descriptions
-    NODE_BASE_HEIGHT: 60,      // Base height (header)
-    SECTION_HEIGHT: 50,        // Height per section (name + description + padding)
-    SECTION_GAP_HEIGHT: 12,    // Height for gap between sections (+ button area)
-    HORIZONTAL_GAP: 80,        // Gap between sibling nodes (larger for cleaner connectors)
-    VERTICAL_GAP: 80,          // Gap between levels
+    NODE_WIDTH: 280,
+    NODE_HEADER_HEIGHT: 42,          // Header: py-2.5 (20px padding) + ~20px content + 1px border-b + 1px rounding
+    SECTIONS_PADDING: 16,            // Sections container: p-2 = 8px top + 8px bottom
+    SECTION_BASE_HEIGHT: 40,         // Section without description: 2px border + 20px padding + 18px name
+    SECTION_DESC_LINE_HEIGHT: 16,    // Each line of description text (~12px font + 4px leading)
+    SECTION_DESC_MT: 4,              // mt-1 = 4px margin-top for description
+    SECTION_DESC_CHARS_PER_LINE: 34, // ~34 chars per line (280px - node padding - section padding at text-xs)
+    SECTION_DESC_MAX_LINES: 3,       // line-clamp-3 limits to 3 lines max
+    SECTION_GAP: 8,                  // space-y-2 = 0.5rem = 8px
+    EMPTY_STATE_HEIGHT: 44,          // "Add Section" dashed button in empty state
+    HORIZONTAL_GAP: 80,              // Gap between sibling nodes
+    VERTICAL_GAP: 100,               // Gap between levels (generous, like Relume)
     PROJECT_HEIGHT: 50,
-    ADD_SECTION_BUTTON_HEIGHT: 40, // Height for "Add Section" button at bottom
 }
 
 // Calculate estimated node height based on sections
@@ -66,17 +72,36 @@ const estimateNodeHeight = (node: Node): number => {
     const sectionCount = sections.length
 
     if (sectionCount === 0) {
-        // Just the header + empty state add button
-        return LAYOUT.NODE_BASE_HEIGHT + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
+        // Header + padding + empty state add button
+        return LAYOUT.NODE_HEADER_HEIGHT + LAYOUT.SECTIONS_PADDING + LAYOUT.EMPTY_STATE_HEIGHT
     }
 
-    // Header + sections + gaps between sections + add button
-    const sectionsHeight = sectionCount * LAYOUT.SECTION_HEIGHT
-    const gapsHeight = Math.max(0, sectionCount - 1) * LAYOUT.SECTION_GAP_HEIGHT
-    return LAYOUT.NODE_BASE_HEIGHT + sectionsHeight + gapsHeight + LAYOUT.ADD_SECTION_BUTTON_HEIGHT
+    // Calculate per-section height based on description length
+    let totalSectionHeight = 0
+    sections.forEach(section => {
+        let h = LAYOUT.SECTION_BASE_HEIGHT
+        const isGlobal = typeof section === 'object'
+            ? /^(navbar|footer|header|navigation)$/i.test(section.name)
+            : /^(navbar|footer|header|navigation)$/i.test(section)
+        const desc = !isGlobal && typeof section === 'object' ? section.description : undefined
+        if (desc) {
+            const lineCount = Math.min(
+                LAYOUT.SECTION_DESC_MAX_LINES,
+                Math.max(1, Math.ceil(desc.length / LAYOUT.SECTION_DESC_CHARS_PER_LINE))
+            )
+            h += LAYOUT.SECTION_DESC_MT + lineCount * LAYOUT.SECTION_DESC_LINE_HEIGHT
+        }
+        totalSectionHeight += h
+    })
+    const gapsHeight = (sectionCount - 1) * LAYOUT.SECTION_GAP
+
+    return LAYOUT.NODE_HEADER_HEIGHT + LAYOUT.SECTIONS_PADDING + totalSectionHeight + gapsHeight
 }
 
 // Tree layout helper - calculates proper positions for sitemap hierarchy
+// Uses parent-relative Y positioning (like Relume): each child is placed
+// directly below its own parent (parentY + parentHeight + gap), so edges
+// are compact and don't stretch unnecessarily.
 const calculateTreeLayout = (
     nodes: Node[],
     edges: Edge[]
@@ -122,7 +147,8 @@ const calculateTreeLayout = (
 
     calculateWidth(root.id)
 
-    // Step 2: Position nodes (top-down)
+    // Step 2: Position nodes (top-down) using parent-relative Y
+    // Each child's Y = its parent's Y + parent's actual height + VERTICAL_GAP
     const positions: Record<string, { x: number; y: number }> = {}
 
     const positionNode = (nodeId: string, centerX: number, y: number) => {
@@ -132,13 +158,13 @@ const calculateTreeLayout = (
         // Position node so its center is at centerX
         positions[nodeId] = {
             x: centerX - LAYOUT.NODE_WIDTH / 2,
-            y
+            y,
         }
 
         const nodeChildren = children[nodeId] || []
         if (nodeChildren.length === 0) return
 
-        // Calculate the height of this node for next level positioning
+        // Child Y = this node's Y + this node's height + gap
         const nodeHeight = estimateNodeHeight(node)
         const childY = y + nodeHeight + LAYOUT.VERTICAL_GAP
 
@@ -184,6 +210,15 @@ interface SitemapState {
     sectionPickerTargetPageId: string | null
     sectionPickerInsertIndex: number | null
 
+    // Drag state for live shuffle preview (Relume-style)
+    dragState: {
+        isDragging: boolean
+        dragNodeId: string | null
+        parentId: string | null
+        originalOrder: string[]
+        previewOrder: string[]
+    }
+
     // ReactFlow instance reference for zoom control
     reactFlowZoom: ((zoom: number) => void) | null
     reactFlowFitView: (() => void) | null
@@ -211,6 +246,10 @@ interface SitemapState {
     addEdge: (edge: Edge) => void
     deleteEdge: (id: string) => void
 
+    // Page-level actions (Relume-style + buttons)
+    addSiblingPage: (nodeId: string, position: 'left' | 'right') => void
+    addChildPage: (parentId: string) => void
+
     // Section actions
     openSectionPicker: (pageId: string, insertIndex: number) => void
     closeSectionPicker: () => void
@@ -218,6 +257,12 @@ interface SitemapState {
     removeSectionFromPage: (pageId: string, sectionIndex: number) => void
     moveSectionInPage: (pageId: string, fromIndex: number, toIndex: number) => void
     updateSectionInPage: (pageId: string, sectionIndex: number, updates: { name?: string; description?: string }) => void
+
+    // Node drag constraint actions (Relume-style)
+    handleNodeDragStart: (nodeId: string) => void
+    handleNodeDrag: (nodeId: string) => void
+    handleNodeDragStop: (nodeId: string) => void
+    recalculateLayout: () => void
 
     undo: () => void
     redo: () => void
@@ -316,8 +361,8 @@ const defaultEdges: Edge[] = [
 
 export const useSitemapStore = create<SitemapState>()(
     immer((set, get) => ({
-        nodes: defaultNodes,
-        edges: defaultEdges,
+        nodes: [],
+        edges: [],
         activeTool: 'select',
         zoomLevel: 100,
         isPanning: false,
@@ -325,10 +370,17 @@ export const useSitemapStore = create<SitemapState>()(
         sectionPickerOpen: false,
         sectionPickerTargetPageId: null,
         sectionPickerInsertIndex: null,
+        dragState: {
+            isDragging: false,
+            dragNodeId: null,
+            parentId: null,
+            originalOrder: [],
+            previewOrder: [],
+        },
         reactFlowZoom: null,
         reactFlowFitView: null,
-        history: [{ nodes: defaultNodes, edges: defaultEdges }],
-        historyIndex: 0,
+        history: [],
+        historyIndex: -1,
 
         // Backend sync state
         currentProjectId: null,
@@ -341,9 +393,20 @@ export const useSitemapStore = create<SitemapState>()(
         setEdges: (edges) => set({ edges }),
 
         onNodesChange: (changes) => {
+            const hasRemovals = changes.some(c => c.type === 'remove')
             set((state) => {
                 state.nodes = applyNodeChanges(changes, state.nodes) as Node[]
+                if (hasRemovals) {
+                    // Clean up edges for removed nodes
+                    const nodeIds = new Set(state.nodes.map(n => n.id))
+                    state.edges = state.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+                    // Recalculate layout so remaining nodes reflow
+                    state.nodes = calculateTreeLayout(state.nodes, state.edges)
+                }
             })
+            if (hasRemovals) {
+                get().saveToHistory()
+            }
         },
 
         onEdgesChange: (changes) => {
@@ -380,6 +443,10 @@ export const useSitemapStore = create<SitemapState>()(
                 state.nodes = state.nodes.filter(n => n.id !== id)
                 state.edges = state.edges.filter(e => e.source !== id && e.target !== id)
             })
+            // Recalculate layout after deletion
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
             get().saveToHistory()
         },
 
@@ -395,6 +462,92 @@ export const useSitemapStore = create<SitemapState>()(
                 state.edges = state.edges.filter(e => e.id !== id)
             })
             get().saveToHistory()
+        },
+
+        // Page-level actions (Relume-style + buttons around nodes)
+        addSiblingPage: (nodeId, position) => {
+            const { edges } = get()
+            // Find parent of this node
+            const parentEdge = edges.find(e => e.target === nodeId)
+            if (!parentEdge) return // Can't add sibling to root
+
+            const parentId = parentEdge.source
+            const newId = `page-${Date.now()}`
+
+            set((state) => {
+                // Create new page node
+                state.nodes.push({
+                    id: newId,
+                    type: 'page',
+                    position: { x: 0, y: 0 },
+                    data: {
+                        label: 'New Page',
+                        slug: '/new-page',
+                        sections: [],
+                    },
+                })
+
+                // Insert edge at correct position relative to the sibling
+                const siblingEdges = state.edges.filter(e => e.source === parentId)
+                const siblingIndex = siblingEdges.findIndex(e => e.target === nodeId)
+                const insertIdx = position === 'left' ? siblingIndex : siblingIndex + 1
+
+                // Find the actual index in the full edges array for the insertion point
+                const newEdge: Edge = {
+                    id: `e-${parentId}-${newId}`,
+                    source: parentId,
+                    target: newId,
+                    type: 'sitemap',
+                }
+
+                if (insertIdx >= siblingEdges.length) {
+                    // Insert after the last sibling edge
+                    const lastSiblingEdge = siblingEdges[siblingEdges.length - 1]
+                    const lastIdx = state.edges.findIndex(e => e.id === lastSiblingEdge.id)
+                    state.edges.splice(lastIdx + 1, 0, newEdge)
+                } else {
+                    // Insert before the sibling edge at insertIdx
+                    const targetEdge = siblingEdges[insertIdx]
+                    const targetIdx = state.edges.findIndex(e => e.id === targetEdge.id)
+                    state.edges.splice(targetIdx, 0, newEdge)
+                }
+
+                // Recalculate layout
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+            get().setSelectedNodeId(newId)
+        },
+
+        addChildPage: (parentId) => {
+            const newId = `page-${Date.now()}`
+
+            set((state) => {
+                // Create new page node
+                state.nodes.push({
+                    id: newId,
+                    type: 'page',
+                    position: { x: 0, y: 0 },
+                    data: {
+                        label: 'New Page',
+                        slug: '/new-page',
+                        sections: [],
+                    },
+                })
+
+                // Add edge from parent to new child
+                state.edges.push({
+                    id: `e-${parentId}-${newId}`,
+                    source: parentId,
+                    target: newId,
+                    type: 'sitemap',
+                })
+
+                // Recalculate layout
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
+            get().saveToHistory()
+            get().setSelectedNodeId(newId)
         },
 
         saveToHistory: () => {
@@ -467,6 +620,142 @@ export const useSitemapStore = create<SitemapState>()(
             if (reactFlowZoom) {
                 reactFlowZoom(1)
             }
+        },
+
+        // Node drag constraint actions (Relume-style)
+        // Live shuffle preview: siblings animate to make room during drag
+
+        handleNodeDragStart: (nodeId: string) => {
+            const { edges } = get()
+
+            // Don't track project node drags
+            const parentEdge = edges.find(e => e.target === nodeId)
+            if (!parentEdge) {
+                set((state) => {
+                    state.dragState = { isDragging: false, dragNodeId: null, parentId: null, originalOrder: [], previewOrder: [] }
+                })
+                return
+            }
+
+            const parentId = parentEdge.source
+            const siblingEdges = edges.filter(e => e.source === parentId)
+            const siblingOrder = siblingEdges.map(e => e.target)
+
+            set((state) => {
+                state.dragState = {
+                    isDragging: true,
+                    dragNodeId: nodeId,
+                    parentId,
+                    originalOrder: [...siblingOrder],
+                    previewOrder: [...siblingOrder],
+                }
+            })
+        },
+
+        handleNodeDrag: (nodeId: string) => {
+            const { nodes, dragState } = get()
+            if (!dragState.isDragging || dragState.dragNodeId !== nodeId) return
+
+            const { originalOrder, previewOrder, parentId } = dragState
+            if (!parentId || originalOrder.length <= 1) return
+
+            // Get current x positions (dragged node has live position from onNodesChange)
+            const siblingPositions = originalOrder.map(id => ({
+                id,
+                x: nodes.find(n => n.id === id)?.position.x ?? 0,
+            }))
+
+            // Sort by x position to determine visual order
+            siblingPositions.sort((a, b) => a.x - b.x)
+            const newPreviewOrder = siblingPositions.map(s => s.id)
+
+            // Only update if order changed from current preview
+            const changed = newPreviewOrder.some((id, i) => id !== previewOrder[i])
+            if (!changed) return
+
+            // Update preview order and reposition non-dragged siblings
+            set((state) => {
+                state.dragState.previewOrder = newPreviewOrder
+
+                // Recalculate layout with preview edge order to get target positions
+                // Temporarily reorder edges for layout calculation
+                const siblingEdges = state.edges.filter(e => e.source === parentId)
+                const siblingEdgeSet = new Set(siblingEdges.map(e => e.id))
+                const otherEdges = state.edges.filter(e => !siblingEdgeSet.has(e.id))
+                const reorderedSiblingEdges = newPreviewOrder
+                    .map(childId => siblingEdges.find(e => e.target === childId)!)
+                    .filter(Boolean)
+
+                const firstSiblingIndex = state.edges.findIndex(e => siblingEdgeSet.has(e.id))
+                const previewEdges = [
+                    ...otherEdges.slice(0, firstSiblingIndex >= 0 ? firstSiblingIndex : otherEdges.length),
+                    ...reorderedSiblingEdges,
+                    ...otherEdges.slice(firstSiblingIndex >= 0 ? firstSiblingIndex : otherEdges.length),
+                ]
+
+                // Calculate layout with preview order
+                const layoutedNodes = calculateTreeLayout(state.nodes, previewEdges)
+
+                // Apply positions to all nodes EXCEPT the dragged one (let it follow the cursor)
+                state.nodes = state.nodes.map(n => {
+                    if (n.id === nodeId) return n // Keep dragged node at cursor position
+                    const layouted = layoutedNodes.find(ln => ln.id === n.id)
+                    return layouted ? { ...n, position: layouted.position } : n
+                })
+            })
+        },
+
+        handleNodeDragStop: (nodeId: string) => {
+            const { dragState, edges } = get()
+
+            // If no drag state, just snap back
+            if (!dragState.isDragging || dragState.dragNodeId !== nodeId) {
+                set((state) => {
+                    state.nodes = calculateTreeLayout(state.nodes, state.edges)
+                    state.dragState = { isDragging: false, dragNodeId: null, parentId: null, originalOrder: [], previewOrder: [] }
+                })
+                return
+            }
+
+            const { originalOrder, previewOrder, parentId } = dragState
+            const orderChanged = previewOrder.some((id, i) => id !== originalOrder[i])
+
+            if (orderChanged && parentId) {
+                // Commit the reorder: update edges to match preview order
+                const siblingEdges = edges.filter(e => e.source === parentId)
+
+                set((state) => {
+                    const siblingEdgeSet = new Set(siblingEdges.map(e => e.id))
+                    const otherEdges = state.edges.filter(e => !siblingEdgeSet.has(e.id))
+                    const reorderedSiblingEdges = previewOrder
+                        .map(childId => siblingEdges.find(e => e.target === childId)!)
+                        .filter(Boolean)
+
+                    const firstSiblingIndex = state.edges.findIndex(e => siblingEdgeSet.has(e.id))
+                    state.edges = [
+                        ...otherEdges.slice(0, firstSiblingIndex >= 0 ? firstSiblingIndex : otherEdges.length),
+                        ...reorderedSiblingEdges,
+                        ...otherEdges.slice(firstSiblingIndex >= 0 ? firstSiblingIndex : otherEdges.length),
+                    ]
+
+                    // Final layout with committed order
+                    state.nodes = calculateTreeLayout(state.nodes, state.edges)
+                    state.dragState = { isDragging: false, dragNodeId: null, parentId: null, originalOrder: [], previewOrder: [] }
+                })
+                get().saveToHistory()
+            } else {
+                // No reorder - snap back to layout positions
+                set((state) => {
+                    state.nodes = calculateTreeLayout(state.nodes, state.edges)
+                    state.dragState = { isDragging: false, dragNodeId: null, parentId: null, originalOrder: [], previewOrder: [] }
+                })
+            }
+        },
+
+        recalculateLayout: () => {
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
         },
 
         // Section picker actions
@@ -561,6 +850,10 @@ export const useSitemapStore = create<SitemapState>()(
                         node.data = { ...node.data, sections }
                     }
                 }
+            })
+            // Recalculate layout after updating section (description length may have changed node height)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
             })
             get().saveToHistory()
         },
@@ -671,18 +964,27 @@ export const useSitemapStore = create<SitemapState>()(
         },
 
         loadRawSitemap: (nodes, edges) => {
+            const layoutedNodes = calculateTreeLayout(nodes, edges as Edge[])
             set((state) => {
-                state.nodes = nodes
+                state.nodes = layoutedNodes
                 state.edges = edges as Edge[]
                 state.selectedNodeId = null
             })
             get().saveToHistory()
+
+            // Fit view after layout
+            setTimeout(() => {
+                const { reactFlowFitView } = get()
+                if (reactFlowFitView) {
+                    reactFlowFitView()
+                }
+            }, 100)
         },
 
         clearSitemap: () => {
             set((state) => {
-                state.nodes = defaultNodes
-                state.edges = defaultEdges
+                state.nodes = []
+                state.edges = []
                 state.selectedNodeId = null
                 state.history = []
                 state.historyIndex = -1
@@ -692,7 +994,7 @@ export const useSitemapStore = create<SitemapState>()(
 
         // Save sitemap to backend
         saveSitemap: async () => {
-            const { nodes, currentProjectId, isSaving } = get()
+            const { nodes, edges, currentProjectId, isSaving } = get()
 
             // Skip if no project ID or already saving
             if (!currentProjectId || isSaving) {
@@ -700,17 +1002,24 @@ export const useSitemapStore = create<SitemapState>()(
                 return
             }
 
-            // Convert nodes to pages format for storage
-            const pages = nodes
-                .filter(n => n.type === 'page')
-                .map(node => ({
+            // Save full sitemap structure: nodes + edges
+            // This preserves the entire tree hierarchy including parent-child relationships
+            const sitemapData = {
+                version: 2,
+                nodes: nodes.map(node => ({
                     id: node.id,
-                    label: (node.data as { label?: string }).label || 'Untitled',
-                    slug: (node.data as { slug?: string }).slug || '/',
-                    sections: (node.data as { sections?: SectionData[] }).sections || [],
-                }))
+                    type: node.type,
+                    data: node.data,
+                })),
+                edges: edges.map(edge => ({
+                    id: edge.id,
+                    source: edge.source,
+                    target: edge.target,
+                    type: edge.type,
+                })),
+            }
 
-            console.log('💾 Saving sitemap with pages:', JSON.stringify(pages, null, 2))
+            console.log('💾 Saving sitemap v2:', nodes.length, 'nodes,', edges.length, 'edges')
 
             set({ isSaving: true })
 
@@ -728,7 +1037,7 @@ export const useSitemapStore = create<SitemapState>()(
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        sitemapData: JSON.stringify(pages),
+                        sitemapData: JSON.stringify(sitemapData),
                     }),
                 })
 
