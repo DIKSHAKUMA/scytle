@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { generate } from '@/lib/ai'
 
 // Request validation schema
 const RewriteTextSchema = z.object({
@@ -12,8 +12,7 @@ const RewriteTextSchema = z.object({
     fieldKey: z.string().optional(),
 })
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+// Initialize Gemini via shared Vertex AI client (see lib/ai/client.ts)
 
 // AI prompt templates
 const ACTION_PROMPTS: Record<string, string> = {
@@ -71,10 +70,10 @@ Text to modify:
 
 Modified text:`
 
-        // Check for API key
-        if (!process.env.GEMINI_API_KEY) {
+        // Check for Vertex AI project config
+        if (!process.env.GOOGLE_CLOUD_PROJECT) {
             // Return a mock response for development
-            console.warn('⚠️ GEMINI_API_KEY not set, returning mock response')
+            console.warn('⚠️ GOOGLE_CLOUD_PROJECT not set, returning mock response')
             return NextResponse.json({
                 text: getMockResponse(text, action, tone),
                 action,
@@ -82,23 +81,15 @@ Modified text:`
             })
         }
 
-        // Call Gemini API
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-
-        const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-            generationConfig: {
-                temperature: 0.7,
-                topP: 0.9,
-                maxOutputTokens: 1024,
-            },
+        // Call Vertex AI via shared client
+        const generatedText = await generate(fullPrompt, [], {
+            model: 'fast',
+            temperature: 0.7,
+            maxTokens: 1024,
         })
 
-        const response = result.response
-        const generatedText = response.text().trim()
-
         // Clean up the response (remove quotes if present)
-        const cleanedText = generatedText
+        const cleanedText = generatedText.trim()
             .replace(/^["']|["']$/g, '')
             .replace(/^Modified text:\s*/i, '')
             .trim()

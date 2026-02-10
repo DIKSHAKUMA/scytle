@@ -15,10 +15,11 @@ import type {
     WireframeSectionContent,
     WireframeSectionControls,
     ViewportMode,
+    ViewportDevice,
     DeviceVisibility,
 } from '@/types'
 import { createJWT } from '@/lib/appwrite'
-import { getDesignById } from '@/lib/designs'
+import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
 
 // ============================================
 // Type Definitions
@@ -471,6 +472,8 @@ interface UnifiedState {
     selectedSectionId: string | null
     viewportMode: ViewportMode
     deviceVisibility: DeviceVisibility
+    /** Active viewports shown per page (Figma Sites style) */
+    activeViewports: ViewportDevice[]
     activePanelView: 'page' | 'section' | 'library' | null
 
     // Add section sidebar state (wireframe view)
@@ -483,6 +486,8 @@ interface UnifiedState {
         type: string
         variant?: string
         name: string
+        /** Preset ID for direct design registry lookup */
+        presetId?: string
     } | null
 
     // History for undo/redo
@@ -574,11 +579,13 @@ interface UnifiedState {
     selectSection: (sectionId: string | null) => void
     deselectAll: () => void
     setViewportMode: (mode: ViewportMode) => void
-    toggleDeviceVisibility: (device: 'desktop' | 'mobile') => void
+    toggleDeviceVisibility: (device: 'desktop' | 'mobile' | 'tablet') => void
+    addViewport: (device: ViewportDevice) => void
+    removeViewport: (device: ViewportDevice) => void
     setActivePanelView: (view: 'page' | 'section' | 'library' | null) => void
     openAddSidebar: (pageId: string, insertIndex: number) => void
     closeAddSidebar: () => void
-    setGhostPreviewLayout: (layout: { type: string; variant?: string; name: string } | null) => void
+    setGhostPreviewLayout: (layout: { type: string; variant?: string; name: string; presetId?: string } | null) => void
 
     // ============================================
     // Actions - Zoom/View
@@ -684,7 +691,8 @@ export const useUnifiedStore = create<UnifiedState>()(
             selectedPageId: null,
             selectedSectionId: null,
             viewportMode: 'dual',
-            deviceVisibility: { desktop: true, mobile: true },
+            deviceVisibility: { desktop: true, tablet: false, mobile: true },
+            activeViewports: ['desktop', 'mobile'] as ViewportDevice[],
             activePanelView: null,
             isAddSidebarOpen: false,
             addSidebarPageId: '',
@@ -1236,16 +1244,48 @@ export const useUnifiedStore = create<UnifiedState>()(
                     const section = page?.sections.find(s => s.id === sectionId)
                     if (section) {
                         section.componentId = componentId
-                        // Also update layoutVariant so the renderer picks the correct layout
-                        const design = getDesignById(componentId)
-                        if (design) {
-                            section.layoutVariant = design.layout
+
+                        // Try preset → family resolution first
+                        const preset = getPresetById(componentId)
+                        if (preset) {
+                            const family = getFamilyById(preset.familyId)
+                            if (family) {
+                                section.layoutVariant = preset.familyId
+                                section.name = preset.name
+                                section.description = family.description
+                                // Reset controls to preset's curated values
+                                section.controls = { ...(preset.controls ?? {}) }
+                                // Reset content to family defaults + preset overrides
+                                section.content = {
+                                    ...(family.defaultContent ?? {}),
+                                    ...(preset.content ?? {}),
+                                } as WireframeSectionContent
+                            }
                         } else {
-                            // Fallback: infer variant from componentId (e.g. "hero-centered" → "centered")
-                            const typePrefix = section.type ? `${section.type}-` : ''
-                            section.layoutVariant = typePrefix && componentId.startsWith(typePrefix)
-                                ? componentId.slice(typePrefix.length)
-                                : undefined
+                            // Try as family directly
+                            const family = getFamilyById(componentId)
+                            if (family) {
+                                section.layoutVariant = family.id
+                                section.name = family.name
+                                section.description = family.description
+                                section.controls = { ...family.defaultControls }
+                                section.content = { ...family.defaultContent } as WireframeSectionContent
+                            } else {
+                                // Fallback: try legacy getDesignById
+                                const design = getDesignById(componentId)
+                                if (design) {
+                                    section.layoutVariant = design.layout
+                                    if (design.defaultControls) {
+                                        section.controls = { ...design.defaultControls }
+                                    }
+                                } else {
+                                    // Last resort: infer variant from componentId
+                                    const typePrefix = section.type ? `${section.type}-` : ''
+                                    section.layoutVariant = typePrefix && componentId.startsWith(typePrefix)
+                                        ? componentId.slice(typePrefix.length)
+                                        : undefined
+                                }
+                            }
                         }
                         state.isDirty = true
                     }
@@ -1431,6 +1471,28 @@ export const useUnifiedStore = create<UnifiedState>()(
             toggleDeviceVisibility: (device) => {
                 set(state => {
                     state.deviceVisibility[device] = !state.deviceVisibility[device]
+                })
+            },
+
+            addViewport: (device) => {
+                set(state => {
+                    if (!state.activeViewports.includes(device)) {
+                        const order: ViewportDevice[] = ['desktop', 'tablet', 'mobile']
+                        const newViewports = [...state.activeViewports, device]
+                        // Sort by canonical order: desktop → tablet → mobile
+                        newViewports.sort((a, b) => order.indexOf(a) - order.indexOf(b))
+                        state.activeViewports = newViewports
+                        state.deviceVisibility[device] = true
+                    }
+                })
+            },
+
+            removeViewport: (device) => {
+                set(state => {
+                    // Don't allow removing if only 1 viewport left
+                    if (state.activeViewports.length <= 1) return
+                    state.activeViewports = state.activeViewports.filter(v => v !== device)
+                    state.deviceVisibility[device] = false
                 })
             },
 

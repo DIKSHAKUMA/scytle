@@ -1,14 +1,33 @@
 /**
  * Design System - Main Export
  * 
+ * Two-tier model: Template Families + Design Presets
+ * 
  * Usage:
- *   import { getDesignById, getDesignsForCategory, DESIGN_CATEGORIES } from '@/lib/designs'
+ *   import { getFamilyById, getPresetById, getPresetsForCategory } from '@/lib/designs'
+ *   import { getDesignById } from '@/lib/designs'  // backward compat
  */
 
-// Re-export everything from registry
+// Re-export registries
 export {
-    DESIGN_REGISTRY,
+    FAMILY_REGISTRY,
+    PRESET_REGISTRY,
     DESIGN_CATEGORIES,
+} from './registry'
+
+// Re-export family + preset helpers
+export {
+    getFamilyById,
+    getFamiliesForCategory,
+    getPresetById,
+    getPresetsForCategory,
+    getPresetsForFamily,
+    resolvePreset,
+    searchPresets,
+} from './registry'
+
+// Re-export backward-compatible helpers
+export {
     getDesignById,
     getDesignsForCategory,
     getActiveCategories,
@@ -21,8 +40,13 @@ export {
 
 // Re-export types
 export type {
+    TemplateFamily,
+    DesignPreset,
     DesignDefinition,
     CanvasProps,
+    ControlType,
+    ControlDefinition,
+    ControlOption,
     DesignCategory,
     DesignCategoryId,
     ComponentVariant,

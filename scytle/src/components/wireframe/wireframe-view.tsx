@@ -1,13 +1,68 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Plus, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUnifiedStore } from '@/store'
-import { ViewportFrame, DualViewport } from './viewport-frame'
+import { PageViewports } from './viewport-frame'
 import { WireframeSidebar } from './wireframe-sidebar'
 import { AddSectionSidebar } from './add-section-sidebar'
 import { useKeyboardShortcuts } from './use-keyboard-shortcuts'
+
+/* ------------------------------------------------------------------ */
+/*  DraggablePageBlock                                                 */
+/*  Wraps each PageViewports so users can freely drag pages on canvas  */
+/* ------------------------------------------------------------------ */
+interface DraggablePageBlockProps {
+    pageId: string
+    children: ReactNode
+}
+
+function DraggablePageBlock({ pageId, children }: DraggablePageBlockProps) {
+    const ref = useRef<HTMLDivElement>(null)
+    const [offset, setOffset] = useState({ x: 0, y: 0 })
+    const dragStart = useRef<{ mx: number; my: number; ox: number; oy: number } | null>(null)
+
+    const onPointerDown = useCallback((e: React.PointerEvent) => {
+        // Only allow drag from the page header area (first 32px)
+        const rect = ref.current?.getBoundingClientRect()
+        if (!rect) return
+        // Allow drag when clicking on the page background (outside sections)
+        // Target must be the container itself or the page header row
+        const target = e.target as HTMLElement
+        const isHeader = target.closest('[data-page-header]')
+        if (!isHeader) return
+
+        e.stopPropagation()
+        e.preventDefault()
+        dragStart.current = { mx: e.clientX, my: e.clientY, ox: offset.x, oy: offset.y }
+        ref.current?.setPointerCapture(e.pointerId)
+    }, [offset])
+
+    const onPointerMove = useCallback((e: React.PointerEvent) => {
+        if (!dragStart.current) return
+        const dx = e.clientX - dragStart.current.mx
+        const dy = e.clientY - dragStart.current.my
+        setOffset({ x: dragStart.current.ox + dx, y: dragStart.current.oy + dy })
+    }, [])
+
+    const onPointerUp = useCallback(() => {
+        dragStart.current = null
+    }, [])
+
+    return (
+        <div
+            ref={ref}
+            style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
+            className="relative"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+        >
+            {children}
+        </div>
+    )
+}
 
 interface WireframeViewProps {
     projectId?: string
@@ -38,8 +93,6 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
     // Store state - unified store for both sitemap and wireframe
     const {
         pages,
-        viewportMode,
-        deviceVisibility,
         zoomLevel,
         selectedPageId,
         activePanelView,
@@ -269,10 +322,6 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
     // Cursor based on state
     const cursorClass = isPanning ? 'cursor-grabbing' : 'cursor-default'
 
-    // Determine which viewports to show
-    const showDesktop = viewportMode === 'dual' || viewportMode === 'desktop' || deviceVisibility.desktop
-    const showMobile = viewportMode === 'dual' || viewportMode === 'mobile' || deviceVisibility.mobile
-
     return (
         <div
             ref={containerRef}
@@ -304,40 +353,24 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
             {/* Canvas with transform */}
             <div
                 ref={canvasRef}
-                className="absolute inset-0 flex flex-col items-center"
+                className="absolute inset-0"
                 style={{
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
                     transformOrigin: 'center top',
-                    paddingTop: '48px', // Space for viewport labels
+                    paddingTop: '48px',
+                    paddingLeft: '48px',
                 }}
             >
-                {/* Pages container - vertical column layout */}
-                <div className="flex flex-col gap-16 pb-24">
-                    {pages.map((page) => {
-                        // Show dual viewport when both are visible
-                        if (showDesktop && showMobile) {
-                            return (
-                                <DualViewport
-                                    key={page.id}
-                                    page={page}
-                                    scale={1}
-                                    desktopVisible={true}
-                                    mobileVisible={true}
-                                />
-                            )
-                        }
-
-                        // Show single viewport
-                        return (
-                            <ViewportFrame
-                                key={page.id}
+                {/* Pages container - horizontal row layout */}
+                <div className="flex flex-row flex-wrap items-start gap-12 pb-24">
+                    {pages.map((page) => (
+                        <DraggablePageBlock key={page.id} pageId={page.id}>
+                            <PageViewports
                                 page={page}
-                                viewport={showMobile ? 'mobile' : 'desktop'}
                                 scale={1}
-                                isVisible={true}
                             />
-                        )
-                    })}
+                        </DraggablePageBlock>
+                    ))}
 
                     {/* Empty state */}
                     {pages.length === 0 && (

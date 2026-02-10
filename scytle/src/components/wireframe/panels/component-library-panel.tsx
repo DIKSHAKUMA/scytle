@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { ChevronLeft, Search, Shuffle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -9,10 +9,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
 import { ComponentCard } from './component-card'
-import { getDesignsForCategory, searchDesigns, type DesignCategoryId, type DesignDefinition } from '@/lib/designs'
+import {
+    getFamiliesForCategory,
+    getPresetsForCategory,
+    getPresetById,
+    type DesignCategoryId,
+} from '@/lib/designs'
 import type { WireframeSection } from '@/types'
 
-// Component variant interface for internal use (backwards compatible)
+// Component variant interface — one entry per preset
 export interface ComponentVariant {
     id: string
     sectionType: string
@@ -20,24 +25,25 @@ export interface ComponentVariant {
     name: string
     description: string
     tags: string[]
+    /** Thumbnail component matching the wireframe canvas design */
+    Thumbnail?: React.FC
 }
 
-// Convert DesignDefinition to ComponentVariant for UI
-function designToComponentVariant(design: DesignDefinition): ComponentVariant {
-    return {
-        id: design.id,
-        sectionType: design.category,
-        variant: design.layout,
-        name: design.name,
-        description: design.description,
-        tags: design.tags || [],
-    }
-}
-
-// Get component variants for a section type (from registry)
+/**
+ * Get component variants for a section type — all presets for that category.
+ * This mirrors the Add sidebar's approach, showing all preset variations.
+ */
 function getVariantsForType(sectionType: string): ComponentVariant[] {
-    const designs = getDesignsForCategory(sectionType as DesignCategoryId)
-    return designs.map(designToComponentVariant)
+    const presets = getPresetsForCategory(sectionType as DesignCategoryId)
+    return presets.map(preset => ({
+        id: preset.id,
+        sectionType: sectionType as DesignCategoryId,
+        variant: preset.familyId,
+        name: preset.name,
+        description: preset.description,
+        tags: [],
+        Thumbnail: preset.Thumbnail,
+    }))
 }
 
 interface ComponentLibraryPanelProps {
@@ -75,6 +81,11 @@ export function ComponentLibraryPanel({
 
     const { setComponent, setActivePanelView, setGhostPreviewLayout, selectedPageId } = useUnifiedStore()
 
+    // Determine which preset the section's current componentId is
+    const currentPresetId = useMemo(() => {
+        return section.componentId  // componentId is now the preset ID
+    }, [section.componentId])
+
     // Handle layout hover for ghost preview
     const handleComponentHover = useCallback((component: ComponentVariant | null) => {
         if (component) {
@@ -82,13 +93,14 @@ export function ComponentLibraryPanel({
                 type: component.sectionType,
                 variant: component.variant,
                 name: component.name,
+                presetId: component.id,
             })
         } else {
             setGhostPreviewLayout(null)
         }
     }, [setGhostPreviewLayout])
 
-    // Get components for this section type (from centralized registry)
+    // Get components for this section type — one per family
     const sectionType = section.type.toLowerCase()
     const availableComponents = useMemo((): ComponentVariant[] => {
         const typeVariants = getVariantsForType(sectionType)
@@ -99,7 +111,8 @@ export function ComponentLibraryPanel({
             return typeVariants.filter((c: ComponentVariant) =>
                 c.name.toLowerCase().includes(query) ||
                 c.id.toLowerCase().includes(query) ||
-                c.description.toLowerCase().includes(query)
+                c.description.toLowerCase().includes(query) ||
+                c.tags.some(t => t.toLowerCase().includes(query))
             )
         }
 
@@ -204,7 +217,7 @@ export function ComponentLibraryPanel({
                                     <ComponentCard
                                         key={component.id}
                                         component={component}
-                                        isSelected={section.componentId === component.id}
+                                        isSelected={currentPresetId === component.id}
                                         isSaved={savedComponents.includes(component.id)}
                                         onSelectAction={() => handleSelectComponent(component.id)}
                                         onToggleBookmarkAction={() => handleToggleBookmark(component.id)}
@@ -226,7 +239,7 @@ export function ComponentLibraryPanel({
                                     <ComponentCard
                                         key={component.id}
                                         component={component}
-                                        isSelected={section.componentId === component.id}
+                                        isSelected={currentPresetId === component.id}
                                         isSaved={true}
                                         onSelectAction={() => handleSelectComponent(component.id)}
                                         onToggleBookmarkAction={() => handleToggleBookmark(component.id)}

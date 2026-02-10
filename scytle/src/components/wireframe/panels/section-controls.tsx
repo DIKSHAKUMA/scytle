@@ -1,14 +1,27 @@
 'use client'
 
 import { useMemo } from 'react'
-import { AlignLeft, AlignCenter, AlignRight, Image, Video } from 'lucide-react'
+import { AlignLeft, AlignCenter, AlignRight, Image, Video, ArrowLeft, ArrowRight, Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
+import type { ControlDefinition } from '@/lib/designs/types'
 import type { WireframeSectionControls } from '@/types'
 
 interface SectionControlsProps {
+    /** The section's componentId — used to look up design controls */
+    componentId?: string
+    /** Fallback: section type for legacy hardcoded controls */
     sectionType: string
     controls: WireframeSectionControls
     onControlChangeAction: (key: string, value: string | number | boolean) => void
@@ -16,327 +29,67 @@ interface SectionControlsProps {
 }
 
 /**
- * Control Configuration Types
+ * Icon name → Lucide component mapping
  */
-type ControlType = 'toggle-group' | 'switch' | 'select'
-
-interface BaseControl {
-    key: string
-    label: string
-    type: ControlType
-}
-
-interface ToggleGroupControl extends BaseControl {
-    type: 'toggle-group'
-    options: Array<{
-        value: string
-        label: string
-        icon?: React.ComponentType<{ className?: string }>
-    }>
-}
-
-interface SwitchControl extends BaseControl {
-    type: 'switch'
-}
-
-type ControlConfig = ToggleGroupControl | SwitchControl
-
-/**
- * Section Control Configurations
- * 
- * Each section type has its own set of controls.
- * This maps to the WIREFRAME-SPEC.md specification.
- */
-const SECTION_CONTROLS: Record<string, ControlConfig[]> = {
-    hero: [
-        {
-            key: 'textAlign',
-            label: 'Text Alignment',
-            type: 'toggle-group',
-            options: [
-                { value: 'left', label: 'Left', icon: AlignLeft },
-                { value: 'center', label: 'Center', icon: AlignCenter },
-                { value: 'right', label: 'Right', icon: AlignRight },
-            ],
-        },
-        {
-            key: 'assetType',
-            label: 'Asset Type',
-            type: 'toggle-group',
-            options: [
-                { value: 'image', label: 'Image', icon: Image },
-                { value: 'video', label: 'Video', icon: Video },
-            ],
-        },
-    ],
-    features: [
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-        {
-            key: 'showIcons',
-            label: 'Show Icons',
-            type: 'switch',
-        },
-    ],
-    testimonials: [
-        {
-            key: 'slider',
-            label: 'Slider',
-            type: 'toggle-group',
-            options: [
-                { value: 'true', label: 'Yes' },
-                { value: 'false', label: 'No' },
-            ],
-        },
-        {
-            key: 'contentType',
-            label: 'Content Type',
-            type: 'toggle-group',
-            options: [
-                { value: 'type1', label: 'Type 1' },
-                { value: 'type2', label: 'Type 2' },
-            ],
-        },
-    ],
-    faq: [
-        {
-            key: 'style',
-            label: 'Style',
-            type: 'toggle-group',
-            options: [
-                { value: 'accordion', label: 'Accordion' },
-                { value: 'list', label: 'List' },
-            ],
-        },
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '1', label: '1' },
-                { value: '2', label: '2' },
-            ],
-        },
-    ],
-    gallery: [
-        {
-            key: 'layout',
-            label: 'Layout',
-            type: 'toggle-group',
-            options: [
-                { value: 'grid', label: 'Grid' },
-                { value: 'masonry', label: 'Masonry' },
-                { value: 'carousel', label: 'Carousel' },
-            ],
-        },
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-    ],
-    pricing: [
-        {
-            key: 'tiers',
-            label: 'Tiers',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-        {
-            key: 'highlight',
-            label: 'Highlight Popular',
-            type: 'switch',
-        },
-    ],
-    cta: [
-        {
-            key: 'textAlign',
-            label: 'Text Alignment',
-            type: 'toggle-group',
-            options: [
-                { value: 'left', label: 'Left', icon: AlignLeft },
-                { value: 'center', label: 'Center', icon: AlignCenter },
-            ],
-        },
-        {
-            key: 'showSecondaryButton',
-            label: 'Secondary Button',
-            type: 'switch',
-        },
-    ],
-    contact: [
-        {
-            key: 'layout',
-            label: 'Layout',
-            type: 'toggle-group',
-            options: [
-                { value: 'side-by-side', label: 'Side by Side' },
-                { value: 'stacked', label: 'Stacked' },
-            ],
-        },
-        {
-            key: 'showMap',
-            label: 'Show Map',
-            type: 'switch',
-        },
-    ],
-    team: [
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-        {
-            key: 'showSocial',
-            label: 'Show Social Links',
-            type: 'switch',
-        },
-    ],
-    stats: [
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-        {
-            key: 'showIcons',
-            label: 'Show Icons',
-            type: 'switch',
-        },
-    ],
-    logos: [
-        {
-            key: 'style',
-            label: 'Style',
-            type: 'toggle-group',
-            options: [
-                { value: 'grid', label: 'Grid' },
-                { value: 'marquee', label: 'Marquee' },
-            ],
-        },
-        {
-            key: 'grayscale',
-            label: 'Grayscale',
-            type: 'switch',
-        },
-    ],
-    blog: [
-        {
-            key: 'columns',
-            label: 'Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-            ],
-        },
-        {
-            key: 'showExcerpt',
-            label: 'Show Excerpt',
-            type: 'switch',
-        },
-    ],
-    footer: [
-        {
-            key: 'columns',
-            label: 'Link Columns',
-            type: 'toggle-group',
-            options: [
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-                { value: '5', label: '5' },
-            ],
-        },
-        {
-            key: 'showNewsletter',
-            label: 'Newsletter Signup',
-            type: 'switch',
-        },
-    ],
-    navbar: [
-        {
-            key: 'layout',
-            label: 'Layout',
-            type: 'toggle-group',
-            options: [
-                { value: 'left', label: 'Logo Left' },
-                { value: 'center', label: 'Logo Center' },
-            ],
-        },
-        {
-            key: 'sticky',
-            label: 'Sticky Header',
-            type: 'switch',
-        },
-    ],
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    Image,
+    Video,
+    ArrowLeft,
+    ArrowRight,
 }
 
 /**
  * SectionControls Component
  * 
- * Renders dynamic controls based on section type.
- * Uses Shadcn ToggleGroup and Switch components.
+ * Schema-driven controls renderer.
+ * Resolves controls from the design registry (componentId → family/preset controlsDef).
+ * All 15 categories (45 families) are registered — no legacy fallback needed.
  */
 export function SectionControls({
+    componentId,
     sectionType,
     controls,
     onControlChangeAction,
     className,
 }: SectionControlsProps) {
-    // Normalize section type and get controls
-    const normalizedType = sectionType.toLowerCase().replace(/[-_\s]+/g, '')
+    // Resolve controls from family/preset system
+    const { controlsDef: designControls, defaultControls: designDefaults } = useMemo(() => {
+        if (!componentId) return { controlsDef: undefined, defaultControls: undefined }
 
-    const controlConfigs = useMemo(() => {
-        // Try exact match first
-        if (SECTION_CONTROLS[sectionType]) {
-            return SECTION_CONTROLS[sectionType]
-        }
-
-        // Try normalized match
-        for (const [key, value] of Object.entries(SECTION_CONTROLS)) {
-            if (key.toLowerCase().replace(/[-_\s]+/g, '') === normalizedType) {
-                return value
+        // Try preset → family
+        const preset = getPresetById(componentId)
+        if (preset) {
+            const family = getFamilyById(preset.familyId)
+            if (family) {
+                return {
+                    controlsDef: family.controlsDef,
+                    defaultControls: { ...family.defaultControls, ...preset.controls },
+                }
             }
         }
 
-        // Try partial match
-        for (const [key, value] of Object.entries(SECTION_CONTROLS)) {
-            if (normalizedType.includes(key) || key.includes(normalizedType)) {
-                return value
+        // Try family directly
+        const family = getFamilyById(componentId)
+        if (family) {
+            return {
+                controlsDef: family.controlsDef,
+                defaultControls: family.defaultControls,
             }
         }
 
-        return []
-    }, [sectionType, normalizedType])
+        // Backward compat: getDesignById
+        const design = getDesignById(componentId)
+        return {
+            controlsDef: design?.controlsDef,
+            defaultControls: design?.defaultControls,
+        }
+    }, [componentId])
 
-    if (controlConfigs.length === 0) {
+    // Nothing to render
+    if (!designControls?.length) {
         return (
             <div className={cn('space-y-3', className)}>
                 <p className="text-xs text-muted-foreground">
@@ -346,93 +99,282 @@ export function SectionControls({
         )
     }
 
+    // Helper to get effective value for a control key
+    const getEffectiveValue = (key: string, defaultVal?: string | number | boolean) => {
+        return controls[key] ?? designDefaults?.[key] ?? defaultVal
+    }
+
+    // Filter controls by showWhen condition
+    const visibleControls = designControls.filter(def => {
+        if (!def.showWhen) return true
+        const currentValue = getEffectiveValue(def.showWhen.key)
+        return currentValue === def.showWhen.value
+    })
+
     return (
         <div className={cn('space-y-4', className)}>
             <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Controls
             </Label>
+            {visibleControls.map((def) => {
+                const effectiveValue = getEffectiveValue(def.key, def.defaultValue)
 
-            {controlConfigs.map((config) => (
-                <div key={config.key} className="space-y-2">
-                    {config.type === 'toggle-group' && (
-                        <ToggleGroupControl
-                            config={config}
-                            value={String(controls[config.key] ?? config.options[0]?.value)}
-                            onChange={(value) => onControlChangeAction(config.key, value)}
-                        />
-                    )}
+                // Toggle Group
+                if (def.type === 'toggle-group' && def.options) {
+                    return (
+                        <div key={def.key} className="space-y-1.5">
+                            <Label className="text-xs font-medium">{def.label}</Label>
+                            <ToggleGroup
+                                type="single"
+                                value={String(effectiveValue)}
+                                onValueChange={(v) => v && onControlChangeAction(def.key, v)}
+                                className="justify-start"
+                            >
+                                {def.options.map((opt) => {
+                                    const IconComp = opt.icon ? ICON_MAP[opt.icon] : undefined
+                                    return (
+                                        <ToggleGroupItem
+                                            key={opt.value}
+                                            value={opt.value}
+                                            aria-label={opt.label}
+                                            className="h-8 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                                        >
+                                            {IconComp ? (
+                                                <IconComp className="h-3.5 w-3.5" />
+                                            ) : (
+                                                opt.label
+                                            )}
+                                        </ToggleGroupItem>
+                                    )
+                                })}
+                            </ToggleGroup>
+                        </div>
+                    )
+                }
 
-                    {config.type === 'switch' && (
-                        <SwitchControlComponent
-                            config={config}
-                            value={Boolean(controls[config.key])}
-                            onChange={(value) => onControlChangeAction(config.key, value)}
+                // Switch
+                if (def.type === 'switch') {
+                    return (
+                        <div key={def.key} className="flex items-center justify-between">
+                            <Label htmlFor={def.key} className="text-xs font-medium">
+                                {def.label}
+                            </Label>
+                            <Switch
+                                id={def.key}
+                                checked={Boolean(effectiveValue)}
+                                onCheckedChange={(v) => onControlChangeAction(def.key, v)}
+                            />
+                        </div>
+                    )
+                }
+
+                // Slider
+                if (def.type === 'slider') {
+                    return (
+                        <SliderWidget
+                            key={def.key}
+                            def={def}
+                            value={Number(effectiveValue)}
+                            onChange={(v) => onControlChangeAction(def.key, v)}
                         />
-                    )}
-                </div>
-            ))}
+                    )
+                }
+
+                // Select
+                if (def.type === 'select' && def.options) {
+                    return (
+                        <SelectWidget
+                            key={def.key}
+                            def={def}
+                            value={String(effectiveValue)}
+                            onChange={(v) => onControlChangeAction(def.key, v)}
+                        />
+                    )
+                }
+
+                // Number
+                if (def.type === 'number') {
+                    return (
+                        <NumberWidget
+                            key={def.key}
+                            def={def}
+                            value={Number(effectiveValue)}
+                            onChange={(v) => onControlChangeAction(def.key, v)}
+                        />
+                    )
+                }
+
+                // Color
+                if (def.type === 'color' && def.options) {
+                    return (
+                        <ColorWidget
+                            key={def.key}
+                            def={def}
+                            value={String(effectiveValue)}
+                            onChange={(v) => onControlChangeAction(def.key, v)}
+                        />
+                    )
+                }
+
+                return null
+            })}
+        </div>
+    )
+}
+
+// ===== WIDGET COMPONENTS =====
+
+/**
+ * SliderWidget — Range input with value label
+ */
+interface SliderWidgetProps {
+    def: ControlDefinition
+    value: number
+    onChange: (value: number) => void
+}
+
+function SliderWidget({ def, value, onChange }: SliderWidgetProps) {
+    const min = def.min ?? 0
+    const max = def.max ?? 100
+    const step = def.step ?? 1
+
+    return (
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">{def.label}</Label>
+                <span className="text-xs text-muted-foreground tabular-nums">{value}</span>
+            </div>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={value}
+                onChange={(e) => onChange(Number(e.target.value))}
+                className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+            />
         </div>
     )
 }
 
 /**
- * ToggleGroupControl Component
+ * SelectWidget — Dropdown select
  */
-interface ToggleGroupControlProps {
-    config: ToggleGroupControl
+interface SelectWidgetProps {
+    def: ControlDefinition
     value: string
     onChange: (value: string) => void
 }
 
-function ToggleGroupControl({ config, value, onChange }: ToggleGroupControlProps) {
+function SelectWidget({ def, value, onChange }: SelectWidgetProps) {
     return (
         <div className="space-y-1.5">
-            <Label className="text-xs font-medium">{config.label}</Label>
-            <ToggleGroup
-                type="single"
-                value={value}
-                onValueChange={(v) => v && onChange(v)}
-                className="justify-start"
-            >
-                {config.options.map((option) => (
-                    <ToggleGroupItem
-                        key={option.value}
-                        value={option.value}
-                        aria-label={option.label}
-                        className="h-8 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                    >
-                        {option.icon ? (
-                            <option.icon className="h-3.5 w-3.5" />
-                        ) : (
-                            option.label
-                        )}
-                    </ToggleGroupItem>
-                ))}
-            </ToggleGroup>
+            <Label className="text-xs font-medium">{def.label}</Label>
+            <Select value={value} onValueChange={onChange}>
+                <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    {def.options?.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                            {opt.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
         </div>
     )
 }
 
 /**
- * SwitchControl Component
+ * NumberWidget — Numeric stepper with +/- buttons
  */
-interface SwitchControlProps {
-    config: SwitchControl
-    value: boolean
-    onChange: (value: boolean) => void
+interface NumberWidgetProps {
+    def: ControlDefinition
+    value: number
+    onChange: (value: number) => void
 }
 
-function SwitchControlComponent({ config, value, onChange }: SwitchControlProps) {
+function NumberWidget({ def, value, onChange }: NumberWidgetProps) {
+    const min = def.min ?? 0
+    const max = def.max ?? 99
+    const step = def.step ?? 1
+
+    const handleDecrement = () => {
+        const newVal = Math.max(min, value - step)
+        onChange(newVal)
+    }
+
+    const handleIncrement = () => {
+        const newVal = Math.min(max, value + step)
+        onChange(newVal)
+    }
+
     return (
-        <div className="flex items-center justify-between">
-            <Label htmlFor={config.key} className="text-xs font-medium">
-                {config.label}
-            </Label>
-            <Switch
-                id={config.key}
-                checked={value}
-                onCheckedChange={onChange}
-            />
+        <div className="space-y-1.5">
+            <Label className="text-xs font-medium">{def.label}</Label>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={handleDecrement}
+                    disabled={value <= min}
+                    className="h-8 w-8 flex items-center justify-center border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Minus className="h-3 w-3" />
+                </button>
+                <Input
+                    type="number"
+                    value={value}
+                    min={min}
+                    max={max}
+                    step={step}
+                    onChange={(e) => {
+                        const v = Number(e.target.value)
+                        if (!isNaN(v) && v >= min && v <= max) onChange(v)
+                    }}
+                    className="h-8 w-16 text-center text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <button
+                    onClick={handleIncrement}
+                    disabled={value >= max}
+                    className="h-8 w-8 flex items-center justify-center border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Plus className="h-3 w-3" />
+                </button>
+            </div>
+        </div>
+    )
+}
+
+/**
+ * ColorWidget — Color swatch picker
+ */
+interface ColorWidgetProps {
+    def: ControlDefinition
+    value: string
+    onChange: (value: string) => void
+}
+
+function ColorWidget({ def, value, onChange }: ColorWidgetProps) {
+    return (
+        <div className="space-y-1.5">
+            <Label className="text-xs font-medium">{def.label}</Label>
+            <div className="flex flex-wrap gap-1.5">
+                {def.options?.map((opt) => (
+                    <button
+                        key={opt.value}
+                        onClick={() => onChange(opt.value)}
+                        className={cn(
+                            'w-7 h-7 rounded-full border-2 transition-all',
+                            value === opt.value
+                                ? 'border-primary ring-2 ring-primary/20 scale-110'
+                                : 'border-transparent hover:border-muted-foreground/30'
+                        )}
+                        style={{ backgroundColor: opt.value }}
+                        aria-label={opt.label}
+                        title={opt.label}
+                    />
+                ))}
+            </div>
         </div>
     )
 }

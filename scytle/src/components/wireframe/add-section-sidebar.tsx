@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import {
     X,
     Search,
@@ -28,7 +28,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useUnifiedStore } from '@/store'
 import { WireframeThumbnail } from './wireframe-thumbnail'
-import { getDesignsForCategory, getActiveCategories, type DesignCategoryId, type DesignDefinition } from '@/lib/designs'
+import {
+    getPresetsForCategory,
+    getActiveCategories,
+    type DesignCategoryId,
+    type DesignPreset,
+} from '@/lib/designs'
 import type { WireframeSection } from '@/types'
 
 /**
@@ -54,13 +59,15 @@ interface AddSectionSidebarProps {
     insertIndex: number
 }
 
-// Interface for layout (converted from DesignDefinition)
+// Interface for layout (converted from DesignPreset)
 interface SectionLayout {
     id: string
     name: string
     type: string
     variant?: string
     preview?: string
+    /** Direct Thumbnail component from preset */
+    Thumbnail?: React.FC
 }
 
 // Interface for category (built from registry)
@@ -71,21 +78,20 @@ interface SectionCategory {
     layouts: SectionLayout[]
 }
 
-// Convert design to layout format
-function designToLayout(design: DesignDefinition): SectionLayout {
+// Convert preset to layout format
+function presetToLayout(preset: DesignPreset, category: string): SectionLayout {
     return {
-        id: design.id,
-        name: design.name,
-        type: design.category,
-        variant: design.layout,
-        preview: design.description,
+        id: preset.id,
+        name: preset.name,
+        type: category,
+        variant: preset.familyId,
+        preview: preset.description,
+        Thumbnail: preset.Thumbnail,
     }
 }
 
 // Build categories from registry dynamically
 function buildCategoriesFromRegistry(): SectionCategory[] {
-    const activeCategories = getActiveCategories()
-
     // All possible categories (for showing empty ones too)
     const allCategoryMeta: { id: DesignCategoryId; name: string }[] = [
         { id: 'hero', name: 'Hero Header' },
@@ -108,7 +114,7 @@ function buildCategoriesFromRegistry(): SectionCategory[] {
     return allCategoryMeta.map(cat => ({
         id: cat.id,
         name: cat.name,
-        layouts: getDesignsForCategory(cat.id).map(designToLayout),
+        layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
     }))
 }
 
@@ -140,6 +146,7 @@ export function AddSectionSidebar({
                 type: layout.type,
                 variant: layout.variant,
                 name: layout.name,
+                presetId: layout.id,
             })
         } else {
             setGhostPreviewLayout(null)
@@ -590,9 +597,13 @@ function LayoutSelectionView({ category, onSelectLayout, onHoverLayout }: Layout
                             onMouseLeave={() => onHoverLayout?.(null)}
                             className="w-full bg-white border border-gray-200 overflow-hidden hover:border-gray-400 hover:shadow-sm transition-all"
                         >
-                            {/* Layout Preview - Use actual wireframe thumbnail */}
+                            {/* Layout Preview — use preset Thumbnail directly, fallback to WireframeThumbnail */}
                             <div className="aspect-[16/10] bg-white border-b">
-                                <WireframeThumbnail type={layout.type} variant={layout.variant} />
+                                {layout.Thumbnail ? (
+                                    <layout.Thumbnail />
+                                ) : (
+                                    <WireframeThumbnail type={layout.type} variant={layout.variant} designId={layout.id} />
+                                )}
                             </div>
 
                             {/* Layout Info - Relume-style name */}

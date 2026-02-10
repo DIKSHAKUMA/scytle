@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, forwardRef } from 'react'
-import { GripVertical, Maximize2, Plus, Globe, Trash2, Copy, Sparkles } from 'lucide-react'
+import { GripVertical, Plus, Globe, Trash2, Copy, Sparkles } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
@@ -12,20 +12,23 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { WireframeSection } from '@/types'
+import type { WireframeSection, ViewportDevice } from '@/types'
 import { PlaceholderRenderer } from './placeholder-renderer'
 
 interface SectionBlockProps {
     section: WireframeSection
     isSelected: boolean
-    viewport: 'desktop' | 'mobile'
+    viewport: ViewportDevice
     onSelectAction: (sectionId: string) => void
     onAddBelowAction?: () => void
-    onExpandAction?: () => void
     onDeleteAction?: () => void
     onDuplicateAction?: () => void
     onToggleGlobalAction?: () => void
     onGenerateAction?: () => void
+    /** Content change handler — wired to store.updateSectionContent */
+    onContentChange?: (key: string, value: unknown) => void
+    /** Whether inline editing is enabled on sections */
+    editable?: boolean
     className?: string
     // For dnd-kit
     isDragging?: boolean
@@ -49,11 +52,12 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
     viewport,
     onSelectAction,
     onAddBelowAction,
-    onExpandAction,
     onDeleteAction,
     onDuplicateAction,
     onToggleGlobalAction,
     onGenerateAction,
+    onContentChange,
+    editable,
     className,
     isDragging = false,
     dragHandleProps,
@@ -78,10 +82,6 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
         onAddBelowAction?.()
     }, [onAddBelowAction])
 
-    const handleExpandClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        onExpandAction?.()
-    }, [onExpandAction])
 
     const handleDeleteClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
@@ -93,17 +93,17 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
             {/* Main Section Block */}
             <div
                 className={cn(
-                    'relative rounded-lg overflow-hidden cursor-pointer',
+                    'relative overflow-hidden cursor-pointer',
                     'transition-all duration-150 ease-out',
-                    'bg-white',
-                    // Border states
+                    'bg-white border-b border-gray-100',
+                    // Selection / hover states
                     isSelected
-                        ? 'ring-2 ring-violet-500 ring-offset-2'
+                        ? 'outline outline-2 outline-violet-500 z-[1]'
                         : isHovered
-                            ? 'ring-1 ring-violet-300'
-                            : 'ring-1 ring-gray-200',
+                            ? 'outline outline-1 outline-violet-300 z-[1]'
+                            : '',
                     // Dragging state
-                    isDragging && 'opacity-50 ring-2 ring-violet-400 shadow-lg',
+                    isDragging && 'opacity-50 outline outline-2 outline-violet-400 shadow-lg z-[1]',
                     className
                 )}
                 onClick={handleClick}
@@ -116,20 +116,21 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                     {...dragHandleProps}
                     className={cn(
                         'absolute left-0 top-0 bottom-0 w-6 flex items-center justify-center',
-                        'bg-linear-to-r from-gray-50 to-transparent',
                         'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
                         'cursor-grab active:cursor-grabbing z-10'
                     )}
                 >
-                    <GripVertical className="w-4 h-4 text-gray-400" />
+                    <div className="w-5 h-5 rounded bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                        <GripVertical className="w-3.5 h-3.5 text-gray-500" />
+                    </div>
                 </div>
 
                 {/* Section Header - Top bar */}
                 <div
                     className={cn(
-                        'absolute top-0 left-0 right-0 h-8',
-                        'flex items-center justify-between px-3',
-                        'bg-linear-to-b from-white/95 to-white/0',
+                        'absolute top-1 left-7 right-1',
+                        'flex items-center justify-between px-2 py-1 rounded',
+                        'bg-white/80 backdrop-blur-sm shadow-sm',
                         'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
                         'z-10'
                     )}
@@ -150,16 +151,6 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                     {/* Right: Action buttons */}
                     <div className="flex items-center gap-1">
                         <button
-                            onClick={handleExpandClick}
-                            className={cn(
-                                'p-1 rounded hover:bg-gray-100 transition-colors',
-                                'text-gray-400 hover:text-gray-600'
-                            )}
-                            title="Expand"
-                        >
-                            <Maximize2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
                             onClick={handleDeleteClick}
                             className={cn(
                                 'p-1 rounded hover:bg-red-50 transition-colors',
@@ -176,6 +167,8 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                 <PlaceholderRenderer
                     section={section}
                     viewport={viewport}
+                    onContentChange={onContentChange}
+                    editable={editable}
                 />
             </div>
 
@@ -214,21 +207,21 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Add Section Button - Below on hover */}
+            {/* Add Section Button - Between sections on hover */}
             <div
                 className={cn(
-                    'absolute -bottom-3 left-1/2 -translate-x-1/2',
+                    'absolute -bottom-3.5 left-1/2 -translate-x-1/2',
                     'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
-                    'z-20'
+                    'z-30 pointer-events-auto'
                 )}
             >
                 <button
                     onClick={handleAddClick}
                     className={cn(
-                        'flex items-center gap-1 px-2 py-1',
+                        'flex items-center gap-1 px-2.5 py-1',
                         'bg-violet-500 hover:bg-violet-600 text-white',
                         'rounded-full text-xs font-medium',
-                        'shadow-sm hover:shadow transition-all duration-150',
+                        'shadow-md hover:shadow-lg transition-all duration-150',
                         'transform hover:scale-105'
                     )}
                 >

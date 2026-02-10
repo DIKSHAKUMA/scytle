@@ -34,9 +34,13 @@ export function ComponentCard({
             onMouseEnter={() => onHoverAction?.(component)}
             onMouseLeave={() => onHoverAction?.(null)}
         >
-            {/* Thumbnail Preview - Now using actual wireframe designs */}
+            {/* Thumbnail Preview — actual wireframe design */}
             <div className="aspect-video bg-white relative border-b">
-                <WireframeThumbnail type={component.sectionType} variant={component.variant} />
+                {component.Thumbnail ? (
+                    <component.Thumbnail />
+                ) : (
+                    <WireframeThumbnail type={component.sectionType} variant={component.variant} />
+                )}
 
                 {/* Selected Indicator */}
                 {isSelected && (

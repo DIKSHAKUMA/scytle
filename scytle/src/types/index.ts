@@ -325,13 +325,33 @@ export interface WireframePage {
     sections: WireframeSection[]
 }
 
+// Viewport device type
+export type ViewportDevice = 'desktop' | 'tablet' | 'mobile'
+
 // Viewport mode for dual display
 export type ViewportMode = 'dual' | 'desktop' | 'mobile'
 
 // Device visibility toggles
 export interface DeviceVisibility {
     desktop: boolean
+    tablet: boolean
     mobile: boolean
+}
+
+// Viewport configuration with widths and breakpoint labels
+export interface ViewportConfig {
+    device: ViewportDevice
+    width: number
+    label: string
+    breakpoint: string
+    isPrimary?: boolean
+}
+
+// All available viewport configs
+export const VIEWPORT_CONFIGS: Record<ViewportDevice, ViewportConfig> = {
+    desktop: { device: 'desktop', width: 1280, label: 'Desktop', breakpoint: '1280 +', isPrimary: true },
+    tablet: { device: 'tablet', width: 800, label: 'Tablet', breakpoint: '800 - 1279' },
+    mobile: { device: 'mobile', width: 375, label: 'Mobile', breakpoint: '1 - 799' },
 }
 
 // ============================================

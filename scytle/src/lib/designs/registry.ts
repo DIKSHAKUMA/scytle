@@ -1,34 +1,80 @@
 /**
  * Design Registry - Single Source of Truth
  * 
- * This is the central hub for all design definitions.
- * Import designs here and they automatically become available
- * in all panels (Add Section, Replace Component, Wireframe Preview).
+ * Two-tier registry: Template Families (parametric Canvas components) +
+ * Design Presets (named control snapshots users browse in the sidebar).
  */
 
-import type { DesignDefinition, DesignCategory, DesignCategoryId, ComponentVariant, SectionLayout } from './types'
+import type {
+    TemplateFamily,
+    DesignPreset,
+    DesignDefinition,
+    DesignCategory,
+    DesignCategoryId,
+    ComponentVariant,
+    SectionLayout,
+} from './types'
 
-// Import all category designs
-import { Header1, Header2, Header3 } from './hero'
+// Import all category families + presets
+import { heroFamilies, heroPresets } from './hero'
+import { ctaFamilies, ctaPresets } from './cta'
+import { navbarFamilies, navbarPresets } from './navbar'
+import { footerFamilies, footerPresets } from './footer'
+import { featuresFamilies, featuresPresets } from './features'
+import { testimonialsFamilies, testimonialsPresets } from './testimonials'
+import { pricingFamilies, pricingPresets } from './pricing'
+import { faqFamilies, faqPresets } from './faq'
+import { contactFamilies, contactPresets } from './contact'
+import { contentFamilies, contentPresets } from './content'
+import { galleryFamilies, galleryPresets } from './gallery'
+import { teamFamilies, teamPresets } from './team'
+import { blogFamilies, blogPresets } from './blog'
+import { statsFamilies, statsPresets } from './stats'
+import { logosFamilies, logosPresets } from './logos'
 
-// ===== DESIGN REGISTRY =====
-// The single source of truth - add new designs here!
+// ===== FAMILY REGISTRY =====
+// Parametric Canvas components — one per layout pattern
 
-export const DESIGN_REGISTRY: DesignDefinition[] = [
-    // Hero Sections
-    Header1,
-    Header2,
-    Header3,
+export const FAMILY_REGISTRY: TemplateFamily[] = [
+    ...heroFamilies,
+    ...ctaFamilies,
+    ...navbarFamilies,
+    ...footerFamilies,
+    ...featuresFamilies,
+    ...testimonialsFamilies,
+    ...pricingFamilies,
+    ...faqFamilies,
+    ...contactFamilies,
+    ...contentFamilies,
+    ...galleryFamilies,
+    ...teamFamilies,
+    ...blogFamilies,
+    ...statsFamilies,
+    ...logosFamilies,
+]
 
-    // Future categories:
-    // ...FeatureDesigns,
-    // ...CTADesigns,
-    // ...FooterDesigns,
-    // ...NavbarDesigns,
+// ===== PRESET REGISTRY =====
+// Named control snapshots — what users browse in the sidebar
+
+export const PRESET_REGISTRY: DesignPreset[] = [
+    ...heroPresets,
+    ...ctaPresets,
+    ...navbarPresets,
+    ...footerPresets,
+    ...featuresPresets,
+    ...testimonialsPresets,
+    ...pricingPresets,
+    ...faqPresets,
+    ...contactPresets,
+    ...contentPresets,
+    ...galleryPresets,
+    ...teamPresets,
+    ...blogPresets,
+    ...statsPresets,
+    ...logosPresets,
 ]
 
 // ===== CATEGORY METADATA =====
-// Used by Add Section Sidebar for category labels and organization
 
 export interface CategoryMeta {
     id: DesignCategoryId
@@ -55,46 +101,187 @@ export const DESIGN_CATEGORIES: CategoryMeta[] = [
     { id: 'logos', name: 'Logos', description: 'Logo clouds and partners' },
 ]
 
-// ===== HELPER FUNCTIONS =====
+// ===== FAMILY HELPERS =====
+
+/** Get a family by its unique ID */
+export function getFamilyById(id: string): TemplateFamily | undefined {
+    return FAMILY_REGISTRY.find(f => f.id === id)
+}
+
+/** Get all families for a specific category */
+export function getFamiliesForCategory(category: DesignCategoryId): TemplateFamily[] {
+    return FAMILY_REGISTRY.filter(f => f.category === category)
+}
+
+// ===== PRESET HELPERS =====
+
+/** Get a preset by its unique ID */
+export function getPresetById(id: string): DesignPreset | undefined {
+    return PRESET_REGISTRY.find(p => p.id === id)
+}
+
+/** Get all presets for a category (by resolving preset → family → category) */
+export function getPresetsForCategory(category: DesignCategoryId): DesignPreset[] {
+    const familyIds = new Set(
+        FAMILY_REGISTRY.filter(f => f.category === category).map(f => f.id)
+    )
+    return PRESET_REGISTRY.filter(p => familyIds.has(p.familyId))
+}
+
+/** Get all presets for a specific family */
+export function getPresetsForFamily(familyId: string): DesignPreset[] {
+    return PRESET_REGISTRY.filter(p => p.familyId === familyId)
+}
+
+/** 
+ * Resolve a preset to its family + merged controls.
+ * Returns the three-layer merge ingredients.
+ */
+export function resolvePreset(presetId: string): {
+    family: TemplateFamily
+    controls: Record<string, string | number | boolean>
+    content: Record<string, unknown>
+} | undefined {
+    const preset = getPresetById(presetId)
+    if (!preset) return undefined
+
+    const family = getFamilyById(preset.familyId)
+    if (!family) return undefined
+
+    return {
+        family,
+        controls: {
+            ...family.defaultControls,
+            ...preset.controls,
+        },
+        content: {
+            ...family.defaultContent,
+            ...(preset.content ?? {}),
+        },
+    }
+}
+
+/** Search presets by name, description, or family tags */
+export function searchPresets(query: string): DesignPreset[] {
+    const lowerQuery = query.toLowerCase()
+    return PRESET_REGISTRY.filter(preset => {
+        if (preset.name.toLowerCase().includes(lowerQuery)) return true
+        if (preset.description.toLowerCase().includes(lowerQuery)) return true
+        // Also search the family's tags
+        const family = getFamilyById(preset.familyId)
+        if (family?.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))) return true
+        return false
+    })
+}
+
+// ===== BACKWARD COMPATIBILITY =====
 
 /**
- * Get a design by its unique ID
+ * Get a design by ID — works with both preset IDs and family IDs.
+ * 
+ * Resolution order:
+ * 1. Try as preset ID → return its family (with preset.controls as defaults)
+ * 2. Try as family ID → return the family directly
+ * 3. Return undefined
+ * 
+ * This wraps the result into a DesignDefinition-shaped object for
+ * components that haven't been migrated to the family/preset model yet.
  */
 export function getDesignById(id: string): DesignDefinition | undefined {
-    return DESIGN_REGISTRY.find(design => design.id === id)
+    // Try as preset first
+    const preset = getPresetById(id)
+    if (preset) {
+        const family = getFamilyById(preset.familyId)
+        if (family) {
+            return {
+                id: preset.id,
+                category: family.category,
+                name: preset.name,
+                description: preset.description,
+                tags: family.tags,
+                Thumbnail: preset.Thumbnail,
+                Canvas: family.Canvas,
+                hasImage: family.hasImage,
+                hasVideo: family.hasVideo,
+                hasForm: family.hasForm,
+                controlsDef: family.controlsDef,
+                defaultControls: {
+                    ...family.defaultControls,
+                    ...preset.controls,
+                },
+            }
+        }
+    }
+
+    // Try as family directly
+    const family = getFamilyById(id)
+    if (family) {
+        return {
+            id: family.id,
+            category: family.category,
+            name: family.name,
+            description: family.description,
+            tags: family.tags,
+            Thumbnail: () => null, // Families don't have thumbnails (presets do)
+            Canvas: family.Canvas,
+            hasImage: family.hasImage,
+            hasVideo: family.hasVideo,
+            hasForm: family.hasForm,
+            controlsDef: family.controlsDef,
+            defaultControls: family.defaultControls,
+        }
+    }
+
+    return undefined
 }
 
 /**
- * Get all designs for a specific category
+ * @deprecated Use getPresetsForCategory() instead
  */
 export function getDesignsForCategory(category: DesignCategoryId): DesignDefinition[] {
-    return DESIGN_REGISTRY.filter(design => design.category === category)
+    return getPresetsForCategory(category).map(preset => {
+        const family = getFamilyById(preset.familyId)
+        return {
+            id: preset.id,
+            category: family?.category ?? category,
+            name: preset.name,
+            description: preset.description,
+            tags: family?.tags,
+            Thumbnail: preset.Thumbnail,
+            Canvas: family?.Canvas ?? (() => null),
+            hasImage: family?.hasImage,
+            hasVideo: family?.hasVideo,
+            hasForm: family?.hasForm,
+            controlsDef: family?.controlsDef,
+            defaultControls: {
+                ...(family?.defaultControls ?? {}),
+                ...preset.controls,
+            },
+        } as DesignDefinition
+    })
 }
 
-/**
- * Get categories that have at least one design
- */
+/** Get categories that have at least one preset */
 export function getActiveCategories(): CategoryMeta[] {
-    const categoriesWithDesigns = new Set(
-        DESIGN_REGISTRY.map(design => design.category)
+    const familyIds = new Set(PRESET_REGISTRY.map(p => p.familyId))
+    const categoriesWithPresets = new Set(
+        FAMILY_REGISTRY.filter(f => familyIds.has(f.id)).map(f => f.category)
     )
-    return DESIGN_CATEGORIES.filter(cat => categoriesWithDesigns.has(cat.id))
+    return DESIGN_CATEGORIES.filter(cat => categoriesWithPresets.has(cat.id))
 }
 
 /**
- * Search designs by name, description, or tags
+ * @deprecated Use searchPresets() instead
  */
 export function searchDesigns(query: string): DesignDefinition[] {
-    const lowerQuery = query.toLowerCase()
-    return DESIGN_REGISTRY.filter(design =>
-        design.name.toLowerCase().includes(lowerQuery) ||
-        design.description.toLowerCase().includes(lowerQuery) ||
-        design.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
-    )
+    return searchPresets(query).map(preset => {
+        const design = getDesignById(preset.id)
+        return design!
+    }).filter(Boolean)
 }
 
 /**
- * Convert DesignDefinition to ComponentVariant (for backwards compatibility)
+ * @deprecated Backward compat — convert preset to ComponentVariant
  */
 export function designToVariant(design: DesignDefinition): ComponentVariant {
     return {
@@ -107,7 +294,7 @@ export function designToVariant(design: DesignDefinition): ComponentVariant {
 }
 
 /**
- * Convert DesignDefinition to SectionLayout (for Add Section Sidebar)
+ * @deprecated Backward compat — convert preset to SectionLayout
  */
 export function designToLayout(design: DesignDefinition): SectionLayout {
     return {
@@ -118,14 +305,14 @@ export function designToLayout(design: DesignDefinition): SectionLayout {
 }
 
 /**
- * Get designs as ComponentVariants for a category (backwards compatible)
+ * @deprecated Use getPresetsForCategory() instead
  */
 export function getCategoryVariants(category: DesignCategoryId): ComponentVariant[] {
     return getDesignsForCategory(category).map(designToVariant)
 }
 
 /**
- * Get designs as SectionLayouts for a category (for sidebar)
+ * @deprecated Use getPresetsForCategory() instead
  */
 export function getCategoryLayouts(category: DesignCategoryId): SectionLayout[] {
     return getDesignsForCategory(category).map(designToLayout)

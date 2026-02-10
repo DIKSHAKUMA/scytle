@@ -10,7 +10,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
-import { getDesignById } from '@/lib/designs'
+import {
+    getPresetById,
+    getFamilyById,
+} from '@/lib/designs'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
 
@@ -51,11 +54,20 @@ export function SectionPanel({
         selectedPageId,
     } = useUnifiedStore()
 
-    // Look up the current design from the registry
-    const currentDesign = useMemo(
-        () => section.componentId ? getDesignById(section.componentId) : undefined,
-        [section.componentId]
-    )
+    // Look up the current preset + family from the registry
+    const { currentPreset, currentFamily } = useMemo(() => {
+        if (!section.componentId) return { currentPreset: undefined, currentFamily: undefined }
+
+        const preset = getPresetById(section.componentId)
+        if (preset) {
+            const family = getFamilyById(preset.familyId)
+            return { currentPreset: preset, currentFamily: family }
+        }
+
+        // Try as family directly
+        const family = getFamilyById(section.componentId)
+        return { currentPreset: undefined, currentFamily: family }
+    }, [section.componentId])
 
     // Sync local state when section changes
     useEffect(() => {
@@ -183,38 +195,37 @@ export function SectionPanel({
 
                     <Separator />
 
-                    {/* Component Selector */}
-                    <div className="space-y-1.5">
-                        <button
-                            onClick={handleOpenLibrary}
-                            className={cn(
-                                'w-full flex items-center gap-3 p-3',
-                                'bg-muted/50 rounded-lg',
-                                'hover:bg-muted transition-colors',
-                                'cursor-pointer text-left',
-                                'overflow-hidden'
-                            )}
-                        >
-                            {/* Icon like Relume */}
-                            <div className="w-10 h-10 bg-background rounded-lg border flex items-center justify-center shrink-0">
-                                <Layers className="h-5 w-5 text-muted-foreground" />
+                    {/* Component Selector — Opens library panel */}
+                    <button
+                        onClick={handleOpenLibrary}
+                        className={cn(
+                            'w-full flex items-center gap-3 p-3',
+                            'bg-muted/50 rounded-lg',
+                            'hover:bg-muted transition-colors',
+                            'cursor-pointer text-left',
+                            'overflow-hidden'
+                        )}
+                    >
+                        {/* Icon preview */}
+                        <div className="w-10 h-10 bg-background rounded-lg border flex items-center justify-center shrink-0 overflow-hidden">
+                            <Layers className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                            <div className="text-sm font-medium truncate">
+                                {currentPreset?.name ?? currentFamily?.name ?? section.name}
                             </div>
-                            <div className="flex-1 min-w-0 overflow-hidden">
-                                <div className="text-sm font-medium truncate">
-                                    {currentDesign?.name ?? section.name}
-                                </div>
-                                <div className="text-xs text-muted-foreground capitalize truncate">
-                                    {currentDesign?.category ?? section.type}
-                                </div>
+                            <div className="text-xs text-muted-foreground capitalize truncate">
+                                {currentFamily?.name ?? section.type}
                             </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        </button>
-                    </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
 
                     <Separator />
 
                     {/* Section-Specific Controls */}
                     <SectionControls
+                        componentId={section.componentId}
                         sectionType={section.type}
                         controls={section.controls}
                         onControlChangeAction={handleControlChange}

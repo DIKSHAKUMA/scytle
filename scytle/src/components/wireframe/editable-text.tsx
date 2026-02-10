@@ -8,11 +8,20 @@ import { AITextMenu } from './ai-text-menu'
 
 export interface EditableTextProps {
     value: string
-    onChangeAction: (value: string) => void
+    /** Called when user commits an edit (Next.js action-compatible alias) */
+    onChangeAction?: (value: string) => void
+    /** Called when user commits an edit (standard alias, used by Canvas families) */
+    onChange?: (value: string) => void
     placeholder?: string
+    /** HTML element to render as (for semantic wireframe headings/paragraphs) */
+    as?: 'h1' | 'h2' | 'h3' | 'h4' | 'p' | 'span' | 'div'
     variant?: 'heading' | 'subheading' | 'body' | 'button' | 'caption'
     className?: string
+    /** Whether editing is enabled — when false, renders plain static text */
+    editable?: boolean
     disabled?: boolean
+    /** Allow multiline editing with Shift+Enter */
+    multiline?: boolean
     sectionId?: string
     fieldKey?: string
 }
@@ -34,10 +43,14 @@ export interface EditableTextProps {
 export function EditableText({
     value,
     onChangeAction,
+    onChange,
     placeholder = 'Click to edit...',
+    as: Tag = 'div',
     variant = 'body',
     className,
+    editable = true,
     disabled = false,
+    multiline = false,
     sectionId,
     fieldKey,
 }: EditableTextProps) {
@@ -48,6 +61,12 @@ export function EditableText({
     const [localValue, setLocalValue] = useState(value)
     const inputRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+
+    // Unified change handler — calls whichever callback is provided
+    const emitChange = useCallback((newValue: string) => {
+        onChangeAction?.(newValue)
+        onChange?.(newValue)
+    }, [onChangeAction, onChange])
 
     // Sync local value with prop
     useEffect(() => {
@@ -95,15 +114,19 @@ export function EditableText({
 
         const newValue = inputRef.current?.textContent || ''
         if (newValue !== value) {
-            onChangeAction(newValue)
+            emitChange(newValue)
         }
-    }, [value, onChangeAction])
+    }, [value, emitChange])
 
     // Handle key events
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault()
-            inputRef.current?.blur()
+        if (e.key === 'Enter') {
+            // Multiline: only save on Enter without Shift
+            // Single-line: always save on Enter
+            if (!multiline || !e.shiftKey) {
+                e.preventDefault()
+                inputRef.current?.blur()
+            }
         }
         if (e.key === 'Escape') {
             e.preventDefault()
@@ -111,7 +134,7 @@ export function EditableText({
             setIsEditing(false)
             setIsSelected(false)
         }
-    }, [value])
+    }, [value, multiline])
 
     // Handle input changes
     const handleInput = useCallback(() => {
@@ -122,10 +145,10 @@ export function EditableText({
     // Handle AI text generation result
     const handleAIResult = useCallback((newText: string) => {
         setLocalValue(newText)
-        onChangeAction(newText)
+        emitChange(newText)
         setIsAIMenuOpen(false)
         setIsLoading(false)
-    }, [onChangeAction])
+    }, [emitChange])
 
     // Handle AI loading state
     const handleAILoading = useCallback((loading: boolean) => {
@@ -159,26 +182,35 @@ export function EditableText({
     const displayValue = localValue || placeholder
     const isEmpty = !localValue
 
+    // Non-editable: render plain static text with the correct tag
+    if (!editable) {
+        return (
+            <Tag className={className}>
+                {value || placeholder}
+            </Tag>
+        )
+    }
+
     return (
         <div
             ref={containerRef}
             className={cn(
                 'relative group',
                 disabled && 'pointer-events-none opacity-50',
-                className
             )}
         >
             {/* Text Display / Input */}
-            <div
-                ref={inputRef}
+            <Tag
+                ref={inputRef as React.Ref<HTMLElement & HTMLDivElement>}
                 contentEditable={isEditing}
                 suppressContentEditableWarning
                 className={cn(
                     'outline-none rounded px-1 -mx-1 transition-all',
-                    variantClasses[variant],
+                    variant !== 'body' ? variantClasses[variant] : '',
+                    className,
                     isEmpty && 'text-muted-foreground italic',
-                    isSelected && !isEditing && 'ring-2 ring-primary/50 bg-primary/5',
-                    isEditing && 'ring-2 ring-primary bg-white',
+                    isSelected && !isEditing && 'ring-2 ring-violet-400/50 bg-violet-50/30',
+                    isEditing && 'ring-2 ring-violet-500 bg-white',
                     !isEditing && 'cursor-pointer hover:bg-muted/50',
                     isLoading && 'opacity-50'
                 )}
@@ -189,7 +221,7 @@ export function EditableText({
                 onInput={handleInput}
             >
                 {displayValue}
-            </div>
+            </Tag>
 
             {/* AI Button - shows when selected */}
             {isSelected && !isEditing && !disabled && (

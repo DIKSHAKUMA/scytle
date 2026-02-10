@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronRight, MoreHorizontal, Copy, Trash2, Plus, Sparkles } from 'lucide-react'
+import { Plus, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
     DndContext,
@@ -13,27 +13,20 @@ import {
     type DragEndEvent,
 } from '@dnd-kit/core'
 import {
-    arrayMove,
     SortableContext,
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import type { WireframePage } from '@/types'
+import type { WireframePage, ViewportDevice } from '@/types'
+import { VIEWPORT_CONFIGS } from '@/types'
 import { useUnifiedStore } from '@/store'
 import { SortableSectionBlock } from './section-block'
 import { PlaceholderRenderer } from './placeholder-renderer'
 
 interface PageFrameProps {
     page: WireframePage
-    viewport: 'desktop' | 'mobile'
+    viewport: ViewportDevice
     scale?: number
     className?: string
 }
@@ -51,9 +44,9 @@ interface PageFrameProps {
  */
 export function PageFrame({ page, viewport, scale = 1, className }: PageFrameProps) {
     const containerRef = useRef<HTMLDivElement>(null)
-    const [isCollapsed, setIsCollapsed] = useState(false)
-    const [isEditingName, setIsEditingName] = useState(false)
-    const [editedName, setEditedName] = useState(page.name)
+    const [frameWidth, setFrameWidth] = useState(VIEWPORT_CONFIGS[viewport].width)
+    const [isResizing, setIsResizing] = useState(false)
+    const resizeStartRef = useRef({ x: 0, width: 0, side: '' as 'left' | 'right' })
 
     const {
         selectedPageId,
@@ -66,6 +59,7 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
         duplicateSection,
         toggleGlobalSection,
         syncGlobalSection,
+        updateSectionContent,
         openAddSidebar,
         // Ghost preview state
         ghostPreviewLayout,
@@ -77,16 +71,47 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
 
     const isPageSelected = selectedPageId === page.id && !selectedSectionId
 
+    // Reset frame width when viewport changes
+    useEffect(() => {
+        setFrameWidth(VIEWPORT_CONFIGS[viewport].width)
+    }, [viewport])
+
     // Show ghost preview for Add Sidebar OR for Replace Component library panel
-    // For add sidebar: show at insert position
-    // For library panel: show in place of the selected section
     const showGhostPreviewForAdd = isAddSidebarOpen && ghostPreviewLayout && addSidebarPageId === page.id
     const showGhostPreviewForReplace = activePanelView === 'library' && ghostPreviewLayout && selectedSectionId !== null
     const showGhostPreview = showGhostPreviewForAdd || showGhostPreviewForReplace
 
-    // Frame dimensions based on viewport
-    const frameWidth = viewport === 'desktop' ? 1280 : 375
     const scaledWidth = frameWidth * scale
+
+    // ===== SIDE RESIZE HANDLES =====
+    const handleResizeStart = useCallback((e: React.MouseEvent, side: 'left' | 'right') => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsResizing(true)
+        resizeStartRef.current = { x: e.clientX, width: frameWidth, side }
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const dx = moveEvent.clientX - resizeStartRef.current.x
+            const delta = resizeStartRef.current.side === 'right' ? dx : -dx
+            // Adjust for scale
+            const scaledDelta = delta / scale
+            const newWidth = Math.max(320, Math.min(1920, resizeStartRef.current.width + scaledDelta))
+            setFrameWidth(Math.round(newWidth))
+        }
+
+        const handleMouseUp = () => {
+            setIsResizing(false)
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+    }, [frameWidth, scale])
 
     // DnD sensors
     const sensors = useSensors(
@@ -117,7 +142,6 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
     // Keyboard navigation for sections
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Only handle if this page's section is selected
             if (!selectedSectionId) return
             const currentIndex = page.sections.findIndex(s => s.id === selectedSectionId)
             if (currentIndex === -1) return
@@ -138,16 +162,13 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
                 deselectAll()
             }
 
-            // Delete section with Backspace or Delete
             if ((e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.ctrlKey) {
-                // Don't delete if user is typing in an input
                 const target = e.target as HTMLElement
                 if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                     return
                 }
                 e.preventDefault()
                 deleteSection(page.id, selectedSectionId)
-                // Select next or previous section
                 if (page.sections.length > 1) {
                     const nextIndex = Math.min(currentIndex, page.sections.length - 2)
                     const nextSection = page.sections.filter(s => s.id !== selectedSectionId)[nextIndex]
@@ -164,209 +185,149 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [selectedSectionId, page.sections, page.id, selectSection, selectPage, deselectAll, deleteSection])
 
-    const handleHeaderClick = useCallback(() => {
+    const handleFrameClick = useCallback((e: React.MouseEvent) => {
+        // Select the page/frame when clicking its background
+        // The sections call e.stopPropagation(), so this only fires for frame bg
         selectPage(page.id)
     }, [page.id, selectPage])
 
-    const handleNameDoubleClick = useCallback(() => {
-        setIsEditingName(true)
-    }, [])
-
-    const handleNameBlur = useCallback(() => {
-        setIsEditingName(false)
-        // TODO: Save name change
-    }, [])
-
-    const handleNameKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            setIsEditingName(false)
-            // TODO: Save name change
-        }
-        if (e.key === 'Escape') {
-            setEditedName(page.name)
-            setIsEditingName(false)
-        }
-    }, [page.name])
-
-    // Open add section sidebar instead of popup picker
+    // Open add section sidebar
     const handleAddSection = useCallback((index: number) => {
         openAddSidebar(page.id, index)
     }, [page.id, openAddSidebar])
 
     return (
-        <div
-            ref={containerRef}
-            className={cn(
-                'flex flex-col bg-white rounded-lg shadow-sm',
-                'transition-all duration-200',
-                isPageSelected ? 'ring-2 ring-violet-500 ring-offset-2' : 'ring-1 ring-gray-200',
-                className
-            )}
-            style={{ width: scaledWidth }}
-        >
-            {/* Frame Header - Figma-style */}
+        <div className="relative group/frame">
+            {/* Left resize handle */}
             <div
                 className={cn(
-                    'flex items-center justify-between px-3 py-2',
-                    'cursor-pointer hover:bg-gray-50 transition-colors',
-                    'rounded-t-lg border-b border-gray-100'
+                    'absolute -left-[5px] top-0 bottom-0 w-[10px] z-10',
+                    'cursor-col-resize',
+                    'flex items-center justify-center',
+                    isResizing ? 'opacity-100' : 'opacity-0 group-hover/frame:opacity-100',
+                    'transition-opacity',
                 )}
-                onClick={handleHeaderClick}
+                onMouseDown={(e) => handleResizeStart(e, 'left')}
             >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                    {/* Collapse toggle */}
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation()
-                            setIsCollapsed(!isCollapsed)
-                        }}
-                        className="p-0.5 hover:bg-gray-200 rounded transition-colors"
-                    >
-                        {isCollapsed ? (
-                            <ChevronRight className="w-4 h-4 text-gray-500" />
-                        ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-500" />
-                        )}
-                    </button>
-
-                    {/* Page name - editable on double click */}
-                    {isEditingName ? (
-                        <input
-                            type="text"
-                            value={editedName}
-                            onChange={(e) => setEditedName(e.target.value)}
-                            onBlur={handleNameBlur}
-                            onKeyDown={handleNameKeyDown}
-                            autoFocus
-                            className={cn(
-                                'flex-1 px-1.5 py-0.5 text-sm font-medium',
-                                'border border-violet-500 rounded outline-none',
-                                'bg-white'
-                            )}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    ) : (
-                        <span
-                            className="text-sm font-medium text-gray-900 truncate"
-                            onDoubleClick={handleNameDoubleClick}
-                        >
-                            {page.name}
-                        </span>
-                    )}
-
-                    {/* Slug badge */}
-                    <span className="text-xs text-gray-400 truncate hidden sm:inline">
-                        {page.slug}
-                    </span>
-                </div>
-
-                {/* Options menu */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button
-                            className="p-1 hover:bg-gray-200 rounded transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <MoreHorizontal className="w-4 h-4 text-gray-500" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem>
-                            <Copy className="w-4 h-4 mr-2" />
-                            Duplicate Page
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Delete Page
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="w-[3px] h-8 rounded-full bg-violet-500" />
             </div>
 
-            {/* Frame Content - Section blocks */}
-            {!isCollapsed && (
-                <div className="flex-1">
-                    {page.sections.length === 0 ? (
-                        /* Empty state with ghost preview support */
-                        <div className="relative">
-                            {showGhostPreviewForAdd && (
-                                <GhostPreviewBlock
-                                    type={ghostPreviewLayout.type}
-                                    variant={ghostPreviewLayout.variant}
-                                    name={ghostPreviewLayout.name}
-                                />
-                            )}
-                            {!showGhostPreviewForAdd && (
-                                <EmptyPageState onAddSection={() => handleAddSection(0)} />
-                            )}
-                        </div>
-                    ) : (
-                        /* Section blocks with drag & drop */
-                        <DndContext
-                            sensors={sensors}
-                            collisionDetection={closestCenter}
-                            onDragEnd={handleDragEnd}
+            {/* Right resize handle */}
+            <div
+                className={cn(
+                    'absolute -right-[5px] top-0 bottom-0 w-[10px] z-10',
+                    'cursor-col-resize',
+                    'flex items-center justify-center',
+                    isResizing ? 'opacity-100' : 'opacity-0 group-hover/frame:opacity-100',
+                    'transition-opacity',
+                )}
+                onMouseDown={(e) => handleResizeStart(e, 'right')}
+            >
+                <div className="w-[3px] h-8 rounded-full bg-violet-500" />
+            </div>
+
+            {/* Figma-style frame — clean white artboard */}
+            <div
+                ref={containerRef}
+                className={cn(
+                    'flex flex-col bg-white pb-2',
+                    'transition-all duration-200',
+                    isPageSelected
+                        ? 'ring-2 ring-violet-500'
+                        : isResizing
+                            ? 'ring-2 ring-violet-500'
+                            : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
+                    className
+                )}
+                style={{ width: scaledWidth }}
+                onClick={handleFrameClick}
+            >
+                {/* Frame Content — sections */}
+                {page.sections.length === 0 ? (
+                    <div className="relative">
+                        {showGhostPreviewForAdd && (
+                            <GhostPreviewBlock
+                                type={ghostPreviewLayout.type}
+                                variant={ghostPreviewLayout.variant}
+                                name={ghostPreviewLayout.name}
+                                presetId={ghostPreviewLayout.presetId}
+                            />
+                        )}
+                        {!showGhostPreviewForAdd && (
+                            <EmptyPageState onAddSection={() => handleAddSection(0)} />
+                        )}
+                    </div>
+                ) : (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext
+                            items={page.sections.map(s => s.id)}
+                            strategy={verticalListSortingStrategy}
                         >
-                            <SortableContext
-                                items={page.sections.map(s => s.id)}
-                                strategy={verticalListSortingStrategy}
-                            >
-                                <div className="relative">
-                                    {/* Ghost preview at insert position 0 (for Add mode) */}
-                                    {showGhostPreviewForAdd && addSidebarInsertIndex === 0 && (
-                                        <GhostPreviewBlock
-                                            type={ghostPreviewLayout.type}
-                                            variant={ghostPreviewLayout.variant}
-                                            name={ghostPreviewLayout.name}
-                                        />
-                                    )}
+                            <div className="relative">
+                                {showGhostPreviewForAdd && addSidebarInsertIndex === 0 && (
+                                    <GhostPreviewBlock
+                                        type={ghostPreviewLayout.type}
+                                        variant={ghostPreviewLayout.variant}
+                                        name={ghostPreviewLayout.name}
+                                        presetId={ghostPreviewLayout.presetId}
+                                    />
+                                )}
 
-                                    {page.sections.map((section, index) => (
-                                        <div key={section.id}>
-                                            {/* Ghost preview replaces the selected section when in Replace mode */}
-                                            {showGhostPreviewForReplace && selectedSectionId === section.id ? (
-                                                <div className="px-3">
-                                                    <GhostPreviewBlock
-                                                        type={ghostPreviewLayout.type}
-                                                        variant={ghostPreviewLayout.variant}
-                                                        name={ghostPreviewLayout.name}
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="px-3">
-                                                    <SortableSectionBlock
-                                                        section={section}
-                                                        isSelected={selectedSectionId === section.id}
-                                                        viewport={viewport}
-                                                        onSelectAction={selectSection}
-                                                        onAddBelowAction={() => handleAddSection(index + 1)}
-                                                        onDeleteAction={() => deleteSection(page.id, section.id)}
-                                                        onDuplicateAction={() => duplicateSection(page.id, section.id)}
-                                                        onToggleGlobalAction={() => {
-                                                            toggleGlobalSection(page.id, section.id)
-                                                            if (!section.isGlobal) {
-                                                                syncGlobalSection(section.id)
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
+                                {page.sections.map((section, index) => (
+                                    <div key={section.id} className="relative">
+                                        {showGhostPreviewForReplace && selectedSectionId === section.id ? (
+                                            <GhostPreviewBlock
+                                                type={ghostPreviewLayout.type}
+                                                variant={ghostPreviewLayout.variant}
+                                                name={ghostPreviewLayout.name}
+                                                presetId={ghostPreviewLayout.presetId}
+                                            />
+                                        ) : (
+                                            <SortableSectionBlock
+                                                section={section}
+                                                isSelected={selectedSectionId === section.id}
+                                                viewport={viewport}
+                                                editable
+                                                onSelectAction={selectSection}
+                                                onContentChange={(key, value) => {
+                                                    updateSectionContent(page.id, section.id, { [key]: value })
+                                                }}
+                                                onAddBelowAction={() => handleAddSection(index + 1)}
+                                                onDeleteAction={() => deleteSection(page.id, section.id)}
+                                                onDuplicateAction={() => duplicateSection(page.id, section.id)}
+                                                onToggleGlobalAction={() => {
+                                                    toggleGlobalSection(page.id, section.id)
+                                                    if (!section.isGlobal) {
+                                                        syncGlobalSection(section.id)
+                                                    }
+                                                }}
+                                            />
+                                        )}
 
-                                            {/* Ghost preview at this position (for Add mode) */}
-                                            {showGhostPreviewForAdd && addSidebarInsertIndex === index + 1 && (
-                                                <GhostPreviewBlock
-                                                    type={ghostPreviewLayout.type}
-                                                    variant={ghostPreviewLayout.variant}
-                                                    name={ghostPreviewLayout.name}
-                                                />
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </SortableContext>
-                        </DndContext>
-                    )}
+                                        {showGhostPreviewForAdd && addSidebarInsertIndex === index + 1 && (
+                                            <GhostPreviewBlock
+                                                type={ghostPreviewLayout.type}
+                                                variant={ghostPreviewLayout.variant}
+                                                name={ghostPreviewLayout.name}
+                                                presetId={ghostPreviewLayout.presetId}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
+                )}
+            </div>
+
+            {/* Width indicator (visible while resizing) */}
+            {isResizing && (
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-violet-500 text-white text-[10px] font-medium whitespace-nowrap">
+                    {frameWidth}px
                 </div>
             )}
         </div>
@@ -433,15 +394,21 @@ interface GhostPreviewBlockProps {
     type: string
     variant?: string
     name: string
+    /** Preset ID for direct design registry lookup */
+    presetId?: string
 }
 
-function GhostPreviewBlock({ type, variant }: GhostPreviewBlockProps) {
+function GhostPreviewBlock({ type, variant, presetId }: GhostPreviewBlockProps) {
+    // Use presetId directly as componentId (the design registry resolves it).
+    // Fallback: variant alone (often is the preset ID), then type.
+    const componentId = presetId || variant || type
+
     // Construct a minimal section object for PlaceholderRenderer
     const ghostSection = {
         id: 'ghost-preview',
         type,
         name: 'Preview',
-        componentId: variant ? `${type}-${variant}` : type,
+        componentId,
         layoutVariant: variant,
         order: 0,
         isGlobal: false,
@@ -450,14 +417,13 @@ function GhostPreviewBlock({ type, variant }: GhostPreviewBlockProps) {
     }
 
     return (
-        <div className="px-3 py-2 animate-in fade-in duration-200">
+        <div className="animate-in fade-in duration-200">
             <div
                 className={cn(
-                    "relative rounded-lg border-2 border-dashed border-violet-400 bg-violet-50/30",
+                    "relative border-2 border-dashed border-violet-400 bg-violet-50/30",
                     "overflow-hidden"
                 )}
             >
-                {/* Content with reduced opacity - using PlaceholderRenderer for actual design */}
                 <div className="opacity-50">
                     <PlaceholderRenderer
                         section={ghostSection}

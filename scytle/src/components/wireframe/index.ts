@@ -10,11 +10,12 @@
 
 export { WireframeView } from './wireframe-view'
 export { PageFrame } from './page-frame'
-export { ViewportFrame, DualViewport } from './viewport-frame'
+export { ViewportFrame, DualViewport, PageViewports } from './viewport-frame'
 export { SectionBlock, SortableSectionBlock, AddSectionTrigger } from './section-block'
 export { PlaceholderRenderer } from './placeholder-renderer'
 export { WireframeSidebar } from './wireframe-sidebar'
 export { EditableText } from './editable-text'
+export { FloatingToolbar } from './floating-toolbar'
 export { AITextMenu } from './ai-text-menu'
 export { AddSectionButton } from './add-section-button'
 export { SectionPicker } from './section-picker'

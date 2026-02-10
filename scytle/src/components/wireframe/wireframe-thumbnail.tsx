@@ -14,7 +14,7 @@ import { getDesignById } from '@/lib/designs'
  * - Ghost preview on canvas
  * 
  * Design philosophy:
- * - Match the actual wireframe-layouts.tsx designs
+ * - Match the actual design registry family Canvas components
  * - Scaled-down but recognizable
  * - Real text placeholders
  * - Image placeholders with icons
@@ -28,16 +28,21 @@ import { getDesignById } from '@/lib/designs'
 interface WireframeThumbnailProps {
     type: string
     variant?: string
+    /** Preset/design ID for direct registry lookup (highest priority) */
+    designId?: string
     className?: string
     /** Show as ghost/transparent preview */
     ghost?: boolean
 }
 
-export function WireframeThumbnail({ type, variant, className, ghost = false }: WireframeThumbnailProps) {
-    const key = variant ? `${type}-${variant}` : type
+export function WireframeThumbnail({ type, variant, designId, className, ghost = false }: WireframeThumbnailProps) {
+    const legacyKey = variant ? `${type}-${variant}` : type
 
-    // Try to get from centralized design registry first
-    const design = getDesignById(key)
+    // Priority: designId → variant (may be a presetId) → legacy key
+    const design =
+        (designId ? getDesignById(designId) : undefined) ??
+        (variant ? getDesignById(variant) : undefined) ??
+        getDesignById(legacyKey)
 
     return (
         <div className={cn(
@@ -46,11 +51,11 @@ export function WireframeThumbnail({ type, variant, className, ghost = false }: 
             className
         )}>
             {design ? (
-                // Use new centralized design thumbnail
+                // Use new centralized design thumbnail from registry
                 <design.Thumbnail />
             ) : (
                 // Fallback to legacy switch-case for non-migrated designs
-                <ThumbnailContent layoutKey={key} type={type} variant={variant} />
+                <ThumbnailContent layoutKey={legacyKey} type={type} variant={variant} />
             )}
         </div>
     )

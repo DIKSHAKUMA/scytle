@@ -14,8 +14,10 @@ import { cn } from '@/lib/utils'
  * the structure of each section type without real content.
  */
 
+import type { ViewportDevice } from '@/types'
+
 interface PlaceholderProps {
-    viewport: 'desktop' | 'mobile'
+    viewport: ViewportDevice
     className?: string
 }
 
