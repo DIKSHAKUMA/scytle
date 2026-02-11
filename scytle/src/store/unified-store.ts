@@ -181,8 +181,8 @@ function createSection(
     return {
         id,
         type: sectionType,
-        name: preset?.name || name,
-        description: family?.description || description,
+        name,
+        description,
         componentId,
         isGlobal: sectionType === 'navbar' || sectionType === 'footer',
         order: index,
@@ -1386,8 +1386,6 @@ export const useUnifiedStore = create<UnifiedState>()(
                             const family = getFamilyById(preset.familyId)
                             if (family) {
                                 section.layoutVariant = preset.familyId
-                                section.name = preset.name
-                                section.description = family.description
                                 // Reset controls to preset's curated values
                                 section.controls = { ...(preset.controls ?? {}) }
                                 // Reset content to family defaults + preset overrides
@@ -1401,8 +1399,6 @@ export const useUnifiedStore = create<UnifiedState>()(
                             const family = getFamilyById(componentId)
                             if (family) {
                                 section.layoutVariant = family.id
-                                section.name = family.name
-                                section.description = family.description
                                 section.controls = { ...family.defaultControls }
                                 section.content = { ...family.defaultContent } as WireframeSectionContent
                             } else {
