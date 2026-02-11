@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore, useUnifiedStore } from '@/store'
 import { useSitemapStore, CanvasTool, flushPendingSave } from '@/store/sitemap-store'
 import { flushPendingSave as flushUnifiedSave } from '@/store/unified-store'
@@ -38,6 +38,7 @@ type CanvasView = 'sitemap' | 'wireframe' | 'design' | 'code'
 export default function ProjectEditorPage() {
     const params = useParams()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const projectId = params.id as string
 
     const { user, setUser } = useAuthStore()
@@ -63,7 +64,19 @@ export default function ProjectEditorPage() {
         addSectionToPage,
     } = useSitemapStore()
 
-    const [activeView, setActiveView] = useState<CanvasView>('sitemap')
+    const validViews: CanvasView[] = ['sitemap', 'wireframe', 'design', 'code']
+    const viewParam = searchParams.get('view') as CanvasView | null
+    const [activeView, setActiveViewState] = useState<CanvasView>(
+        viewParam && validViews.includes(viewParam) ? viewParam : 'sitemap'
+    )
+
+    // Wrap setActiveView to also update the URL
+    const setActiveView = (view: CanvasView) => {
+        setActiveViewState(view)
+        const url = new URL(window.location.href)
+        url.searchParams.set('view', view)
+        window.history.replaceState({}, '', url.toString())
+    }
     const [isDevMode, setIsDevMode] = useState(false)
     const [authChecked, setAuthChecked] = useState(false)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)

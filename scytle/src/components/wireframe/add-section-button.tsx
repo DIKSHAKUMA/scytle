@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useUnifiedStore } from '@/store'
 import { SectionPicker } from './section-picker'
 
 interface AddSectionButtonProps {
@@ -30,6 +31,8 @@ export function AddSectionButton({
 }: AddSectionButtonProps) {
     const [isHovered, setIsHovered] = useState(false)
     const [isPickerOpen, setIsPickerOpen] = useState(false)
+    const zoomLevel = useUnifiedStore(state => state.zoomLevel)
+    const inverseScale = 100 / zoomLevel
 
     return (
         <div
@@ -50,17 +53,22 @@ export function AddSectionButton({
                 )}
             />
 
-            {/* Add Button */}
+            {/* Add Button - inverse zoom scaled */}
             <button
                 onClick={() => setIsPickerOpen(true)}
                 className={cn(
                     'relative z-10 flex items-center justify-center',
-                    'w-6 h-6 rounded-full bg-primary text-primary-foreground',
-                    'shadow-sm hover:shadow-md hover:scale-110',
+                    'rounded-full bg-primary text-primary-foreground',
+                    'shadow-sm hover:shadow-md',
                     'transition-all duration-200',
-                    'opacity-0 scale-75',
-                    (isHovered || isPickerOpen) && 'opacity-100 scale-100'
+                    'opacity-0',
+                    (isHovered || isPickerOpen) && 'opacity-100'
                 )}
+                style={{
+                    width: `${24 * inverseScale}px`,
+                    height: `${24 * inverseScale}px`,
+                    transform: `scale(${inverseScale})`,
+                }}
             >
                 <Plus className="h-4 w-4" />
             </button>

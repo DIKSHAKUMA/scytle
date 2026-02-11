@@ -236,12 +236,37 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
             e.preventDefault()
             e.stopPropagation()
 
-            // Zoom with Ctrl/Cmd + scroll - smoother like ReactFlow
+            // Zoom with Ctrl/Cmd + scroll — zoom toward cursor
             if (e.ctrlKey || e.metaKey) {
-                // Use smaller increments for smoother zoom
-                const zoomFactor = 1 - e.deltaY * 0.002  // Much smaller multiplier
-                const newZoom = Math.min(200, Math.max(25, zoomLevel * zoomFactor))
-                setZoomLevel(Math.round(newZoom))
+                const zoomFactor = 1 - e.deltaY * 0.002
+                const currentZoom = useUnifiedStore.getState().zoomLevel
+                const newZoom = Math.min(200, Math.max(25, currentZoom * zoomFactor))
+                const clampedZoom = Math.round(newZoom)
+
+                // Zoom-toward-cursor: adjust pan so the point under the
+                // cursor stays fixed on screen.
+                const rect = container.getBoundingClientRect()
+                const cursorX = e.clientX - rect.left
+                const cursorY = e.clientY - rect.top
+
+                const oldScale = currentZoom / 100
+                const newScale = clampedZoom / 100
+
+                // Point in world-space under the cursor before zoom:
+                //   worldX = (cursorX - panOffset.x) / oldScale
+                // After zoom it should be in the same screen position:
+                //   cursorX = worldX * newScale + newPanX
+                // => newPanX = cursorX - worldX * newScale
+                setPanOffset(prev => {
+                    const worldX = (cursorX - prev.x) / oldScale
+                    const worldY = (cursorY - prev.y) / oldScale
+                    return {
+                        x: cursorX - worldX * newScale,
+                        y: cursorY - worldY * newScale,
+                    }
+                })
+
+                setZoomLevel(clampedZoom)
             } else {
                 // Pan with regular scroll
                 setPanOffset(prev => ({
@@ -353,16 +378,16 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
             {/* Canvas with transform */}
             <div
                 ref={canvasRef}
-                className="absolute inset-0"
+                className="absolute top-0 left-0"
                 style={{
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
-                    transformOrigin: 'center top',
+                    transformOrigin: '0 0',
                     paddingTop: '48px',
                     paddingLeft: '48px',
                 }}
             >
-                {/* Pages container - horizontal row layout */}
-                <div className="flex flex-row flex-wrap items-start gap-12 pb-24">
+                {/* Pages container - horizontal row layout (no wrap, like Relume) */}
+                <div className="flex flex-row flex-nowrap items-start gap-12 pb-24">
                     {pages.map((page) => (
                         <DraggablePageBlock key={page.id} pageId={page.id}>
                             <PageViewports

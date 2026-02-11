@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromJWT, createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
-import { generate, RateLimitError } from '@/lib/ai'
+import { generate } from '@/lib/ai'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -230,7 +230,7 @@ Think step by step:
 Generate the sitemap JSON now.`
 
         const aiResponse = await generate(userMessage, [], {
-            model: 'fast',  // Use fast model (gemini-2.0-flash) to avoid quota issues; auto-fallback if needed
+            model: 'balanced',  // Use better model for sitemap generation
             systemPrompt,
             temperature: 0.7,
         })
@@ -340,12 +340,6 @@ Generate the sitemap JSON now.`
         })
     } catch (error) {
         console.error('🤖 Generate sitemap error:', error)
-        if (error instanceof RateLimitError) {
-            return NextResponse.json(
-                { error: error.message, code: 'rate_limit' },
-                { status: 429 }
-            )
-        }
         return NextResponse.json(
             { error: 'Internal server error' },
             { status: 500 }

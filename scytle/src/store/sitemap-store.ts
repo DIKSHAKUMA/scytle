@@ -435,6 +435,10 @@ export const useSitemapStore = create<SitemapState>()(
                     node.data = { ...node.data, ...data }
                 }
             })
+            // Recalculate layout after update (sections may have changed node height)
+            set((state) => {
+                state.nodes = calculateTreeLayout(state.nodes, state.edges)
+            })
             get().saveToHistory()
         },
 

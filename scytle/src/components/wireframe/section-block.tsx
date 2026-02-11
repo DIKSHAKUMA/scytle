@@ -5,6 +5,7 @@ import { GripVertical, Plus, Globe, Trash2, Copy, Sparkles } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
+import { useUnifiedStore } from '@/store'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -64,6 +65,7 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
 }, ref) {
     const [isHovered, setIsHovered] = useState(false)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
+    const zoomLevel = useUnifiedStore(state => state.zoomLevel)
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation()
@@ -214,6 +216,9 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                     'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
                     'z-30 pointer-events-auto'
                 )}
+                style={{
+                    transform: `translateX(-50%) scale(${100 / zoomLevel})`,
+                }}
             >
                 <button
                     onClick={handleAddClick}
