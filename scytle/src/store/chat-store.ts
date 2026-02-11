@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import type { Message, MessageRole } from '@/types'
 import { createJWT } from '@/lib/appwrite'
 import { useUnifiedStore } from './unified-store'
+import { useSitemapStore } from './sitemap-store'
 import { useProjectStore } from './project-store'
 
 interface ChatState {
@@ -207,6 +208,9 @@ export const useChatStore = create<ChatState>()(
                         data.sitemap.pages,
                         projectName
                     )
+
+                    // Sync the sitemap ReactFlow canvas with the AI-generated pages
+                    useSitemapStore.getState().loadSitemap(data.sitemap.pages, projectName)
 
                     // Add success message
                     const pageNames = data.sitemap.pages.map((p: { label: string }) => p.label).join(', ')

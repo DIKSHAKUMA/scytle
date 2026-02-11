@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore, useUnifiedStore } from '@/store'
-import { useSitemapStore, CanvasTool, flushPendingSave } from '@/store/sitemap-store'
+import { useSitemapStore, CanvasTool, flushPendingSave, setSkipUnifiedSync } from '@/store/sitemap-store'
 import { flushPendingSave as flushUnifiedSave } from '@/store/unified-store'
 import { SitemapView, LeftSidebar, SectionPickerPanel } from '@/components/canvas'
 import { WireframeView } from '@/components/wireframe/wireframe-view'
@@ -156,6 +156,9 @@ export default function ProjectEditorPage() {
                 const sitemapState = useSitemapStore.getState()
                 if (!sitemapState.nodes.length || !pages.length) return
 
+                // Set guard flag so saveToHistory doesn't sync back to unified (avoids loop)
+                setSkipUnifiedSync(true)
+
                 pages.forEach((page) => {
                     const node = sitemapState.nodes.find(n => n.id === page.id)
                     if (!node) return
@@ -178,6 +181,9 @@ export default function ProjectEditorPage() {
                         })
                     }
                 })
+
+                // Clear guard flag
+                setSkipUnifiedSync(false)
             },
             { equalityFn: (a, b) => a === b } // Only fire on reference change (immer produces new refs)
         )
@@ -259,7 +265,7 @@ export default function ProjectEditorPage() {
                                     sections: n.data.sections || [],
                                     children: [],
                                 }))
-                            useUnifiedStore.getState().loadFromAI(aiPages, project.name)
+                            useUnifiedStore.getState().loadFromAI(aiPages, project.name, { skipSave: true })
                             console.log('📦 Both stores loaded -', 'sitemap nodes:', rawNodes.length, 'edges:', rawEdges.length, 'unified pages:', useUnifiedStore.getState().pages.length)
                         } else {
                             // Legacy format: flat array or {pages, projectName}
@@ -292,11 +298,11 @@ export default function ProjectEditorPage() {
                                     }))
                                     console.log('📦 Loading legacy unified format')
                                     useSitemapStore.getState().loadSitemap(aiPages, savedProjectName)
-                                    useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName)
+                                    useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName, { skipSave: true })
                                 } else {
                                     console.log('📦 Loading legacy sitemap format')
                                     useSitemapStore.getState().loadSitemap(sitemapPages, savedProjectName)
-                                    useUnifiedStore.getState().loadFromAI(sitemapPages, savedProjectName)
+                                    useUnifiedStore.getState().loadFromAI(sitemapPages, savedProjectName, { skipSave: true })
                                 }
                                 console.log('📦 Legacy load complete -', 'sitemap nodes:', useSitemapStore.getState().nodes.length)
                             } else {

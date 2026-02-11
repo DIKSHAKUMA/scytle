@@ -1,13 +1,18 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { Node, Edge, applyNodeChanges, applyEdgeChanges, NodeChange, EdgeChange } from '@xyflow/react'
-import { createJWT } from '@/lib/appwrite'
 
 export type CanvasTool = 'select' | 'hand' | 'add'
 
 // Track if a save is already in progress to prevent concurrent saves
 let isSaveInProgress = false
 let pendingSave = false
+
+// Guard flag: when true, saveToHistory skips syncing back to unified store.
+// Set when an update originates from the unified store (via page.tsx subscriber)
+// to prevent infinite unified→sitemap→unified loops.
+let _skipUnifiedSync = false
+export const setSkipUnifiedSync = (skip: boolean) => { _skipUnifiedSync = skip }
 
 // Immediate save function - saves right away, queues if another save is in progress
 async function triggerSave() {
@@ -567,8 +572,14 @@ export const useSitemapStore = create<SitemapState>()(
                 state.historyIndex = newHistory.length - 1
             })
 
-            // Trigger immediate save to backend
-            triggerSave()
+            // Sync sitemap mutations back to the unified store (single source of truth).
+            // Skip if this update originated from the unified store (avoids infinite loop).
+            if (!_skipUnifiedSync) {
+                const { nodes, edges } = get()
+                import('./unified-store').then(({ useUnifiedStore }) => {
+                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
+                })
+            }
         },
 
         undo: () => {
@@ -578,6 +589,11 @@ export const useSitemapStore = create<SitemapState>()(
                     state.historyIndex = historyIndex - 1
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex - 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex - 1].edges))
+                })
+                // Sync undo state back to unified store
+                const { nodes, edges } = get()
+                import('./unified-store').then(({ useUnifiedStore }) => {
+                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
                 })
             }
         },
@@ -589,6 +605,11 @@ export const useSitemapStore = create<SitemapState>()(
                     state.historyIndex = historyIndex + 1
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex + 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex + 1].edges))
+                })
+                // Sync redo state back to unified store
+                const { nodes, edges } = get()
+                import('./unified-store').then(({ useUnifiedStore }) => {
+                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
                 })
             }
         },
@@ -956,7 +977,10 @@ export const useSitemapStore = create<SitemapState>()(
                 state.edges = rawEdges
                 state.selectedNodeId = null
             })
+            // Skip unified sync — loadSitemap is called after loadFromAI already populated unified store
+            _skipUnifiedSync = true
             get().saveToHistory()
+            _skipUnifiedSync = false
 
             // Fit view after layout is applied
             setTimeout(() => {
@@ -974,7 +998,10 @@ export const useSitemapStore = create<SitemapState>()(
                 state.edges = edges as Edge[]
                 state.selectedNodeId = null
             })
+            // Skip unified sync — loadRawSitemap is called when syncing from unified store
+            _skipUnifiedSync = true
             get().saveToHistory()
+            _skipUnifiedSync = false
 
             // Fit view after layout
             setTimeout(() => {
@@ -997,64 +1024,16 @@ export const useSitemapStore = create<SitemapState>()(
         },
 
         // Save sitemap to backend
+        // Delegates to unified store which is the single source of truth for persistence.
+        // This avoids the race condition where both stores write different formats to sitemapData.
         saveSitemap: async () => {
-            const { nodes, edges, currentProjectId, isSaving } = get()
+            // Import dynamically to avoid circular dependency
+            const { useUnifiedStore } = await import('./unified-store')
+            const unifiedState = useUnifiedStore.getState()
 
-            // Skip if no project ID or already saving
-            if (!currentProjectId || isSaving) {
-                console.log('⏭️ Skipping save:', { currentProjectId, isSaving })
-                return
-            }
-
-            // Save full sitemap structure: nodes + edges
-            // This preserves the entire tree hierarchy including parent-child relationships
-            const sitemapData = {
-                version: 2,
-                nodes: nodes.map(node => ({
-                    id: node.id,
-                    type: node.type,
-                    data: node.data,
-                })),
-                edges: edges.map(edge => ({
-                    id: edge.id,
-                    source: edge.source,
-                    target: edge.target,
-                    type: edge.type,
-                })),
-            }
-
-            console.log('💾 Saving sitemap v2:', nodes.length, 'nodes,', edges.length, 'edges')
-
-            set({ isSaving: true })
-
-            try {
-                const jwt = await createJWT()
-                if (!jwt) {
-                    console.error('❌ Not authenticated, cannot save sitemap')
-                    return
-                }
-
-                const response = await fetch(`/api/projects/${currentProjectId}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Authorization': `Bearer ${jwt.jwt}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        sitemapData: JSON.stringify(sitemapData),
-                    }),
-                })
-
-                if (response.ok) {
-                    set({ lastSavedAt: new Date() })
-                    console.log('✅ Sitemap saved to database')
-                } else {
-                    console.error('❌ Failed to save sitemap:', await response.text())
-                }
-            } catch (error) {
-                console.error('❌ Error saving sitemap:', error)
-            } finally {
-                set({ isSaving: false })
+            // Only save if unified store has data and a project ID
+            if (unifiedState.projectId && unifiedState.pages.length > 0) {
+                await unifiedState.save()
             }
         },
     }))

@@ -18,8 +18,8 @@ import type {
     ViewportDevice,
     DeviceVisibility,
 } from '@/types'
-import { createJWT } from '@/lib/appwrite'
 import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
+import { createJWT } from '@/lib/appwrite'
 
 // ============================================
 // Type Definitions
@@ -106,23 +106,26 @@ export interface PageDragState {
 // Helper Functions
 // ============================================
 
-// Default component IDs per section type
+// Default preset IDs per section type — must match actual preset IDs in the design registry.
+// These are resolved by PlaceholderRenderer via getPresetById → getFamilyById pipeline.
 const DEFAULT_COMPONENT_IDS: Record<string, string> = {
-    hero: 'header-1',
-    features: 'features-grid',
-    testimonials: 'testimonials-grid',
-    pricing: 'pricing-3-tier',
-    faq: 'faq-accordion',
-    cta: 'cta-centered',
-    contact: 'contact-form',
-    team: 'team-grid',
-    about: 'about-1',
+    hero: 'hero-split',
+    features: 'features-grid-3col',
+    testimonials: 'testimonials-cards-3',
+    pricing: 'pricing-cards-3tier',
+    faq: 'faq-accordion-centered',
+    cta: 'cta-banner-centered',
+    contact: 'contact-split-default',
+    team: 'team-1',
+    about: 'content-3',
     stats: 'stats-1',
     logos: 'logos-1',
-    gallery: 'gallery-grid',
-    'blog-list': 'blog-list',
-    footer: 'footer-1',
-    navbar: 'navbar-1',
+    gallery: 'gallery-1',
+    'blog-list': 'blog-1',
+    blog: 'blog-1',
+    footer: 'footer-columns-4',
+    navbar: 'navbar-standard-default',
+    content: 'content-1',
 }
 
 // Infer section type from name
@@ -148,7 +151,9 @@ function inferSectionType(name: string): string {
     return 'content'
 }
 
-// Create a WireframeSection from raw data
+// Create a WireframeSection from raw data.
+// Resolves the preset from the design registry to initialize with real content and controls,
+// so sections render with actual pre-designed layouts instead of empty placeholders.
 function createSection(
     data: string | { id?: string; name: string; description?: string },
     index: number
@@ -159,20 +164,30 @@ function createSection(
     const id = isString ? `section-${Date.now()}-${index}` : (data.id || `section-${Date.now()}-${index}`)
 
     const sectionType = inferSectionType(name)
+    const componentId = DEFAULT_COMPONENT_IDS[sectionType] || `${sectionType}-1`
+
+    // Resolve preset → family to get real content and controls
+    const preset = getPresetById(componentId)
+    const family = preset ? getFamilyById(preset.familyId) : getFamilyById(componentId)
+
+    const resolvedContent = family
+        ? { ...family.defaultContent, ...(preset?.content ?? {}), heading: name, subheading: description }
+        : { heading: name, subheading: description }
+
+    const resolvedControls = family
+        ? { ...family.defaultControls, ...(preset?.controls ?? {}) }
+        : {}
 
     return {
         id,
         type: sectionType,
-        name,
-        description,
-        componentId: DEFAULT_COMPONENT_IDS[sectionType] || `${sectionType}-1`,
+        name: preset?.name || name,
+        description: family?.description || description,
+        componentId,
         isGlobal: sectionType === 'navbar' || sectionType === 'footer',
         order: index,
-        content: {
-            heading: name,
-            subheading: description,
-        },
-        controls: {},
+        content: resolvedContent as WireframeSectionContent,
+        controls: resolvedControls as WireframeSectionControls,
     }
 }
 
@@ -513,8 +528,9 @@ interface UnifiedState {
     // ============================================
     // Actions - Data Loading
     // ============================================
-    loadFromAI: (aiPages: AIGeneratedPage[], projectName?: string) => void
+    loadFromAI: (aiPages: AIGeneratedPage[], projectName?: string, options?: { skipSave?: boolean }) => void
     loadFromJSON: (json: string) => void
+    syncFromSitemap: (nodes: Node[], edges: Edge[]) => void
     reset: () => void
 
     // ============================================
@@ -736,7 +752,7 @@ export const useUnifiedStore = create<UnifiedState>()(
             // Data Loading
             // ========================================
 
-            loadFromAI: (aiPages, projectName) => {
+            loadFromAI: (aiPages, projectName, options) => {
                 console.log('📦 Loading sitemap from AI:', aiPages.length, 'root pages')
 
                 const pages = flattenAIPages(aiPages)
@@ -753,17 +769,26 @@ export const useUnifiedStore = create<UnifiedState>()(
                     projectNode.position = projectPosition
                 }
 
+                const isInitialLoad = options?.skipSave === true
+
                 set(state => {
                     state.pages = layoutPages
                     state.nodes = nodes
                     state.edges = edges
                     if (projectName) state.projectName = projectName
-                    state.isDirty = true
+                    state.isDirty = !isInitialLoad
+                    if (isInitialLoad) state.lastSavedAt = new Date()
                     state.history = [JSON.parse(JSON.stringify(layoutPages))]
                     state.historyIndex = 0
                 })
 
                 console.log('✅ Loaded', layoutPages.length, 'pages,', nodes.length, 'nodes,', edges.length, 'edges')
+
+                // Persist the unified format immediately so it's the source of truth on next reload
+                // Skip save during initial project load (data already exists in DB)
+                if (!isInitialLoad) {
+                    triggerSave()
+                }
             },
 
             loadFromJSON: (json) => {
@@ -799,6 +824,116 @@ export const useUnifiedStore = create<UnifiedState>()(
                 } catch (error) {
                     console.error('❌ Failed to load JSON:', error)
                 }
+            },
+
+            /**
+             * Sync pages from sitemap store's nodes/edges back into the unified store.
+             * Preserves rich wireframe section data (componentId, controls, content) for
+             * sections that already exist; creates lightweight stubs for newly added ones.
+             * This is the sitemap→unified reverse sync path.
+             */
+            syncFromSitemap: (sitemapNodes, sitemapEdges) => {
+                const existingPages = get().pages
+                const existingPagesMap = new Map(existingPages.map(p => [p.id, p]))
+
+                // Build parent map from edges
+                const parentMap = new Map<string, string>()
+                const childOrderMap = new Map<string, string[]>()
+                for (const edge of sitemapEdges) {
+                    parentMap.set(edge.target, edge.source)
+                    if (!childOrderMap.has(edge.source)) childOrderMap.set(edge.source, [])
+                    childOrderMap.get(edge.source)!.push(edge.target)
+                }
+
+                // Convert sitemap nodes → unified pages (skip 'project' node)
+                const newPages: UnifiedPage[] = []
+                for (const node of sitemapNodes) {
+                    if (node.type === 'project') continue
+
+                    const data = node.data as {
+                        label?: string
+                        slug?: string
+                        sections?: ({ id?: string; name: string; description?: string } | string)[]
+                    }
+                    const existing = existingPagesMap.get(node.id)
+
+                    // Determine parent: map 'project' parent → null (root)
+                    const rawParent = parentMap.get(node.id) ?? null
+                    const parentId = rawParent === 'project' ? null : rawParent
+
+                    // Determine sibling order
+                    const effectiveParent = rawParent ?? 'project'
+                    const siblings = childOrderMap.get(effectiveParent) || []
+                    const order = siblings.indexOf(node.id)
+
+                    // Merge sections: preserve existing rich WireframeSection data where possible
+                    const sitemapSections = data.sections || []
+                    const mergedSections: WireframeSection[] = sitemapSections.map((s, idx) => {
+                        const sectionName = typeof s === 'string' ? s : s.name
+                        const sectionId = typeof s === 'string' ? `${node.id}-section-${idx}` : (s.id || `${node.id}-section-${idx}`)
+                        const sectionDesc = typeof s === 'string' ? undefined : s.description
+
+                        // Try to find matching existing section by id, then by name
+                        const existingSection = existing?.sections.find(es => es.id === sectionId)
+                            || existing?.sections.find(es => es.name === sectionName)
+
+                        if (existingSection) {
+                            // Preserve rich wireframe data, but update name/description/order
+                            return {
+                                ...existingSection,
+                                name: sectionName,
+                                description: sectionDesc ?? existingSection.description,
+                                order: idx,
+                            }
+                        }
+
+                        // New section — create a lightweight stub
+                        return {
+                            id: sectionId,
+                            type: sectionName.toLowerCase().replace(/\s+/g, '-'),
+                            name: sectionName,
+                            description: sectionDesc,
+                            componentId: '',
+                            isGlobal: false,
+                            order: idx,
+                            content: {
+                                heading: sectionName,
+                                body: sectionDesc || '',
+                            } as WireframeSectionContent,
+                            controls: {} as WireframeSectionControls,
+                        }
+                    })
+
+                    newPages.push({
+                        id: node.id,
+                        name: data.label || existing?.name || 'Untitled',
+                        slug: data.slug || existing?.slug || `/${(data.label || 'untitled').toLowerCase().replace(/\s+/g, '-')}`,
+                        description: existing?.description,
+                        parentId,
+                        order: order >= 0 ? order : 0,
+                        position: existing?.position || node.position || { x: 0, y: 0 },
+                        sections: mergedSections,
+                    })
+                }
+
+                // Only update if pages actually changed
+                const currentIds = existingPages.map(p => p.id).sort().join(',')
+                const newIds = newPages.map(p => p.id).sort().join(',')
+                const currentNames = existingPages.map(p => `${p.id}:${p.name}:${p.parentId}:${p.sections.length}`).sort().join(',')
+                const newNames = newPages.map(p => `${p.id}:${p.name}:${p.parentId}:${p.sections.length}`).sort().join(',')
+
+                if (currentIds === newIds && currentNames === newNames) {
+                    return // No meaningful change
+                }
+
+                console.log('🔄 syncFromSitemap: syncing', newPages.length, 'pages from sitemap')
+
+                set(state => {
+                    state.pages = newPages
+                    state.isDirty = true
+                })
+                get().recalculateLayout()
+                triggerSave()
             },
 
             reset: () => {
@@ -1290,6 +1425,14 @@ export const useUnifiedStore = create<UnifiedState>()(
                         state.isDirty = true
                     }
                 })
+
+                // If this is a global section, sync the design change to all pages
+                const page = get().pages.find(p => p.id === pageId)
+                const section = page?.sections.find(s => s.id === sectionId)
+                if (section?.isGlobal) {
+                    get().syncGlobalSection(sectionId)
+                }
+
                 triggerSave()
             },
 
