@@ -483,6 +483,8 @@ interface UnifiedState {
     pageDrag: PageDragState
 
     // Wireframe UI State
+    wireframePanOffset: { x: number; y: number }
+    wireframeHasInitialFit: boolean
     selectedPageId: string | null
     selectedSectionId: string | null
     viewportMode: ViewportMode
@@ -583,6 +585,8 @@ interface UnifiedState {
     // ============================================
     setActiveTool: (tool: CanvasTool) => void
     setZoomLevel: (zoom: number) => void
+    setWireframePanOffset: (offset: { x: number; y: number }) => void
+    setWireframeHasInitialFit: (hasInitialFit: boolean) => void
     setSelectedNodeId: (id: string | null) => void
     setIsPanning: (isPanning: boolean) => void
     openSectionPicker: (pageId: string, insertIndex: number) => void
@@ -704,6 +708,8 @@ export const useUnifiedStore = create<UnifiedState>()(
             },
 
             // Wireframe UI
+            wireframePanOffset: { x: 0, y: 0 },
+            wireframeHasInitialFit: false,
             selectedPageId: null,
             selectedSectionId: null,
             viewportMode: 'dual',
@@ -933,6 +939,7 @@ export const useUnifiedStore = create<UnifiedState>()(
                     state.isDirty = true
                 })
                 get().recalculateLayout()
+                get().saveToHistory()
                 triggerSave()
             },
 
@@ -1551,6 +1558,8 @@ export const useUnifiedStore = create<UnifiedState>()(
 
             setActiveTool: (tool) => set({ activeTool: tool }),
             setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
+            setWireframePanOffset: (offset) => set({ wireframePanOffset: offset }),
+            setWireframeHasInitialFit: (hasInitialFit) => set({ wireframeHasInitialFit: hasInitialFit }),
             setSelectedNodeId: (id) => set({ selectedNodeId: id }),
             setIsPanning: (isPanning) => set({ isPanning }),
 
@@ -1661,14 +1670,14 @@ export const useUnifiedStore = create<UnifiedState>()(
 
             zoomIn: () => {
                 const { zoomLevel, reactFlowZoom } = get()
-                const newZoom = Math.min(200, zoomLevel + 25)
+                const newZoom = Math.min(300, zoomLevel + 25)
                 set({ zoomLevel: newZoom })
                 if (reactFlowZoom) reactFlowZoom(newZoom / 100)
             },
 
             zoomOut: () => {
                 const { zoomLevel, reactFlowZoom } = get()
-                const newZoom = Math.max(25, zoomLevel - 25)
+                const newZoom = Math.max(5, zoomLevel - 25)
                 set({ zoomLevel: newZoom })
                 if (reactFlowZoom) reactFlowZoom(newZoom / 100)
             },

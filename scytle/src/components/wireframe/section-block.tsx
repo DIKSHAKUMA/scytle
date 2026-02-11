@@ -209,15 +209,16 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Add Section Button - Between sections on hover */}
+            {/* Add Section Button - Between sections on hover (hidden when zoomed out, inverse-scaled when visible) */}
+            {zoomLevel >= 15 && (
             <div
                 className={cn(
-                    'absolute -bottom-3.5 left-1/2 -translate-x-1/2',
+                    'absolute -bottom-3.5 left-1/2',
                     'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
                     'z-30 pointer-events-auto'
                 )}
                 style={{
-                    transform: `translateX(-50%) scale(${100 / zoomLevel})`,
+                    transform: `translateX(-50%) scale(${Math.min(100 / zoomLevel, 2)})`,
                 }}
             >
                 <button
@@ -234,6 +235,7 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                     <span>Section</span>
                 </button>
             </div>
+            )}
         </div>
     )
 })

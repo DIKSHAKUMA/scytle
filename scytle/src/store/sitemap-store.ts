@@ -590,10 +590,9 @@ export const useSitemapStore = create<SitemapState>()(
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex - 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex - 1].edges))
                 })
-                // Sync undo state back to unified store
-                const { nodes, edges } = get()
+                // Undo in unified store too — restores full rich section data
                 import('./unified-store').then(({ useUnifiedStore }) => {
-                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
+                    useUnifiedStore.getState().undo()
                 })
             }
         },
@@ -606,10 +605,9 @@ export const useSitemapStore = create<SitemapState>()(
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex + 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex + 1].edges))
                 })
-                // Sync redo state back to unified store
-                const { nodes, edges } = get()
+                // Redo in unified store too — restores full rich section data
                 import('./unified-store').then(({ useUnifiedStore }) => {
-                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
+                    useUnifiedStore.getState().redo()
                 })
             }
         },
@@ -623,7 +621,7 @@ export const useSitemapStore = create<SitemapState>()(
 
         zoomIn: () => {
             const { zoomLevel, reactFlowZoom } = get()
-            const newZoom = Math.min(200, zoomLevel + 25)
+            const newZoom = Math.min(300, zoomLevel + 25)
             set({ zoomLevel: newZoom })
             if (reactFlowZoom) {
                 reactFlowZoom(newZoom / 100)
@@ -632,7 +630,7 @@ export const useSitemapStore = create<SitemapState>()(
 
         zoomOut: () => {
             const { zoomLevel, reactFlowZoom } = get()
-            const newZoom = Math.max(25, zoomLevel - 25)
+            const newZoom = Math.max(5, zoomLevel - 25)
             set({ zoomLevel: newZoom })
             if (reactFlowZoom) {
                 reactFlowZoom(newZoom / 100)
@@ -982,13 +980,7 @@ export const useSitemapStore = create<SitemapState>()(
             get().saveToHistory()
             _skipUnifiedSync = false
 
-            // Fit view after layout is applied
-            setTimeout(() => {
-                const { reactFlowFitView } = get()
-                if (reactFlowFitView) {
-                    reactFlowFitView()
-                }
-            }, 100)
+            // Fit is handled by SitemapCanvas component via hasInitialFit
         },
 
         loadRawSitemap: (nodes, edges) => {
@@ -1003,13 +995,7 @@ export const useSitemapStore = create<SitemapState>()(
             get().saveToHistory()
             _skipUnifiedSync = false
 
-            // Fit view after layout
-            setTimeout(() => {
-                const { reactFlowFitView } = get()
-                if (reactFlowFitView) {
-                    reactFlowFitView()
-                }
-            }, 100)
+            // Fit is handled by SitemapCanvas component via hasInitialFit
         },
 
         clearSitemap: () => {

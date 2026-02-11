@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
     ReactFlow,
     Background,
@@ -59,6 +59,8 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         handleNodeDragStop,
     } = useSitemapStore()
 
+    const [hasInitialFit, setHasInitialFit] = useState(false)
+
     // Register ReactFlow zoom functions for toolbar controls
     useEffect(() => {
         const zoomTo = (zoom: number) => {
@@ -69,6 +71,19 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         }
         setReactFlowFunctions(zoomTo, fitView)
     }, [reactFlowInstance, setReactFlowFunctions])
+
+    // Auto-fit on first project open — waits until nodes are loaded, fires once
+    useEffect(() => {
+        if (hasInitialFit || nodes.length === 0) return
+
+        // Small delay so ReactFlow has rendered the nodes and can calculate bounds
+        const timer = setTimeout(() => {
+            reactFlowInstance.fitView({ padding: 0.2, duration: 400 })
+            setHasInitialFit(true)
+        }, 150)
+
+        return () => clearTimeout(timer)
+    }, [hasInitialFit, nodes.length, reactFlowInstance])
 
     // Update project name in nodes
     useEffect(() => {
@@ -115,6 +130,42 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         const zoom = reactFlowInstance.getZoom()
         setZoomLevel(Math.round(zoom * 100))
     }, [reactFlowInstance, setZoomLevel])
+
+    // Custom exponential zoom handler — matches wireframe's smooth feel.
+    // Attached in capture phase so it fires before ReactFlow's internal handlers.
+    useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
+
+        const handleWheel = (e: WheelEvent) => {
+            if (!e.ctrlKey && !e.metaKey) return // plain scroll → let ReactFlow pan
+
+            e.preventDefault()
+            e.stopPropagation()
+
+            const currentZoom = reactFlowInstance.getZoom()
+            const delta = -e.deltaY
+            const factor = Math.pow(2, delta * 0.008)
+            const newZoom = Math.min(3, Math.max(0.05, currentZoom * factor))
+
+            // Zoom toward cursor
+            const rect = container.getBoundingClientRect()
+            const cursorX = e.clientX - rect.left
+            const cursorY = e.clientY - rect.top
+
+            // screenToFlowPosition expects screen/client coords, not container-relative
+            const pointBefore = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+
+            // viewport.x/y are container-relative, so use cursorX/cursorY
+            const newX = cursorX - pointBefore.x * newZoom
+            const newY = cursorY - pointBefore.y * newZoom
+            reactFlowInstance.setViewport({ x: newX, y: newY, zoom: newZoom }, { duration: 0 })
+        }
+
+        // capture: true → fires before ReactFlow's bubble-phase handlers
+        container.addEventListener('wheel', handleWheel, { passive: false, capture: true })
+        return () => container.removeEventListener('wheel', handleWheel, { capture: true })
+    }, [reactFlowInstance])
 
     // Handle new connections
     const onConnect = useCallback(
@@ -231,22 +282,17 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 nodesDraggable={activeTool === 'select'}
-                fitView
-                fitViewOptions={{
-                    padding: 0.2,
-                    duration: 400,
-                }}
                 panOnDrag={shouldPan}
                 selectionOnDrag={false}
-                // Figma-style: two-finger scroll to pan, pinch to zoom
+                // Two-finger scroll = pan; zoom handled by custom exponential handler
                 panOnScroll={true}
                 panOnScrollSpeed={0.8}
                 zoomOnScroll={false}
-                zoomOnPinch={true}
+                zoomOnPinch={false}
                 zoomOnDoubleClick={false}
                 preventScrolling={true}
-                minZoom={0.1}
-                maxZoom={2}
+                minZoom={0.05}
+                maxZoom={3}
                 defaultEdgeOptions={{
                     type: 'sitemap',
                     animated: false,
@@ -265,6 +311,10 @@ function SitemapCanvas({ projectName }: SitemapViewProps) {
         </div>
     )
 }
+
+// SitemapCanvas is exported separately so ReactFlowProvider can be hoisted
+// to preserve viewport state across tab switches
+export { SitemapCanvas }
 
 export function SitemapView({ projectName = 'My Project' }: SitemapViewProps) {
     return (

@@ -68,51 +68,49 @@ export function EditableText({
         onChange?.(newValue)
     }, [onChangeAction, onChange])
 
-    // Sync local value with prop
+    // Sync local value with prop (only when not editing)
     useEffect(() => {
         if (!isEditing) {
             setLocalValue(value)
         }
     }, [value, isEditing])
 
-    // Handle click to select
-    const handleClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (disabled) return
-
-        if (!isSelected) {
-            setIsSelected(true)
-        }
-    }, [disabled, isSelected])
-
-    // Handle double-click to edit
-    const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation()
-        if (disabled) return
-
-        setIsEditing(true)
-        setIsSelected(true)
-
-        // Focus the input after render
-        setTimeout(() => {
-            if (inputRef.current) {
+    // When entering edit mode, set the DOM textContent and select all
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            // Set DOM content to the actual value (not placeholder)
+            inputRef.current.textContent = localValue
+            // Select all text so user can type to replace
+            requestAnimationFrame(() => {
+                if (!inputRef.current) return
                 inputRef.current.focus()
-                // Select all text
                 const selection = window.getSelection()
                 const range = document.createRange()
                 range.selectNodeContents(inputRef.current)
                 selection?.removeAllRanges()
                 selection?.addRange(range)
-            }
-        }, 0)
-    }, [disabled])
+            })
+        }
+    }, [isEditing]) // intentionally exclude localValue — only run on edit mode entry
+
+    // Handle click — Relume-style: single click enters edit mode directly
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (disabled) return
+
+        if (!isEditing) {
+            setIsSelected(true)
+            setIsEditing(true)
+        }
+    }, [disabled, isEditing])
 
     // Handle blur to save
     const handleBlur = useCallback(() => {
+        const newValue = inputRef.current?.textContent?.trim() || ''
+        setLocalValue(newValue)
         setIsEditing(false)
         setIsSelected(false)
 
-        const newValue = inputRef.current?.textContent || ''
         if (newValue !== value) {
             emitChange(newValue)
         }
@@ -120,9 +118,8 @@ export function EditableText({
 
     // Handle key events
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        e.stopPropagation() // Prevent canvas shortcuts while editing
         if (e.key === 'Enter') {
-            // Multiline: only save on Enter without Shift
-            // Single-line: always save on Enter
             if (!multiline || !e.shiftKey) {
                 e.preventDefault()
                 inputRef.current?.blur()
@@ -130,7 +127,11 @@ export function EditableText({
         }
         if (e.key === 'Escape') {
             e.preventDefault()
-            setLocalValue(value) // Revert
+            // Revert to original value
+            if (inputRef.current) {
+                inputRef.current.textContent = value
+            }
+            setLocalValue(value)
             setIsEditing(false)
             setIsSelected(false)
         }
@@ -157,9 +158,14 @@ export function EditableText({
 
     // Click outside to deselect
     useEffect(() => {
+        if (!isSelected && !isEditing) return
+
         const handleClickOutside = (e: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                if (!isEditing) {
+                if (isEditing) {
+                    // Save and exit edit mode
+                    inputRef.current?.blur()
+                } else {
                     setIsSelected(false)
                     setIsAIMenuOpen(false)
                 }
@@ -168,7 +174,7 @@ export function EditableText({
 
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [isEditing])
+    }, [isEditing, isSelected])
 
     // Variant styles
     const variantClasses = {
@@ -208,19 +214,19 @@ export function EditableText({
                     'outline-none rounded px-1 -mx-1 transition-all',
                     variant !== 'body' ? variantClasses[variant] : '',
                     className,
-                    isEmpty && 'text-muted-foreground italic',
+                    !isEditing && isEmpty && 'text-muted-foreground italic',
                     isSelected && !isEditing && 'ring-2 ring-violet-400/50 bg-violet-50/30',
                     isEditing && 'ring-2 ring-violet-500 bg-white',
-                    !isEditing && 'cursor-pointer hover:bg-muted/50',
+                    !isEditing && 'cursor-text hover:ring-1 hover:ring-violet-300/50',
                     isLoading && 'opacity-50'
                 )}
                 onClick={handleClick}
-                onDoubleClick={handleDoubleClick}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
                 onInput={handleInput}
             >
-                {displayValue}
+                {/* Only render React children when NOT editing — prevents prefix bug */}
+                {!isEditing && displayValue}
             </Tag>
 
             {/* AI Button - shows when selected */}

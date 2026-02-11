@@ -1,4 +1,4 @@
-export { SitemapView } from './sitemap-view'
+export { SitemapView, SitemapCanvas } from './sitemap-view'
 export { PageNode } from './nodes/page-node'
 export { ProjectNode } from './nodes/project-node'
 export { PageDetailsPanel } from './page-details-panel'

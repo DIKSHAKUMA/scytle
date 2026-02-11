@@ -84,9 +84,11 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const canvasRef = useRef<HTMLDivElement>(null)
 
-    // Pan state
+    // Pan state — offset persisted in store so it survives tab switches
     const [isPanning, setIsPanning] = useState(false)
-    const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+    const panOffset = useUnifiedStore(state => state.wireframePanOffset)
+    const setPanOffset = useUnifiedStore(state => state.setWireframePanOffset)
+    const wireframeHasInitialFit = useUnifiedStore(state => state.wireframeHasInitialFit)
     const panStartRef = useRef({ x: 0, y: 0 })
     const panOffsetStartRef = useRef({ x: 0, y: 0 })
 
@@ -153,6 +155,55 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
     // Calculate scale from zoom level (percentage)
     const scale = zoomLevel / 100
 
+    // Auto-fit wireframe on first load — deferred until container is visible
+    const fitAttemptedRef = useRef(false)
+    useEffect(() => {
+        if (wireframeHasInitialFit || pages.length === 0 || fitAttemptedRef.current) return
+
+        const tryFit = () => {
+            const container = containerRef.current
+            if (!container) return false
+            const rect = container.getBoundingClientRect()
+            // If container isn't visible yet (display:none), rect is 0x0
+            if (rect.width === 0 || rect.height === 0) return false
+
+            fitAttemptedRef.current = true
+
+            // Measure actual content: each page has desktop (1440) + mobile (390) viewports + gap (48)
+            const pageWidth = 1440 + 390 + 48 // desktop + gap + mobile
+            const totalContentWidth = pages.length * pageWidth + (pages.length - 1) * 48 + 96 // pages + gaps + padding
+            const maxSections = Math.max(...pages.map(p => p.sections.length), 1)
+            const totalContentHeight = 80 + maxSections * 200 + 96
+
+            // Fit both dimensions − pick the smaller zoom so everything shows
+            const fitZoomW = (rect.width * 0.85) / totalContentWidth * 100
+            const fitZoomH = (rect.height * 0.80) / totalContentHeight * 100
+            const fitZoom = Math.max(5, Math.min(fitZoomW, fitZoomH, 100))
+            const rounded = Math.round(fitZoom)
+
+            setZoomLevel(rounded)
+
+            // Center the content
+            const scaledW = totalContentWidth * (rounded / 100)
+            const scaledH = totalContentHeight * (rounded / 100)
+            setPanOffset({
+                x: Math.max(0, (rect.width - scaledW) / 2),
+                y: Math.max(20, (rect.height - scaledH) / 2),
+            })
+
+            useUnifiedStore.getState().setWireframeHasInitialFit(true)
+            return true
+        }
+
+        // Try immediately — if container is visible it works; otherwise poll
+        if (!tryFit()) {
+            const interval = setInterval(() => {
+                if (tryFit()) clearInterval(interval)
+            }, 100)
+            return () => clearInterval(interval)
+        }
+    }, [wireframeHasInitialFit, pages, setZoomLevel, setPanOffset])
+
     // Keyboard handlers for panning (Figma-style: hold Space to pan)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -193,10 +244,10 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
         if (isPanning || e.button === 1) { // Middle mouse button or Space held
             e.preventDefault()
             panStartRef.current = { x: e.clientX, y: e.clientY }
-            panOffsetStartRef.current = { ...panOffset }
+            panOffsetStartRef.current = { ...useUnifiedStore.getState().wireframePanOffset }
             setIsPanning(true)
         }
-    }, [isPanning, panOffset])
+    }, [isPanning])
 
     const handleMouseMove = useCallback((e: React.MouseEvent) => {
         if (isPanning) {
@@ -207,7 +258,7 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
                 y: panOffsetStartRef.current.y + dy,
             })
         }
-    }, [isPanning])
+    }, [isPanning, setPanOffset])
 
     const handleMouseUp = useCallback(() => {
         // Only stop panning if Space is not held
@@ -217,124 +268,103 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
         }
     }, [])
 
-    // Native wheel event listener for proper preventDefault (React synthetic events are passive)
+    // Native wheel event listener — Relume-style:
+    //   • Ctrl/Cmd + scroll (or trackpad pinch) = zoom toward cursor
+    //   • Plain two-finger scroll = pan
+    // All state is read via getState() so the handler never goes stale.
     useEffect(() => {
         const container = containerRef.current
         if (!container) return
 
         const handleWheel = (e: WheelEvent) => {
-            // Check if the event originated from within any sidebar
-            // If so, don't handle it - let the sidebar scroll naturally
+            // Let sidebars scroll naturally
             const target = e.target as HTMLElement
-            const sidebar = target.closest('[data-wireframe-sidebar]') || target.closest('[data-add-section-sidebar]')
-            if (sidebar) {
-                // Don't prevent default or handle - let sidebar scroll naturally
-                return
-            }
+            if (target.closest('[data-wireframe-sidebar]') || target.closest('[data-add-section-sidebar]')) return
 
-            // Always prevent default to stop browser back/forward gestures
             e.preventDefault()
             e.stopPropagation()
 
-            // Zoom with Ctrl/Cmd + scroll — zoom toward cursor
-            if (e.ctrlKey || e.metaKey) {
-                const zoomFactor = 1 - e.deltaY * 0.002
-                const currentZoom = useUnifiedStore.getState().zoomLevel
-                const newZoom = Math.min(200, Math.max(25, currentZoom * zoomFactor))
-                const clampedZoom = Math.round(newZoom)
+            const state = useUnifiedStore.getState()
+            const currentZoom = state.zoomLevel
+            const prev = state.wireframePanOffset
 
-                // Zoom-toward-cursor: adjust pan so the point under the
-                // cursor stays fixed on screen.
+            if (e.ctrlKey || e.metaKey) {
+                // ── Zoom toward cursor (trackpad pinch sends ctrlKey + small deltaY) ──
+                // Exponential zoom factor — matches Relume's silky feel
+                const delta = -e.deltaY
+                const zoomSpeed = 0.008 // higher = faster zoom
+                const factor = Math.pow(2, delta * zoomSpeed)
+                const newZoom = Math.round(Math.min(300, Math.max(5, currentZoom * factor)))
+
+                if (newZoom === currentZoom) return
+
                 const rect = container.getBoundingClientRect()
                 const cursorX = e.clientX - rect.left
                 const cursorY = e.clientY - rect.top
 
                 const oldScale = currentZoom / 100
-                const newScale = clampedZoom / 100
+                const newScale = newZoom / 100
 
-                // Point in world-space under the cursor before zoom:
-                //   worldX = (cursorX - panOffset.x) / oldScale
-                // After zoom it should be in the same screen position:
-                //   cursorX = worldX * newScale + newPanX
-                // => newPanX = cursorX - worldX * newScale
-                setPanOffset(prev => {
-                    const worldX = (cursorX - prev.x) / oldScale
-                    const worldY = (cursorY - prev.y) / oldScale
-                    return {
-                        x: cursorX - worldX * newScale,
-                        y: cursorY - worldY * newScale,
-                    }
+                // Keep the world-point under the cursor pinned
+                const worldX = (cursorX - prev.x) / oldScale
+                const worldY = (cursorY - prev.y) / oldScale
+
+                state.setWireframePanOffset({
+                    x: cursorX - worldX * newScale,
+                    y: cursorY - worldY * newScale,
                 })
-
-                setZoomLevel(clampedZoom)
+                state.setZoomLevel(newZoom)
             } else {
-                // Pan with regular scroll
-                setPanOffset(prev => ({
+                // ── Pan (two-finger scroll / scroll wheel) ──
+                state.setWireframePanOffset({
                     x: prev.x - e.deltaX,
                     y: prev.y - e.deltaY,
-                }))
+                })
             }
         }
 
-        // Add with passive: false to allow preventDefault
         container.addEventListener('wheel', handleWheel, { passive: false })
+        return () => container.removeEventListener('wheel', handleWheel)
+    }, []) // ← empty deps: all reads via getState(), never stale
 
-        return () => {
-            container.removeEventListener('wheel', handleWheel)
-        }
-    }, [zoomLevel, setZoomLevel])
-
-    // Pinch zoom support - smoother behavior matching ReactFlow
+    // Touch pinch-to-zoom — same exponential curve
     useEffect(() => {
         const container = containerRef.current
         if (!container) return
 
         let lastDistance = 0
-        let initialZoom = zoomLevel
 
         const handleTouchStart = (e: TouchEvent) => {
             if (e.touches.length === 2) {
-                const touch1 = e.touches[0]
-                const touch2 = e.touches[1]
                 lastDistance = Math.hypot(
-                    touch2.clientX - touch1.clientX,
-                    touch2.clientY - touch1.clientY
+                    e.touches[1].clientX - e.touches[0].clientX,
+                    e.touches[1].clientY - e.touches[0].clientY
                 )
-                initialZoom = useUnifiedStore.getState().zoomLevel
             }
         }
 
         const handleTouchMove = (e: TouchEvent) => {
-            if (e.touches.length === 2) {
-                e.preventDefault()
-                const touch1 = e.touches[0]
-                const touch2 = e.touches[1]
-                const currentDistance = Math.hypot(
-                    touch2.clientX - touch1.clientX,
-                    touch2.clientY - touch1.clientY
-                )
+            if (e.touches.length !== 2) return
+            e.preventDefault()
 
-                // Calculate scale ratio like ReactFlow - smoother exponential scaling
-                const scaleRatio = currentDistance / lastDistance
-                const currentZoom = useUnifiedStore.getState().zoomLevel
-
-                // Apply smoother damping factor (0.15) for gradual zoom
-                const targetZoom = currentZoom * (1 + (scaleRatio - 1) * 0.15)
-                const newZoom = Math.min(200, Math.max(10, targetZoom))
-
-                setZoomLevel(Math.round(newZoom))
-                lastDistance = currentDistance
-            }
+            const dist = Math.hypot(
+                e.touches[1].clientX - e.touches[0].clientX,
+                e.touches[1].clientY - e.touches[0].clientY
+            )
+            const ratio = dist / lastDistance
+            const state = useUnifiedStore.getState()
+            const newZoom = Math.round(Math.min(300, Math.max(5, state.zoomLevel * ratio)))
+            state.setZoomLevel(newZoom)
+            lastDistance = dist
         }
 
         container.addEventListener('touchstart', handleTouchStart, { passive: false })
         container.addEventListener('touchmove', handleTouchMove, { passive: false })
-
         return () => {
             container.removeEventListener('touchstart', handleTouchStart)
             container.removeEventListener('touchmove', handleTouchMove)
         }
-    }, [zoomLevel, setZoomLevel])
+    }, [])
 
     // Click on canvas to deselect
     const handleCanvasClick = useCallback((e: React.MouseEvent) => {

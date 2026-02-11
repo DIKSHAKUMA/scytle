@@ -6,6 +6,7 @@ import { useProjectStore, useAuthStore, useUnifiedStore } from '@/store'
 import { useSitemapStore, CanvasTool, flushPendingSave, setSkipUnifiedSync } from '@/store/sitemap-store'
 import { flushPendingSave as flushUnifiedSave } from '@/store/unified-store'
 import { SitemapView, LeftSidebar, SectionPickerPanel } from '@/components/canvas'
+import { ReactFlowProvider } from '@xyflow/react'
 import { WireframeView } from '@/components/wireframe/wireframe-view'
 import { AppShell } from '@/components/app-shell'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,13 @@ export default function ProjectEditorPage() {
         addSectionToPage,
     } = useSitemapStore()
 
+    // Wireframe zoom state from unified store
+    const wireframeZoomLevel = useUnifiedStore(state => state.zoomLevel)
+    const wireframeZoomIn = useUnifiedStore(state => state.zoomIn)
+    const wireframeZoomOut = useUnifiedStore(state => state.zoomOut)
+    const wireframeResetZoom = useUnifiedStore(state => state.resetZoom)
+    const wireframeFitView = useUnifiedStore(state => state.fitView)
+
     const validViews: CanvasView[] = ['sitemap', 'wireframe', 'design', 'code']
     const viewParam = searchParams.get('view') as CanvasView | null
     const [activeView, setActiveViewState] = useState<CanvasView>(
@@ -80,6 +88,13 @@ export default function ProjectEditorPage() {
     const [isDevMode, setIsDevMode] = useState(false)
     const [authChecked, setAuthChecked] = useState(false)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+
+    // View-aware zoom: pick the right store based on which tab is active
+    const activeZoomLevel = activeView === 'wireframe' ? wireframeZoomLevel : zoomLevel
+    const activeZoomIn = activeView === 'wireframe' ? wireframeZoomIn : zoomIn
+    const activeZoomOut = activeView === 'wireframe' ? wireframeZoomOut : zoomOut
+    const activeResetZoom = activeView === 'wireframe' ? wireframeResetZoom : resetZoom
+    const activeFitView = activeView === 'wireframe' ? wireframeFitView : fitView
 
     // Reset project store loading state on mount (prevents stuck spinner after HMR)
     useEffect(() => {
@@ -114,15 +129,15 @@ export default function ProjectEditorPage() {
             // Zoom shortcuts
             if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
                 e.preventDefault()
-                zoomIn()
+                activeZoomIn()
             }
             if ((e.metaKey || e.ctrlKey) && e.key === '-') {
                 e.preventDefault()
-                zoomOut()
+                activeZoomOut()
             }
             if ((e.metaKey || e.ctrlKey) && e.key === '0') {
                 e.preventDefault()
-                resetZoom()
+                activeResetZoom()
             }
 
             // Escape to close panel
@@ -134,7 +149,7 @@ export default function ProjectEditorPage() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [setActiveTool, undo, redo, zoomIn, zoomOut, resetZoom, setSelectedNodeId])
+    }, [setActiveTool, undo, redo, activeZoomIn, activeZoomOut, activeResetZoom, setSelectedNodeId])
 
     // Flush pending saves before page unload (prevents data loss on refresh)
     useEffect(() => {
@@ -427,17 +442,24 @@ export default function ProjectEditorPage() {
                             </div>
                         </div>
 
-                        {/* Canvas Content */}
+                        {/* Canvas Content - Always mount both views, toggle visibility with CSS
+                            to preserve viewport state (zoom/pan) across tab switches like Relume */}
                         <div className="flex-1 relative overflow-hidden">
-                            {/* Sitemap View */}
-                            {activeView === 'sitemap' && !isDevMode && (
+                            {/* Sitemap View - always mounted, hidden when not active */}
+                            <div
+                                className="absolute inset-0"
+                                style={{ display: activeView === 'sitemap' && !isDevMode ? 'block' : 'none' }}
+                            >
                                 <SitemapView projectName={currentProject.name} />
-                            )}
+                            </div>
 
-                            {/* Wireframe View */}
-                            {activeView === 'wireframe' && !isDevMode && (
+                            {/* Wireframe View - always mounted, hidden when not active */}
+                            <div
+                                className="absolute inset-0"
+                                style={{ display: activeView === 'wireframe' && !isDevMode ? 'block' : 'none' }}
+                            >
                                 <WireframeView projectId={projectId as string} />
-                            )}
+                            </div>
 
                             {/* Placeholder for design/code views and dev mode */}
                             {((activeView === 'design') || isDevMode) && (
@@ -531,7 +553,7 @@ export default function ProjectEditorPage() {
                                             variant="ghost"
                                             size="icon-sm"
                                             className="rounded-md"
-                                            onClick={zoomOut}
+                                            onClick={activeZoomOut}
                                         >
                                             <ZoomOut className="w-4 h-4" />
                                         </Button>
@@ -545,9 +567,9 @@ export default function ProjectEditorPage() {
                                     <TooltipTrigger asChild>
                                         <button
                                             className="text-xs text-muted-foreground px-2 min-w-[48px] text-center hover:text-foreground transition-colors"
-                                            onClick={resetZoom}
+                                            onClick={activeResetZoom}
                                         >
-                                            {zoomLevel}%
+                                            {activeZoomLevel}%
                                         </button>
                                     </TooltipTrigger>
                                     <TooltipContent side="top">
@@ -561,7 +583,7 @@ export default function ProjectEditorPage() {
                                             variant="ghost"
                                             size="icon-sm"
                                             className="rounded-md"
-                                            onClick={zoomIn}
+                                            onClick={activeZoomIn}
                                         >
                                             <ZoomIn className="w-4 h-4" />
                                         </Button>
@@ -577,7 +599,7 @@ export default function ProjectEditorPage() {
                                             variant="ghost"
                                             size="icon-sm"
                                             className="rounded-md"
-                                            onClick={fitView}
+                                            onClick={activeFitView}
                                         >
                                             <Maximize className="w-4 h-4" />
                                         </Button>
