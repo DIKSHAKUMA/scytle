@@ -11,18 +11,41 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
+import { useState } from 'react'
+import { DynamicListItem, InsertDot, addListItem, insertListItem, removeListItem } from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
     const showIcon = controls?.showIcon !== false
     const showDividers = controls?.showDividers !== false
-    const itemCount = Number(controls?.itemCount ?? 4)
+    const iconPosition = (controls?.iconPosition as string) ?? 'left'
 
-    const features = Array.from({ length: itemCount }, (_, i) => ({
-        title: `Feature ${i + 1}`,
-        description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.',
-    }))
+    const titles = (content?.featureTitles as string[]) ?? ['Feature 1', 'Feature 2', 'Feature 3', 'Feature 4']
+    const descriptions = (content?.featureDescriptions as string[]) ?? Array(4).fill(
+        'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'
+    )
+    const icons = (content?.icons as string[]) ?? ['Layers', 'Zap', 'Shield', 'Target']
+    const itemCount = titles.length
+
+    const insertItem = (index: number) => {
+        onContentChange?.('featureTitles', insertListItem(titles, index, `Feature ${itemCount + 1}`))
+        onContentChange?.('featureDescriptions', insertListItem(descriptions, index, 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'))
+        onContentChange?.('icons', insertListItem(icons, index, 'Star'))
+    }
+
+    const removeItem = (index: number) => {
+        const newTitles = removeListItem(titles, index, 2)
+        const newDescs = removeListItem(descriptions, index, 2)
+        const newIcons = removeListItem(icons, index, 2)
+        if (newTitles && newDescs && newIcons) {
+            onContentChange?.('featureTitles', newTitles)
+            onContentChange?.('featureDescriptions', newDescs)
+            onContentChange?.('icons', newIcons)
+        }
+    }
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
@@ -55,25 +78,62 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
 
                 {/* Feature List */}
                 <div className="space-y-0">
-                    {features.map((feature, i) => (
-                        <div
-                            key={i}
-                            className={`flex items-start gap-4 py-5 ${showDividers && i < itemCount - 1 ? 'border-b border-gray-100' : ''
-                                }`}
-                        >
-                            {showIcon && (
-                                <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <div className="w-5 h-5 bg-gray-300 rounded" />
-                                </div>
+                    {Array.from({ length: itemCount }).map((_, i) => (
+                        <div key={i}>
+                            {editable && i === 0 && (
+                                <InsertDot onInsert={() => insertItem(0)} />
                             )}
-                            <div className="flex-1">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-1">
-                                    {feature.title}
-                                </h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">
-                                    {feature.description}
-                                </p>
-                            </div>
+                            <DynamicListItem
+                                index={i}
+                                selectedIndex={selectedIndex}
+                                onSelect={setSelectedIndex}
+                                onDelete={() => removeItem(i)}
+                                deletable={itemCount > 2}
+                                editable={editable}
+                                className={`${iconPosition === 'top' ? 'flex flex-col items-start gap-3' : 'flex items-start gap-4'} py-5 ${showDividers && i < itemCount - 1 ? 'border-b border-gray-100' : ''
+                                    }`}
+                            >
+                                {showIcon && (
+                                    <EditableIcon
+                                        iconName={icons[i] || 'Star'}
+                                        onChange={(name) => {
+                                            const updated = [...icons]
+                                            updated[i] = name
+                                            onContentChange?.('icons', updated)
+                                        }}
+                                        editable={editable}
+                                        size="lg"
+                                    />
+                                )}
+                                <div className="flex-1">
+                                    <EditableText
+                                        value={titles[i] || `Feature ${i + 1}`}
+                                        onChange={(v) => {
+                                            const updated = [...titles]
+                                            updated[i] = v
+                                            onContentChange?.('featureTitles', updated)
+                                        }}
+                                        as="h3"
+                                        className="font-semibold text-gray-900 text-sm mb-1"
+                                        editable={editable}
+                                    />
+                                    <EditableText
+                                        value={descriptions[i] || 'Description goes here.'}
+                                        onChange={(v) => {
+                                            const updated = [...descriptions]
+                                            updated[i] = v
+                                            onContentChange?.('featureDescriptions', updated)
+                                        }}
+                                        as="p"
+                                        className="text-gray-500 text-sm leading-relaxed"
+                                        editable={editable}
+                                        multiline
+                                    />
+                                </div>
+                            </DynamicListItem>
+                            {editable && (
+                                <InsertDot onInsert={() => insertItem(i + 1)} />
+                            )}
                         </div>
                     ))}
                 </div>
@@ -91,18 +151,6 @@ export const FeaturesListFamily: TemplateFamily = {
     Canvas,
     controlsDef: [
         {
-            key: 'itemCount',
-            label: 'Items',
-            type: 'toggle-group',
-            options: [
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-                { value: '5', label: '5' },
-                { value: '6', label: '6' },
-            ],
-            defaultValue: '4',
-        },
-        {
             key: 'showIcon',
             label: 'Show Icons',
             type: 'switch',
@@ -114,15 +162,28 @@ export const FeaturesListFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'iconPosition',
+            label: 'Icon Position',
+            type: 'toggle-group',
+            options: [
+                { value: 'left', label: 'Left' },
+                { value: 'top', label: 'Top' },
+            ],
+            defaultValue: 'left',
+        },
     ],
     defaultControls: {
-        itemCount: '4',
         showIcon: true,
         showDividers: true,
+        iconPosition: 'left',
     },
     defaultContent: {
         tagline: 'Features',
         heading: 'Why choose our product',
         subheading: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+        featureTitles: ['Feature 1', 'Feature 2', 'Feature 3', 'Feature 4'],
+        featureDescriptions: Array(4).fill('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'),
+        icons: ['Layers', 'Zap', 'Shield', 'Target'],
     },
 }

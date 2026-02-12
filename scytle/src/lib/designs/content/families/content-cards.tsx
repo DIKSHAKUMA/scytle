@@ -19,6 +19,8 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const columns = Number(controls?.columns ?? 3)
     const showImage = controls?.showImage !== false
     const itemCount = Number(controls?.itemCount ?? 3)
+    const cardStyle = (controls?.cardStyle as string) ?? 'bordered'
+    const showDescription = controls?.showDescription !== false
 
     const gridCols = isMobile ? 1 : isTablet ? 2 : columns
 
@@ -53,23 +55,28 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     className="grid gap-6"
                     style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
-                    {cards.map((card, i) => (
-                        <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
-                            {showImage && (
-                                <div className="aspect-[16/9] bg-gray-100 border-b border-gray-200 flex items-center justify-center">
-                                    <ImageIcon className="w-8 h-8 text-gray-300" />
+                    {cards.map((card, i) => {
+                        const borderClass = cardStyle === 'shadow' ? 'shadow-sm border-0' : cardStyle === 'flat' ? 'border-0 bg-gray-50' : 'border border-gray-200'
+                        return (
+                            <div key={i} className={`${borderClass} rounded-lg overflow-hidden`}>
+                                {showImage && (
+                                    <div className="aspect-[16/9] bg-gray-100 border-b border-gray-200 flex items-center justify-center">
+                                        <ImageIcon className="w-8 h-8 text-gray-300" />
+                                    </div>
+                                )}
+                                <div className="p-5">
+                                    <h3 className="font-semibold text-gray-900 text-sm mb-2">
+                                        {card.title}
+                                    </h3>
+                                    {showDescription && (
+                                        <p className="text-gray-500 text-sm leading-relaxed">
+                                            {card.description}
+                                        </p>
+                                    )}
                                 </div>
-                            )}
-                            <div className="p-5">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-2">
-                                    {card.title}
-                                </h3>
-                                <p className="text-gray-500 text-sm leading-relaxed">
-                                    {card.description}
-                                </p>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
         </section>
@@ -113,11 +120,30 @@ export const ContentCardsFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'cardStyle',
+            label: 'Card Style',
+            type: 'toggle-group',
+            options: [
+                { value: 'bordered', label: 'Border' },
+                { value: 'shadow', label: 'Shadow' },
+                { value: 'flat', label: 'Flat' },
+            ],
+            defaultValue: 'bordered',
+        },
+        {
+            key: 'showDescription',
+            label: 'Description',
+            type: 'switch',
+            defaultValue: true,
+        },
     ],
     defaultControls: {
         columns: '3',
         itemCount: '3',
         showImage: true,
+        cardStyle: 'bordered',
+        showDescription: true,
     },
     defaultContent: {
         tagline: 'Resources',

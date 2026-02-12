@@ -18,6 +18,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const textAlign = (controls?.textAlign as string) ?? 'center'
     const showButton = controls?.showButton === true
     const maxWidth = (controls?.maxWidth as string) ?? 'medium'
+    const showSecondParagraph = controls?.showSecondParagraph !== false
 
     const widthClass = maxWidth === 'narrow' ? 'max-w-xl' : maxWidth === 'wide' ? 'max-w-4xl' : 'max-w-2xl'
     const alignClass = textAlign === 'center' ? 'text-center mx-auto' : ''
@@ -47,14 +48,16 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     editable={editable}
                     multiline
                 />
-                <EditableText
-                    value={(content?.body2 as string) || 'Aenean faucibus nibh et justo cursus id rutrum lorem imperdiet. Nunc ut sem vitae risus tristique posuere.'}
-                    onChange={(v) => onContentChange?.('body2', v)}
-                    as="p"
-                    className="text-gray-500 leading-relaxed"
-                    editable={editable}
-                    multiline
-                />
+                {showSecondParagraph && (
+                    <EditableText
+                        value={(content?.body2 as string) || 'Aenean faucibus nibh et justo cursus id rutrum lorem imperdiet. Nunc ut sem vitae risus tristique posuere.'}
+                        onChange={(v) => onContentChange?.('body2', v)}
+                        as="p"
+                        className="text-gray-500 leading-relaxed"
+                        editable={editable}
+                        multiline
+                    />
+                )}
                 {showButton && (
                     <div className={`mt-6 ${textAlign === 'center' ? '' : ''}`}>
                         <div className="inline-block bg-gray-800 text-white px-5 py-2.5 text-sm font-medium">
@@ -107,11 +110,18 @@ export const ContentTextFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: false,
         },
+        {
+            key: 'showSecondParagraph',
+            label: 'Second Paragraph',
+            type: 'switch',
+            defaultValue: true,
+        },
     ],
     defaultControls: {
         textAlign: 'center',
         maxWidth: 'medium',
         showButton: false,
+        showSecondParagraph: true,
     },
     defaultContent: {
         tagline: 'Tagline',

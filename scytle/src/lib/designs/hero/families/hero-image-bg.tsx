@@ -19,6 +19,8 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const textAlign = (controls?.textAlign as string) ?? 'center'
     const buttonCount = Number(controls?.buttonCount ?? 2)
     const showTagline = controls?.showTagline !== false
+    const overlayOpacity = Number(controls?.overlayOpacity ?? 40)
+    const textLayout = (controls?.textLayout as string) ?? 'single'
 
     const alignClass = textAlign === 'center' ? 'text-center items-center' : textAlign === 'right' ? 'text-right items-end' : 'text-left items-start'
     const justifyClass = textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : ''
@@ -31,56 +33,114 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 Background Image
             </div>
 
+            {/* Dark overlay */}
+            <div className="absolute inset-0 bg-black" style={{ opacity: overlayOpacity / 100 }} />
+
             {/* Content */}
             <div className={`relative ${isMobile ? 'py-16 px-4' : isTablet ? 'py-24 px-8' : 'py-32 px-16'}`}>
-                <div className={`max-w-3xl ${textAlign === 'center' ? 'mx-auto' : textAlign === 'right' ? 'ml-auto' : ''} flex flex-col ${alignClass} space-y-5`}>
-                    {showTagline && (
-                        <EditableText
-                            value={(content?.tagline as string) || 'Tagline'}
-                            onChange={(v) => onContentChange?.('tagline', v)}
-                            as="p"
-                            className="text-sm text-gray-400 uppercase tracking-wide"
-                            editable={editable}
-                        />
-                    )}
-                    <EditableText
-                        value={(content?.heading as string) || 'Medium length hero headline goes here'}
-                        onChange={(v) => onContentChange?.('heading', v)}
-                        as="h1"
-                        className={`font-bold text-gray-900 ${isMobile ? 'text-2xl' : 'text-5xl'}`}
-                        editable={editable}
-                    />
-                    <EditableText
-                        value={(content?.subheading as string) || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'}
-                        onChange={(v) => onContentChange?.('subheading', v)}
-                        as="p"
-                        className="text-gray-500 text-lg"
-                        editable={editable}
-                        multiline
-                    />
-                    {buttonCount > 0 && (
-                        <div className={`flex gap-3 pt-2 ${justifyClass}`}>
-                            <div className="bg-gray-800 text-white px-6 py-3 text-sm font-medium">
+                {textLayout === 'split' ? (
+                    <div className={`max-w-6xl mx-auto ${isMobile ? 'flex flex-col gap-6' : 'flex gap-16'}`}>
+                        <div className="flex-1">
+                            {showTagline && (
                                 <EditableText
-                                    value={(content?.primaryCta as string) || 'Button'}
-                                    onChange={(v) => onContentChange?.('primaryCta', v)}
-                                    as="span"
+                                    value={(content?.tagline as string) || 'Tagline'}
+                                    onChange={(v) => onContentChange?.('tagline', v)}
+                                    as="p"
+                                    className="text-sm text-gray-300 uppercase tracking-wide mb-4"
                                     editable={editable}
                                 />
-                            </div>
-                            {buttonCount >= 2 && (
-                                <div className="border border-gray-300 text-gray-700 px-6 py-3 text-sm font-medium">
+                            )}
+                            <EditableText
+                                value={(content?.heading as string) || 'Medium length hero headline goes here'}
+                                onChange={(v) => onContentChange?.('heading', v)}
+                                as="h1"
+                                className={`font-bold text-white ${isMobile ? 'text-2xl' : 'text-5xl'}`}
+                                editable={editable}
+                            />
+                        </div>
+                        <div className={`flex-1 ${isMobile ? '' : 'flex flex-col justify-end'}`}>
+                            <EditableText
+                                value={(content?.subheading as string) || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'}
+                                onChange={(v) => onContentChange?.('subheading', v)}
+                                as="p"
+                                className="text-gray-300 text-lg mb-6"
+                                editable={editable}
+                                multiline
+                            />
+                            {buttonCount > 0 && (
+                                <div className="flex gap-3">
+                                    <div className="bg-white text-gray-900 px-6 py-3 text-sm font-medium">
+                                        <EditableText
+                                            value={(content?.primaryCta as string) || 'Button'}
+                                            onChange={(v) => onContentChange?.('primaryCta', v)}
+                                            as="span"
+                                            editable={editable}
+                                        />
+                                    </div>
+                                    {buttonCount >= 2 && (
+                                        <div className="border border-white text-white px-6 py-3 text-sm font-medium">
+                                            <EditableText
+                                                value={(content?.secondaryCta as string) || 'Button'}
+                                                onChange={(v) => onContentChange?.('secondaryCta', v)}
+                                                as="span"
+                                                editable={editable}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div className={`max-w-3xl ${textAlign === 'center' ? 'mx-auto' : textAlign === 'right' ? 'ml-auto' : ''} flex flex-col ${alignClass} space-y-5`}>
+                        {showTagline && (
+                            <EditableText
+                                value={(content?.tagline as string) || 'Tagline'}
+                                onChange={(v) => onContentChange?.('tagline', v)}
+                                as="p"
+                                className="text-sm text-gray-400 uppercase tracking-wide"
+                                editable={editable}
+                            />
+                        )}
+                        <EditableText
+                            value={(content?.heading as string) || 'Medium length hero headline goes here'}
+                            onChange={(v) => onContentChange?.('heading', v)}
+                            as="h1"
+                            className={`font-bold text-gray-900 ${isMobile ? 'text-2xl' : 'text-5xl'}`}
+                            editable={editable}
+                        />
+                        <EditableText
+                            value={(content?.subheading as string) || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique.'}
+                            onChange={(v) => onContentChange?.('subheading', v)}
+                            as="p"
+                            className="text-gray-500 text-lg"
+                            editable={editable}
+                            multiline
+                        />
+                        {buttonCount > 0 && (
+                            <div className={`flex gap-3 pt-2 ${justifyClass}`}>
+                                <div className="bg-gray-800 text-white px-6 py-3 text-sm font-medium">
                                     <EditableText
-                                        value={(content?.secondaryCta as string) || 'Button'}
-                                        onChange={(v) => onContentChange?.('secondaryCta', v)}
+                                        value={(content?.primaryCta as string) || 'Button'}
+                                        onChange={(v) => onContentChange?.('primaryCta', v)}
                                         as="span"
                                         editable={editable}
                                     />
                                 </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+                                {buttonCount >= 2 && (
+                                    <div className="border border-gray-300 text-gray-700 px-6 py-3 text-sm font-medium">
+                                        <EditableText
+                                            value={(content?.secondaryCta as string) || 'Button'}
+                                            onChange={(v) => onContentChange?.('secondaryCta', v)}
+                                            as="span"
+                                            editable={editable}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </section>
     )
@@ -123,11 +183,32 @@ export const HeroImageBgFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'overlayOpacity',
+            label: 'Overlay Opacity',
+            type: 'slider',
+            min: 0,
+            max: 100,
+            step: 10,
+            defaultValue: 40,
+        },
+        {
+            key: 'textLayout',
+            label: 'Text Layout',
+            type: 'toggle-group',
+            options: [
+                { value: 'single', label: 'Single' },
+                { value: 'split', label: 'Split' },
+            ],
+            defaultValue: 'single',
+        },
     ],
     defaultControls: {
         textAlign: 'center',
         buttonCount: '2',
         showTagline: true,
+        overlayOpacity: 40,
+        textLayout: 'single',
     },
     defaultContent: {
         tagline: 'Tagline',

@@ -30,20 +30,33 @@ export interface ComponentVariant {
 }
 
 /**
- * Get component variants for a section type — all presets for that category.
- * This mirrors the Add sidebar's approach, showing all preset variations.
+ * Get component variants for a section type — one entry per family.
+ * For each family we pick its first preset as the representative entry.
  */
 function getVariantsForType(sectionType: string): ComponentVariant[] {
+    const families = getFamiliesForCategory(sectionType as DesignCategoryId)
     const presets = getPresetsForCategory(sectionType as DesignCategoryId)
-    return presets.map(preset => ({
-        id: preset.id,
-        sectionType: sectionType as DesignCategoryId,
-        variant: preset.familyId,
-        name: preset.name,
-        description: preset.description,
-        tags: [],
-        Thumbnail: preset.Thumbnail,
-    }))
+
+    // Group presets by familyId, pick the first preset per family
+    const firstPresetByFamily = new Map<string, typeof presets[number]>()
+    for (const preset of presets) {
+        if (!firstPresetByFamily.has(preset.familyId)) {
+            firstPresetByFamily.set(preset.familyId, preset)
+        }
+    }
+
+    return families.map(family => {
+        const preset = firstPresetByFamily.get(family.id)
+        return {
+            id: preset?.id ?? family.id,
+            sectionType: sectionType as DesignCategoryId,
+            variant: family.id,
+            name: family.name,
+            description: family.description,
+            tags: family.tags ?? [],
+            Thumbnail: preset?.Thumbnail,
+        }
+    })
 }
 
 interface ComponentLibraryPanelProps {
@@ -121,7 +134,7 @@ export function ComponentLibraryPanel({
 
     // Suggested components (AI would recommend these)
     const suggestedComponents = useMemo((): ComponentVariant[] => {
-        return availableComponents.slice(0, 6)
+        return availableComponents
     }, [availableComponents])
 
     // Saved/bookmarked components
@@ -199,7 +212,7 @@ export function ComponentLibraryPanel({
                 <div className="px-3 pt-2">
                     <TabsList className="w-full">
                         <TabsTrigger value="suggested" className="flex-1 text-xs">
-                            Suggested
+                            All ({availableComponents.length})
                         </TabsTrigger>
                         <TabsTrigger value="saved" className="flex-1 text-xs">
                             Saved ({savedComponentsList.length})

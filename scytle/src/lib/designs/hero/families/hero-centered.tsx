@@ -21,15 +21,17 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const buttonCount = Number(controls?.buttonCount ?? 2)
     const showTagline = controls?.showTagline !== false
     const showImage = controls?.showImage === true
+    const maxWidth = (controls?.maxWidth as string) ?? 'narrow'
 
     const alignClass = textAlign === 'center' ? 'text-center' : textAlign === 'right' ? 'text-right' : 'text-left'
     const justifyClass = textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : ''
+    const widthClass = maxWidth === 'wide' ? 'max-w-4xl' : 'max-w-3xl'
 
     return (
         <section className="relative">
             {/* Text Content Section */}
             <div className={`py-16 ${isMobile ? 'px-4' : isTablet ? 'px-8' : 'px-16'}`}>
-                <div className={`max-w-3xl mx-auto ${alignClass} space-y-6`}>
+                <div className={`${widthClass} mx-auto ${alignClass} space-y-6`}>
                     {showTagline && (
                         <EditableText
                             value={(content?.tagline as string) || 'Tagline'}
@@ -144,12 +146,23 @@ export const HeroCenteredFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: false,
         },
+        {
+            key: 'maxWidth',
+            label: 'Max Width',
+            type: 'toggle-group',
+            options: [
+                { value: 'narrow', label: 'Narrow' },
+                { value: 'wide', label: 'Wide' },
+            ],
+            defaultValue: 'narrow',
+        },
     ],
     defaultControls: {
         textAlign: 'center',
         buttonCount: '2',
         showTagline: true,
         showImage: false,
+        maxWidth: 'narrow',
     },
     defaultContent: {
         tagline: 'Tagline',

@@ -300,6 +300,7 @@ export default function ProjectEditorPage() {
                                 const isUnifiedFormat = sitemapPages[0].name && !sitemapPages[0].label
 
                                 if (isUnifiedFormat) {
+                                    // Build slim pages for the sitemap store (only needs id/label/slug/stubs)
                                     const aiPages = sitemapPages.map((p: { id: string; name: string; slug: string; sections: Array<{ name: string; description?: string; id?: string }> }) => ({
                                         id: p.id,
                                         label: p.name,
@@ -311,9 +312,11 @@ export default function ProjectEditorPage() {
                                         })),
                                         children: [],
                                     }))
-                                    console.log('📦 Loading legacy unified format')
+                                    console.log('📦 Loading legacy unified format (with rich section data)')
                                     useSitemapStore.getState().loadSitemap(aiPages, savedProjectName)
-                                    useUnifiedStore.getState().loadFromAI(aiPages, savedProjectName, { skipSave: true })
+                                    // Use loadFromJSON to preserve full section data (content, controls, componentId)
+                                    // instead of loadFromAI which re-creates sections from defaults
+                                    useUnifiedStore.getState().loadFromJSON(JSON.stringify({ pages: sitemapPages, projectName: savedProjectName }))
                                 } else {
                                     console.log('📦 Loading legacy sitemap format')
                                     useSitemapStore.getState().loadSitemap(sitemapPages, savedProjectName)

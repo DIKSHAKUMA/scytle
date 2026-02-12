@@ -19,8 +19,10 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const imagePlacement = (controls?.imagePlacement as string) ?? 'right'
     const showButton = controls?.showButton !== false
     const showList = controls?.showList === true
+    const imageAspect = (controls?.imageAspect as string) ?? '4:3'
 
     const flexDir = imagePlacement === 'left' ? 'flex-row-reverse' : 'flex-row'
+    const aspectMap: Record<string, string> = { '4:3': 'aspect-[4/3]', '16:9': 'aspect-[16/9]', '1:1': 'aspect-square' }
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
@@ -74,7 +76,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 </div>
 
                 {/* Image Side */}
-                <div className={`${isMobile ? 'w-full' : 'flex-1'} aspect-[4/3] bg-gray-100 border border-gray-200 flex items-center justify-center`}>
+                <div className={`${isMobile ? 'w-full' : 'flex-1'} ${aspectMap[imageAspect] ?? 'aspect-[4/3]'} bg-gray-100 border border-gray-200 flex items-center justify-center`}>
                     <ImageIcon className="w-12 h-12 text-gray-300" />
                 </div>
             </div>
@@ -113,11 +115,23 @@ export const ContentSplitFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: false,
         },
+        {
+            key: 'imageAspect',
+            label: 'Image Ratio',
+            type: 'toggle-group',
+            options: [
+                { value: '4:3', label: '4:3' },
+                { value: '16:9', label: '16:9' },
+                { value: '1:1', label: '1:1' },
+            ],
+            defaultValue: '4:3',
+        },
     ],
     defaultControls: {
         imagePlacement: 'right',
         showButton: true,
         showList: false,
+        imageAspect: '4:3',
     },
     defaultContent: {
         tagline: 'About',

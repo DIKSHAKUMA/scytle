@@ -124,7 +124,6 @@ export const Features1Preset: DesignPreset = {
     description: '3-column icon grid, centered',
     controls: {
         columns: '3',
-        itemCount: '6',
         showIcon: true,
         textAlign: 'center',
     },
@@ -139,7 +138,6 @@ export const Features2Preset: DesignPreset = {
     description: '2-column icon grid',
     controls: {
         columns: '2',
-        itemCount: '4',
         showIcon: true,
         textAlign: 'center',
     },
@@ -153,7 +151,6 @@ export const Features3Preset: DesignPreset = {
     name: 'Features 3',
     description: 'Vertical feature list with icons',
     controls: {
-        itemCount: '4',
         showIcon: true,
         showDividers: true,
     },
@@ -182,11 +179,116 @@ export const Features5Preset: DesignPreset = {
     description: '4-column compact grid',
     controls: {
         columns: '4',
-        itemCount: '8',
         showIcon: true,
         textAlign: 'left',
     },
     Thumbnail: Features5Thumbnail,
+}
+
+// ===== NEW FAMILY THUMBNAILS =====
+
+/** Features 6 Thumbnail: Numbered grid */
+function Features6Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col">
+            <div className="text-center mb-1.5">
+                <div className="text-[7px] font-semibold text-gray-800">Numbered</div>
+            </div>
+            <div className="grid grid-cols-3 gap-1 flex-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="border border-gray-100 p-1 space-y-0.5">
+                        <div className="text-[7px] font-bold text-gray-200">{String(i + 1).padStart(2, '0')}</div>
+                        <div className="text-[3px] font-medium text-gray-700">Feature</div>
+                        <div className="text-[2px] text-gray-400">Lorem ipsum</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/** Features 7 Thumbnail: Numbered list */
+function Features7Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col">
+            <div className="mb-1.5">
+                <div className="text-[7px] font-semibold text-gray-800">Process</div>
+            </div>
+            <div className="space-y-1">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className={`flex items-center gap-1 ${i > 0 ? 'border-t border-gray-100 pt-1' : ''}`}>
+                        <div className="text-[6px] font-bold text-gray-200 w-3">{String(i + 1).padStart(2, '0')}</div>
+                        <div className="text-[3px] font-medium text-gray-700">Feature {i + 1}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/** Features 8 Thumbnail: Bordered grid cards */
+function Features8Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col">
+            <div className="text-center mb-1.5">
+                <div className="text-[7px] font-semibold text-gray-800">Features</div>
+            </div>
+            <div className="grid grid-cols-3 gap-1 flex-1">
+                {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="border border-gray-200 rounded p-1 flex flex-col items-center text-center space-y-0.5">
+                        <div className="w-3 h-3 bg-gray-100 border border-gray-200 rounded" />
+                        <div className="text-[3.5px] font-medium text-gray-700">Feature</div>
+                        <div className="text-[2.5px] text-gray-400">Lorem ipsum</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+// ===== NEW PRESETS =====
+
+/** Features 6 — Numbered grid */
+export const Features6Preset: DesignPreset = {
+    id: 'features-numbered-grid',
+    familyId: 'features-numbered',
+    name: 'Features 6',
+    description: 'Numbered feature grid with descriptions',
+    controls: {
+        layout: 'grid',
+        showDividers: true,
+        showDescription: true,
+    },
+    Thumbnail: Features6Thumbnail,
+}
+
+/** Features 7 — Numbered list */
+export const Features7Preset: DesignPreset = {
+    id: 'features-numbered-list',
+    familyId: 'features-numbered',
+    name: 'Features 7',
+    description: 'Numbered vertical list with dividers',
+    controls: {
+        layout: 'list',
+        showDividers: true,
+        showDescription: true,
+    },
+    Thumbnail: Features7Thumbnail,
+}
+
+/** Features 8 — Bordered card grid */
+export const Features8Preset: DesignPreset = {
+    id: 'features-grid-bordered',
+    familyId: 'features-grid',
+    name: 'Features 8',
+    description: '3-column bordered card grid',
+    controls: {
+        columns: '3',
+        showIcon: true,
+        textAlign: 'center',
+        cardStyle: 'bordered',
+    },
+    Thumbnail: Features8Thumbnail,
 }
 
 /** All Features presets for registry */
@@ -196,4 +298,7 @@ export const featuresPresets: DesignPreset[] = [
     Features3Preset,
     Features4Preset,
     Features5Preset,
+    Features6Preset,
+    Features7Preset,
+    Features8Preset,
 ]

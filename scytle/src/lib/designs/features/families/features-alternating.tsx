@@ -19,6 +19,8 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const startPlacement = (controls?.startPlacement as string) ?? 'right'
     const itemCount = Number(controls?.itemCount ?? 3)
     const showButton = controls?.showButton !== false
+    const imageAspect = (controls?.imageAspect as string) ?? '4:3'
+    const aspectMap: Record<string, string> = { '4:3': 'aspect-[4/3]', '16:9': 'aspect-[16/9]', '1:1': 'aspect-square' }
 
     const features = Array.from({ length: itemCount }, (_, i) => ({
         title: `Feature heading ${i + 1}`,
@@ -74,7 +76,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                             </div>
 
                             {/* Image Placeholder */}
-                            <div className={`${isMobile ? 'w-full' : 'flex-1'} aspect-[4/3] bg-gray-100 border border-gray-200 flex items-center justify-center`}>
+                            <div className={`${isMobile ? 'w-full' : 'flex-1'} ${aspectMap[imageAspect] ?? 'aspect-[4/3]'} bg-gray-100 border border-gray-200 flex items-center justify-center`}>
                                 <ImageIcon className="w-10 h-10 text-gray-300" />
                             </div>
                         </div>
@@ -121,11 +123,23 @@ export const FeaturesSplitFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'imageAspect',
+            label: 'Image Ratio',
+            type: 'toggle-group',
+            options: [
+                { value: '4:3', label: '4:3' },
+                { value: '16:9', label: '16:9' },
+                { value: '1:1', label: '1:1' },
+            ],
+            defaultValue: '4:3',
+        },
     ],
     defaultControls: {
         startPlacement: 'right',
         itemCount: '3',
         showButton: true,
+        imageAspect: '4:3',
     },
     defaultContent: {
         tagline: 'Features',

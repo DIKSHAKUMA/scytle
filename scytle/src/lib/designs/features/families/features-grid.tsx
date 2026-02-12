@@ -12,22 +12,46 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
+import { useState } from 'react'
+import { DynamicListItem, InsertDot, addListItem, insertListItem, removeListItem } from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
     const columns = Number(controls?.columns ?? 3)
     const showIcon = controls?.showIcon !== false
     const textAlign = (controls?.textAlign as string) ?? 'center'
-    const itemCount = Number(controls?.itemCount ?? 6)
+    const cardStyle = (controls?.cardStyle as string) ?? 'flat'
 
     const gridCols = isMobile ? 1 : isTablet ? 2 : columns
     const alignClass = textAlign === 'center' ? 'text-center items-center' : 'text-left items-start'
 
-    const features = Array.from({ length: itemCount }, (_, i) => ({
-        title: `Feature ${i + 1}`,
-        description: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-    }))
+    const titles = (content?.featureTitles as string[]) ?? Array.from({ length: 6 }, (_, i) => `Feature ${i + 1}`)
+    const descriptions = (content?.featureDescriptions as string[]) ?? Array(6).fill('Lorem ipsum dolor sit amet, consectetur adipiscing elit.')
+    const icons = (content?.icons as string[]) ?? ['Layers', 'Zap', 'Shield', 'Target', 'Star', 'Heart']
+    const itemCount = titles.length
+
+    const addItem = () => {
+        const newTitles = addListItem(titles, `Feature ${itemCount + 1}`)
+        const newDescs = addListItem(descriptions, 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.')
+        const newIcons = addListItem(icons, 'Star')
+        onContentChange?.('featureTitles', newTitles)
+        onContentChange?.('featureDescriptions', newDescs)
+        onContentChange?.('icons', newIcons)
+    }
+
+    const removeItem = (index: number) => {
+        const newTitles = removeListItem(titles, index, 2)
+        const newDescs = removeListItem(descriptions, index, 2)
+        const newIcons = removeListItem(icons, index, 2)
+        if (newTitles && newDescs && newIcons) {
+            onContentChange?.('featureTitles', newTitles)
+            onContentChange?.('featureDescriptions', newDescs)
+            onContentChange?.('icons', newIcons)
+        }
+    }
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
@@ -63,22 +87,63 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     className="grid gap-8"
                     style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
-                    {features.map((feature, i) => (
-                        <div key={i} className={`flex flex-col ${alignClass} space-y-2`}>
-                            {showIcon && (
-                                <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center mb-1">
-                                    <div className="w-5 h-5 bg-gray-300 rounded" />
-                                </div>
-                            )}
-                            <h3 className="font-semibold text-gray-900 text-sm">
-                                {feature.title}
-                            </h3>
-                            <p className="text-gray-500 text-sm leading-relaxed">
-                                {feature.description}
-                            </p>
-                        </div>
-                    ))}
+                    {Array.from({ length: itemCount }).map((_, i) => {
+                        const styleClass = cardStyle === 'bordered' ? 'p-5 border border-gray-200 rounded-lg' : cardStyle === 'filled' ? 'p-5 bg-gray-50 rounded-lg' : ''
+                        return (
+                            <DynamicListItem
+                                key={i}
+                                index={i}
+                                selectedIndex={selectedIndex}
+                                onSelect={setSelectedIndex}
+                                onDelete={() => removeItem(i)}
+                                deletable={itemCount > 2}
+                                editable={editable}
+                                className={`flex flex-col ${alignClass} space-y-2 ${styleClass}`}
+                            >
+                                {showIcon && (
+                                    <EditableIcon
+                                        iconName={icons[i] || 'Star'}
+                                        onChange={(name) => {
+                                            const updated = [...icons]
+                                            updated[i] = name
+                                            onContentChange?.('icons', updated)
+                                        }}
+                                        editable={editable}
+                                        size="lg"
+                                        className="mb-1"
+                                    />
+                                )}
+                                <EditableText
+                                    value={titles[i] || `Feature ${i + 1}`}
+                                    onChange={(v) => {
+                                        const updated = [...titles]
+                                        updated[i] = v
+                                        onContentChange?.('featureTitles', updated)
+                                    }}
+                                    as="h3"
+                                    className="font-semibold text-gray-900 text-sm"
+                                    editable={editable}
+                                />
+                                <EditableText
+                                    value={descriptions[i] || 'Description goes here.'}
+                                    onChange={(v) => {
+                                        const updated = [...descriptions]
+                                        updated[i] = v
+                                        onContentChange?.('featureDescriptions', updated)
+                                    }}
+                                    as="p"
+                                    className="text-gray-500 text-sm leading-relaxed"
+                                    editable={editable}
+                                    multiline
+                                />
+                            </DynamicListItem>
+                        )
+                    })}
                 </div>
+
+                {editable && (
+                    <InsertDot onInsert={addItem} className="mt-2" />
+                )}
             </div>
         </section>
     )
@@ -104,22 +169,21 @@ export const FeaturesGridFamily: TemplateFamily = {
             defaultValue: '3',
         },
         {
-            key: 'itemCount',
-            label: 'Items',
-            type: 'toggle-group',
-            options: [
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-                { value: '6', label: '6' },
-                { value: '8', label: '8' },
-            ],
-            defaultValue: '6',
-        },
-        {
             key: 'showIcon',
             label: 'Show Icons',
             type: 'switch',
             defaultValue: true,
+        },
+        {
+            key: 'cardStyle',
+            label: 'Card Style',
+            type: 'toggle-group',
+            options: [
+                { value: 'flat', label: 'Flat' },
+                { value: 'bordered', label: 'Border' },
+                { value: 'filled', label: 'Filled' },
+            ],
+            defaultValue: 'flat',
         },
         {
             key: 'textAlign',
@@ -134,7 +198,6 @@ export const FeaturesGridFamily: TemplateFamily = {
     ],
     defaultControls: {
         columns: '3',
-        itemCount: '6',
         showIcon: true,
         textAlign: 'center',
     },
@@ -142,5 +205,8 @@ export const FeaturesGridFamily: TemplateFamily = {
         tagline: 'Features',
         heading: 'Product features that stand out',
         subheading: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+        featureTitles: ['Feature 1', 'Feature 2', 'Feature 3', 'Feature 4', 'Feature 5', 'Feature 6'],
+        featureDescriptions: Array(6).fill('Lorem ipsum dolor sit amet, consectetur adipiscing elit.'),
+        icons: ['Layers', 'Zap', 'Shield', 'Target', 'Star', 'Heart'],
     },
 }

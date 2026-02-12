@@ -205,6 +205,361 @@ export const Header5Preset: DesignPreset = {
     Thumbnail: Header5Thumbnail,
 }
 
+// ===== NEW PHASE 2 THUMBNAILS =====
+
+/** Header 6 Thumbnail: Split with landscape image */
+function Header6Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex gap-2">
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+                <div className="text-[6px] text-gray-400 uppercase">Tagline</div>
+                <div className="text-[8px] font-semibold text-gray-800 leading-tight">Hero headline</div>
+                <div className="text-[5px] text-gray-500">Lorem ipsum dolor sit amet.</div>
+                <div className="flex gap-1 mt-1">
+                    <div className="bg-gray-800 text-white text-[5px] px-1.5 py-0.5">Button</div>
+                    <div className="border border-gray-300 text-gray-600 text-[5px] px-1.5 py-0.5">Button</div>
+                </div>
+            </div>
+            <div className="flex-1 aspect-video bg-gray-200 flex items-center justify-center self-center">
+                <ImageIcon className="w-3 h-3 text-gray-400" />
+            </div>
+        </div>
+    )
+}
+
+/** Header 7 Thumbnail: Minimal two-col with image below */
+function Header7Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-1.5 flex flex-col">
+            <div className="flex gap-2 mb-1.5">
+                <div className="flex-1">
+                    <div className="text-[7px] font-semibold text-gray-800 leading-tight">Hero headline goes here</div>
+                </div>
+                <div className="flex-1 flex flex-col justify-center space-y-0.5">
+                    <div className="text-[4px] text-gray-500 leading-tight">Lorem ipsum dolor sit amet consectetur.</div>
+                    <div className="flex gap-0.5">
+                        <div className="bg-gray-800 text-white text-[4px] px-1 py-0.5">Button</div>
+                        <div className="border border-gray-300 text-gray-600 text-[4px] px-1 py-0.5">Button</div>
+                    </div>
+                </div>
+            </div>
+            <div className="flex-1 bg-gray-200 flex items-center justify-center">
+                <ImageIcon className="w-3 h-3 text-gray-400" />
+            </div>
+        </div>
+    )
+}
+
+/** Header 8 Thumbnail: Minimal text-only, no image */
+function Header8Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex items-center gap-2">
+            <div className="flex-1">
+                <div className="text-[8px] font-semibold text-gray-800 leading-tight">Medium length hero headline goes here</div>
+            </div>
+            <div className="flex-1 flex flex-col space-y-0.5">
+                <div className="text-[5px] text-gray-500 leading-tight">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+                <div className="flex gap-0.5 mt-1">
+                    <div className="bg-gray-800 text-white text-[4px] px-1 py-0.5">Button</div>
+                    <div className="border border-gray-300 text-gray-600 text-[4px] px-1 py-0.5">Button</div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Header 9 Thumbnail: Image BG with dark overlay */
+function Header9Thumbnail() {
+    return (
+        <div className="w-full h-full relative bg-gray-700">
+            <div className="absolute top-1 right-1 flex items-center gap-0.5 px-1 py-0.5 bg-white/30 rounded text-[3px] text-gray-200">
+                <ImageIcon className="w-2 h-2" /> BG
+            </div>
+            <div className="h-full flex flex-col items-center justify-center text-center p-2 space-y-0.5">
+                <div className="text-[5px] text-gray-300 uppercase">Tagline</div>
+                <div className="text-[7px] font-semibold text-white leading-tight">Hero headline</div>
+                <div className="flex gap-0.5 mt-0.5">
+                    <div className="bg-white text-gray-900 text-[4px] px-1 py-0.5">Button</div>
+                    <div className="border border-white text-white text-[4px] px-1 py-0.5">Button</div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Header 10 Thumbnail: Image BG with split text layout */
+function Header10Thumbnail() {
+    return (
+        <div className="w-full h-full relative bg-gray-300">
+            <div className="absolute top-1 right-1 flex items-center gap-0.5 px-1 py-0.5 bg-white/80 rounded text-[3px] text-gray-400">
+                <ImageIcon className="w-2 h-2" /> BG
+            </div>
+            <div className="h-full flex flex-col justify-end p-2 space-y-1">
+                <div className="text-[7px] font-semibold text-gray-800 leading-tight">Hero headline</div>
+                <div className="flex justify-between items-end">
+                    <div className="text-[4px] text-gray-600 max-w-[50%]">Lorem ipsum dolor sit amet.</div>
+                    <div className="flex gap-0.5">
+                        <div className="bg-gray-800 text-white text-[4px] px-1 py-0.5">Button</div>
+                        <div className="border border-gray-500 text-gray-600 text-[4px] px-1 py-0.5">Button</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Header 11 Thumbnail: Form — centered with inline form */
+function Header11Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col items-center justify-center text-center space-y-1">
+            <div className="text-[7px] font-semibold text-gray-800 leading-tight">Hero headline</div>
+            <div className="text-[4px] text-gray-500 max-w-[80%]">Lorem ipsum dolor sit amet.</div>
+            <div className="flex gap-0.5 mt-0.5">
+                <div className="border border-gray-300 text-gray-400 text-[4px] px-3 py-0.5">email@example.com</div>
+                <div className="bg-gray-800 text-white text-[4px] px-1.5 py-0.5">Sign up</div>
+            </div>
+            <div className="text-[3px] text-gray-400">By signing up you agree to our Terms.</div>
+        </div>
+    )
+}
+
+/** Header 12 Thumbnail: Form — split with image */
+function Header12Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex gap-2">
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+                <div className="text-[7px] font-semibold text-gray-800 leading-tight">Hero headline</div>
+                <div className="text-[4px] text-gray-500">Lorem ipsum dolor sit amet.</div>
+                <div className="flex gap-0.5">
+                    <div className="border border-gray-300 text-gray-400 text-[4px] px-2 py-0.5">email</div>
+                    <div className="bg-gray-800 text-white text-[4px] px-1 py-0.5">Go</div>
+                </div>
+            </div>
+            <div className="flex-1 bg-gray-200 flex items-center justify-center">
+                <ImageIcon className="w-3 h-3 text-gray-400" />
+            </div>
+        </div>
+    )
+}
+
+/** Header 13 Thumbnail: Form — centered with stacked form */
+function Header13Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col items-center justify-center text-center space-y-1">
+            <div className="text-[7px] font-semibold text-gray-800 leading-tight">Hero headline</div>
+            <div className="text-[4px] text-gray-500 max-w-[80%]">Lorem ipsum dolor sit amet.</div>
+            <div className="flex flex-col gap-0.5 w-[60%] mt-0.5">
+                <div className="border border-gray-300 text-gray-400 text-[4px] px-2 py-0.5 text-left">email@example.com</div>
+                <div className="bg-gray-800 text-white text-[4px] py-0.5 text-center">Sign up</div>
+            </div>
+        </div>
+    )
+}
+
+/** Header 14 Thumbnail: Card — left-aligned text */
+function Header14Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-1.5">
+            <div className="w-full h-full relative bg-gray-300 p-2 flex flex-col justify-end">
+                <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5 px-0.5 py-0.5 bg-white/80 rounded text-[3px] text-gray-400">
+                    <ImageIcon className="w-1.5 h-1.5" />
+                </div>
+                <div className="absolute inset-0 bg-black/30" />
+                <div className="relative space-y-0.5">
+                    <div className="text-[6px] text-gray-200 uppercase">Tagline</div>
+                    <div className="text-[7px] font-semibold text-white leading-tight">Hero headline</div>
+                    <div className="text-[4px] text-gray-200">Lorem ipsum.</div>
+                    <div className="flex gap-0.5 mt-0.5">
+                        <div className="bg-white text-gray-900 text-[4px] px-1 py-0.5">Button</div>
+                        <div className="border border-white text-white text-[4px] px-1 py-0.5">Button</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Header 15 Thumbnail: Card — centered text */
+function Header15Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-1.5">
+            <div className="w-full h-full relative bg-gray-300 p-2 flex flex-col items-center justify-center text-center">
+                <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5 px-0.5 py-0.5 bg-white/80 rounded text-[3px] text-gray-400">
+                    <ImageIcon className="w-1.5 h-1.5" />
+                </div>
+                <div className="absolute inset-0 bg-black/30" />
+                <div className="relative space-y-0.5">
+                    <div className="text-[6px] text-gray-200 uppercase">Tagline</div>
+                    <div className="text-[7px] font-semibold text-white leading-tight">Hero headline</div>
+                    <div className="text-[4px] text-gray-200">Lorem ipsum.</div>
+                    <div className="flex gap-0.5 mt-0.5 justify-center">
+                        <div className="bg-white text-gray-900 text-[4px] px-1 py-0.5">Button</div>
+                        <div className="border border-white text-white text-[4px] px-1 py-0.5">Button</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ===== PHASE 2 PRESETS =====
+
+/** Header 6 — Split with landscape image ratio */
+export const Header6Preset: DesignPreset = {
+    id: 'hero-split-landscape',
+    familyId: 'hero-split',
+    name: 'Header 6',
+    description: 'Split layout with landscape image',
+    controls: {
+        textAlign: 'left',
+        assetPlacement: 'right',
+        buttonCount: '2',
+        showTagline: true,
+        imageAspect: 'landscape',
+    },
+    Thumbnail: Header6Thumbnail,
+}
+
+/** Header 7 — Minimal two-column with image below */
+export const Header7Preset: DesignPreset = {
+    id: 'hero-minimal-with-image',
+    familyId: 'hero-minimal',
+    name: 'Header 7',
+    description: 'Two-column text with image below',
+    controls: {
+        showImage: true,
+        showTagline: false,
+        buttonCount: '2',
+        contentAlign: 'top',
+    },
+    Thumbnail: Header7Thumbnail,
+}
+
+/** Header 8 — Minimal text-only, no image */
+export const Header8Preset: DesignPreset = {
+    id: 'hero-minimal-text-only',
+    familyId: 'hero-minimal',
+    name: 'Header 8',
+    description: 'Two-column text-only layout',
+    controls: {
+        showImage: false,
+        showTagline: false,
+        buttonCount: '2',
+        contentAlign: 'center',
+    },
+    Thumbnail: Header8Thumbnail,
+}
+
+/** Header 9 — Image BG with dark overlay */
+export const Header9Preset: DesignPreset = {
+    id: 'hero-image-bg-dark',
+    familyId: 'hero-image-bg',
+    name: 'Header 9',
+    description: 'Image background with dark overlay',
+    controls: {
+        textAlign: 'center',
+        buttonCount: '2',
+        showTagline: true,
+        textLayout: 'single',
+        overlayOpacity: 70,
+    },
+    Thumbnail: Header9Thumbnail,
+}
+
+/** Header 10 — Image BG with split text layout */
+export const Header10Preset: DesignPreset = {
+    id: 'hero-image-bg-split-text',
+    familyId: 'hero-image-bg',
+    name: 'Header 10',
+    description: 'Image BG with heading left, body right',
+    controls: {
+        textAlign: 'left',
+        buttonCount: '2',
+        showTagline: false,
+        textLayout: 'split',
+        overlayOpacity: 30,
+    },
+    Thumbnail: Header10Thumbnail,
+}
+
+/** Header 11 — Form: centered with inline email form */
+export const Header11Preset: DesignPreset = {
+    id: 'hero-form-inline',
+    familyId: 'hero-form',
+    name: 'Header 11',
+    description: 'Centered header with inline signup form',
+    controls: {
+        layout: 'centered',
+        formStyle: 'inline',
+        showImage: false,
+        showDisclaimer: true,
+        showTagline: false,
+    },
+    Thumbnail: Header11Thumbnail,
+}
+
+/** Header 12 — Form: split with image + inline form */
+export const Header12Preset: DesignPreset = {
+    id: 'hero-form-split',
+    familyId: 'hero-form',
+    name: 'Header 12',
+    description: 'Split layout with image and signup form',
+    controls: {
+        layout: 'split',
+        formStyle: 'inline',
+        showImage: true,
+        showDisclaimer: false,
+        showTagline: false,
+    },
+    Thumbnail: Header12Thumbnail,
+}
+
+/** Header 13 — Form: centered with stacked form fields */
+export const Header13Preset: DesignPreset = {
+    id: 'hero-form-stacked',
+    familyId: 'hero-form',
+    name: 'Header 13',
+    description: 'Centered header with stacked form',
+    controls: {
+        layout: 'centered',
+        formStyle: 'stacked',
+        showImage: false,
+        showDisclaimer: false,
+        showTagline: false,
+    },
+    Thumbnail: Header13Thumbnail,
+}
+
+/** Header 14 — Card: contained card with left-aligned text */
+export const Header14Preset: DesignPreset = {
+    id: 'hero-card-left',
+    familyId: 'hero-card',
+    name: 'Header 14',
+    description: 'Contained card with left-aligned text',
+    controls: {
+        textAlign: 'left',
+        buttonCount: '2',
+        showTagline: true,
+        overlayOpacity: 40,
+    },
+    Thumbnail: Header14Thumbnail,
+}
+
+/** Header 15 — Card: contained card with centered text */
+export const Header15Preset: DesignPreset = {
+    id: 'hero-card-centered',
+    familyId: 'hero-card',
+    name: 'Header 15',
+    description: 'Contained card with centered text',
+    controls: {
+        textAlign: 'center',
+        buttonCount: '2',
+        showTagline: true,
+        overlayOpacity: 40,
+    },
+    Thumbnail: Header15Thumbnail,
+}
+
 /** All hero presets for registry */
 export const heroPresets: DesignPreset[] = [
     Header1Preset,
@@ -212,4 +567,14 @@ export const heroPresets: DesignPreset[] = [
     Header3Preset,
     Header4Preset,
     Header5Preset,
+    Header6Preset,
+    Header7Preset,
+    Header8Preset,
+    Header9Preset,
+    Header10Preset,
+    Header11Preset,
+    Header12Preset,
+    Header13Preset,
+    Header14Preset,
+    Header15Preset,
 ]

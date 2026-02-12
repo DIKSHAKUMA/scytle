@@ -15,6 +15,8 @@ export { SectionBlock, SortableSectionBlock, AddSectionTrigger } from './section
 export { PlaceholderRenderer } from './placeholder-renderer'
 export { WireframeSidebar } from './wireframe-sidebar'
 export { EditableText } from './editable-text'
+export { EditableIcon, resolveIcon } from './editable-icon'
+export { AddItemButton, RemoveItemButton, addListItem, removeListItem } from './dynamic-list'
 export { FloatingToolbar } from './floating-toolbar'
 export { AITextMenu } from './ai-text-menu'
 export { AddSectionButton } from './add-section-button'

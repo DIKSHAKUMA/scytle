@@ -22,9 +22,11 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const assetPlacement = (controls?.assetPlacement as string) ?? 'right'
     const buttonCount = Number(controls?.buttonCount ?? 2)
     const showTagline = controls?.showTagline !== false
+    const imageAspect = (controls?.imageAspect as string) ?? 'square'
 
     const alignClass = textAlign === 'center' ? 'text-center' : textAlign === 'right' ? 'text-right' : 'text-left'
     const flexDir = assetPlacement === 'left' ? 'flex-row-reverse' : 'flex-row'
+    const aspectClass = imageAspect === 'landscape' ? 'aspect-[16/10]' : imageAspect === 'portrait' ? 'aspect-[3/4]' : 'aspect-[4/3]'
 
     return (
         <section className={`py-12 ${isMobile ? 'px-4' : isTablet ? 'px-8' : 'px-16'}`}>
@@ -80,7 +82,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 </div>
 
                 {/* Image Placeholder */}
-                <div className={`${isMobile ? 'w-full' : 'flex-1'} aspect-[4/3] bg-gray-100 border border-gray-200 flex items-center justify-center`}>
+                <div className={`${isMobile ? 'w-full' : 'flex-1'} ${aspectClass} bg-gray-100 border border-gray-200 flex items-center justify-center`}>
                     <ImageIcon className="w-12 h-12 text-gray-300" />
                 </div>
             </div>
@@ -136,12 +138,24 @@ export const HeroSplitFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'imageAspect',
+            label: 'Image Aspect',
+            type: 'toggle-group',
+            options: [
+                { value: 'square', label: 'Square' },
+                { value: 'landscape', label: 'Wide' },
+                { value: 'portrait', label: 'Tall' },
+            ],
+            defaultValue: 'square',
+        },
     ],
     defaultControls: {
         textAlign: 'left',
         assetPlacement: 'right',
         buttonCount: '2',
         showTagline: true,
+        imageAspect: 'square',
     },
     defaultContent: {
         tagline: 'Tagline',
