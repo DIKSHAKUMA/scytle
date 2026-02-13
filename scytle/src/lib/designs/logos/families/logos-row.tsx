@@ -1,28 +1,50 @@
 'use client'
 
 /**
- * Logos Row Family — Simple horizontal row of logos.
+ * Logos Row Family — Simple horizontal row of logos with editable labels.
  *
  * Controls:
- * - itemCount: 4 | 5 | 6 | 8
  * - showLabel: boolean
  */
 
+import { useState } from 'react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import {
+    DynamicListItem,
+    InsertDot,
+    insertListItem,
+    removeListItem,
+} from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
-    const itemCount = Number(controls?.itemCount ?? 6)
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
     const showLabel = controls?.showLabel === true
+    const logos = (content?.logos as Array<{ name: string }>) || []
+    const itemCount = logos.length
 
     const gridCols = isMobile ? 3 : isTablet ? Math.min(itemCount, 5) : itemCount
+
+    const handleLogoChange = (index: number, value: string) => {
+        const updated = [...logos]
+        updated[index] = { ...updated[index], name: value }
+        onContentChange?.('logos', updated)
+    }
+
+    const insertItem = (index: number) => {
+        onContentChange?.('logos', insertListItem(logos, index, { name: `Company ${itemCount + 1}` }))
+    }
+
+    const removeItem = (index: number) => {
+        const result = removeListItem(logos, index, 1)
+        if (result) onContentChange?.('logos', result)
+    }
 
     return (
         <section className={`${isMobile ? 'py-10 px-4' : isTablet ? 'py-12 px-8' : 'py-14 px-16'}`}>
             <div className="max-w-7xl mx-auto">
-                {/* Optional heading */}
                 <div className="text-center mb-6">
                     <EditableText
                         value={(content?.heading as string) || 'Trusted by industry leaders'}
@@ -33,19 +55,36 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     />
                 </div>
 
-                {/* Logos */}
                 <div
                     className="grid items-center gap-6"
                     style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
-                    {Array.from({ length: itemCount }).map((_, i) => (
-                        <div key={i} className="flex flex-col items-center gap-1">
-                            <div className="h-8 w-20 bg-gray-100 border border-gray-200 rounded flex items-center justify-center">
-                                <span className="text-[10px] text-gray-400">Logo</span>
-                            </div>
-                            {showLabel && (
-                                <span className="text-[9px] text-gray-400">Company {i + 1}</span>
-                            )}
+                    {logos.map((logo, i) => (
+                        <div key={i}>
+                            {editable && i === 0 && <InsertDot onInsert={() => insertItem(0)} />}
+                            <DynamicListItem
+                                index={i}
+                                selectedIndex={selectedIndex}
+                                onSelect={setSelectedIndex}
+                                onDelete={() => removeItem(i)}
+                                deletable={itemCount > 1}
+                                editable={editable}
+                            >
+                                <div className="flex flex-col items-center gap-1">
+                                    <div className="h-8 w-20 bg-gray-100 border border-gray-200 rounded flex items-center justify-center">
+                                        <span className="text-[10px] text-gray-400">Logo</span>
+                                    </div>
+                                    {showLabel && (
+                                        <EditableText
+                                            value={logo.name}
+                                            onChange={(v) => handleLogoChange(i, v)}
+                                            className="text-[9px] text-gray-400"
+                                            editable={editable}
+                                        />
+                                    )}
+                                </div>
+                            </DynamicListItem>
+                            {editable && <InsertDot onInsert={() => insertItem(i + 1)} />}
                         </div>
                     ))}
                 </div>
@@ -63,18 +102,6 @@ export const LogosRowFamily: TemplateFamily = {
     Canvas,
     controlsDef: [
         {
-            key: 'itemCount',
-            label: 'Logos',
-            type: 'toggle-group',
-            options: [
-                { value: '4', label: '4' },
-                { value: '5', label: '5' },
-                { value: '6', label: '6' },
-                { value: '8', label: '8' },
-            ],
-            defaultValue: '6',
-        },
-        {
             key: 'showLabel',
             label: 'Show Names',
             type: 'switch',
@@ -82,10 +109,17 @@ export const LogosRowFamily: TemplateFamily = {
         },
     ],
     defaultControls: {
-        itemCount: '6',
         showLabel: false,
     },
     defaultContent: {
         heading: 'Trusted by industry leaders',
+        logos: [
+            { name: 'Webflow' },
+            { name: 'Relume' },
+            { name: 'Figma' },
+            { name: 'Framer' },
+            { name: 'Notion' },
+            { name: 'Linear' },
+        ],
     },
 }

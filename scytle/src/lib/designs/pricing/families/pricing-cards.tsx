@@ -11,6 +11,7 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
@@ -18,6 +19,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const plans = Number(controls?.plans ?? 3)
     const showToggle = controls?.showToggle !== false
     const highlightPlan = Number(controls?.highlightPlan ?? 2)
+    const checkIcon = (content?.checkIcon as string) || 'Check'
 
     const gridCols = isMobile ? 1 : isTablet ? Math.min(plans, 2) : plans
 
@@ -25,7 +27,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
         name: ['Basic', 'Pro', 'Enterprise', 'Premium'][i] || `Plan ${i + 1}`,
         price: ['$9', '$29', '$99', '$199'][i] || '$XX',
         description: 'Lorem ipsum dolor sit amet',
-        features: Array.from({ length: 4 + i }, (_, f) => `Feature ${f + 1}`),
+        features: Array.from({ length: 5 + i }, (_, f) => `Feature ${f + 1}`),
     }))
 
     return (
@@ -96,7 +98,14 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                                 <div className="space-y-2.5 mb-6 flex-1">
                                     {plan.features.map((feature, f) => (
                                         <div key={f} className="flex items-center gap-2 text-sm text-gray-600">
-                                            <div className="w-4 h-4 bg-gray-200 rounded-full flex-shrink-0" />
+                                            <EditableIcon
+                                                iconName={checkIcon}
+                                                onChange={(name) => onContentChange?.('checkIcon', name)}
+                                                editable={editable}
+                                                size="sm"
+                                                className="w-5 h-5"
+                                                iconClassName="w-3 h-3 text-gray-400"
+                                            />
                                             {feature}
                                         </div>
                                     ))}
@@ -163,5 +172,6 @@ export const PricingCardsFamily: TemplateFamily = {
         tagline: 'Pricing',
         heading: 'Simple, transparent pricing',
         subheading: 'Choose the plan that fits your needs.',
+        checkIcon: 'Check',
     },
 }

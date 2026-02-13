@@ -1,16 +1,21 @@
 'use client'
 
 /**
- * Testimonials Slider Family — Single focused quote, carousel-style.
+ * Testimonials Slider Family — Single focused quote with carousel navigation.
+ * Covers Relume T7-T12: centered quote with slider dots/arrows, stars, logo.
  *
  * Controls:
  * - showAvatar: boolean
  * - showRating: boolean
  * - showArrows: boolean
+ * - showLogo: boolean
+ * - avatarLayout: stacked | inline
  */
 
+import { Star } from 'lucide-react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
@@ -18,10 +23,24 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const showAvatar = controls?.showAvatar !== false
     const showRating = controls?.showRating !== false
     const showArrows = controls?.showArrows !== false
+    const showLogo = controls?.showLogo === true
+    const avatarLayout = (controls?.avatarLayout as string) ?? 'stacked'
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
             <div className="max-w-3xl mx-auto text-center">
+                {/* Company Logo */}
+                {showLogo && (
+                    <div className="mx-auto mb-6">
+                        <EditableIcon
+                            iconName={(content?.logoIcon as string) || 'Building2'}
+                            onChange={(name) => onContentChange?.('logoIcon', name)}
+                            editable={editable}
+                            size="lg"
+                        />
+                    </div>
+                )}
+
                 {/* Section Header */}
                 <EditableText
                     value={(content?.tagline as string) || 'Testimonials'}
@@ -34,7 +53,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 {showRating && (
                     <div className="flex gap-0.5 justify-center mb-6">
                         {Array.from({ length: 5 }).map((_, s) => (
-                            <div key={s} className="w-5 h-5 bg-gray-300 rounded-sm" />
+                            <Star key={s} className="w-5 h-5 text-gray-300 fill-gray-300" />
                         ))}
                     </div>
                 )}
@@ -50,27 +69,51 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 />
 
                 {/* Attribution */}
-                <div className="flex flex-col items-center gap-3">
-                    {showAvatar && (
-                        <div className="w-14 h-14 bg-gray-200 border border-gray-200 rounded-full" />
-                    )}
-                    <div>
-                        <EditableText
-                            value={(content?.name as string) || 'Person Name'}
-                            onChange={(v) => onContentChange?.('name', v)}
-                            as="div"
-                            className="font-medium text-gray-900"
-                            editable={editable}
-                        />
-                        <EditableText
-                            value={(content?.role as string) || 'Job Title, Company'}
-                            onChange={(v) => onContentChange?.('role', v)}
-                            as="div"
-                            className="text-gray-500 text-sm"
-                            editable={editable}
-                        />
+                {avatarLayout === 'inline' ? (
+                    <div className="flex items-center justify-center gap-3">
+                        {showAvatar && (
+                            <div className="w-14 h-14 bg-gray-200 border border-gray-200 rounded-full flex-shrink-0" />
+                        )}
+                        <div className="text-left">
+                            <EditableText
+                                value={(content?.name as string) || 'Person Name'}
+                                onChange={(v) => onContentChange?.('name', v)}
+                                as="div"
+                                className="font-medium text-gray-900"
+                                editable={editable}
+                            />
+                            <EditableText
+                                value={(content?.role as string) || 'Job Title, Company'}
+                                onChange={(v) => onContentChange?.('role', v)}
+                                as="div"
+                                className="text-gray-500 text-sm"
+                                editable={editable}
+                            />
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="flex flex-col items-center gap-3">
+                        {showAvatar && (
+                            <div className="w-14 h-14 bg-gray-200 border border-gray-200 rounded-full" />
+                        )}
+                        <div>
+                            <EditableText
+                                value={(content?.name as string) || 'Person Name'}
+                                onChange={(v) => onContentChange?.('name', v)}
+                                as="div"
+                                className="font-medium text-gray-900"
+                                editable={editable}
+                            />
+                            <EditableText
+                                value={(content?.role as string) || 'Job Title, Company'}
+                                onChange={(v) => onContentChange?.('role', v)}
+                                as="div"
+                                className="text-gray-500 text-sm"
+                                editable={editable}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* Navigation Dots + Arrows */}
                 <div className="flex items-center justify-center gap-4 mt-8">
@@ -99,8 +142,8 @@ export const TestimonialsSliderFamily: TemplateFamily = {
     id: 'testimonials-slider',
     category: 'testimonials',
     name: 'Testimonial Slider',
-    description: 'Single focused quote with navigation',
-    tags: ['slider', 'carousel', 'single', 'quote'],
+    description: 'Single focused quote with carousel navigation',
+    tags: ['slider', 'carousel', 'single', 'quote', 'navigation'],
     Canvas,
     controlsDef: [
         {
@@ -121,16 +164,35 @@ export const TestimonialsSliderFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'showLogo',
+            label: 'Show Logo',
+            type: 'switch',
+            defaultValue: false,
+        },
+        {
+            key: 'avatarLayout',
+            label: 'Avatar Layout',
+            type: 'toggle-group',
+            options: [
+                { value: 'stacked', label: 'Stacked' },
+                { value: 'inline', label: 'Inline' },
+            ],
+            defaultValue: 'stacked',
+        },
     ],
     defaultControls: {
         showAvatar: true,
         showRating: true,
         showArrows: true,
+        showLogo: false,
+        avatarLayout: 'stacked',
     },
     defaultContent: {
         tagline: 'Testimonials',
         quote: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.',
         name: 'Person Name',
         role: 'Job Title, Company',
+        logoIcon: 'Building2',
     },
 }

@@ -5,23 +5,43 @@
  *
  * Controls:
  * - statsPlacement: left | right
- * - itemCount: 2 | 3 | 4
  * - showImage: boolean
  */
 
+import { useState } from 'react'
 import { ImageIcon } from 'lucide-react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import {
+    DynamicListItem,
+    InsertDot,
+    insertListItem,
+    removeListItem,
+} from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
     const statsPlacement = (controls?.statsPlacement as string) ?? 'left'
-    const itemCount = Number(controls?.itemCount ?? 3)
     const showImage = controls?.showImage !== false
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+    const stats = (content?.stats as Array<{ value: string; label: string }>) || []
+    const itemCount = stats.length
 
-    const statLabels = ['Customers', 'Countries', 'Uptime', 'Team size']
-    const statValues = ['10K+', '50+', '99.9%', '120+']
+    const handleStatChange = (index: number, field: 'value' | 'label', value: string) => {
+        const updated = [...stats]
+        updated[index] = { ...updated[index], [field]: value }
+        onContentChange?.('stats', updated)
+    }
+
+    const insertItem = (index: number) => {
+        onContentChange?.('stats', insertListItem(stats, index, { value: '100+', label: 'Metric' }))
+    }
+
+    const removeItem = (index: number) => {
+        const result = removeListItem(stats, index, 1)
+        if (result) onContentChange?.('stats', result)
+    }
 
     const statsBlock = (
         <div className="space-y-6">
@@ -43,14 +63,34 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 />
             </div>
             <div className="grid grid-cols-2 gap-4">
-                {Array.from({ length: itemCount }).map((_, i) => (
-                    <div key={i} className="py-2">
-                        <div className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}>
-                            {statValues[i % statValues.length]}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-0.5">
-                            {statLabels[i % statLabels.length]}
-                        </div>
+                {stats.map((stat, i) => (
+                    <div key={i}>
+                        {editable && i === 0 && <InsertDot onInsert={() => insertItem(0)} />}
+                        <DynamicListItem
+                            index={i}
+                            selectedIndex={selectedIndex}
+                            onSelect={setSelectedIndex}
+                            onDelete={() => removeItem(i)}
+                            deletable={itemCount > 1}
+                            editable={editable}
+                        >
+                            <div className="py-2">
+                                <EditableText
+                                    value={stat.value}
+                                    onChange={(v) => handleStatChange(i, 'value', v)}
+                                    as="div"
+                                    className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}
+                                    editable={editable}
+                                />
+                                <EditableText
+                                    value={stat.label}
+                                    onChange={(v) => handleStatChange(i, 'label', v)}
+                                    className="text-sm text-gray-500 mt-0.5"
+                                    editable={editable}
+                                />
+                            </div>
+                        </DynamicListItem>
+                        {editable && <InsertDot onInsert={() => insertItem(i + 1)} />}
                     </div>
                 ))}
             </div>
@@ -63,9 +103,13 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
         </div>
     ) : (
         <div className="aspect-[4/3] bg-gray-50 border border-gray-200 rounded flex items-center justify-center">
-            <p className="text-sm text-gray-400 text-center px-6">
-                Additional context or description about the company and its achievements.
-            </p>
+            <EditableText
+                value={(content?.mediaText as string) || 'Additional context or description about the company and its achievements.'}
+                onChange={(v) => onContentChange?.('mediaText', v)}
+                className="text-sm text-gray-400 text-center px-6"
+                editable={editable}
+                multiline
+            />
         </div>
     )
 
@@ -110,17 +154,6 @@ export const StatsSplitFamily: TemplateFamily = {
             defaultValue: 'left',
         },
         {
-            key: 'itemCount',
-            label: 'Stats',
-            type: 'toggle-group',
-            options: [
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-            defaultValue: '3',
-        },
-        {
             key: 'showImage',
             label: 'Show Image',
             type: 'switch',
@@ -129,11 +162,16 @@ export const StatsSplitFamily: TemplateFamily = {
     ],
     defaultControls: {
         statsPlacement: 'left',
-        itemCount: '3',
         showImage: true,
     },
     defaultContent: {
         heading: 'Trusted by thousands',
         subheading: 'Our numbers speak for themselves.',
+        mediaText: 'Additional context or description about the company and its achievements.',
+        stats: [
+            { value: '10K+', label: 'Customers' },
+            { value: '50+', label: 'Countries' },
+            { value: '99.9%', label: 'Uptime' },
+        ],
     },
 }

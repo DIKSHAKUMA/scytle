@@ -10,11 +10,15 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const showSocial = controls?.showSocial !== false
     const showLegal = controls?.showLegal !== false
+
+    const socialIcons = (content?.socialIcons as string[]) ?? ['Globe', 'Heart', 'Camera', 'Star', 'Play']
+    const legalLinks = (content?.legalLinks as string[]) ?? ['Privacy', 'Terms', 'Cookies']
 
     return (
         <footer className={`bg-white border-t border-gray-200 ${isMobile ? 'px-4 py-6' : 'px-16 py-6'}`}>
@@ -31,12 +35,24 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                             />
                         </div>
                         <div className="text-xs text-gray-400">
-                            © 2024 <EditableText
+                            <EditableText
+                                value={(content?.copyrightPrefix as string) || '© 2024'}
+                                onChange={(v) => onContentChange?.('copyrightPrefix', v)}
+                                as="span"
+                                editable={editable}
+                            />{' '}
+                            <EditableText
                                 value={(content?.companyName as string) || 'Company'}
                                 onChange={(v) => onContentChange?.('companyName', v)}
                                 as="span"
                                 editable={editable}
-                            />. All rights reserved.
+                            />{' '}
+                            <EditableText
+                                value={(content?.copyrightSuffix as string) || '. All rights reserved.'}
+                                onChange={(v) => onContentChange?.('copyrightSuffix', v)}
+                                as="span"
+                                editable={editable}
+                            />
                         </div>
                     </div>
 
@@ -44,17 +60,36 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     <div className="flex items-center gap-6">
                         {showLegal && (
                             <div className="flex items-center gap-4">
-                                {['Privacy', 'Terms', 'Cookies'].map((link) => (
-                                    <span key={link} className="text-xs text-gray-500">{link}</span>
+                                {legalLinks.map((link, i) => (
+                                    <EditableText
+                                        key={i}
+                                        value={link}
+                                        onChange={(v) => {
+                                            const updated = [...legalLinks]
+                                            updated[i] = v
+                                            onContentChange?.('legalLinks', updated)
+                                        }}
+                                        as="span"
+                                        className="text-xs text-gray-500"
+                                        editable={editable}
+                                    />
                                 ))}
                             </div>
                         )}
                         {showSocial && (
                             <div className="flex gap-2">
-                                {['FB', 'TW', 'IG'].map((s) => (
-                                    <div key={s} className="w-5 h-5 bg-gray-100 rounded flex items-center justify-center text-[7px] text-gray-500">
-                                        {s}
-                                    </div>
+                                {socialIcons.map((icon, i) => (
+                                    <EditableIcon
+                                        key={i}
+                                        iconName={icon}
+                                        onChange={(name) => {
+                                            const updated = [...socialIcons]
+                                            updated[i] = name
+                                            onContentChange?.('socialIcons', updated)
+                                        }}
+                                        editable={editable}
+                                        size="sm"
+                                    />
                                 ))}
                             </div>
                         )}
@@ -93,5 +128,9 @@ export const FooterSimpleFamily: TemplateFamily = {
     defaultContent: {
         logo: 'Logo',
         companyName: 'Company',
+        copyrightPrefix: '© 2024',
+        copyrightSuffix: '. All rights reserved.',
+        legalLinks: ['Privacy', 'Terms', 'Cookies'],
+        socialIcons: ['Globe', 'Heart', 'Camera', 'Star', 'Play'],
     },
 }

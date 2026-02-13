@@ -4,7 +4,7 @@
  * Navbar Presets — Named snapshots of navbar family control values.
  */
 
-import { Search, ChevronDown, Menu } from 'lucide-react'
+import { Search, ChevronDown, Menu, X, Phone } from 'lucide-react'
 import type { DesignPreset } from '../types'
 
 // ===== THUMBNAILS =====
@@ -105,6 +105,111 @@ function Navbar5Thumbnail() {
     )
 }
 
+/** Navbar 6 Thumbnail: Floating pill navbar */
+function Navbar6Thumbnail() {
+    return (
+        <div className="w-full h-full bg-gray-50 flex items-start justify-center pt-1.5 px-2">
+            <div className="w-full bg-white border border-gray-200 rounded-full px-2 py-0.5 flex items-center justify-between shadow-sm">
+                <div className="font-bold text-[6px] text-gray-900">Logo</div>
+                <div className="flex items-center gap-1.5">
+                    {['Link', 'Link', 'Link'].map((l, i) => (
+                        <span key={i} className="text-[4px] text-gray-500">{l}</span>
+                    ))}
+                </div>
+                <div className="bg-gray-800 text-white text-[4px] px-1.5 py-0.5 rounded-full">CTA</div>
+            </div>
+        </div>
+    )
+}
+
+/** Navbar 7 Thumbnail: Floating pill with 2 buttons */
+function Navbar7Thumbnail() {
+    return (
+        <div className="w-full h-full bg-gray-50 flex items-start justify-center pt-1.5 px-2">
+            <div className="w-full bg-white border border-gray-200 rounded-full px-2 py-0.5 flex items-center justify-between shadow-sm">
+                <div className="font-bold text-[6px] text-gray-900">Logo</div>
+                <div className="flex items-center gap-1.5">
+                    {['Link', 'Link', 'Link'].map((l, i) => (
+                        <span key={i} className="text-[4px] text-gray-500">{l}</span>
+                    ))}
+                </div>
+                <div className="flex items-center gap-0.5">
+                    <div className="border border-gray-300 text-[4px] text-gray-700 px-1.5 py-0.5 rounded-full">Login</div>
+                    <div className="bg-gray-800 text-white text-[4px] px-1.5 py-0.5 rounded-full">Sign Up</div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Navbar 8 Thumbnail: Double-row with utility bar */
+function Navbar8Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white flex flex-col">
+            {/* Utility bar */}
+            <div className="bg-gray-50 border-b border-gray-100 px-2 py-0.5 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                    <Phone className="w-1.5 h-1.5 text-gray-400" />
+                    <span className="text-[3px] text-gray-400">+1 (555) 000</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <span className="text-[3px] text-gray-400">Login</span>
+                    <span className="text-[3px] text-gray-400">Register</span>
+                </div>
+            </div>
+            {/* Main nav */}
+            <div className="border-b border-gray-200 px-2 py-1 flex items-center justify-between">
+                <div className="font-bold text-[7px] text-gray-900">Logo</div>
+                <div className="flex items-center gap-2">
+                    {['Link', 'Link', 'Link'].map((l, i) => (
+                        <span key={i} className="text-[5px] text-gray-500">{l}</span>
+                    ))}
+                </div>
+                <div className="flex items-center gap-0.5">
+                    <div className="border border-gray-300 text-gray-700 text-[4px] px-1 py-0.5">Login</div>
+                    <div className="bg-gray-800 text-white text-[4px] px-1 py-0.5">CTA</div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Navbar 9 Thumbnail: Fullscreen overlay (grid) */
+function Navbar9Thumbnail() {
+    return (
+        <div className="w-full h-full bg-gray-900 p-1.5 flex flex-col">
+            <div className="flex items-center justify-between mb-1.5">
+                <div className="font-bold text-[6px] text-white">Logo</div>
+                <X className="w-2.5 h-2.5 text-white" />
+            </div>
+            <div className="grid grid-cols-2 gap-1 flex-1">
+                {['About', 'Services', 'Work', 'Contact'].map((item) => (
+                    <div key={item} className="text-[5px] font-medium text-white">{item}</div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/** Navbar 10 Thumbnail: Fullscreen overlay (sidebar) */
+function Navbar10Thumbnail() {
+    return (
+        <div className="w-full h-full flex">
+            <div className="w-1/2 bg-gray-800" />
+            <div className="w-1/2 bg-gray-900 p-1.5 flex flex-col">
+                <div className="flex justify-end mb-1.5">
+                    <X className="w-2.5 h-2.5 text-white" />
+                </div>
+                <div className="space-y-1 flex-1">
+                    {['About', 'Services', 'Work', 'Blog', 'Contact'].map((item) => (
+                        <div key={item} className="text-[5px] font-medium text-white">{item}</div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ===== PRESETS =====
 
 /** Navbar 1 — Standard: Logo left, links, CTA */
@@ -176,6 +281,76 @@ export const Navbar5Preset: DesignPreset = {
     Thumbnail: Navbar5Thumbnail,
 }
 
+/** Navbar 6 — Floating pill with single CTA */
+export const Navbar6Preset: DesignPreset = {
+    id: 'navbar-floating-default',
+    familyId: 'navbar-floating',
+    name: 'Navbar 6',
+    description: 'Floating pill-shaped navbar',
+    controls: {
+        buttonCount: '1',
+        showDropdown: false,
+        showSearch: false,
+    },
+    Thumbnail: Navbar6Thumbnail,
+}
+
+/** Navbar 7 — Floating pill with dual buttons */
+export const Navbar7Preset: DesignPreset = {
+    id: 'navbar-floating-dual',
+    familyId: 'navbar-floating',
+    name: 'Navbar 7',
+    description: 'Floating pill with two buttons',
+    controls: {
+        buttonCount: '2',
+        showDropdown: false,
+        showSearch: false,
+    },
+    Thumbnail: Navbar7Thumbnail,
+}
+
+/** Navbar 8 — Double-row with utility bar */
+export const Navbar8Preset: DesignPreset = {
+    id: 'navbar-double-default',
+    familyId: 'navbar-double',
+    name: 'Navbar 8',
+    description: 'Two-row navbar with utility bar',
+    controls: {
+        showSearch: true,
+        showAuth: true,
+        showUtilityLinks: true,
+    },
+    Thumbnail: Navbar8Thumbnail,
+}
+
+/** Navbar 9 — Fullscreen overlay (grid) */
+export const Navbar9Preset: DesignPreset = {
+    id: 'navbar-fullscreen-grid',
+    familyId: 'navbar-fullscreen',
+    name: 'Navbar 9',
+    description: 'Fullscreen overlay with grid links',
+    controls: {
+        menuStyle: 'grid',
+        showSocial: true,
+        showContact: false,
+    },
+    Thumbnail: Navbar9Thumbnail,
+}
+
+/** Navbar 10 — Fullscreen overlay (sidebar) */
+export const Navbar10Preset: DesignPreset = {
+    id: 'navbar-fullscreen-sidebar',
+    familyId: 'navbar-fullscreen',
+    name: 'Navbar 10',
+    description: 'Fullscreen sidebar panel overlay',
+    controls: {
+        menuStyle: 'sidebar',
+        showSocial: true,
+        showContact: true,
+    },
+    Thumbnail: Navbar10Thumbnail,
+}
+
 /** All navbar presets for registry */
 export const navbarPresets: DesignPreset[] = [
     Navbar1Preset,
@@ -183,4 +358,9 @@ export const navbarPresets: DesignPreset[] = [
     Navbar3Preset,
     Navbar4Preset,
     Navbar5Preset,
+    Navbar6Preset,
+    Navbar7Preset,
+    Navbar8Preset,
+    Navbar9Preset,
+    Navbar10Preset,
 ]

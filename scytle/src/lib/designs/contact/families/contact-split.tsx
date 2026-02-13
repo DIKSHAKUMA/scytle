@@ -5,21 +5,43 @@
  *
  * Controls:
  * - formPlacement: left | right
- * - showPhone: boolean
- * - showAddress: boolean
  */
 
+import { useState } from 'react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
+import { DynamicListItem, InsertDot, insertListItem, removeListItem } from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
     const formPlacement = (controls?.formPlacement as string) ?? 'right'
-    const showPhone = controls?.showPhone !== false
-    const showAddress = controls?.showAddress !== false
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
     const flexDir = formPlacement === 'left' ? 'flex-row-reverse' : 'flex-row'
+
+    const infoLabels = (content?.infoLabels as string[]) ?? ['Email', 'Phone', 'Address']
+    const infoValues = (content?.infoValues as string[]) ?? ['hello@example.com', '+1 (555) 000-0000', '123 Main St, City, Country']
+    const infoIcons = (content?.infoIcons as string[]) ?? ['Mail', 'Phone', 'MapPin']
+    const itemCount = infoLabels.length
+
+    const insertItem = (index: number) => {
+        onContentChange?.('infoLabels', insertListItem(infoLabels, index, 'Info'))
+        onContentChange?.('infoValues', insertListItem(infoValues, index, 'Details here'))
+        onContentChange?.('infoIcons', insertListItem(infoIcons, index, 'Info'))
+    }
+
+    const removeItem = (index: number) => {
+        const newL = removeListItem(infoLabels, index, 1)
+        const newV = removeListItem(infoValues, index, 1)
+        const newI = removeListItem(infoIcons, index, 1)
+        if (newL && newV && newI) {
+            onContentChange?.('infoLabels', newL)
+            onContentChange?.('infoValues', newV)
+            onContentChange?.('infoIcons', newI)
+        }
+    }
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
@@ -52,42 +74,57 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     </div>
 
                     <div className="space-y-4">
-                        {/* Email */}
-                        <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <div className="w-5 h-5 bg-gray-300 rounded" />
-                            </div>
-                            <div>
-                                <div className="font-medium text-gray-900 text-sm">Email</div>
-                                <div className="text-gray-500 text-sm">hello@example.com</div>
-                            </div>
-                        </div>
-
-                        {/* Phone */}
-                        {showPhone && (
-                            <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <div className="w-5 h-5 bg-gray-300 rounded" />
+                        {infoLabels.map((label, i) => (
+                            <DynamicListItem
+                                key={i}
+                                index={i}
+                                selectedIndex={selectedIndex}
+                                onSelect={setSelectedIndex}
+                                onDelete={() => removeItem(i)}
+                                deletable={itemCount > 1}
+                                editable={editable}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <EditableIcon
+                                            iconName={infoIcons[i] || 'Mail'}
+                                            onChange={(name) => {
+                                                const updated = [...infoIcons]
+                                                updated[i] = name
+                                                onContentChange?.('infoIcons', updated)
+                                            }}
+                                            editable={editable}
+                                            size="sm"
+                                        />
+                                    </div>
+                                    <div>
+                                        <EditableText
+                                            value={label}
+                                            onChange={(v) => {
+                                                const updated = [...infoLabels]
+                                                updated[i] = v
+                                                onContentChange?.('infoLabels', updated)
+                                            }}
+                                            as="div"
+                                            className="font-medium text-gray-900 text-sm"
+                                            editable={editable}
+                                        />
+                                        <EditableText
+                                            value={infoValues[i] || 'Details here'}
+                                            onChange={(v) => {
+                                                const updated = [...infoValues]
+                                                updated[i] = v
+                                                onContentChange?.('infoValues', updated)
+                                            }}
+                                            as="div"
+                                            className="text-gray-500 text-sm"
+                                            editable={editable}
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <div className="font-medium text-gray-900 text-sm">Phone</div>
-                                    <div className="text-gray-500 text-sm">+1 (555) 000-0000</div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Address */}
-                        {showAddress && (
-                            <div className="flex items-start gap-3">
-                                <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <div className="w-5 h-5 bg-gray-300 rounded" />
-                                </div>
-                                <div>
-                                    <div className="font-medium text-gray-900 text-sm">Address</div>
-                                    <div className="text-gray-500 text-sm">123 Main St, City, Country</div>
-                                </div>
-                            </div>
-                        )}
+                            </DynamicListItem>
+                        ))}
+                        {editable && <InsertDot onInsert={() => insertItem(itemCount)} />}
                     </div>
                 </div>
 
@@ -141,27 +178,16 @@ export const ContactSplitFamily: TemplateFamily = {
             ],
             defaultValue: 'right',
         },
-        {
-            key: 'showPhone',
-            label: 'Show Phone',
-            type: 'switch',
-            defaultValue: true,
-        },
-        {
-            key: 'showAddress',
-            label: 'Show Address',
-            type: 'switch',
-            defaultValue: true,
-        },
     ],
     defaultControls: {
         formPlacement: 'right',
-        showPhone: true,
-        showAddress: true,
     },
     defaultContent: {
         tagline: 'Contact',
         heading: 'Get in touch',
         subheading: 'We\'d love to hear from you. Send us a message and we\'ll respond as soon as possible.',
+        infoLabels: ['Email', 'Phone', 'Address'],
+        infoValues: ['hello@example.com', '+1 (555) 000-0000', '123 Main St, City, Country'],
+        infoIcons: ['Mail', 'Phone', 'MapPin'],
     },
 }

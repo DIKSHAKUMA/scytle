@@ -11,6 +11,7 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
@@ -19,8 +20,12 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const showNewsletter = controls?.showNewsletter === true
     const showSocial = controls?.showSocial !== false
 
-    const colNames = ['Product', 'Company', 'Resources', 'Legal', 'Support'].slice(0, columns)
-    const linkItems = ['Link One', 'Link Two', 'Link Three', 'Link Four']
+    const socialIcons = (content?.socialIcons as string[]) ?? ['Globe', 'Heart', 'Camera', 'Star', 'Play']
+
+    const columnHeaders = (content?.columnHeaders as string[]) ?? ['Product', 'Company', 'Resources', 'Legal', 'Support']
+    const colNames = columnHeaders.slice(0, columns)
+    const columnLinks = (content?.columnLinks as string[]) ?? ['Link One', 'Link Two', 'Link Three', 'Link Four']
+    const legalLinks = (content?.legalLinks as string[]) ?? ['Privacy', 'Terms', 'Cookies']
     const gridCols = isMobile ? 'grid-cols-2' : columns === 3 ? 'grid-cols-3' : columns === 5 ? 'grid-cols-5' : 'grid-cols-4'
 
     return (
@@ -48,10 +53,18 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                         />
                         {showSocial && (
                             <div className="flex gap-3 pt-2">
-                                {['FB', 'TW', 'IG', 'LI', 'YT'].map((s) => (
-                                    <div key={s} className="w-7 h-7 bg-gray-100 rounded flex items-center justify-center text-[8px] text-gray-500">
-                                        {s}
-                                    </div>
+                                {socialIcons.map((icon, i) => (
+                                    <EditableIcon
+                                        key={i}
+                                        iconName={icon}
+                                        onChange={(name) => {
+                                            const updated = [...socialIcons]
+                                            updated[i] = name
+                                            onContentChange?.('socialIcons', updated)
+                                        }}
+                                        editable={editable}
+                                        size="sm"
+                                    />
                                 ))}
                             </div>
                         )}
@@ -59,11 +72,32 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
 
                     {/* Link Columns */}
                     <div className={`flex-1 grid ${gridCols} gap-8`}>
-                        {colNames.map((col) => (
-                            <div key={col} className="space-y-3">
-                                <div className="text-sm font-semibold text-gray-900">{col}</div>
-                                {linkItems.map((item) => (
-                                    <div key={item} className="text-sm text-gray-500">{item}</div>
+                        {colNames.map((col, colIdx) => (
+                            <div key={colIdx} className="space-y-3">
+                                <EditableText
+                                    value={col}
+                                    onChange={(v) => {
+                                        const updated = [...columnHeaders]
+                                        updated[colIdx] = v
+                                        onContentChange?.('columnHeaders', updated)
+                                    }}
+                                    as="div"
+                                    className="text-sm font-semibold text-gray-900"
+                                    editable={editable}
+                                />
+                                {columnLinks.map((item, i) => (
+                                    <EditableText
+                                        key={i}
+                                        value={item}
+                                        onChange={(v) => {
+                                            const updated = [...columnLinks]
+                                            updated[i] = v
+                                            onContentChange?.('columnLinks', updated)
+                                        }}
+                                        as="div"
+                                        className="text-sm text-gray-500"
+                                        editable={editable}
+                                    />
                                 ))}
                             </div>
                         ))}
@@ -74,12 +108,30 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 {showNewsletter && (
                     <div className="border-t border-gray-200 py-8 mb-4">
                         <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-center gap-4'}`}>
-                            <div className="text-sm font-medium text-gray-900">Subscribe to our newsletter</div>
+                            <EditableText
+                                value={(content?.subscribeLabel as string) || 'Subscribe to our newsletter'}
+                                onChange={(v) => onContentChange?.('subscribeLabel', v)}
+                                as="div"
+                                className="text-sm font-medium text-gray-900"
+                                editable={editable}
+                            />
                             <div className="flex gap-2 flex-1 max-w-md">
                                 <div className="flex-1 h-9 bg-gray-100 border border-gray-200 px-3 flex items-center text-sm text-gray-400">
-                                    Enter your email
+                                    <EditableText
+                                        value={(content?.emailPlaceholder as string) || 'Enter your email'}
+                                        onChange={(v) => onContentChange?.('emailPlaceholder', v)}
+                                        as="span"
+                                        editable={editable}
+                                    />
                                 </div>
-                                <div className="bg-gray-800 text-white px-4 py-2 text-sm font-medium">Subscribe</div>
+                                <div className="bg-gray-800 text-white px-4 py-2 text-sm font-medium">
+                                    <EditableText
+                                        value={(content?.subscribeButton as string) || 'Subscribe'}
+                                        onChange={(v) => onContentChange?.('subscribeButton', v)}
+                                        as="span"
+                                        editable={editable}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -88,16 +140,39 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 {/* Bottom bar */}
                 <div className="border-t border-gray-200 pt-6 flex items-center justify-between">
                     <div className="text-xs text-gray-400">
-                        © 2024 <EditableText
+                        <EditableText
+                            value={(content?.copyrightPrefix as string) || '© 2024'}
+                            onChange={(v) => onContentChange?.('copyrightPrefix', v)}
+                            as="span"
+                            editable={editable}
+                        />{' '}
+                        <EditableText
                             value={(content?.companyName as string) || 'Company'}
                             onChange={(v) => onContentChange?.('companyName', v)}
                             as="span"
                             editable={editable}
-                        />. All rights reserved.
+                        />{' '}
+                        <EditableText
+                            value={(content?.copyrightSuffix as string) || '. All rights reserved.'}
+                            onChange={(v) => onContentChange?.('copyrightSuffix', v)}
+                            as="span"
+                            editable={editable}
+                        />
                     </div>
                     <div className="flex gap-4">
-                        {['Privacy', 'Terms', 'Cookies'].map((link) => (
-                            <span key={link} className="text-xs text-gray-500">{link}</span>
+                        {legalLinks.map((link, i) => (
+                            <EditableText
+                                key={i}
+                                value={link}
+                                onChange={(v) => {
+                                    const updated = [...legalLinks]
+                                    updated[i] = v
+                                    onContentChange?.('legalLinks', updated)
+                                }}
+                                as="span"
+                                className="text-xs text-gray-500"
+                                editable={editable}
+                            />
                         ))}
                     </div>
                 </div>
@@ -147,5 +222,14 @@ export const FooterBigFamily: TemplateFamily = {
         logo: 'Logo',
         description: 'A brief description of your company and what you do. Keep it short and sweet.',
         companyName: 'Company',
+        copyrightPrefix: '© 2024',
+        copyrightSuffix: '. All rights reserved.',
+        columnHeaders: ['Product', 'Company', 'Resources', 'Legal', 'Support'],
+        columnLinks: ['Link One', 'Link Two', 'Link Three', 'Link Four'],
+        legalLinks: ['Privacy', 'Terms', 'Cookies'],
+        subscribeLabel: 'Subscribe to our newsletter',
+        emailPlaceholder: 'Enter your email',
+        subscribeButton: 'Subscribe',
+        socialIcons: ['Globe', 'Heart', 'Camera', 'Star', 'Play'],
     },
 }

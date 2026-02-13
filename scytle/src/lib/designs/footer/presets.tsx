@@ -252,6 +252,91 @@ export const Footer6Preset: DesignPreset = {
     Thumbnail: Footer6Thumbnail,
 }
 
+// ===== NEW THUMBNAILS =====
+
+/** Footer 7 Thumbnail: Centered footer */
+function Footer7Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white border-t border-gray-200 p-1.5 flex flex-col items-center justify-center gap-1">
+            <div className="font-bold text-[6px] text-gray-900">Logo</div>
+            <div className="flex items-center gap-2">
+                {['Link', 'Link', 'Link', 'Link', 'Link'].map((l, i) => (
+                    <span key={i} className="text-[4px] text-gray-500">{l}</span>
+                ))}
+            </div>
+            <div className="flex gap-0.5">
+                {['FB', 'TW', 'IG', 'LI', 'YT'].map((s) => (
+                    <div key={s} className="w-2 h-2 bg-gray-100 rounded flex items-center justify-center text-[3px] text-gray-400">{s}</div>
+                ))}
+            </div>
+            <div className="border-t border-gray-100 w-full pt-1 text-center">
+                <div className="text-[3px] text-gray-400">© 2024 Company. All rights reserved.</div>
+            </div>
+        </div>
+    )
+}
+
+/** Footer 8 Thumbnail: Branded with giant text */
+function Footer8Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white border-t border-gray-200 p-1.5 flex flex-col justify-between">
+            <div className="flex gap-2">
+                <div className="w-1/3 space-y-0.5">
+                    <div className="font-bold text-[5px] text-gray-900">Logo</div>
+                    <div className="flex gap-0.5">
+                        <div className="w-8 h-1.5 bg-gray-100 border border-gray-200" />
+                        <div className="bg-gray-800 text-white text-[3px] px-0.5">→</div>
+                    </div>
+                </div>
+                <div className="flex-1 grid grid-cols-3 gap-1">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="space-y-0.5">
+                            <div className="text-[3px] font-semibold text-gray-800">Col</div>
+                            <div className="text-[3px] text-gray-400">Link</div>
+                            <div className="text-[3px] text-gray-400">Link</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="font-bold text-[12px] text-gray-900/10 tracking-tight text-center leading-none">Brand</div>
+            <div className="border-t border-gray-100 pt-0.5 flex justify-between">
+                <div className="text-[3px] text-gray-400">© Company</div>
+                <div className="flex gap-1">
+                    <span className="text-[3px] text-gray-400 underline">Privacy</span>
+                    <span className="text-[3px] text-gray-400 underline">Terms</span>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/** Footer 7 — Centered layout */
+export const Footer7Preset: DesignPreset = {
+    id: 'footer-centered-default',
+    familyId: 'footer-centered',
+    name: 'Footer 7',
+    description: 'Centered footer with logo, links, social',
+    controls: {
+        showLogo: true,
+        showSocial: true,
+    },
+    Thumbnail: Footer7Thumbnail,
+}
+
+/** Footer 8 — Branded with giant text */
+export const Footer8Preset: DesignPreset = {
+    id: 'footer-branded-default',
+    familyId: 'footer-branded',
+    name: 'Footer 8',
+    description: 'Branded footer with giant company name',
+    controls: {
+        showNewsletter: true,
+        showColumns: true,
+        showSocial: true,
+    },
+    Thumbnail: Footer8Thumbnail,
+}
+
 /** All footer presets for registry */
 export const footerPresets: DesignPreset[] = [
     Footer1Preset,
@@ -260,4 +345,6 @@ export const footerPresets: DesignPreset[] = [
     Footer4Preset,
     Footer5Preset,
     Footer6Preset,
+    Footer7Preset,
+    Footer8Preset,
 ]

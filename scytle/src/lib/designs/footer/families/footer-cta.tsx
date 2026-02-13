@@ -10,6 +10,7 @@
 
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import { EditableIcon } from '@/components/wireframe/editable-icon'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
@@ -17,8 +18,11 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const columns = Number(controls?.columns ?? 4)
     const showSocial = controls?.showSocial !== false
 
-    const colNames = ['Product', 'Company', 'Resources', 'Legal'].slice(0, columns)
-    const linkItems = ['Link One', 'Link Two', 'Link Three']
+    const socialIcons = (content?.socialIcons as string[]) ?? ['Globe', 'Heart', 'Camera', 'Star', 'Play']
+
+    const columnHeaders = (content?.columnHeaders as string[]) ?? ['Product', 'Company', 'Resources', 'Legal']
+    const colNames = columnHeaders.slice(0, columns)
+    const columnLinks = (content?.columnLinks as string[]) ?? ['Link One', 'Link Two', 'Link Three', 'Link Four']
     const gridCols = isMobile ? 'grid-cols-2' : columns === 3 ? 'grid-cols-3' : 'grid-cols-4'
 
     return (
@@ -43,7 +47,12 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     />
                     <div className="flex gap-2 w-full max-w-sm">
                         <div className="flex-1 h-10 bg-gray-100 border border-gray-200 px-3 flex items-center text-sm text-gray-400">
-                            Enter your email
+                            <EditableText
+                                value={(content?.emailPlaceholder as string) || 'Enter your email'}
+                                onChange={(v) => onContentChange?.('emailPlaceholder', v)}
+                                as="span"
+                                editable={editable}
+                            />
                         </div>
                         <div className="bg-gray-800 text-white px-5 py-2.5 text-sm font-medium whitespace-nowrap">
                             <EditableText
@@ -60,11 +69,32 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
             {/* Link Columns */}
             <div className={`max-w-7xl mx-auto ${isMobile ? 'py-8' : 'py-12'}`}>
                 <div className={`grid ${gridCols} gap-8 mb-8`}>
-                    {colNames.map((col) => (
-                        <div key={col} className="space-y-3">
-                            <div className="text-sm font-semibold text-gray-900">{col}</div>
-                            {linkItems.map((item) => (
-                                <div key={item} className="text-sm text-gray-500">{item}</div>
+                    {colNames.map((col, colIdx) => (
+                        <div key={colIdx} className="space-y-3">
+                            <EditableText
+                                value={col}
+                                onChange={(v) => {
+                                    const updated = [...columnHeaders]
+                                    updated[colIdx] = v
+                                    onContentChange?.('columnHeaders', updated)
+                                }}
+                                as="div"
+                                className="text-sm font-semibold text-gray-900"
+                                editable={editable}
+                            />
+                            {columnLinks.map((item, i) => (
+                                <EditableText
+                                    key={i}
+                                    value={item}
+                                    onChange={(v) => {
+                                        const updated = [...columnLinks]
+                                        updated[i] = v
+                                        onContentChange?.('columnLinks', updated)
+                                    }}
+                                    as="div"
+                                    className="text-sm text-gray-500"
+                                    editable={editable}
+                                />
                             ))}
                         </div>
                     ))}
@@ -73,19 +103,39 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                 {/* Bottom bar */}
                 <div className="border-t border-gray-200 pt-6 flex items-center justify-between">
                     <div className="text-xs text-gray-400">
-                        © 2024 <EditableText
+                        <EditableText
+                            value={(content?.copyrightPrefix as string) || '© 2024'}
+                            onChange={(v) => onContentChange?.('copyrightPrefix', v)}
+                            as="span"
+                            editable={editable}
+                        />{' '}
+                        <EditableText
                             value={(content?.companyName as string) || 'Company'}
                             onChange={(v) => onContentChange?.('companyName', v)}
                             as="span"
                             editable={editable}
-                        />. All rights reserved.
+                        />{' '}
+                        <EditableText
+                            value={(content?.copyrightSuffix as string) || '. All rights reserved.'}
+                            onChange={(v) => onContentChange?.('copyrightSuffix', v)}
+                            as="span"
+                            editable={editable}
+                        />
                     </div>
                     {showSocial && (
                         <div className="flex gap-3">
-                            {['FB', 'TW', 'IG', 'LI'].map((s) => (
-                                <div key={s} className="w-6 h-6 bg-gray-100 rounded flex items-center justify-center text-[8px] text-gray-500">
-                                    {s}
-                                </div>
+                            {socialIcons.map((icon, i) => (
+                                <EditableIcon
+                                    key={i}
+                                    iconName={icon}
+                                    onChange={(name) => {
+                                        const updated = [...socialIcons]
+                                        updated[i] = name
+                                        onContentChange?.('socialIcons', updated)
+                                    }}
+                                    editable={editable}
+                                    size="sm"
+                                />
                             ))}
                         </div>
                     )}
@@ -128,6 +178,12 @@ export const FooterCtaFamily: TemplateFamily = {
         ctaHeading: 'Stay up to date',
         ctaSubheading: 'Subscribe to our newsletter for the latest updates and news.',
         ctaButton: 'Subscribe',
+        emailPlaceholder: 'Enter your email',
         companyName: 'Company',
+        copyrightPrefix: '© 2024',
+        copyrightSuffix: '. All rights reserved.',
+        columnHeaders: ['Product', 'Company', 'Resources', 'Legal'],
+        columnLinks: ['Link One', 'Link Two', 'Link Three', 'Link Four'],
+        socialIcons: ['Globe', 'Heart', 'Camera', 'Star', 'Play'],
     },
 }

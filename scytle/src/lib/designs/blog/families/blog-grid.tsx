@@ -1,85 +1,190 @@
 'use client'
 
 /**
- * Blog Grid Family — Blog post cards in a grid.
+ * Blog Grid Family — Blog post cards in a responsive grid.
  *
  * Controls:
  * - columns: 2 | 3
- * - itemCount: 3 | 4 | 6
+ * - itemCount: 3 | 4 | 6 | 9
+ * - alignment: center | left
  * - showImage: boolean
  * - showExcerpt: boolean
+ * - showAuthor: boolean
+ * - cardBorder: boolean
+ * - metaStyle: badge | plain
+ *
+ * Editable content arrays: postTitles, postCategories, postExcerpts, postAuthors, postDates
  */
 
 import { ImageIcon } from 'lucide-react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
 
+const defaultTitles = [
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+    'Blog post title heading will go here',
+]
+
+const defaultCategories = ['Category', 'Category', 'Category', 'Category', 'Category', 'Category', 'Category', 'Category', 'Category']
+const defaultExcerpts = Array.from({ length: 9 }, () => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros.')
+const defaultAuthors = Array.from({ length: 9 }, () => 'Full name')
+const defaultDates = Array.from({ length: 9 }, () => '11 Jan 2022')
+
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
     const columns = Number(controls?.columns ?? 3)
     const itemCount = Number(controls?.itemCount ?? 3)
+    const alignment = (controls?.alignment as string) ?? 'center'
     const showImage = controls?.showImage !== false
     const showExcerpt = controls?.showExcerpt !== false
+    const showAuthor = controls?.showAuthor !== false
+    const cardBorder = controls?.cardBorder !== false
+    const metaStyle = (controls?.metaStyle as string) ?? 'badge'
+    const isCenter = alignment === 'center'
 
     const gridCols = isMobile ? 1 : isTablet ? 2 : columns
+
+    const postTitles = (content?.postTitles as string[]) ?? defaultTitles
+    const postCategories = (content?.postCategories as string[]) ?? defaultCategories
+    const postExcerpts = (content?.postExcerpts as string[]) ?? defaultExcerpts
+    const postAuthors = (content?.postAuthors as string[]) ?? defaultAuthors
+    const postDates = (content?.postDates as string[]) ?? defaultDates
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
             <div className="max-w-7xl mx-auto">
                 {/* Section Header */}
-                <div className="text-center mb-10 max-w-2xl mx-auto">
+                <div className={`mb-12 ${isCenter ? 'text-center max-w-2xl mx-auto' : 'max-w-3xl'}`}>
                     <EditableText
                         value={(content?.tagline as string) || 'Blog'}
                         onChange={(v) => onContentChange?.('tagline', v)}
                         as="p"
-                        className="text-sm text-gray-400 uppercase tracking-wide mb-2"
+                        className="text-sm text-gray-400 uppercase tracking-wide mb-3"
                         editable={editable}
                     />
                     <EditableText
-                        value={(content?.heading as string) || 'Latest articles'}
+                        value={(content?.heading as string) || 'Short heading goes here'}
                         onChange={(v) => onContentChange?.('heading', v)}
                         as="h2"
-                        className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}
+                        className={`font-bold text-gray-900 ${isMobile ? 'text-2xl' : 'text-4xl'}`}
+                        editable={editable}
+                    />
+                    <EditableText
+                        value={(content?.subheading as string) || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.'}
+                        onChange={(v) => onContentChange?.('subheading', v)}
+                        as="p"
+                        className={`text-gray-500 mt-4 ${isMobile ? 'text-sm' : 'text-base'}`}
                         editable={editable}
                     />
                 </div>
 
                 {/* Grid */}
                 <div
-                    className="grid gap-6"
+                    className="grid gap-8"
                     style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
                     {Array.from({ length: itemCount }).map((_, i) => (
-                        <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div key={i} className={`${cardBorder ? 'border border-gray-200 rounded-lg overflow-hidden' : ''}`}>
                             {showImage && (
                                 <div className="aspect-[16/9] bg-gray-100 flex items-center justify-center">
                                     <ImageIcon className="w-8 h-8 text-gray-300" />
                                 </div>
                             )}
-                            <div className="p-4">
+                            <div className={cardBorder ? 'p-5' : 'pt-4'}>
+                                {/* Meta */}
                                 <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-[10px] text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">
-                                        Category
-                                    </span>
-                                    <span className="text-[10px] text-gray-400">5 min read</span>
+                                    {metaStyle === 'badge' ? (
+                                        <EditableText
+                                            value={postCategories[i] ?? 'Category'}
+                                            onChange={(v) => { const u = [...postCategories]; u[i] = v; onContentChange?.('postCategories', u) }}
+                                            as="span"
+                                            className="text-[10px] text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full"
+                                            editable={editable}
+                                        />
+                                    ) : (
+                                        <EditableText
+                                            value={postCategories[i] ?? 'Category'}
+                                            onChange={(v) => { const u = [...postCategories]; u[i] = v; onContentChange?.('postCategories', u) }}
+                                            as="span"
+                                            className="text-[10px] font-medium text-gray-500"
+                                            editable={editable}
+                                        />
+                                    )}
+                                    <span className="text-[10px] text-gray-300">•</span>
+                                    <EditableText
+                                        value={postDates[i] ?? '11 Jan 2022'}
+                                        onChange={(v) => { const u = [...postDates]; u[i] = v; onContentChange?.('postDates', u) }}
+                                        as="span"
+                                        className="text-[10px] text-gray-400"
+                                        editable={editable}
+                                    />
                                 </div>
-                                <h3 className="font-semibold text-gray-900 text-sm">
-                                    Blog post title goes here
-                                </h3>
+
+                                {/* Title */}
+                                <EditableText
+                                    value={postTitles[i] ?? 'Blog post title heading will go here'}
+                                    onChange={(v) => { const u = [...postTitles]; u[i] = v; onContentChange?.('postTitles', u) }}
+                                    as="h3"
+                                    className="font-semibold text-gray-900 text-sm leading-snug"
+                                    editable={editable}
+                                />
+
+                                {/* Excerpt */}
                                 {showExcerpt && (
-                                    <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
-                                        Short excerpt from the blog post that gives readers a preview of the content.
-                                    </p>
+                                    <EditableText
+                                        value={postExcerpts[i] ?? 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.'}
+                                        onChange={(v) => { const u = [...postExcerpts]; u[i] = v; onContentChange?.('postExcerpts', u) }}
+                                        as="p"
+                                        className="text-xs text-gray-500 mt-2 line-clamp-2"
+                                        editable={editable}
+                                        multiline
+                                    />
                                 )}
-                                <div className="flex items-center gap-2 mt-3">
-                                    <div className="w-6 h-6 rounded-full bg-gray-200" />
-                                    <span className="text-[10px] text-gray-500">Author Name</span>
-                                    <span className="text-[10px] text-gray-400 ml-auto">Jan 1, 2025</span>
-                                </div>
+
+                                {/* Author */}
+                                {showAuthor && (
+                                    <div className="flex items-center gap-2 mt-4">
+                                        <div className="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0" />
+                                        <div>
+                                            <EditableText
+                                                value={postAuthors[i] ?? 'Full name'}
+                                                onChange={(v) => { const u = [...postAuthors]; u[i] = v; onContentChange?.('postAuthors', u) }}
+                                                as="span"
+                                                className="text-xs font-medium text-gray-700 block"
+                                                editable={editable}
+                                            />
+                                            <EditableText
+                                                value={postDates[i] ?? '11 Jan 2022'}
+                                                onChange={(v) => { const u = [...postDates]; u[i] = v; onContentChange?.('postDates', u) }}
+                                                as="span"
+                                                className="text-[10px] text-gray-400 block"
+                                                editable={editable}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
+                </div>
+
+                {/* View All Button */}
+                <div className={`mt-12 ${isCenter ? 'text-center' : ''}`}>
+                    <EditableText
+                        value={(content?.ctaButton as string) || 'View all'}
+                        onChange={(v) => onContentChange?.('ctaButton', v)}
+                        as="span"
+                        className="inline-block border border-gray-900 text-gray-900 px-5 py-2.5 text-sm font-medium"
+                        editable={editable}
+                    />
                 </div>
             </div>
         </section>
@@ -90,8 +195,8 @@ export const BlogGridFamily: TemplateFamily = {
     id: 'blog-grid',
     category: 'blog',
     name: 'Blog Grid',
-    description: 'Blog post cards in a grid layout',
-    tags: ['blog', 'grid', 'articles', 'posts'],
+    description: 'Blog post cards in a responsive grid layout',
+    tags: ['blog', 'grid', 'articles', 'posts', 'cards'],
     hasImage: true,
     Canvas,
     controlsDef: [
@@ -113,8 +218,19 @@ export const BlogGridFamily: TemplateFamily = {
                 { value: '3', label: '3' },
                 { value: '4', label: '4' },
                 { value: '6', label: '6' },
+                { value: '9', label: '9' },
             ],
             defaultValue: '3',
+        },
+        {
+            key: 'alignment',
+            label: 'Alignment',
+            type: 'toggle-group',
+            options: [
+                { value: 'center', label: 'Center' },
+                { value: 'left', label: 'Left' },
+            ],
+            defaultValue: 'center',
         },
         {
             key: 'showImage',
@@ -128,15 +244,43 @@ export const BlogGridFamily: TemplateFamily = {
             type: 'switch',
             defaultValue: true,
         },
+        {
+            key: 'showAuthor',
+            label: 'Show Author',
+            type: 'switch',
+            defaultValue: true,
+        },
+        {
+            key: 'cardBorder',
+            label: 'Card Border',
+            type: 'switch',
+            defaultValue: false,
+        },
+        {
+            key: 'metaStyle',
+            label: 'Meta Style',
+            type: 'toggle-group',
+            options: [
+                { value: 'badge', label: 'Badge' },
+                { value: 'plain', label: 'Plain' },
+            ],
+            defaultValue: 'badge',
+        },
     ],
     defaultControls: {
         columns: '3',
         itemCount: '3',
+        alignment: 'center',
         showImage: true,
         showExcerpt: true,
+        showAuthor: true,
+        cardBorder: false,
+        metaStyle: 'badge',
     },
     defaultContent: {
         tagline: 'Blog',
-        heading: 'Latest articles',
+        heading: 'Short heading goes here',
+        subheading: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+        ctaButton: 'View all',
     },
 }

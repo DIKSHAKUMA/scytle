@@ -7,6 +7,8 @@ export { FooterColumnsFamily } from './families/footer-columns'
 export { FooterSimpleFamily } from './families/footer-simple'
 export { FooterCtaFamily } from './families/footer-cta'
 export { FooterBigFamily } from './families/footer-big'
+export { FooterCenteredFamily } from './families/footer-centered'
+export { FooterBrandedFamily } from './families/footer-branded'
 
 // Presets
 export {
@@ -17,6 +19,8 @@ export {
     Footer4Preset,
     Footer5Preset,
     Footer6Preset,
+    Footer7Preset,
+    Footer8Preset,
 } from './presets'
 
 // Aggregate exports for registry
@@ -24,6 +28,8 @@ import { FooterColumnsFamily } from './families/footer-columns'
 import { FooterSimpleFamily } from './families/footer-simple'
 import { FooterCtaFamily } from './families/footer-cta'
 import { FooterBigFamily } from './families/footer-big'
+import { FooterCenteredFamily } from './families/footer-centered'
+import { FooterBrandedFamily } from './families/footer-branded'
 import type { TemplateFamily } from '../types'
 
 export const footerFamilies: TemplateFamily[] = [
@@ -31,6 +37,8 @@ export const footerFamilies: TemplateFamily[] = [
     FooterSimpleFamily,
     FooterCtaFamily,
     FooterBigFamily,
+    FooterCenteredFamily,
+    FooterBrandedFamily,
 ]
 
 export { footerPresets as footerPresetsArray } from './presets'

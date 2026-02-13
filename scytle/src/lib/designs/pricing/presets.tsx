@@ -219,6 +219,158 @@ export const Pricing5Preset: DesignPreset = {
     Thumbnail: Pricing5Thumbnail,
 }
 
+// ===== NEW THUMBNAILS =====
+
+/** Pricing 6 Thumbnail: Split layout */
+function Pricing6Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex gap-2">
+            {/* Left: heading + features */}
+            <div className="w-1/2 space-y-1">
+                <div className="text-[3px] text-gray-400 uppercase">Tagline</div>
+                <div className="text-[7px] font-semibold text-gray-800">Pricing plan</div>
+                <div className="text-[3px] text-gray-500 leading-tight">Lorem ipsum dolor sit amet, consectetur adipiscing elit.</div>
+                <div className="space-y-0.5 pt-0.5">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-start gap-0.5">
+                            <div className="w-2 h-2 bg-gray-100 rounded flex-shrink-0 mt-px" />
+                            <div>
+                                <div className="text-[3px] font-medium text-gray-700">Feature heading</div>
+                                <div className="text-[2.5px] text-gray-400">Description text</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            {/* Right: card */}
+            <div className="w-1/2 border border-gray-200 rounded p-1.5 flex flex-col">
+                <div className="flex justify-between mb-0.5">
+                    <div className="text-[4px] font-medium text-gray-700">Basic plan</div>
+                    <div className="text-[6px] font-bold text-gray-900">$19</div>
+                </div>
+                <div className="border-t border-gray-100 my-0.5" />
+                <div className="space-y-0.5 flex-1">
+                    {Array.from({ length: 5 }).map((_, f) => (
+                        <div key={f} className="flex items-center gap-0.5">
+                            <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                            <div className="text-[3px] text-gray-500">Feature</div>
+                        </div>
+                    ))}
+                </div>
+                <div className="bg-gray-800 text-white text-center text-[3.5px] py-0.5 mt-0.5">Get started</div>
+            </div>
+        </div>
+    )
+}
+
+/** Pricing 7 Thumbnail: Left-header 3 cards */
+function Pricing7Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col">
+            <div className="flex items-end justify-between mb-1">
+                <div>
+                    <div className="text-[3px] text-gray-400 uppercase">Tagline</div>
+                    <div className="text-[7px] font-semibold text-gray-800">Pricing plan</div>
+                </div>
+                <div className="flex items-center gap-0.5">
+                    <div className="text-[3px] text-gray-600">Mo</div>
+                    <div className="w-3 h-1.5 bg-gray-800 rounded-full" />
+                    <div className="text-[3px] text-gray-400">Yr</div>
+                </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1 flex-1">
+                {['$9', '$29', '$49'].map((price, i) => (
+                    <div key={i} className={`border rounded p-1 flex flex-col ${i === 1 ? 'border-gray-800' : 'border-gray-200'}`}>
+                        <div className="text-[3px] font-medium text-gray-600 mb-0.5">{['Basic', 'Pro', 'Biz'][i]}</div>
+                        <div className="text-[6px] font-bold text-gray-900 mb-0.5">{price}</div>
+                        <div className="bg-gray-800 text-white text-center text-[3px] py-0.5 mb-0.5">Start</div>
+                        <div className="space-y-0.5">
+                            {Array.from({ length: 3 }).map((_, f) => (
+                                <div key={f} className="flex items-center gap-0.5">
+                                    <div className="w-0.5 h-0.5 bg-gray-300 rounded-full" />
+                                    <div className="text-[2.5px] text-gray-500">Feature</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/** Pricing 8 Thumbnail: Left-header 2 cards no toggle */
+function Pricing8Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-2 flex flex-col">
+            <div className="mb-1">
+                <div className="text-[3px] text-gray-400 uppercase">Tagline</div>
+                <div className="text-[7px] font-semibold text-gray-800">Pricing plan</div>
+                <div className="text-[3px] text-gray-500">Lorem ipsum dolor sit amet.</div>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 flex-1">
+                {['$19', '$49'].map((price, i) => (
+                    <div key={i} className={`border rounded p-1.5 flex flex-col ${i === 1 ? 'border-gray-800' : 'border-gray-200'}`}>
+                        <div className="text-[4px] font-medium text-gray-600 mb-0.5">{['Basic', 'Pro'][i]}</div>
+                        <div className="text-[8px] font-bold text-gray-900 mb-0.5">{price}</div>
+                        <div className="bg-gray-800 text-white text-center text-[3.5px] py-0.5 mb-1">Start</div>
+                        <div className="space-y-0.5 flex-1">
+                            {Array.from({ length: 4 }).map((_, f) => (
+                                <div key={f} className="flex items-center gap-0.5">
+                                    <div className="w-1 h-1 bg-gray-300 rounded-full" />
+                                    <div className="text-[3px] text-gray-500">Feature</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/** Pricing 6 — Split layout */
+export const Pricing6Preset: DesignPreset = {
+    id: 'pricing-split-default',
+    familyId: 'pricing-split',
+    name: 'Pricing 6',
+    description: 'Split layout: features left, card right',
+    controls: {
+        showFeatures: true,
+        showIcon: true,
+        showLogos: false,
+    },
+    Thumbnail: Pricing6Thumbnail,
+}
+
+/** Pricing 7 — Left-header 3 cards with toggle */
+export const Pricing7Preset: DesignPreset = {
+    id: 'pricing-left-header-3tier',
+    familyId: 'pricing-left-header',
+    name: 'Pricing 7',
+    description: 'Left-aligned header, 3 cards, toggle',
+    controls: {
+        planCount: 3,
+        showToggle: true,
+        showDescription: false,
+    },
+    Thumbnail: Pricing7Thumbnail,
+}
+
+/** Pricing 8 — Left-header 2 cards */
+export const Pricing8Preset: DesignPreset = {
+    id: 'pricing-left-header-2tier',
+    familyId: 'pricing-left-header',
+    name: 'Pricing 8',
+    description: 'Left-aligned header, 2 cards, description',
+    controls: {
+        planCount: 2,
+        showToggle: false,
+        showDescription: true,
+    },
+    Thumbnail: Pricing8Thumbnail,
+}
+
 /** All Pricing presets for registry */
 export const pricingPresets: DesignPreset[] = [
     Pricing1Preset,
@@ -226,4 +378,7 @@ export const pricingPresets: DesignPreset[] = [
     Pricing3Preset,
     Pricing4Preset,
     Pricing5Preset,
+    Pricing6Preset,
+    Pricing7Preset,
+    Pricing8Preset,
 ]

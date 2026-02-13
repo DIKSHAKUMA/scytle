@@ -168,6 +168,27 @@ Every category follows this exact 6-step pipeline:
 | logos | 3 | 4 | row, grid, marquee |
 | **Total** | **54** | **91** | |
 
+### Updated Inventory (After Phase 2)
+
+| Category | Families | Presets | Notes |
+|----------|----------|--------|-------|
+| hero | 7 | 15 | split, centered, image-bg, video, **minimal, form, card** |
+| features | 4 | 8 | grid, list, alternating, numbered |
+| content | 11 | 22 | text, split, cards, feature-list, steps, tabs, image-overlay, comparison, split-features, video, centered-feature |
+| cta | 3 | 5 | banner, minimal, split |
+| navbar | 3 | 5 | standard, centered, mega |
+| footer | 4 | 6 | simple, columns, big, cta |
+| testimonials | 3 | 5 | simple, cards, slider |
+| pricing | 2 | 5 | cards, comparison |
+| faq | 2 | 4 | accordion, two-column |
+| contact | 3 | 5 | simple, split, map |
+| gallery | 3 | 4 | grid, masonry, carousel |
+| team | 3 | 4 | simple, cards, grid |
+| blog | 3 | 5 | grid, list, featured |
+| stats | 3 | 4 | row, cards, split |
+| logos | 3 | 4 | row, grid, marquee |
+| **Total** | **55** | **107** | |
+
 ---
 
 ## Phase Plan
@@ -234,26 +255,27 @@ Built 2 reusable components for Relume-like interactivity:
 
 | Family | New Controls | Covers | Status |
 |--------|-------------|--------|--------|
-| `hero-centered` | `textAlign: left\|center`, `maxWidth: narrow\|wide` | +~8 | ☐ |
-| `hero-split` | `showTagline`, image position already exists | +~4 | ☐ |
-| `hero-image-bg` | `overlayOpacity: slider`, `textAlign: left\|center\|right` | +~3 | ☐ |
+| `hero-centered` | `textAlign: left\|center\|right`, `showTagline`, `showImage`, `buttonCount` | +~8 | ✅ |
+| `hero-split` | `showTagline`, `imageAspect: square\|landscape\|portrait`, `textAlign` | +~4 | ✅ |
+| `hero-image-bg` | `overlayOpacity: slider`, `textAlign: left\|center\|right`, `showTagline` | +~3 | ✅ |
 | `hero-video` | (adequate for now) | — | ✅ |
 
 #### 2B. New Families
 
 | Family | Archetype | Relume Coverage | Status |
 |--------|-----------|-----------------|--------|
-| `hero-minimal` | Two-column text-only split | ~8 variants (Headers 49, 56-57, 60-61) | ☐ |
-| `hero-form` | Hero with signup/email form | ~5 variants (Headers 48, 58-59) | ☐ |
+| `hero-minimal` | Two-column text-only split | ~8 variants (Headers 49, 56-57, 60-61) | ✅ |
+| `hero-form` | Hero with signup/email form | ~5 variants (Headers 48, 58-59) | ✅ |
+| `hero-card` | Hero with card overlay (BONUS) | ~4 variants | ✅ |
 
 #### 2C. Presets
-- ~8 new presets (3 per new family + 2 for upgraded)
+- 10 new presets created (Header 6 through Header 15)
 
 #### Phase 2 Deliverables
-- [ ] 3 existing hero families upgraded
-- [ ] 2 new hero families built
-- [ ] ~8 new presets
-- [ ] Build passing
+- [x] 3 existing hero families upgraded
+- [x] 3 new hero families built (2 planned + 1 bonus hero-card)
+- [x] 10 new presets (15 total, up from 5)
+- [x] Build passing
 
 ---
 
@@ -519,7 +541,7 @@ Built 2 reusable components for Relume-like interactivity:
 | Phase | Category | New Families | Control Upgrades | New Presets | Est. Time |
 |-------|----------|-------------|-----------------|------------|-----------|
 | **1** | Layout/Content/Features | 9 ✅ | 6 ✅ | 30 ✅ | 2 weeks ✅ |
-| **2** | Hero/Header | 2 | 3 | ~8 | 1 week |
+| **2** | Hero/Header | 3 ✅ | 3 ✅ | 10 ✅ | 1 week ✅ |
 | **3** | Navbar | 2 | 3 | ~8 | 1 week |
 | **4** | CTA | 3 | 3 | ~10 | 1 week |
 | **5** | Footer | 2 | 4 | ~8 | 1 week |
@@ -534,8 +556,8 @@ Built 2 reusable components for Relume-like interactivity:
 | | **TOTAL** | **~35 new** | **~44 upgrades** | **~121 new** | **~10 weeks** |
 
 ### Final Target
-- **Families**: 54 current (45 + 9 from Phase 1) + ~26 remaining = **80 families**
-- **Presets**: 91 current (71 + 20 from Phase 1) + ~101 remaining = **192 presets**
+- **Families**: 55 current (45 + 9 Phase 1 + 3 Phase 2 — includes bonus hero-card) + ~25 remaining = **80 families**
+- **Presets**: 107 current (71 + 20 Phase 1 + 10 Phase 2 + 6 extra) + ~85 remaining = **192 presets**
 - **Effective visual variants** (via controls): **800–1,000+**
 - **Relume equivalent coverage**: ~75%+ of their ~1,500 components
 
@@ -636,3 +658,14 @@ export const {Name}Preset: DesignPreset = {
 - [x] **1D** — EditableIcon + DynamicList infrastructure
 - [x] **1E** — Registration in index.ts + registry.ts
 - [x] **1F** — `npm run build` passing
+
+### Phase 2: Hero / Header ✅ COMPLETE
+- [x] **2A** — `hero-centered` control expansion (+textAlign, +showTagline, +showImage, +buttonCount)
+- [x] **2A** — `hero-split` control expansion (+showTagline, +imageAspect, +textAlign)
+- [x] **2A** — `hero-image-bg` control expansion (+overlayOpacity slider, +textAlign, +showTagline)
+- [x] **2B** — `hero-minimal` family (NEW — two-column text-only)
+- [x] **2B** — `hero-form` family (NEW — hero with email/signup form)
+- [x] **2B** — `hero-card` family (NEW BONUS — hero with card overlay)
+- [x] **2C** — 15 hero presets (Header 1–15)
+- [x] **2D** — Registration in index.ts + registry.ts
+- [x] **2E** — `npm run build` passing

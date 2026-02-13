@@ -1,28 +1,48 @@
 'use client'
 
 /**
- * Stats Cards Family — Stat numbers in card boxes.
+ * Stats Cards Family — Stat numbers in card boxes with editable values.
  *
  * Controls:
  * - columns: 2 | 3 | 4
- * - itemCount: 3 | 4 | 6
  * - showIcon: boolean
  */
 
+import { useState } from 'react'
 import type { TemplateFamily, CanvasProps } from '../../types'
 import { EditableText } from '@/components/wireframe/editable-text'
+import {
+    DynamicListItem,
+    InsertDot,
+    insertListItem,
+    removeListItem,
+} from '@/components/wireframe/dynamic-list'
 
 function Canvas({ content, controls, viewport, onContentChange, editable }: CanvasProps) {
     const isMobile = viewport === 'mobile'
     const isTablet = viewport === 'tablet'
     const columns = Number(controls?.columns ?? 3)
-    const itemCount = Number(controls?.itemCount ?? 3)
     const showIcon = controls?.showIcon === true
+    const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+    const stats = (content?.stats as Array<{ value: string; label: string }>) || []
+    const itemCount = stats.length
 
     const gridCols = isMobile ? 2 : isTablet ? Math.min(columns, 3) : columns
 
-    const statLabels = ['Active Users', 'Countries Served', 'Revenue Generated', 'Team Members', 'Projects Done', 'Satisfaction']
-    const statValues = ['10,000+', '50+', '$2M+', '120+', '500+', '99%']
+    const handleStatChange = (index: number, field: 'value' | 'label', value: string) => {
+        const updated = [...stats]
+        updated[index] = { ...updated[index], [field]: value }
+        onContentChange?.('stats', updated)
+    }
+
+    const insertItem = (index: number) => {
+        onContentChange?.('stats', insertListItem(stats, index, { value: '100+', label: 'Metric' }))
+    }
+
+    const removeItem = (index: number) => {
+        const result = removeListItem(stats, index, 1)
+        if (result) onContentChange?.('stats', result)
+    }
 
     return (
         <section className={`${isMobile ? 'py-12 px-4' : isTablet ? 'py-16 px-8' : 'py-20 px-16'}`}>
@@ -51,22 +71,39 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     className="grid gap-4"
                     style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
                 >
-                    {Array.from({ length: itemCount }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="border border-gray-200 rounded-lg p-6 text-center"
-                        >
-                            {showIcon && (
-                                <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg mx-auto mb-3 flex items-center justify-center text-gray-400 text-xs">
-                                    #
+                    {stats.map((stat, i) => (
+                        <div key={i}>
+                            {editable && i === 0 && <InsertDot onInsert={() => insertItem(0)} />}
+                            <DynamicListItem
+                                index={i}
+                                selectedIndex={selectedIndex}
+                                onSelect={setSelectedIndex}
+                                onDelete={() => removeItem(i)}
+                                deletable={itemCount > 1}
+                                editable={editable}
+                            >
+                                <div className="border border-gray-200 rounded-lg p-6 text-center">
+                                    {showIcon && (
+                                        <div className="w-10 h-10 bg-gray-100 border border-gray-200 rounded-lg mx-auto mb-3 flex items-center justify-center text-gray-400 text-xs">
+                                            #
+                                        </div>
+                                    )}
+                                    <EditableText
+                                        value={stat.value}
+                                        onChange={(v) => handleStatChange(i, 'value', v)}
+                                        as="div"
+                                        className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}
+                                        editable={editable}
+                                    />
+                                    <EditableText
+                                        value={stat.label}
+                                        onChange={(v) => handleStatChange(i, 'label', v)}
+                                        className="text-sm text-gray-500 mt-1"
+                                        editable={editable}
+                                    />
                                 </div>
-                            )}
-                            <div className={`font-bold text-gray-900 ${isMobile ? 'text-xl' : 'text-3xl'}`}>
-                                {statValues[i % statValues.length]}
-                            </div>
-                            <div className="text-sm text-gray-500 mt-1">
-                                {statLabels[i % statLabels.length]}
-                            </div>
+                            </DynamicListItem>
+                            {editable && <InsertDot onInsert={() => insertItem(i + 1)} />}
                         </div>
                     ))}
                 </div>
@@ -95,17 +132,6 @@ export const StatsCardsFamily: TemplateFamily = {
             defaultValue: '3',
         },
         {
-            key: 'itemCount',
-            label: 'Stats',
-            type: 'toggle-group',
-            options: [
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-                { value: '6', label: '6' },
-            ],
-            defaultValue: '3',
-        },
-        {
             key: 'showIcon',
             label: 'Show Icon',
             type: 'switch',
@@ -114,11 +140,15 @@ export const StatsCardsFamily: TemplateFamily = {
     ],
     defaultControls: {
         columns: '3',
-        itemCount: '3',
         showIcon: false,
     },
     defaultContent: {
         heading: 'By the numbers',
         subheading: 'Key metrics that showcase our impact.',
+        stats: [
+            { value: '10,000+', label: 'Active Users' },
+            { value: '50+', label: 'Countries Served' },
+            { value: '$2M+', label: 'Revenue Generated' },
+        ],
     },
 }

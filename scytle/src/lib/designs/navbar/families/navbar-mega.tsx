@@ -19,12 +19,11 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const showCta = controls?.showCta !== false
     const megaColumns = Number(controls?.megaColumns ?? 3)
 
-    const links = [
-        { label: 'Products', hasMega: true },
-        { label: 'Solutions', hasMega: true },
-        { label: 'Resources', hasMega: false },
-        { label: 'Pricing', hasMega: false },
-    ]
+    const navLinks = (content?.navLinks as string[]) ?? ['Products', 'Solutions', 'Resources', 'Pricing']
+    const hasMegaFlags = [true, true, false, false]
+    const megaCategories = (content?.megaCategories as string[]) ?? ['Category 1', 'Category 2', 'Category 3', 'Category 4']
+    const megaItems = (content?.megaItems as string[]) ?? ['Item One', 'Item Two', 'Item Three']
+    const megaDescription = (content?.megaDescription as string) ?? 'Short description'
 
     if (isMobile) {
         return (
@@ -71,10 +70,19 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                                 />
                             </div>
                         )}
-                        {links.map((link) => (
-                            <span key={link.label} className="text-sm text-gray-600 whitespace-nowrap flex items-center gap-1">
-                                {link.label}
-                                {link.hasMega && <ChevronDown className="w-3 h-3" />}
+                        {navLinks.map((link, i) => (
+                            <span key={i} className="text-sm text-gray-600 whitespace-nowrap flex items-center gap-1">
+                                <EditableText
+                                    value={link}
+                                    onChange={(v) => {
+                                        const updated = [...navLinks]
+                                        updated[i] = v
+                                        onContentChange?.('navLinks', updated)
+                                    }}
+                                    as="span"
+                                    editable={editable}
+                                />
+                                {hasMegaFlags[i] && <ChevronDown className="w-3 h-3" />}
                             </span>
                         ))}
                     </div>
@@ -98,12 +106,39 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                     {Array.from({ length: megaColumns }, (_, i) => (
                         <div key={i} className="space-y-3">
                             <div className="text-xs font-semibold text-gray-400 uppercase">
-                                Category {i + 1}
+                                <EditableText
+                                    value={megaCategories[i] ?? `Category ${i + 1}`}
+                                    onChange={(v) => {
+                                        const updated = [...megaCategories]
+                                        updated[i] = v
+                                        onContentChange?.('megaCategories', updated)
+                                    }}
+                                    as="span"
+                                    editable={editable}
+                                />
                             </div>
-                            {['Item One', 'Item Two', 'Item Three'].map((item) => (
-                                <div key={item} className="space-y-0.5">
-                                    <div className="text-sm font-medium text-gray-800">{item}</div>
-                                    <div className="text-xs text-gray-500">Short description</div>
+                            {megaItems.map((item, j) => (
+                                <div key={j} className="space-y-0.5">
+                                    <div className="text-sm font-medium text-gray-800">
+                                        <EditableText
+                                            value={item}
+                                            onChange={(v) => {
+                                                const updated = [...megaItems]
+                                                updated[j] = v
+                                                onContentChange?.('megaItems', updated)
+                                            }}
+                                            as="span"
+                                            editable={editable}
+                                        />
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        <EditableText
+                                            value={megaDescription}
+                                            onChange={(v) => onContentChange?.('megaDescription', v)}
+                                            as="span"
+                                            editable={editable}
+                                        />
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -158,5 +193,9 @@ export const NavbarMegaFamily: TemplateFamily = {
     defaultContent: {
         logo: 'Logo',
         ctaText: 'Get Started',
+        navLinks: ['Products', 'Solutions', 'Resources', 'Pricing'],
+        megaCategories: ['Category 1', 'Category 2', 'Category 3', 'Category 4'],
+        megaItems: ['Item One', 'Item Two', 'Item Three'],
+        megaDescription: 'Short description',
     },
 }

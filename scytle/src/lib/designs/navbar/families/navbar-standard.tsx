@@ -19,7 +19,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const showCta = controls?.showCta !== false
     const showSearch = controls?.showSearch === true
 
-    const links = ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five']
+    const navLinks = (content?.navLinks as string[]) ?? ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five']
 
     if (isMobile) {
         return (
@@ -64,9 +64,18 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
                             />
                         </div>
                     )}
-                    {links.map((link) => (
-                        <span key={link} className="text-sm text-gray-600 whitespace-nowrap">
-                            {link}
+                    {navLinks.map((link, i) => (
+                        <span key={i} className="text-sm text-gray-600 whitespace-nowrap">
+                            <EditableText
+                                value={link}
+                                onChange={(v) => {
+                                    const updated = [...navLinks]
+                                    updated[i] = v
+                                    onContentChange?.('navLinks', updated)
+                                }}
+                                as="span"
+                                editable={editable}
+                            />
                         </span>
                     ))}
                 </div>
@@ -129,5 +138,6 @@ export const NavbarStandardFamily: TemplateFamily = {
     defaultContent: {
         logo: 'Logo',
         ctaText: 'Sign Up',
+        navLinks: ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five'],
     },
 }

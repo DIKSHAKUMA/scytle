@@ -17,7 +17,7 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
     const showCta = controls?.showCta !== false
     const showSearch = controls?.showSearch === true
 
-    const links = ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five']
+    const navLinks = (content?.navLinks as string[]) ?? ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five']
 
     if (isMobile) {
         return (
@@ -52,9 +52,18 @@ function Canvas({ content, controls, viewport, onContentChange, editable }: Canv
             {/* Bottom row: Links centered */}
             <div className="max-w-7xl mx-auto px-6 py-2 flex items-center justify-center gap-6">
                 {showSearch && <Search className="w-4 h-4 text-gray-500 mr-4" />}
-                {links.map((link) => (
-                    <span key={link} className="text-sm text-gray-600 whitespace-nowrap">
-                        {link}
+                {navLinks.map((link, i) => (
+                    <span key={i} className="text-sm text-gray-600 whitespace-nowrap">
+                        <EditableText
+                            value={link}
+                            onChange={(v) => {
+                                const updated = [...navLinks]
+                                updated[i] = v
+                                onContentChange?.('navLinks', updated)
+                            }}
+                            as="span"
+                            editable={editable}
+                        />
                     </span>
                 ))}
                 {showCta && (
@@ -100,5 +109,6 @@ export const NavbarCenteredFamily: TemplateFamily = {
     defaultContent: {
         logo: 'Logo',
         ctaText: 'Sign Up',
+        navLinks: ['Link One', 'Link Two', 'Link Three', 'Link Four', 'Link Five'],
     },
 }
