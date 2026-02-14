@@ -6,6 +6,37 @@ import { z } from 'zod'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+/** Infer page context from name/slug (server-side copy of store helper) */
+function inferPageContext(name: string, slug: string): 'marketing' | 'application' | 'auth' {
+    const s = `${name} ${slug}`.toLowerCase()
+    const appPatterns = ['/dashboard', '/app/', '/admin', '/settings', '/analytics', '/projects', '/orders', '/account', '/billing', '/reports', '/users', '/team-manage', '/inbox', '/notifications']
+    if (appPatterns.some(p => s.includes(p))) return 'application'
+    const authPatterns = ['/login', '/signup', '/register', '/forgot', '/reset', '/verify', '/onboard', 'sign in', 'sign up', 'log in']
+    if (authPatterns.some(p => s.includes(p))) return 'auth'
+    return 'marketing'
+}
+
+/** Map context to layout */
+function inferPageLayout(context: 'marketing' | 'application' | 'auth'): 'stacked' | 'app-shell' | 'centered' {
+    if (context === 'application') return 'app-shell'
+    if (context === 'auth') return 'centered'
+    return 'stacked'
+}
+
+/** Recursively backfill context/layout on sitemap nodes if AI omitted them */
+function backfillContext(nodes: SitemapNode[]): SitemapNode[] {
+    return nodes.map(node => {
+        const context = node.context || inferPageContext(node.label, node.slug)
+        const layout = node.layout || inferPageLayout(context)
+        return {
+            ...node,
+            context,
+            layout,
+            children: node.children ? backfillContext(node.children) : undefined,
+        }
+    })
+}
+
 // Input validation schema
 const GenerateSitemapSchema = z.object({
     projectId: z.string().optional(),
@@ -34,6 +65,8 @@ interface SitemapNode {
     id: string
     label: string
     slug: string
+    context?: 'marketing' | 'application' | 'auth'
+    layout?: 'stacked' | 'app-shell' | 'centered'
     sections: SectionData[]
     children?: SitemapNode[]
 }
@@ -50,6 +83,8 @@ const SitemapNodeSchema: z.ZodType<SitemapNode> = z.object({
     id: z.string(),
     label: z.string(),
     slug: z.string(),
+    context: z.enum(['marketing', 'application', 'auth']).optional(),
+    layout: z.enum(['stacked', 'app-shell', 'centered']).optional(),
     sections: z.array(SectionSchema),
     children: z.lazy(() => z.array(SitemapNodeSchema)).optional(),
 })
@@ -151,35 +186,66 @@ YOUR APPROACH:
    - What are the major competitors in this space? (Use your training knowledge)
    - What's the typical end-to-end user journey for this type of product?
 
-2. Then, GENERATE a sitemap that reflects industry best practices:
+2. CLASSIFY the product type to decide which page contexts to generate:
+   - **SaaS / Web App** → generate marketing + application + auth pages
+   - **Static site / Portfolio / Agency / Restaurant** → marketing pages only
+   - **E-commerce** → marketing + application pages (cart, orders, account)
+   - **Marketplace** → marketing + application pages (seller dashboard, buyer dashboard)
+
+3. Then, GENERATE a sitemap that reflects industry best practices:
    - Include all pages that competitors typically have
    - Use section names that are SPECIFIC to this industry
-   - Think about what users expect when visiting this type of website
+   - Think about what users expect when visiting this type of product
+
+PAGE CONTEXT SYSTEM:
+Every page MUST include a "context" and "layout" field:
+
+| Context       | Layout      | When to use                                    |
+|---------------|-------------|------------------------------------------------|
+| "marketing"   | "stacked"   | Public-facing pages: Home, Features, Pricing, About, Blog, Contact |
+| "application" | "app-shell" | Logged-in app pages: Dashboard, Settings, Projects, Analytics, Orders |
+| "auth"        | "centered"  | Authentication pages: Login, Signup, Forgot Password, Verify Email |
+
+CRITICAL SECTION RULES BY CONTEXT:
+- **marketing** pages: Start with "Navbar" section, end with "Footer" section. Use marketing sections: hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog.
+- **application** pages: Do NOT include Navbar or Footer sections (the app shell provides built-in chrome). Use app sections: dashboard widgets, data tables, charts, forms, lists, page headers, empty states. Name sections specifically: "Stats Overview", "Revenue Chart", "Recent Orders Table", "Activity Feed", "User Settings Form".
+- **auth** pages: Do NOT include Navbar or Footer sections. Include only ONE section: the auth form (login form, signup form, forgot password form, etc.).
 
 INDUSTRY-SPECIFIC EXAMPLES:
 
+For "project management SaaS":
+  Home (marketing/stacked), Features (marketing/stacked), Pricing (marketing/stacked),
+  Dashboard (application/app-shell), Projects (application/app-shell),
+  Team Members (application/app-shell), Settings (application/app-shell),
+  Login (auth/centered), Signup (auth/centered)
+
 For "food delivery app":
-- Pages: Home, Restaurants, Restaurant Page, Cart, Checkout, Order Tracking, Blog, Contact
-- Sections should reference: location search, cuisine filters, restaurant cards with ratings/delivery time, menu categories, order summary
+  Home (marketing/stacked), Restaurants (marketing/stacked), Blog (marketing/stacked),
+  Dashboard (application/app-shell), Orders (application/app-shell), Account (application/app-shell),
+  Login (auth/centered), Signup (auth/centered)
 
-For "SaaS CRM":
-- Pages: Home, Features, Pricing, Integrations, About, Blog, Contact, Login, Demo
-- Sections should reference: feature comparison, pricing tiers, integration logos, customer testimonials, ROI calculator
+For "analytics dashboard SaaS":
+  Home (marketing/stacked), Features (marketing/stacked), Pricing (marketing/stacked),
+  Dashboard (application/app-shell), Reports (application/app-shell),
+  Data Explorer (application/app-shell), Settings (application/app-shell),
+  Login (auth/centered), Signup (auth/centered)
 
-For "architecture firm":
-- Pages: Home, Projects, Project Detail, Services, About, Team, Contact, Blog
-- Sections should reference: project gallery, before/after, design philosophy, awards, process timeline
+For "architecture firm" (marketing only):
+  Home (marketing/stacked), Projects (marketing/stacked), Services (marketing/stacked),
+  About (marketing/stacked), Team (marketing/stacked), Contact (marketing/stacked)
 
 RULES:
 - Generate between ${minPages} and ${maxPages} pages
-- Each page should have 4-7 relevant sections
+- Each marketing page should have 4-7 relevant sections (including navbar + footer)
+- Each application page should have 3-6 relevant sections (NO navbar/footer)
+- Each auth page should have 1-2 sections (just the auth form)
 - Each section MUST have an id, name, and description
 - Section names should be DESCRIPTIVE and industry-specific
 - Section descriptions should explain what UI elements and content the section contains
-- Always start with "Navbar" section and end with "Footer" section on each page
 - Always include Home as the first page with slug "/"
 - Include logical child pages where appropriate (e.g., Blog -> Blog Post)
 - Use lowercase slugs with hyphens
+- For SaaS/app products, always include Login and Signup pages
 
 RESPONSE FORMAT (JSON ONLY, no markdown):
 {
@@ -188,6 +254,8 @@ RESPONSE FORMAT (JSON ONLY, no markdown):
       "id": "home",
       "label": "Home",
       "slug": "/",
+      "context": "marketing",
+      "layout": "stacked",
       "sections": [
         {
           "id": "home-navbar",
@@ -203,6 +271,51 @@ RESPONSE FORMAT (JSON ONLY, no markdown):
           "id": "home-footer",
           "name": "Footer",
           "description": "Site footer with links, social media, and copyright"
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "slug": "/dashboard",
+      "context": "application",
+      "layout": "app-shell",
+      "sections": [
+        {
+          "id": "dashboard-header",
+          "name": "Page Header",
+          "description": "Page title with date range filter and action buttons"
+        },
+        {
+          "id": "dashboard-stats",
+          "name": "Stats Overview",
+          "description": "Row of stat cards showing key metrics like revenue, users, and growth"
+        },
+        {
+          "id": "dashboard-chart",
+          "name": "Revenue Chart",
+          "description": "Line or bar chart showing revenue trends over time"
+        },
+        {
+          "id": "dashboard-table",
+          "name": "Recent Activity",
+          "description": "Data table showing latest transactions or events"
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "login",
+      "label": "Login",
+      "slug": "/login",
+      "context": "auth",
+      "layout": "centered",
+      "sections": [
+        {
+          "id": "login-form",
+          "name": "Login Form",
+          "description": "Email and password fields with social login options and forgot password link"
         }
       ],
       "children": []
@@ -222,10 +335,13 @@ ${targetAudience ? `- Target Audience: ${targetAudience}` : ''}
 ${features?.length ? `- Key Features to highlight: ${features.join(', ')}` : ''}
 
 Think step by step:
-1. What type of product/business is this?
-2. Who are the competitors and what pages do they typically have?
-3. What's the user journey from discovery to conversion?
-4. What sections would each page need?
+1. What type of product/business is this? (SaaS, static site, e-commerce, marketplace, etc.)
+2. Based on the type, which page contexts are needed? (marketing only, or marketing + application + auth)
+3. Who are the competitors and what pages do they typically have?
+4. What's the user journey from discovery to conversion (and ongoing usage for SaaS)?
+5. What sections would each page need? (Remember: no navbar/footer on application and auth pages)
+
+IMPORTANT: Every page MUST include "context" and "layout" fields.
 
 Generate the sitemap JSON now.`
 
@@ -247,17 +363,22 @@ Generate the sitemap JSON now.`
 
             // Validate structure
             SitemapResponseSchema.parse(sitemapData)
+
+            // Backfill context/layout if AI omitted them
+            sitemapData.pages = backfillContext(sitemapData.pages)
         } catch (parseError) {
             console.error('🤖 Failed to parse AI response:', parseError)
             console.error('🤖 Raw response:', aiResponse)
 
-            // Return a default sitemap structure with Relume-style sections
+            // Return a default sitemap structure (marketing-only fallback)
             sitemapData = {
                 pages: [
                     {
                         id: 'home',
                         label: 'Home',
                         slug: '/',
+                        context: 'marketing' as const,
+                        layout: 'stacked' as const,
                         sections: [
                             { id: 'home-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
                             { id: 'home-hero', name: 'Hero', description: 'Main hero section with headline and CTA' },
@@ -272,6 +393,8 @@ Generate the sitemap JSON now.`
                         id: 'about',
                         label: 'About',
                         slug: '/about',
+                        context: 'marketing' as const,
+                        layout: 'stacked' as const,
                         sections: [
                             { id: 'about-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
                             { id: 'about-story', name: 'Our Story', description: 'Company history and mission' },
@@ -285,6 +408,8 @@ Generate the sitemap JSON now.`
                         id: 'services',
                         label: 'Services',
                         slug: '/services',
+                        context: 'marketing' as const,
+                        layout: 'stacked' as const,
                         sections: [
                             { id: 'services-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
                             { id: 'services-overview', name: 'Overview', description: 'Services introduction' },
@@ -298,6 +423,8 @@ Generate the sitemap JSON now.`
                         id: 'contact',
                         label: 'Contact',
                         slug: '/contact',
+                        context: 'marketing' as const,
+                        layout: 'stacked' as const,
                         sections: [
                             { id: 'contact-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
                             { id: 'contact-form', name: 'Contact Form', description: 'Main contact form for inquiries' },

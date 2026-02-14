@@ -18,11 +18,13 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { Button } from '@/components/ui/button'
-import type { WireframePage, ViewportDevice } from '@/types'
+import type { WireframePage, ViewportDevice, PageLayout } from '@/types'
 import { VIEWPORT_CONFIGS } from '@/types'
 import { useUnifiedStore } from '@/store'
 import { SortableSectionBlock } from './section-block'
 import { PlaceholderRenderer } from './placeholder-renderer'
+import { AppTopbar } from './app-topbar'
+import { AppSidebar } from './app-sidebar'
 
 interface PageFrameProps {
     page: WireframePage
@@ -230,8 +232,7 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
             <div
                 ref={containerRef}
                 className={cn(
-                    'flex flex-col bg-white pb-2',
-                    'transition-all duration-200',
+                    'flex flex-col bg-white',
                     isPageSelected
                         ? 'ring-2 ring-violet-500'
                         : isResizing
@@ -242,86 +243,27 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
                 style={{ width: scaledWidth }}
                 onClick={handleFrameClick}
             >
-                {/* Frame Content — sections */}
-                {page.sections.length === 0 ? (
-                    <div className="relative">
-                        {showGhostPreviewForAdd && (
-                            <GhostPreviewBlock
-                                type={ghostPreviewLayout.type}
-                                variant={ghostPreviewLayout.variant}
-                                name={ghostPreviewLayout.name}
-                                presetId={ghostPreviewLayout.presetId}
-                            />
-                        )}
-                        {!showGhostPreviewForAdd && (
-                            <EmptyPageState onAddSection={() => handleAddSection(0)} />
-                        )}
-                    </div>
-                ) : (
-                    <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <SortableContext
-                            items={page.sections.map(s => s.id)}
-                            strategy={verticalListSortingStrategy}
-                        >
-                            <div className="relative">
-                                {showGhostPreviewForAdd && addSidebarInsertIndex === 0 && (
-                                    <GhostPreviewBlock
-                                        type={ghostPreviewLayout.type}
-                                        variant={ghostPreviewLayout.variant}
-                                        name={ghostPreviewLayout.name}
-                                        presetId={ghostPreviewLayout.presetId}
-                                    />
-                                )}
-
-                                {page.sections.map((section, index) => (
-                                    <div key={section.id} className="relative">
-                                        {showGhostPreviewForReplace && selectedSectionId === section.id ? (
-                                            <GhostPreviewBlock
-                                                type={ghostPreviewLayout.type}
-                                                variant={ghostPreviewLayout.variant}
-                                                name={ghostPreviewLayout.name}
-                                                presetId={ghostPreviewLayout.presetId}
-                                            />
-                                        ) : (
-                                            <SortableSectionBlock
-                                                section={section}
-                                                isSelected={selectedSectionId === section.id}
-                                                viewport={viewport}
-                                                editable
-                                                onSelectAction={selectSection}
-                                                onContentChange={(key, value) => {
-                                                    updateSectionContent(page.id, section.id, { [key]: value })
-                                                }}
-                                                onAddBelowAction={() => handleAddSection(index + 1)}
-                                                onDeleteAction={() => deleteSection(page.id, section.id)}
-                                                onDuplicateAction={() => duplicateSection(page.id, section.id)}
-                                                onToggleGlobalAction={() => {
-                                                    toggleGlobalSection(page.id, section.id)
-                                                    if (!section.isGlobal) {
-                                                        syncGlobalSection(section.id)
-                                                    }
-                                                }}
-                                            />
-                                        )}
-
-                                        {showGhostPreviewForAdd && addSidebarInsertIndex === index + 1 && (
-                                            <GhostPreviewBlock
-                                                type={ghostPreviewLayout.type}
-                                                variant={ghostPreviewLayout.variant}
-                                                name={ghostPreviewLayout.name}
-                                                presetId={ghostPreviewLayout.presetId}
-                                            />
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </SortableContext>
-                    </DndContext>
-                )}
+                {/* Layout-aware rendering */}
+                <LayoutRenderer
+                    page={page}
+                    viewport={viewport}
+                    scale={scale}
+                    sensors={sensors}
+                    handleDragEnd={handleDragEnd}
+                    handleAddSection={handleAddSection}
+                    showGhostPreview={showGhostPreview}
+                    showGhostPreviewForAdd={showGhostPreviewForAdd}
+                    showGhostPreviewForReplace={showGhostPreviewForReplace}
+                    ghostPreviewLayout={ghostPreviewLayout}
+                    addSidebarInsertIndex={addSidebarInsertIndex}
+                    selectedSectionId={selectedSectionId}
+                    selectSection={selectSection}
+                    updateSectionContent={updateSectionContent}
+                    deleteSection={deleteSection}
+                    duplicateSection={duplicateSection}
+                    toggleGlobalSection={toggleGlobalSection}
+                    syncGlobalSection={syncGlobalSection}
+                />
             </div>
 
             {/* Width indicator (visible while resizing) */}
@@ -331,6 +273,244 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
                 </div>
             )}
         </div>
+    )
+}
+
+/* ───────────────────────────── Layout Renderer ───────────────────────────── */
+
+/**
+ * Branches rendering based on `page.pageLayout`:
+ * - `stacked` (default): flat vertical list of sections
+ * - `app-shell`: topbar + sidebar + content area
+ * - `centered`: vertically-centered card (auth pages)
+ */
+interface LayoutRendererProps {
+    page: WireframePage
+    viewport: ViewportDevice
+    scale: number
+    sensors: ReturnType<typeof useSensors>
+    handleDragEnd: (event: DragEndEvent) => void
+    handleAddSection: (index: number) => void
+    showGhostPreview: boolean | null | undefined
+    showGhostPreviewForAdd: boolean | null | undefined
+    showGhostPreviewForReplace: boolean | null | undefined
+    ghostPreviewLayout: { type: string; variant?: string; name: string; presetId?: string } | null
+    addSidebarInsertIndex: number | null
+    selectedSectionId: string | null
+    selectSection: (id: string) => void
+    updateSectionContent: (pageId: string, sectionId: string, content: Record<string, unknown>) => void
+    deleteSection: (pageId: string, sectionId: string) => void
+    duplicateSection: (pageId: string, sectionId: string) => void
+    toggleGlobalSection: (pageId: string, sectionId: string) => void
+    syncGlobalSection: (sectionId: string) => void
+}
+
+function LayoutRenderer(props: LayoutRendererProps) {
+    const layout: PageLayout = props.page.pageLayout || 'stacked'
+
+    switch (layout) {
+        case 'app-shell':
+            return <AppShellLayout {...props} />
+        case 'centered':
+            return <CenteredLayout {...props} />
+        case 'stacked':
+        default:
+            return <StackedLayout {...props} />
+    }
+}
+
+/* ─── Stacked Layout (default — marketing pages) ─── */
+
+function StackedLayout(props: LayoutRendererProps) {
+    return (
+        <div className="pb-2">
+            <SectionsContent {...props} />
+        </div>
+    )
+}
+
+/* ─── App Shell Layout (dashboard/app pages) ─── */
+
+/**
+ * Figma ref: Shell 9 (sidebar+topbar), Shell 15 (standalone sidebar)
+ *
+ * Desktop:  [sidebar 240px] + [topbar + content area]
+ * Tablet:   [sidebar 64px collapsed] + [topbar + content area]
+ * Mobile:   [topbar with hamburger] + [content area]
+ */
+function AppShellLayout({ page, viewport, ...rest }: LayoutRendererProps) {
+    // Determine shell archetype from page context
+    // For now, use sensible defaults:
+    // - app pages → sidebar L2 + topbar L1 (most common dashboard layout)
+    const sidebarLevel = 2 as 1 | 2 | 3
+    const topbarLevel = 1 as 1 | 2 | 3
+
+    return (
+        <div className="flex flex-col h-full min-h-[600px]">
+            {/* Full-width topbar when level >= 2 (sits above sidebar) */}
+            {topbarLevel >= 2 && (
+                <AppTopbar
+                    level={topbarLevel}
+                    viewport={viewport}
+                    showSearch
+                    showNavLinks={topbarLevel === 3}
+                />
+            )}
+
+            <div className="flex flex-1 min-h-0">
+                {/* Sidebar */}
+                <AppSidebar
+                    level={sidebarLevel}
+                    viewport={viewport}
+                    showGroups
+                    showBadges
+                />
+
+                {/* Right column: topbar L1 (beside sidebar) + content */}
+                <div className="flex flex-col flex-1 min-w-0">
+                    {topbarLevel === 1 && (
+                        <AppTopbar
+                            level={1}
+                            viewport={viewport}
+                            pageTitle={page.name}
+                            showSearch
+                        />
+                    )}
+
+                    {/* Content area — sections stack here */}
+                    <div className="flex-1 overflow-y-auto bg-gray-50 pb-2">
+                        <SectionsContent page={page} viewport={viewport} {...rest} />
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+/* ─── Centered Layout (auth pages) ─── */
+
+/**
+ * Figma ref: Auth signup (node 4174:123314)
+ *
+ * Dark background with centered white card containing form sections.
+ * Footer text at bottom.
+ */
+function CenteredLayout(props: LayoutRendererProps) {
+    return (
+        <div className="flex items-center justify-center min-h-[600px] bg-gray-950 px-6 py-12">
+            <div className="w-full max-w-md">
+                <SectionsContent {...props} />
+            </div>
+        </div>
+    )
+}
+
+/* ─── Shared Sections Content ─── */
+
+/**
+ * The actual sections list with DnD, ghost preview, and empty state.
+ * Shared by all three layout modes.
+ */
+function SectionsContent({
+    page,
+    viewport,
+    sensors,
+    handleDragEnd,
+    handleAddSection,
+    showGhostPreviewForAdd,
+    showGhostPreviewForReplace,
+    ghostPreviewLayout,
+    addSidebarInsertIndex,
+    selectedSectionId,
+    selectSection,
+    updateSectionContent,
+    deleteSection,
+    duplicateSection,
+    toggleGlobalSection,
+    syncGlobalSection,
+}: LayoutRendererProps) {
+    if (page.sections.length === 0) {
+        return (
+            <div className="relative">
+                {showGhostPreviewForAdd && ghostPreviewLayout && (
+                    <GhostPreviewBlock
+                        type={ghostPreviewLayout.type}
+                        variant={ghostPreviewLayout.variant}
+                        name={ghostPreviewLayout.name}
+                        presetId={ghostPreviewLayout.presetId}
+                    />
+                )}
+                {!showGhostPreviewForAdd && (
+                    <EmptyPageState onAddSection={() => handleAddSection(0)} />
+                )}
+            </div>
+        )
+    }
+
+    return (
+        <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+        >
+            <SortableContext
+                items={page.sections.map(s => s.id)}
+                strategy={verticalListSortingStrategy}
+            >
+                <div className="relative">
+                    {showGhostPreviewForAdd && ghostPreviewLayout && addSidebarInsertIndex === 0 && (
+                        <GhostPreviewBlock
+                            type={ghostPreviewLayout.type}
+                            variant={ghostPreviewLayout.variant}
+                            name={ghostPreviewLayout.name}
+                            presetId={ghostPreviewLayout.presetId}
+                        />
+                    )}
+
+                    {page.sections.map((section, index) => (
+                        <div key={section.id} className="relative">
+                            {showGhostPreviewForReplace && ghostPreviewLayout && selectedSectionId === section.id ? (
+                                <GhostPreviewBlock
+                                    type={ghostPreviewLayout.type}
+                                    variant={ghostPreviewLayout.variant}
+                                    name={ghostPreviewLayout.name}
+                                    presetId={ghostPreviewLayout.presetId}
+                                />
+                            ) : (
+                                <SortableSectionBlock
+                                    section={section}
+                                    isSelected={selectedSectionId === section.id}
+                                    viewport={viewport}
+                                    editable
+                                    onSelectAction={selectSection}
+                                    onContentChange={(key, value) => {
+                                        updateSectionContent(page.id, section.id, { [key]: value })
+                                    }}
+                                    onAddBelowAction={() => handleAddSection(index + 1)}
+                                    onDeleteAction={() => deleteSection(page.id, section.id)}
+                                    onDuplicateAction={() => duplicateSection(page.id, section.id)}
+                                    onToggleGlobalAction={() => {
+                                        toggleGlobalSection(page.id, section.id)
+                                        if (!section.isGlobal) {
+                                            syncGlobalSection(section.id)
+                                        }
+                                    }}
+                                />
+                            )}
+
+                            {showGhostPreviewForAdd && ghostPreviewLayout && addSidebarInsertIndex === index + 1 && (
+                                <GhostPreviewBlock
+                                    type={ghostPreviewLayout.type}
+                                    variant={ghostPreviewLayout.variant}
+                                    name={ghostPreviewLayout.name}
+                                    presetId={ghostPreviewLayout.presetId}
+                                />
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </SortableContext>
+        </DndContext>
     )
 }
 

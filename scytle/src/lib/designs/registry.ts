@@ -14,6 +14,7 @@ import type {
     ComponentVariant,
     SectionLayout,
 } from './types'
+import type { PageContext } from '@/types'
 
 // Import all category families + presets
 import { heroFamilies, heroPresets } from './hero'
@@ -31,6 +32,14 @@ import { teamFamilies, teamPresets } from './team'
 import { blogFamilies, blogPresets } from './blog'
 import { statsFamilies, statsPresets } from './stats'
 import { logosFamilies, logosPresets } from './logos'
+// SaaS / Application categories
+import { dashboardFamilies, dashboardPresets } from './dashboard'
+import { dataTableFamilies, dataTablePresets } from './data-table'
+import { appListFamilies, appListPresets } from './app-list'
+import { authFamilies, authPresets } from './auth'
+import { appFormFamilies, appFormPresets } from './app-form'
+import { chartFamilies, chartPresets } from './chart'
+import { emptyStateFamilies, emptyStatePresets } from './empty-state'
 
 // ===== FAMILY REGISTRY =====
 // Parametric Canvas components — one per layout pattern
@@ -51,6 +60,13 @@ export const FAMILY_REGISTRY: TemplateFamily[] = [
     ...blogFamilies,
     ...statsFamilies,
     ...logosFamilies,
+    ...dashboardFamilies,
+    ...dataTableFamilies,
+    ...appListFamilies,
+    ...authFamilies,
+    ...appFormFamilies,
+    ...chartFamilies,
+    ...emptyStateFamilies,
 ]
 
 // ===== PRESET REGISTRY =====
@@ -72,6 +88,13 @@ export const PRESET_REGISTRY: DesignPreset[] = [
     ...blogPresets,
     ...statsPresets,
     ...logosPresets,
+    ...dashboardPresets,
+    ...dataTablePresets,
+    ...appListPresets,
+    ...authPresets,
+    ...appFormPresets,
+    ...chartPresets,
+    ...emptyStatePresets,
 ]
 
 // ===== CATEGORY METADATA =====
@@ -81,24 +104,36 @@ export interface CategoryMeta {
     name: string
     description: string
     icon?: string
+    /** Page context this category belongs to */
+    context: PageContext
 }
 
 export const DESIGN_CATEGORIES: CategoryMeta[] = [
-    { id: 'hero', name: 'Hero Sections', description: 'Page headers and hero banners' },
-    { id: 'features', name: 'Features', description: 'Feature showcases and grids' },
-    { id: 'cta', name: 'Call to Action', description: 'Conversion sections' },
-    { id: 'testimonials', name: 'Testimonials', description: 'Social proof sections' },
-    { id: 'pricing', name: 'Pricing', description: 'Pricing tables and plans' },
-    { id: 'faq', name: 'FAQ', description: 'Frequently asked questions' },
-    { id: 'contact', name: 'Contact', description: 'Contact forms and info' },
-    { id: 'footer', name: 'Footer', description: 'Page footers' },
-    { id: 'navbar', name: 'Navigation', description: 'Navigation bars' },
-    { id: 'content', name: 'Content', description: 'General content sections' },
-    { id: 'gallery', name: 'Gallery', description: 'Image galleries' },
-    { id: 'team', name: 'Team', description: 'Team member sections' },
-    { id: 'blog', name: 'Blog', description: 'Blog layouts' },
-    { id: 'stats', name: 'Statistics', description: 'Stats and numbers' },
-    { id: 'logos', name: 'Logos', description: 'Logo clouds and partners' },
+    // Marketing categories
+    { id: 'hero', name: 'Hero Sections', description: 'Page headers and hero banners', context: 'marketing' },
+    { id: 'features', name: 'Features', description: 'Feature showcases and grids', context: 'marketing' },
+    { id: 'cta', name: 'Call to Action', description: 'Conversion sections', context: 'marketing' },
+    { id: 'testimonials', name: 'Testimonials', description: 'Social proof sections', context: 'marketing' },
+    { id: 'pricing', name: 'Pricing', description: 'Pricing tables and plans', context: 'marketing' },
+    { id: 'faq', name: 'FAQ', description: 'Frequently asked questions', context: 'marketing' },
+    { id: 'contact', name: 'Contact', description: 'Contact forms and info', context: 'marketing' },
+    { id: 'footer', name: 'Footer', description: 'Page footers', context: 'marketing' },
+    { id: 'navbar', name: 'Navigation', description: 'Navigation bars', context: 'marketing' },
+    { id: 'content', name: 'Content', description: 'General content sections', context: 'marketing' },
+    { id: 'gallery', name: 'Gallery', description: 'Image galleries', context: 'marketing' },
+    { id: 'team', name: 'Team', description: 'Team member sections', context: 'marketing' },
+    { id: 'blog', name: 'Blog', description: 'Blog layouts', context: 'marketing' },
+    { id: 'stats', name: 'Statistics', description: 'Stats and numbers', context: 'marketing' },
+    { id: 'logos', name: 'Logos', description: 'Logo clouds and partners', context: 'marketing' },
+    // Application categories (SaaS)
+    { id: 'dashboard', name: 'Dashboard', description: 'Stat cards, page headers, KPIs', context: 'application' },
+    { id: 'data-table', name: 'Data Tables', description: 'Tables with filters, sorting, and pagination', context: 'application' },
+    { id: 'app-list', name: 'Lists', description: 'Stacked lists and card grids', context: 'application' },
+    { id: 'chart', name: 'Charts', description: 'Bar, line, pie, and area chart wireframes', context: 'application' },
+    { id: 'app-form', name: 'Forms', description: 'Settings, profile, payment, and preference forms', context: 'application' },
+    { id: 'empty-state', name: 'Empty States', description: 'Zero-data and onboarding placeholders', context: 'application' },
+    // Auth category
+    { id: 'auth', name: 'Authentication', description: 'Login, signup, onboarding, and auth modals', context: 'auth' },
 ]
 
 // ===== FAMILY HELPERS =====
@@ -111,6 +146,11 @@ export function getFamilyById(id: string): TemplateFamily | undefined {
 /** Get all families for a specific category */
 export function getFamiliesForCategory(category: DesignCategoryId): TemplateFamily[] {
     return FAMILY_REGISTRY.filter(f => f.category === category)
+}
+
+/** Get categories filtered by page context */
+export function getCategoriesForContext(context: PageContext): CategoryMeta[] {
+    return DESIGN_CATEGORIES.filter(cat => cat.context === context)
 }
 
 // ===== PRESET HELPERS =====

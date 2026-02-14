@@ -9,7 +9,7 @@
 
 export const WIREFRAME_SECTION_PROMPT = `You are an expert UI/UX designer and product strategist. Generate wireframe sections for a web page.
 
-Given a page name and context, generate appropriate sections with:
+Given a page name, context, and layout, generate appropriate sections with:
 1. A logical order that guides users through the content
 2. Industry best practices for this type of page
 3. Essential content sections users expect
@@ -17,15 +17,29 @@ Given a page name and context, generate appropriate sections with:
 
 For each section, include:
 - id: unique kebab-case identifier
-- type: hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog, footer, navbar
+- type: one of the valid section types for the page context (see below)
 - name: descriptive section name
 - description: brief purpose description
-- componentId: format "{type}-{number}" (e.g., "hero-1", "features-3")
+- componentId: format "{type}-{number}" (e.g., "hero-1", "features-3", "dashboard-1")
 - content: object with heading, subheading, body, cta, items (array)
 - controls: default settings for the section type
 
-Return ONLY valid JSON array. Be creative but practical.
-Start with navbar, end with footer for most pages.`
+SECTION TYPES BY PAGE CONTEXT:
+
+"marketing" pages (layout: stacked):
+  hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog, content, footer, navbar
+  → Start with navbar, end with footer.
+
+"application" pages (layout: app-shell):
+  dashboard, data-table, chart, app-form, app-list, app-header, empty-state
+  → Do NOT include navbar or footer (the app shell provides chrome).
+  → Use descriptive app-style names: "Stats Overview", "Revenue Chart", "Recent Orders", "User Settings Form".
+
+"auth" pages (layout: centered):
+  auth
+  → Only 1-2 sections: the auth form. Do NOT include navbar or footer.
+
+Return ONLY valid JSON array. Be creative but practical.`
 
 export const SECTION_COPY_PROMPT = `You are an expert copywriter specializing in web content. Generate compelling copy for a wireframe section.
 
@@ -82,11 +96,23 @@ export function buildSectionGenerationPrompt(
         productName?: string
         productDescription?: string
         targetAudience?: string
-    }
+    },
+    pageContext?: 'marketing' | 'application' | 'auth'
 ): string {
+    const context = pageContext || 'marketing'
+
     let prompt = `Generate wireframe sections for this page:
 
-Page: ${pageName}`
+Page: ${pageName}
+Page Context: ${context}`
+
+    if (context === 'application') {
+        prompt += `\nLayout: app-shell (sidebar + topbar provided by the shell — do NOT generate navbar/footer sections)`
+    } else if (context === 'auth') {
+        prompt += `\nLayout: centered (card on plain background — only generate the auth form section)`
+    } else {
+        prompt += `\nLayout: stacked (full-width sections — include navbar and footer)`
+    }
 
     if (pageDescription) {
         prompt += `\nDescription: ${pageDescription}`
@@ -105,7 +131,13 @@ Page: ${pageName}`
         }
     }
 
-    prompt += `\n\nGenerate 5-8 sections. Return ONLY valid JSON array.`
+    if (context === 'application') {
+        prompt += `\n\nGenerate 3-6 app sections (dashboard widgets, tables, charts, forms). Return ONLY valid JSON array.`
+    } else if (context === 'auth') {
+        prompt += `\n\nGenerate 1-2 auth sections only. Return ONLY valid JSON array.`
+    } else {
+        prompt += `\n\nGenerate 5-8 sections. Return ONLY valid JSON array.`
+    }
 
     return prompt
 }

@@ -13,6 +13,7 @@ const SuggestSectionSchema = z.object({
     pageId: z.string(),
     pageName: z.string(),
     pageDescription: z.string().optional(),
+    pageContext: z.enum(['marketing', 'application', 'auth']).optional(),
     existingSections: z.array(z.object({
         type: z.string(),
         name: z.string(),
@@ -21,18 +22,23 @@ const SuggestSectionSchema = z.object({
 })
 
 /**
- * System prompt for section suggestions
+ * System prompt for section suggestions — context-aware
  */
 const SUGGESTION_PROMPT = `You are an expert UI/UX designer. Suggest a single section that would improve a web page.
 
 Consider:
-1. The page's purpose and what's already there
+1. The page's purpose, context (marketing, application, or auth), and what's already there
 2. What's missing that users typically expect
 3. Industry best practices
 4. The position where the section will be added
 
+PAGE CONTEXT RULES:
+- "marketing" pages: Use marketing section types — hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog, content, footer, navbar
+- "application" pages: Use app section types — dashboard, data-table, chart, app-form, app-list, empty-state, app-header. Do NOT suggest navbar or footer (app shell provides them).
+- "auth" pages: Use auth section type only — auth. Do NOT suggest other section types.
+
 Return a JSON object with:
-- type: section type (hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog, footer, navbar)
+- type: section type (one of the valid types for the page context)
 - name: descriptive name
 - description: brief explanation of what this section does
 - componentId: format {type}-{number}
@@ -68,9 +74,9 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { pageName, pageDescription, existingSections, position } = validation.data
+        const { pageName, pageDescription, pageContext, existingSections, position } = validation.data
 
-        console.log('🤖 Suggesting section for page:', pageName)
+        console.log('🤖 Suggesting section for page:', pageName, '(context:', pageContext || 'marketing', ')')
 
         // 3. Build context about existing sections
         const existingContext = existingSections?.length
@@ -81,11 +87,16 @@ export async function POST(request: NextRequest) {
             ? `\n\nThe section will be added at the ${position} of the page.`
             : ''
 
+        const contextLabel = pageContext || 'marketing'
+
         // 4. Generate suggestion using AI
         const userPrompt = `Suggest a section to add to the following page:
 
 Page Name: ${pageName}
+Page Context: ${contextLabel}
 ${pageDescription ? `Description: ${pageDescription}` : ''}${existingContext}${positionContext}
+
+Remember: This is a "${contextLabel}" page. Only suggest section types valid for this context.
 
 What section would improve this page? Return ONLY valid JSON.`
 

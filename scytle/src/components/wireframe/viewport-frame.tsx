@@ -124,12 +124,26 @@ export function PageViewports({ page, scale = 1, className }: PageViewportsProps
         <div className={cn('flex flex-col rounded-[3px] bg-[#eeeee8] border border-black/[0.06] p-6 pb-8', className)}>
             {/* Page Header Row — Figma Sites style, drag handle for free movement */}
             <div data-page-header className="flex items-center justify-between mb-3 px-0.5 cursor-grab active:cursor-grabbing">
-                <span
-                    className="text-sm font-medium text-foreground cursor-default"
-                    onClick={(e) => { e.stopPropagation(); selectPage(page.id) }}
-                >
-                    {page.name}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span
+                        className="text-sm font-medium text-foreground cursor-default"
+                        onClick={(e) => { e.stopPropagation(); selectPage(page.id) }}
+                    >
+                        {page.name}
+                    </span>
+
+                    {/* Page context badge — shows layout mode for non-marketing pages */}
+                    {page.pageLayout === 'app-shell' && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                            App
+                        </span>
+                    )}
+                    {page.pageLayout === 'centered' && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                            Auth
+                        </span>
+                    )}
+                </div>
 
                 {/* "+" button to add viewports */}
                 <DropdownMenu>

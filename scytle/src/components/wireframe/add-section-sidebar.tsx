@@ -15,6 +15,8 @@ import {
     Loader2,
     Settings2,
     Check,
+    LayoutDashboard,
+    Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -29,27 +31,23 @@ import {
 import { useUnifiedStore } from '@/store'
 import { WireframeThumbnail } from './wireframe-thumbnail'
 import {
+    DESIGN_CATEGORIES,
     getPresetsForCategory,
-    getActiveCategories,
+    getCategoriesForContext,
     type DesignCategoryId,
     type DesignPreset,
+    type CategoryMeta,
 } from '@/lib/designs'
-import type { WireframeSection } from '@/types'
+import type { PageContext, WireframeSection } from '@/types'
 
 /**
- * AddSectionSidebar - Relume-style left sidebar for adding sections
+ * AddSectionSidebar - Registry-driven left sidebar for adding sections
  * 
- * Features:
- * - Fixed left sidebar that slides in
- * - Global sections (Navbar, Footer)
- * - Saved components section
- * - Categories with drill-down to layouts
- * - Search functionality
- * - AI suggestion
- * 
- * MIGRATION NOTE:
- * Now uses centralized design registry from lib/designs/
- * Categories and layouts are dynamically generated from registry.
+ * Follows the registry/plugin pattern (like Figma, Notion, WordPress Gutenberg):
+ * - Categories are read dynamically from DESIGN_CATEGORIES (single source of truth)
+ * - Context tabs (Marketing / Application / Auth) auto-filter by page context
+ * - Adding a new category to the registry = it appears here automatically
+ * - No hardcoded category lists
  */
 
 interface AddSectionSidebarProps {
@@ -90,42 +88,31 @@ function presetToLayout(preset: DesignPreset, category: string): SectionLayout {
     }
 }
 
-// Build categories from registry dynamically
-function buildCategoriesFromRegistry(): SectionCategory[] {
-    // All possible categories (for showing empty ones too)
-    const allCategoryMeta: { id: DesignCategoryId; name: string }[] = [
-        { id: 'hero', name: 'Hero Header' },
-        { id: 'features', name: 'Features' },
-        { id: 'testimonials', name: 'Testimonials' },
-        { id: 'cta', name: 'Call To Action' },
-        { id: 'pricing', name: 'Pricing' },
-        { id: 'faq', name: 'FAQ' },
-        { id: 'contact', name: 'Contact' },
-        { id: 'team', name: 'Team' },
-        { id: 'blog', name: 'Blog' },
-        { id: 'gallery', name: 'Gallery' },
-        { id: 'stats', name: 'Stats' },
-        { id: 'logos', name: 'Logo Cloud' },
-        { id: 'content', name: 'Content' },
-        { id: 'footer', name: 'Footer' },
-        { id: 'navbar', name: 'Navigation' },
-    ]
-
-    return allCategoryMeta.map(cat => ({
-        id: cat.id,
-        name: cat.name,
-        layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
-    }))
+// Build categories from registry for a given context — zero hardcoding
+function buildCategoriesForContext(context: PageContext): SectionCategory[] {
+    const metas = getCategoriesForContext(context)
+    return metas
+        .map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            description: cat.description,
+            layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
+        }))
+        .filter(cat => cat.layouts.length > 0) // Only show categories that have presets
 }
+
+// Context tab metadata
+const CONTEXT_TABS: { id: PageContext; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { id: 'marketing', label: 'Marketing', icon: Globe },
+    { id: 'application', label: 'Application', icon: LayoutDashboard },
+    { id: 'auth', label: 'Auth', icon: Lock },
+]
 
 // Global sections that appear on all pages
 const GLOBAL_SECTIONS = [
     { id: 'footer', name: 'Footer', type: 'footer', instances: 0 },
     { id: 'navbar', name: 'Navbar', type: 'navbar', instances: 0 },
 ]
-
-// Section categories built dynamically from design registry
-const SECTION_CATEGORIES = buildCategoriesFromRegistry()
 
 export function AddSectionSidebar({
     isOpen,
@@ -138,6 +125,19 @@ export function AddSectionSidebar({
     const [isAISuggesting, setIsAISuggesting] = useState(false)
 
     const { addSection, pages, setGhostPreviewLayout } = useUnifiedStore()
+
+    // Derive context from the current page
+    const currentPage = useMemo(() => pages.find(p => p.id === pageId), [pages, pageId])
+    const pageContext: PageContext = currentPage?.pageContext ?? 'marketing'
+
+    // Active context tab — defaults to page's context, user can switch
+    const [activeContext, setActiveContext] = useState<PageContext>(pageContext)
+
+    // Build categories dynamically from registry based on active context tab
+    const categories = useMemo(
+        () => buildCategoriesForContext(activeContext),
+        [activeContext],
+    )
 
     // Handle layout hover for ghost preview
     const handleLayoutHover = useCallback((layout: SectionLayout | null) => {
@@ -167,13 +167,13 @@ export function AddSectionSidebar({
 
     // Filter categories by search
     const filteredCategories = useMemo(() => {
-        if (!searchQuery) return SECTION_CATEGORIES
+        if (!searchQuery) return categories
         const query = searchQuery.toLowerCase()
-        return SECTION_CATEGORIES.filter(cat =>
+        return categories.filter(cat =>
             cat.name.toLowerCase().includes(query) ||
             cat.layouts.some(l => l.name.toLowerCase().includes(query))
         )
-    }, [searchQuery])
+    }, [searchQuery, categories])
 
     // Handle adding a layout
     const handleAddLayout = useCallback((layout: SectionLayout) => {
@@ -314,8 +314,36 @@ export function AddSectionSidebar({
                 </div>
             </div>
 
-            {/* Content - ScrollArea with fixed height like sitemap section picker */}
-            <ScrollArea className="h-[calc(100%-110px)]">
+            {/* Context Tabs — auto-selects based on page context, user can switch */}
+            {!selectedCategory && (
+                <div className="px-3 py-2 border-b flex gap-1">
+                    {CONTEXT_TABS.map((tab) => {
+                        const Icon = tab.icon
+                        const isActive = activeContext === tab.id
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => {
+                                    setActiveContext(tab.id)
+                                    setSearchQuery('')
+                                }}
+                                className={cn(
+                                    'flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors',
+                                    isActive
+                                        ? 'bg-gray-900 text-white'
+                                        : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700',
+                                )}
+                            >
+                                <Icon className="h-3.5 w-3.5" />
+                                {tab.label}
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
+
+            {/* Content - ScrollArea */}
+            <ScrollArea className="flex-1">
                 {selectedCategory ? (
                     // Layout selection view
                     <LayoutSelectionView

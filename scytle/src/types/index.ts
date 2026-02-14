@@ -128,8 +128,13 @@ export const CreatePageSchema = z.object({
     order: z.number().int().min(0).optional(),
 })
 
+// Page Context & Layout (SaaS expansion)
+export const PageContextSchema = z.enum(['marketing', 'application', 'auth'])
+export const PageLayoutSchema = z.enum(['stacked', 'app-shell', 'centered'])
+
 // Section Types
 export const SectionTypeSchema = z.enum([
+    // Marketing section types
     'hero',
     'features',
     'feature-grid',
@@ -153,6 +158,15 @@ export const SectionTypeSchema = z.enum([
     'header',
     'navigation',
     'custom',
+    // Application section types (SaaS)
+    'dashboard',
+    'data-table',
+    'app-list',
+    'chart',
+    'app-form',
+    'empty-state',
+    // Auth section types
+    'auth',
 ])
 
 // Section
@@ -241,6 +255,8 @@ export type ProjectStatus = z.infer<typeof ProjectStatusSchema>
 export type Page = z.infer<typeof PageSchema>
 export type CreatePageInput = z.infer<typeof CreatePageSchema>
 
+export type PageContext = z.infer<typeof PageContextSchema>
+export type PageLayout = z.infer<typeof PageLayoutSchema>
 export type SectionType = z.infer<typeof SectionTypeSchema>
 export type Section = z.infer<typeof SectionSchema>
 export type CreateSectionInput = z.infer<typeof CreateSectionSchema>
@@ -323,6 +339,10 @@ export interface WireframePage {
     parentId?: string | null
     order: number
     sections: WireframeSection[]
+    /** Page context: marketing (stacked), application (app-shell), or auth (centered) */
+    pageContext?: PageContext
+    /** Page layout mode derived from context */
+    pageLayout?: PageLayout
 }
 
 // Viewport device type

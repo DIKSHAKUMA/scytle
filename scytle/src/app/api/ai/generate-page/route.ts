@@ -6,10 +6,11 @@ import { generate } from '@/lib/ai'
 const GeneratePageSchema = z.object({
     pageName: z.string().min(1, 'Page name is required'),
     pageDescription: z.string().optional(),
+    pageContext: z.enum(['marketing', 'application', 'auth']).optional(),
     projectDescription: z.string().optional(),
     industry: z.string().optional(),
     existingSections: z.array(z.string()).optional(),
-    sectionCount: z.number().min(3).max(12).optional().default(5),
+    sectionCount: z.number().min(1).max(12).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -45,58 +46,71 @@ export async function POST(request: NextRequest) {
         const {
             pageName,
             pageDescription,
+            pageContext,
             projectDescription,
             industry,
             existingSections,
-            sectionCount,
+            sectionCount: rawSectionCount,
         } = validation.data
 
+        // Determine count based on context
+        const context = pageContext || 'marketing'
+        const sectionCount = rawSectionCount || (context === 'auth' ? 1 : context === 'application' ? 4 : 5)
+
         // 3. Generate page sections using AI
-        const systemPrompt = `You are an expert web designer. Your task is to generate sections for a web page based on the page name and context.
+        const systemPrompt = `You are an expert web designer. Your task is to generate sections for a web page based on the page name, context, and layout.
 
 INSTRUCTIONS:
-1. Analyze the page name and description
+1. Analyze the page name, description, and context
 2. Generate appropriate sections for this type of page
 3. Consider the project context and industry
 4. Use clear, descriptive section names
-5. Include sections that are appropriate for the page type
+5. Follow the rules for the page context
+
+PAGE CONTEXT RULES:
+
+"marketing" pages (layout: stacked):
+  - Use section types: hero, features, about, team, testimonials, pricing, faq, cta, contact, gallery, services, stats, blog, content, navbar, footer
+  - Include navbar at top and footer at bottom
+
+"application" pages (layout: app-shell):
+  - Use section types: dashboard, data-table, chart, app-form, app-list, app-header, empty-state
+  - Do NOT include navbar or footer sections (the app shell provides built-in chrome)
+  - Use descriptive names: "Stats Overview", "Revenue Chart", "Recent Orders Table", "User Settings Form"
+
+"auth" pages (layout: centered):
+  - Use section type: auth
+  - Generate only 1-2 sections (just the auth form)
+  - Do NOT include navbar or footer sections
 
 RESPONSE FORMAT (JSON ONLY):
 {
   "sections": [
     {
-      "id": "hero",
-      "name": "Hero",
-      "type": "hero",
-      "description": "Main hero section with headline and CTA"
-    },
-    {
-      "id": "features",
-      "name": "Features",
-      "type": "features",
-      "description": "Grid of key features or benefits"
+      "id": "stats-overview",
+      "name": "Stats Overview",
+      "type": "dashboard",
+      "description": "Row of stat cards showing key metrics"
     }
   ],
   "pageTitle": "Page Title Suggestion",
   "metaDescription": "SEO meta description for this page"
 }
 
-SECTION TYPES:
-- hero: Main banner/hero section
-- features: Feature list or grid
-- about: About content
-- team: Team members
-- testimonials: Customer testimonials
-- pricing: Pricing tables
-- faq: Frequently asked questions
-- cta: Call to action
-- contact: Contact form
-- gallery: Image gallery
-- services: Service offerings
-- stats: Statistics/numbers
-- blog: Blog posts list
-- header: Page header (not navigation)
-- footer: Page footer
+SECTION TYPES (marketing):
+- hero, features, about, team, testimonials, pricing, faq, cta, contact, gallery, services, stats, blog, header, footer
+
+SECTION TYPES (application):
+- dashboard: Stat cards, KPI widgets, overview panels
+- data-table: Sortable/filterable data tables
+- chart: Line charts, bar charts, pie charts, analytics
+- app-form: Settings forms, profile editors, input forms
+- app-list: Activity feeds, task lists, item lists
+- app-header: Page title with actions and breadcrumbs
+- empty-state: Zero-data state with illustration and CTA
+
+SECTION TYPES (auth):
+- auth: Login form, signup form, forgot password, verify email
 
 IMPORTANT:
 - Generate ${sectionCount} sections
@@ -106,12 +120,13 @@ IMPORTANT:
         const userMessage = `Generate sections for the following page:
 
 PAGE NAME: ${pageName}
+PAGE CONTEXT: ${context}
 ${pageDescription ? `PAGE DESCRIPTION: ${pageDescription}` : ''}
 ${projectDescription ? `PROJECT CONTEXT: ${projectDescription}` : ''}
 ${industry ? `INDUSTRY: ${industry}` : ''}
 ${existingSections?.length ? `EXISTING SECTIONS (for context): ${existingSections.join(', ')}` : ''}
 
-Generate ${sectionCount} appropriate sections for this page.`
+Generate ${sectionCount} appropriate sections for this "${context}" page. Follow the rules for "${context}" context strictly.`
 
         const aiResponse = await generate(userMessage, [], {
             model: 'fast',
@@ -134,7 +149,7 @@ Generate ${sectionCount} appropriate sections for this page.`
 
             // Provide fallback sections based on page type
             pageData = {
-                sections: getDefaultSectionsForPage(pageName),
+                sections: getDefaultSectionsForPage(pageName, context),
                 pageTitle: pageName,
                 metaDescription: `${pageName} page`,
             }
@@ -160,14 +175,60 @@ Generate ${sectionCount} appropriate sections for this page.`
 }
 
 // Fallback sections based on common page types
-function getDefaultSectionsForPage(pageName: string): Array<{
+function getDefaultSectionsForPage(pageName: string, pageContext?: string): Array<{
     id: string
     name: string
     type: string
     description: string
 }> {
     const normalizedName = pageName.toLowerCase()
+    const context = pageContext || 'marketing'
 
+    // Auth pages — single auth section
+    if (context === 'auth') {
+        if (normalizedName.includes('signup') || normalizedName.includes('register') || normalizedName.includes('sign up')) {
+            return [{ id: 'signup-form', name: 'Signup Form', type: 'auth', description: 'Registration form with name, email, password and social signup options' }]
+        }
+        if (normalizedName.includes('forgot') || normalizedName.includes('reset')) {
+            return [{ id: 'reset-form', name: 'Reset Password', type: 'auth', description: 'Password reset form with email field and submit button' }]
+        }
+        return [{ id: 'login-form', name: 'Login Form', type: 'auth', description: 'Login form with email, password, social login options and forgot password link' }]
+    }
+
+    // Application pages — app section types (no navbar/footer)
+    if (context === 'application') {
+        if (normalizedName.includes('dashboard') || normalizedName.includes('overview')) {
+            return [
+                { id: 'page-header', name: 'Page Header', type: 'app-header', description: 'Page title with date filter and action buttons' },
+                { id: 'stats', name: 'Stats Overview', type: 'dashboard', description: 'Row of stat cards showing key metrics' },
+                { id: 'chart', name: 'Revenue Chart', type: 'chart', description: 'Line chart showing trends over time' },
+                { id: 'recent', name: 'Recent Activity', type: 'data-table', description: 'Table of latest events or transactions' },
+            ]
+        }
+        if (normalizedName.includes('setting') || normalizedName.includes('profile') || normalizedName.includes('account')) {
+            return [
+                { id: 'page-header', name: 'Page Header', type: 'app-header', description: 'Settings page title with breadcrumbs' },
+                { id: 'profile-form', name: 'Profile Settings', type: 'app-form', description: 'User profile form with avatar, name, email fields' },
+                { id: 'notification-form', name: 'Notification Preferences', type: 'app-form', description: 'Toggle switches for notification settings' },
+            ]
+        }
+        if (normalizedName.includes('analytics') || normalizedName.includes('report')) {
+            return [
+                { id: 'page-header', name: 'Page Header', type: 'app-header', description: 'Analytics title with date range picker' },
+                { id: 'chart-main', name: 'Main Chart', type: 'chart', description: 'Primary analytics chart (line or bar)' },
+                { id: 'chart-secondary', name: 'Breakdown Chart', type: 'chart', description: 'Secondary chart showing distribution' },
+                { id: 'data', name: 'Detailed Data', type: 'data-table', description: 'Sortable data table with export option' },
+            ]
+        }
+        // Generic app page
+        return [
+            { id: 'page-header', name: 'Page Header', type: 'app-header', description: 'Page title with actions' },
+            { id: 'list', name: 'Item List', type: 'app-list', description: 'List of items with search and filters' },
+            { id: 'empty', name: 'Empty State', type: 'empty-state', description: 'Empty state shown when no items exist' },
+        ]
+    }
+
+    // Marketing pages — original behavior
     if (normalizedName.includes('home')) {
         return [
             { id: 'hero', name: 'Hero', type: 'hero', description: 'Main hero section' },

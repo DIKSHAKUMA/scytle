@@ -62,6 +62,7 @@ export interface ControlDefinition {
  * Category ID type - all valid section categories
  */
 export type DesignCategoryId =
+    // Marketing categories
     | 'hero'
     | 'features'
     | 'testimonials'
@@ -77,6 +78,15 @@ export type DesignCategoryId =
     | 'blog'
     | 'stats'
     | 'logos'
+    // Application categories (SaaS)
+    | 'dashboard'
+    | 'data-table'
+    | 'app-list'
+    | 'chart'
+    | 'app-form'
+    | 'empty-state'
+    // Auth category
+    | 'auth'
 
 // ===== TIER 1: TEMPLATE FAMILY =====
 

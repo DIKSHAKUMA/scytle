@@ -19,6 +19,7 @@ export {
 export {
     getFamilyById,
     getFamiliesForCategory,
+    getCategoriesForContext,
     getPresetById,
     getPresetsForCategory,
     getPresetsForFamily,

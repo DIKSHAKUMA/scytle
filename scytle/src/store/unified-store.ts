@@ -17,6 +17,8 @@ import type {
     ViewportMode,
     ViewportDevice,
     DeviceVisibility,
+    PageContext,
+    PageLayout,
 } from '@/types'
 import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
 import { createJWT } from '@/lib/appwrite'
@@ -40,6 +42,12 @@ export interface UnifiedPage {
     // Hierarchy
     parentId: string | null
     order: number
+
+    // Page context (SaaS expansion)
+    /** marketing (stacked), application (app-shell), or auth (centered) */
+    pageContext: PageContext
+    /** Layout mode derived from context */
+    pageLayout: PageLayout
 
     // Sitemap position (for ReactFlow)
     position: { x: number; y: number }
@@ -109,6 +117,7 @@ export interface PageDragState {
 // Default preset IDs per section type — must match actual preset IDs in the design registry.
 // These are resolved by PlaceholderRenderer via getPresetById → getFamilyById pipeline.
 const DEFAULT_COMPONENT_IDS: Record<string, string> = {
+    // Marketing defaults
     hero: 'hero-split',
     features: 'features-grid-3col',
     testimonials: 'testimonials-cards-3',
@@ -126,12 +135,22 @@ const DEFAULT_COMPONENT_IDS: Record<string, string> = {
     footer: 'footer-columns-4',
     navbar: 'navbar-standard-default',
     content: 'content-1',
+    // Application defaults (SaaS) — placeholder IDs until families are built
+    dashboard: 'stat-cards',
+    'data-table': 'table-standard',
+    'app-list': 'list-stacked',
+    chart: 'chart-bar',
+    'app-form': 'form-profile',
+    'empty-state': 'empty-state-default',
+    // Auth defaults
+    auth: 'auth-login',
 }
 
 // Infer section type from name
 function inferSectionType(name: string): string {
     const lowerName = name.toLowerCase()
 
+    // Marketing section types
     if (lowerName.includes('hero') || lowerName.includes('header')) return 'hero'
     if (lowerName.includes('feature')) return 'features'
     if (lowerName.includes('testimonial') || lowerName.includes('review')) return 'testimonials'
@@ -148,7 +167,50 @@ function inferSectionType(name: string): string {
     if (lowerName.includes('footer')) return 'footer'
     if (lowerName.includes('nav')) return 'navbar'
 
+    // Application section types (SaaS)
+    if (lowerName.includes('dashboard') || lowerName.includes('overview') || lowerName.includes('metrics') || lowerName.includes('kpi')) return 'dashboard'
+    if (lowerName.includes('table') || lowerName.includes('records') || lowerName.includes('list view')) return 'data-table'
+    if (lowerName.includes('list') || lowerName.includes('grid') || lowerName.includes('directory') || lowerName.includes('people') || lowerName.includes('team members')) return 'app-list'
+    if (lowerName.includes('chart') || lowerName.includes('analytics') || lowerName.includes('graph') || lowerName.includes('report')) return 'chart'
+    if (lowerName.includes('form') || lowerName.includes('settings') || lowerName.includes('preferences') || lowerName.includes('profile') || lowerName.includes('account') || lowerName.includes('payment')) return 'app-form'
+    if (lowerName.includes('empty') || lowerName.includes('getting started') || lowerName.includes('zero')) return 'empty-state'
+
+    // Auth section types
+    if (lowerName.includes('login') || lowerName.includes('sign in') || lowerName.includes('sign up') || lowerName.includes('register') || lowerName.includes('forgot') || lowerName.includes('verify') || lowerName.includes('onboarding')) return 'auth'
+
     return 'content'
+}
+
+/**
+ * Infer the page context from page name and slug.
+ * Used when AI doesn't provide context explicitly.
+ */
+export function inferPageContext(name: string, slug: string): PageContext {
+    const lower = `${name} ${slug}`.toLowerCase()
+
+    // Auth pages
+    if (/\b(login|log-in|signin|sign-in|signup|sign-up|register|forgot-password|reset-password|verify|verification)\b/.test(lower)) {
+        return 'auth'
+    }
+
+    // Application pages
+    if (/\b(dashboard|app|admin|settings|analytics|projects|orders|account|profile|billing|reports|users|members|inventory|inbox|notifications|tasks|calendar|workspace)\b/.test(lower)) {
+        return 'application'
+    }
+
+    return 'marketing'
+}
+
+/**
+ * Derive the page layout from the page context.
+ */
+export function inferPageLayout(context: PageContext): PageLayout {
+    switch (context) {
+        case 'application': return 'app-shell'
+        case 'auth': return 'centered'
+        case 'marketing':
+        default: return 'stacked'
+    }
 }
 
 // Create a WireframeSection from raw data.
@@ -352,12 +414,17 @@ function flattenAIPages(
     aiPages.forEach((aiPage, index) => {
         const sections = aiPage.sections.map((s, i) => createSection(s, i))
 
+        const pageContext = inferPageContext(aiPage.label, aiPage.slug)
+        const pageLayout = inferPageLayout(pageContext)
+
         const page: UnifiedPage = {
             id: aiPage.id,
             name: aiPage.label,
             slug: aiPage.slug,
             parentId,
             order: order + index,
+            pageContext,
+            pageLayout,
             position: { x: 0, y: 0 }, // Will be calculated by layout
             sections,
         }
@@ -800,8 +867,15 @@ export const useUnifiedStore = create<UnifiedState>()(
             loadFromJSON: (json) => {
                 try {
                     const data = JSON.parse(json)
-                    const pages = data.pages as UnifiedPage[]
+                    const rawPages = data.pages as UnifiedPage[]
                     const projectName = data.projectName || get().projectName
+
+                    // Backfill pageContext/pageLayout for pages loaded from older data
+                    const pages = rawPages.map(p => ({
+                        ...p,
+                        pageContext: p.pageContext || inferPageContext(p.name, p.slug),
+                        pageLayout: p.pageLayout || inferPageLayout(p.pageContext || inferPageContext(p.name, p.slug)),
+                    }))
 
                     console.log('📦 loadFromJSON: Loading', pages.length, 'pages for project:', projectName)
 
@@ -910,13 +984,19 @@ export const useUnifiedStore = create<UnifiedState>()(
                         }
                     })
 
+                    const pageName = data.label || existing?.name || 'Untitled'
+                    const pageSlug = data.slug || existing?.slug || `/${(data.label || 'untitled').toLowerCase().replace(/\s+/g, '-')}`
+                    const ctx = existing?.pageContext || inferPageContext(pageName, pageSlug)
+
                     newPages.push({
                         id: node.id,
-                        name: data.label || existing?.name || 'Untitled',
-                        slug: data.slug || existing?.slug || `/${(data.label || 'untitled').toLowerCase().replace(/\s+/g, '-')}`,
+                        name: pageName,
+                        slug: pageSlug,
                         description: existing?.description,
                         parentId,
                         order: order >= 0 ? order : 0,
+                        pageContext: ctx,
+                        pageLayout: existing?.pageLayout || inferPageLayout(ctx),
                         position: existing?.position || node.position || { x: 0, y: 0 },
                         sections: mergedSections,
                     })
@@ -964,13 +1044,20 @@ export const useUnifiedStore = create<UnifiedState>()(
 
             addPage: (pageData, parentId = null) => {
                 const newId = pageData.id || `page-${Date.now()}`
+                const pageName = pageData.name || 'New Page'
+                const pageSlug = pageData.slug || `/${pageName.toLowerCase().replace(/\s+/g, '-') || 'new-page'}`
+                const pageContext = inferPageContext(pageName, pageSlug)
+                const pageLayout = inferPageLayout(pageContext)
+
                 const newPage: UnifiedPage = {
                     id: newId,
-                    name: pageData.name || 'New Page',
-                    slug: pageData.slug || `/${pageData.name?.toLowerCase().replace(/\s+/g, '-') || 'new-page'}`,
+                    name: pageName,
+                    slug: pageSlug,
                     description: pageData.description,
                     parentId,
                     order: get().pages.filter(p => p.parentId === parentId).length,
+                    pageContext,
+                    pageLayout,
                     position: { x: 0, y: 0 },
                     sections: pageData.sections || [],
                 }
