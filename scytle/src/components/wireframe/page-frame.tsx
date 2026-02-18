@@ -364,6 +364,7 @@ function AppShellLayout({ page, viewport, ...rest }: LayoutRendererProps) {
                     viewport={viewport}
                     showGroups
                     showBadges
+                    currentPageName={page.name}
                 />
 
                 {/* Right column: topbar L1 (beside sidebar) + content */}
@@ -378,7 +379,7 @@ function AppShellLayout({ page, viewport, ...rest }: LayoutRendererProps) {
                     )}
 
                     {/* Content area — sections stack here */}
-                    <div className="flex-1 overflow-y-auto bg-gray-50 pb-2">
+                    <div className="flex-1 overflow-hidden bg-gray-50 pb-2">
                         <SectionsContent page={page} viewport={viewport} {...rest} />
                     </div>
                 </div>
@@ -397,8 +398,8 @@ function AppShellLayout({ page, viewport, ...rest }: LayoutRendererProps) {
  */
 function CenteredLayout(props: LayoutRendererProps) {
     return (
-        <div className="flex items-center justify-center min-h-[600px] bg-gray-950 px-6 py-12">
-            <div className="w-full max-w-md">
+        <div className="flex items-center justify-center min-h-[720px] bg-gray-950 px-6 py-12">
+            <div className="w-full max-w-4xl">
                 <SectionsContent {...props} />
             </div>
         </div>

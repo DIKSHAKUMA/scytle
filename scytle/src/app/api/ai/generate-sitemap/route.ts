@@ -32,6 +32,7 @@ function backfillContext(nodes: SitemapNode[]): SitemapNode[] {
             ...node,
             context,
             layout,
+            sections: node.sections || [],
             children: node.children ? backfillContext(node.children) : undefined,
         }
     })
@@ -60,32 +61,32 @@ interface SectionData {
     description: string
 }
 
-// Sitemap node type
+// Sitemap node type — sections are now OPTIONAL (templates fill them client-side)
 interface SitemapNode {
     id: string
     label: string
     slug: string
     context?: 'marketing' | 'application' | 'auth'
     layout?: 'stacked' | 'app-shell' | 'centered'
-    sections: SectionData[]
+    sections?: SectionData[]
     children?: SitemapNode[]
 }
 
-// Section schema
+// Section schema (optional — AI no longer generates sections)
 const SectionSchema = z.object({
     id: z.string(),
     name: z.string(),
     description: z.string(),
 })
 
-// Sitemap response schema for validation
+// Sitemap response schema for validation — sections now optional
 const SitemapNodeSchema: z.ZodType<SitemapNode> = z.object({
     id: z.string(),
     label: z.string(),
     slug: z.string(),
     context: z.enum(['marketing', 'application', 'auth']).optional(),
     layout: z.enum(['stacked', 'app-shell', 'centered']).optional(),
-    sections: z.array(SectionSchema),
+    sections: z.array(SectionSchema).optional(),
     children: z.lazy(() => z.array(SitemapNodeSchema)).optional(),
 })
 
@@ -177,176 +178,47 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // 4. Generate sitemap using AI
-        const systemPrompt = `You are an expert product designer and information architect with comprehensive knowledge of every industry.
+        // 4. Generate sitemap using AI — lightweight prompt, fast model, NO sections
+        const systemPrompt = `You are an expert information architect. Generate a sitemap (page structure only) for a web product.
 
-YOUR APPROACH:
-1. First, ANALYZE the product type from the description:
-   - What industry is this? (SaaS, e-commerce, marketplace, portfolio, restaurant, healthcare, fintech, etc.)
-   - What are the major competitors in this space? (Use your training knowledge)
-   - What's the typical end-to-end user journey for this type of product?
+CLASSIFY the product:
+A) Marketing-Only (portfolio, agency, restaurant, blog, landing page) → all marketing pages
+B) SaaS/App (dashboard, CRM, analytics, HR platform) → marketing + app screens + auth
+C) E-commerce (store, marketplace) → marketing + shop pages + auth
+D) Marketplace (two-sided) → marketing + buyer/seller dashboards + auth
 
-2. CLASSIFY the product type to decide which page contexts to generate:
-   - **SaaS / Web App** → generate marketing + application + auth pages
-   - **Static site / Portfolio / Agency / Restaurant** → marketing pages only
-   - **E-commerce** → marketing + application pages (cart, orders, account)
-   - **Marketplace** → marketing + application pages (seller dashboard, buyer dashboard)
+PAGE BUDGET: ${minPages}-${maxPages} pages. For SaaS: max 3 marketing, 2 auth, rest application.
 
-3. Then, GENERATE a sitemap that reflects industry best practices:
-   - Include all pages that competitors typically have
-   - Use section names that are SPECIFIC to this industry
-   - Think about what users expect when visiting this type of product
+CONTEXT & LAYOUT:
+| Context       | Layout      | Use for                                   |
+|---------------|-------------|-------------------------------------------|
+| "marketing"   | "stacked"   | Public: Home, Features, Pricing, About    |
+| "application" | "app-shell" | Logged-in: Dashboard, Settings, Projects  |
+| "auth"        | "centered"  | Auth: Login, Signup, Forgot Password      |
 
-PAGE CONTEXT SYSTEM:
-Every page MUST include a "context" and "layout" field:
-
-| Context       | Layout      | When to use                                    |
-|---------------|-------------|------------------------------------------------|
-| "marketing"   | "stacked"   | Public-facing pages: Home, Features, Pricing, About, Blog, Contact |
-| "application" | "app-shell" | Logged-in app pages: Dashboard, Settings, Projects, Analytics, Orders |
-| "auth"        | "centered"  | Authentication pages: Login, Signup, Forgot Password, Verify Email |
-
-CRITICAL SECTION RULES BY CONTEXT:
-- **marketing** pages: Start with "Navbar" section, end with "Footer" section. Use marketing sections: hero, features, testimonials, pricing, faq, cta, contact, team, stats, logos, gallery, blog.
-- **application** pages: Do NOT include Navbar or Footer sections (the app shell provides built-in chrome). Use app sections: dashboard widgets, data tables, charts, forms, lists, page headers, empty states. Name sections specifically: "Stats Overview", "Revenue Chart", "Recent Orders Table", "Activity Feed", "User Settings Form".
-- **auth** pages: Do NOT include Navbar or Footer sections. Include only ONE section: the auth form (login form, signup form, forgot password form, etc.).
-
-INDUSTRY-SPECIFIC EXAMPLES:
-
-For "project management SaaS":
-  Home (marketing/stacked), Features (marketing/stacked), Pricing (marketing/stacked),
-  Dashboard (application/app-shell), Projects (application/app-shell),
-  Team Members (application/app-shell), Settings (application/app-shell),
-  Login (auth/centered), Signup (auth/centered)
-
-For "food delivery app":
-  Home (marketing/stacked), Restaurants (marketing/stacked), Blog (marketing/stacked),
-  Dashboard (application/app-shell), Orders (application/app-shell), Account (application/app-shell),
-  Login (auth/centered), Signup (auth/centered)
-
-For "analytics dashboard SaaS":
-  Home (marketing/stacked), Features (marketing/stacked), Pricing (marketing/stacked),
-  Dashboard (application/app-shell), Reports (application/app-shell),
-  Data Explorer (application/app-shell), Settings (application/app-shell),
-  Login (auth/centered), Signup (auth/centered)
-
-For "architecture firm" (marketing only):
-  Home (marketing/stacked), Projects (marketing/stacked), Services (marketing/stacked),
-  About (marketing/stacked), Team (marketing/stacked), Contact (marketing/stacked)
-
-RULES:
-- Generate between ${minPages} and ${maxPages} pages
-- Each marketing page should have 4-7 relevant sections (including navbar + footer)
-- Each application page should have 3-6 relevant sections (NO navbar/footer)
-- Each auth page should have 1-2 sections (just the auth form)
-- Each section MUST have an id, name, and description
-- Section names should be DESCRIPTIVE and industry-specific
-- Section descriptions should explain what UI elements and content the section contains
-- Always include Home as the first page with slug "/"
-- Include logical child pages where appropriate (e.g., Blog -> Blog Post)
-- Use lowercase slugs with hyphens
-- For SaaS/app products, always include Login and Signup pages
-
-RESPONSE FORMAT (JSON ONLY, no markdown):
+Return JSON only (no markdown):
 {
   "pages": [
-    {
-      "id": "home",
-      "label": "Home",
-      "slug": "/",
-      "context": "marketing",
-      "layout": "stacked",
-      "sections": [
-        {
-          "id": "home-navbar",
-          "name": "Navbar",
-          "description": "Main navigation with logo, menu links, and call-to-action button"
-        },
-        {
-          "id": "home-hero",
-          "name": "Hero Header Section",
-          "description": "Eye-catching introduction with headline, subheadline, and primary CTA"
-        },
-        {
-          "id": "home-footer",
-          "name": "Footer",
-          "description": "Site footer with links, social media, and copyright"
-        }
-      ],
-      "children": []
-    },
-    {
-      "id": "dashboard",
-      "label": "Dashboard",
-      "slug": "/dashboard",
-      "context": "application",
-      "layout": "app-shell",
-      "sections": [
-        {
-          "id": "dashboard-header",
-          "name": "Page Header",
-          "description": "Page title with date range filter and action buttons"
-        },
-        {
-          "id": "dashboard-stats",
-          "name": "Stats Overview",
-          "description": "Row of stat cards showing key metrics like revenue, users, and growth"
-        },
-        {
-          "id": "dashboard-chart",
-          "name": "Revenue Chart",
-          "description": "Line or bar chart showing revenue trends over time"
-        },
-        {
-          "id": "dashboard-table",
-          "name": "Recent Activity",
-          "description": "Data table showing latest transactions or events"
-        }
-      ],
-      "children": []
-    },
-    {
-      "id": "login",
-      "label": "Login",
-      "slug": "/login",
-      "context": "auth",
-      "layout": "centered",
-      "sections": [
-        {
-          "id": "login-form",
-          "name": "Login Form",
-          "description": "Email and password fields with social login options and forgot password link"
-        }
-      ],
-      "children": []
-    }
+    {"id": "home", "label": "Home", "slug": "/", "context": "marketing", "layout": "stacked", "children": []},
+    {"id": "dashboard", "label": "Dashboard", "slug": "/app/dashboard", "context": "application", "layout": "app-shell", "children": [
+      {"id": "project-detail", "label": "Project Detail", "slug": "/app/projects/:id", "context": "application", "layout": "app-shell"}
+    ]},
+    {"id": "login", "label": "Login", "slug": "/login", "context": "auth", "layout": "centered"}
   ]
 }`
 
-        const userMessage = `Generate a comprehensive sitemap for the following product:
+        const userMessage = `Generate a sitemap for: ${finalDescription}
 
-PRODUCT DESCRIPTION: ${finalDescription}
+Page budget: ${minPages}-${maxPages} pages.
+${language ? `Language: ${language}` : ''}
+${industry ? `Industry: ${industry}` : ''}
+${targetAudience ? `Target audience: ${targetAudience}` : ''}
+${features?.length ? `Key features: ${features.join(', ')}` : ''}
 
-REQUIREMENTS:
-- Number of pages: ${minPages}-${maxPages}
-${language ? `- Language/Region: ${language}` : ''}
-${industry ? `- Industry: ${industry}` : ''}
-${targetAudience ? `- Target Audience: ${targetAudience}` : ''}
-${features?.length ? `- Key Features to highlight: ${features.join(', ')}` : ''}
-
-Think step by step:
-1. What type of product/business is this? (SaaS, static site, e-commerce, marketplace, etc.)
-2. Based on the type, which page contexts are needed? (marketing only, or marketing + application + auth)
-3. Who are the competitors and what pages do they typically have?
-4. What's the user journey from discovery to conversion (and ongoing usage for SaaS)?
-5. What sections would each page need? (Remember: no navbar/footer on application and auth pages)
-
-IMPORTANT: Every page MUST include "context" and "layout" fields.
-
-Generate the sitemap JSON now.`
+Every page MUST have "context" and "layout" fields. Use children[] for sub-pages. Return JSON only.`
 
         const aiResponse = await generate(userMessage, [], {
-            model: 'balanced',  // Use better model for sitemap generation
+            model: 'fast',
             systemPrompt,
             temperature: 0.7,
         })
@@ -370,7 +242,7 @@ Generate the sitemap JSON now.`
             console.error('🤖 Failed to parse AI response:', parseError)
             console.error('🤖 Raw response:', aiResponse)
 
-            // Return a default sitemap structure (marketing-only fallback)
+            // Return a default sitemap structure (marketing-only fallback, no sections — templates fill them)
             sitemapData = {
                 pages: [
                     {
@@ -379,14 +251,6 @@ Generate the sitemap JSON now.`
                         slug: '/',
                         context: 'marketing' as const,
                         layout: 'stacked' as const,
-                        sections: [
-                            { id: 'home-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
-                            { id: 'home-hero', name: 'Hero', description: 'Main hero section with headline and CTA' },
-                            { id: 'home-features', name: 'Features', description: 'Key features and benefits overview' },
-                            { id: 'home-about', name: 'About', description: 'Brief company introduction' },
-                            { id: 'home-cta', name: 'CTA', description: 'Call to action section' },
-                            { id: 'home-footer', name: 'Footer', description: 'Site footer with links and contact info' },
-                        ],
                         children: [],
                     },
                     {
@@ -395,13 +259,6 @@ Generate the sitemap JSON now.`
                         slug: '/about',
                         context: 'marketing' as const,
                         layout: 'stacked' as const,
-                        sections: [
-                            { id: 'about-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
-                            { id: 'about-story', name: 'Our Story', description: 'Company history and mission' },
-                            { id: 'about-team', name: 'Team', description: 'Team members showcase' },
-                            { id: 'about-values', name: 'Values', description: 'Core company values' },
-                            { id: 'about-footer', name: 'Footer', description: 'Site footer with links and contact info' },
-                        ],
                         children: [],
                     },
                     {
@@ -410,13 +267,6 @@ Generate the sitemap JSON now.`
                         slug: '/services',
                         context: 'marketing' as const,
                         layout: 'stacked' as const,
-                        sections: [
-                            { id: 'services-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
-                            { id: 'services-overview', name: 'Overview', description: 'Services introduction' },
-                            { id: 'services-list', name: 'Service List', description: 'Detailed list of all services' },
-                            { id: 'services-process', name: 'Process', description: 'How we work with clients' },
-                            { id: 'services-footer', name: 'Footer', description: 'Site footer with links and contact info' },
-                        ],
                         children: [],
                     },
                     {
@@ -425,13 +275,6 @@ Generate the sitemap JSON now.`
                         slug: '/contact',
                         context: 'marketing' as const,
                         layout: 'stacked' as const,
-                        sections: [
-                            { id: 'contact-navbar', name: 'Navbar', description: 'Main navigation with logo and menu links' },
-                            { id: 'contact-form', name: 'Contact Form', description: 'Main contact form for inquiries' },
-                            { id: 'contact-map', name: 'Map', description: 'Location map and directions' },
-                            { id: 'contact-info', name: 'Info', description: 'Contact details and hours' },
-                            { id: 'contact-footer', name: 'Footer', description: 'Site footer with links and contact info' },
-                        ],
                         children: [],
                     },
                 ],
@@ -511,7 +354,7 @@ function convertToReactFlowFormat(
             data: {
                 label: page.label,
                 slug: page.slug,
-                sections: page.sections,
+                sections: page.sections || [],
             },
         }
         nodes.push(pageNode)
@@ -542,7 +385,7 @@ function convertToReactFlowFormat(
                     data: {
                         label: child.label,
                         slug: child.slug,
-                        sections: child.sections,
+                        sections: child.sections || [],
                     },
                 }
                 nodes.push(childNode)

@@ -22,6 +22,7 @@ import type {
 } from '@/types'
 import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
 import { createJWT } from '@/lib/appwrite'
+import { getSectionsForPage } from '@/lib/ai/section-templates'
 
 // ============================================
 // Type Definitions
@@ -63,7 +64,7 @@ export interface AIGeneratedPage {
     id: string
     label: string
     slug: string
-    sections: Array<string | { id?: string; name: string; description?: string }>
+    sections?: Array<string | { id?: string; name: string; description?: string; type?: string }>
     children?: AIGeneratedPage[]
 }
 
@@ -114,69 +115,297 @@ export interface PageDragState {
 // Helper Functions
 // ============================================
 
-// Default preset IDs per section type — must match actual preset IDs in the design registry.
-// These are resolved by PlaceholderRenderer via getPresetById → getFamilyById pipeline.
-const DEFAULT_COMPONENT_IDS: Record<string, string> = {
-    // Marketing defaults
-    hero: 'hero-split',
-    features: 'features-grid-3col',
-    testimonials: 'testimonials-cards-3',
-    pricing: 'pricing-cards-3tier',
-    faq: 'faq-accordion-centered',
-    cta: 'cta-banner-centered',
-    contact: 'contact-split-default',
-    team: 'team-1',
-    about: 'content-3',
-    stats: 'stats-1',
-    logos: 'logos-1',
-    gallery: 'gallery-1',
-    'blog-list': 'blog-1',
-    blog: 'blog-1',
-    footer: 'footer-columns-4',
-    navbar: 'navbar-standard-default',
-    content: 'content-1',
-    // Application defaults (SaaS) — placeholder IDs until families are built
-    dashboard: 'stat-cards',
-    'data-table': 'table-standard',
-    'app-list': 'list-stacked',
-    chart: 'chart-bar',
-    'app-form': 'form-profile',
-    'empty-state': 'empty-state-default',
-    // Auth defaults
-    auth: 'auth-login',
+// ──── Fallback defaults (used when name-based resolution finds nothing) ────
+const FALLBACK_COMPONENT_IDS: Record<string, string> = {
+    hero: 'hero-split', features: 'features-grid-3col', testimonials: 'testimonials-cards-3-centered',
+    pricing: 'pricing-cards-3tier', faq: 'faq-accordion-centered', cta: 'cta-banner-centered',
+    contact: 'contact-split-default', team: 'team-1', about: 'content-3', stats: 'stats-1',
+    logos: 'logos-1', gallery: 'gallery-1', 'blog-list': 'blog-1', blog: 'blog-1',
+    footer: 'footer-columns-4', navbar: 'navbar-standard-default', content: 'content-1',
+    dashboard: 'stat-cards-1', 'data-table': 'table-standard-1', 'app-list': 'list-stacked-1',
+    chart: 'chart-bar-1', 'app-form': 'form-profile-1', 'empty-state': 'empty-state-1',
+    auth: 'auth-login-1',
 }
 
-// Infer section type from name
+/**
+ * Smart preset resolution — picks the best preset within a section type
+ * based on the section name and description keywords.
+ *
+ * Example: type='chart', name='Revenue Trend' → 'chart-line-1'
+ *          type='auth',  name='Signup Form'   → 'auth-signup-1'
+ */
+function resolveComponentIdForSection(
+    sectionType: string,
+    sectionName: string,
+    sectionDescription?: string,
+): string {
+    const lower = `${sectionName} ${sectionDescription || ''}`.toLowerCase()
+
+    switch (sectionType) {
+        // ── Auth ──
+        case 'auth': {
+            if (lower.includes('signup') || lower.includes('sign up') || lower.includes('register') || lower.includes('registration'))
+                return 'auth-signup-1'
+            if (lower.includes('onboard') || lower.includes('wizard') || lower.includes('multi-step'))
+                return 'auth-onboarding-1'
+            if (lower.includes('modal') || lower.includes('dialog') || lower.includes('popup'))
+                return 'auth-modal-1'
+            if (lower.includes('forgot') || lower.includes('reset') || lower.includes('verify'))
+                return 'auth-login-3'
+            return 'auth-login-1'
+        }
+
+        // ── Dashboard ──
+        case 'dashboard': {
+            if (lower.includes('page header') || lower.includes('breadcrumb') || lower.includes('title bar') || lower.includes('page title'))
+                return 'page-header-1'
+            if (lower.includes('stat') || lower.includes('metric') || lower.includes('kpi') || lower.includes('overview'))
+                return 'stat-cards-1'
+            return 'stat-cards-1'
+        }
+
+        // ── Chart ──
+        case 'chart': {
+            if (lower.includes('pie') || lower.includes('donut') || lower.includes('distribution') || lower.includes('breakdown') || lower.includes('segment'))
+                return 'chart-pie-1'
+            if (lower.includes('line') || lower.includes('trend') || lower.includes('growth') || lower.includes('revenue') || lower.includes('over time'))
+                return 'chart-line-1'
+            if (lower.includes('area') || lower.includes('filled') || lower.includes('stacked area'))
+                return 'chart-area-1'
+            return 'chart-bar-1'
+        }
+
+        // ── App Form ──
+        case 'app-form': {
+            if (lower.includes('payment') || lower.includes('billing') || lower.includes('card') || lower.includes('subscription') || lower.includes('plan'))
+                return 'form-payment-1'
+            if (lower.includes('preference') || lower.includes('notification') || lower.includes('toggle') || lower.includes('switch'))
+                return 'form-preferences-1'
+            if (lower.includes('detail') || lower.includes('description list') || lower.includes('info') || lower.includes('summary') || lower.includes('read-only'))
+                return 'description-list-1'
+            return 'form-profile-1'
+        }
+
+        // ── Data Table ──
+        case 'data-table': {
+            if (lower.includes('filter') || lower.includes('search') || lower.includes('advanced') || lower.includes('facet'))
+                return 'table-filtered-4'
+            if (lower.includes('expand') || lower.includes('nested') || lower.includes('collapsible') || lower.includes('tree'))
+                return 'table-expandable-7'
+            return 'table-standard-1'
+        }
+
+        // ── App List ──
+        case 'app-list': {
+            if (lower.includes('grid') || lower.includes('card') || lower.includes('thumbnail') || lower.includes('tile'))
+                return 'list-grid-1'
+            return 'list-stacked-1'
+        }
+
+        // ── Empty State ──
+        case 'empty-state': {
+            if (lower.includes('onboard') || lower.includes('getting started') || lower.includes('checklist') || lower.includes('setup') || lower.includes('welcome'))
+                return 'empty-state-5'
+            return 'empty-state-1'
+        }
+
+        // ── Marketing — Hero ──
+        case 'hero': {
+            if (lower.includes('video')) return 'hero-video-centered'
+            if (lower.includes('form') || lower.includes('subscribe') || lower.includes('waitlist')) return 'hero-form-inline'
+            if (lower.includes('minimal') || lower.includes('text only')) return 'hero-minimal-text-only'
+            if (lower.includes('image') && lower.includes('bg')) return 'hero-image-bg-centered'
+            if (lower.includes('card')) return 'hero-card-centered'
+            if (lower.includes('landscape') || lower.includes('wide')) return 'hero-split-landscape'
+            return 'hero-split'
+        }
+
+        // ── Marketing — Features ──
+        case 'features': {
+            if (lower.includes('number') && lower.includes('list')) return 'features-numbered-list'
+            if (lower.includes('number') || lower.includes('step') || lower.includes('how it works') || lower.includes('process')) return 'features-numbered-grid'
+            if (lower.includes('split') || lower.includes('showcase') || lower.includes('highlight') || lower.includes('detail')) return 'features-split-default'
+            if (lower.includes('list')) return 'features-list-default'
+            if (lower.includes('4') || lower.includes('four')) return 'features-grid-4col'
+            if (lower.includes('2') || lower.includes('two')) return 'features-grid-2col'
+            if (lower.includes('border') || lower.includes('card')) return 'features-grid-bordered'
+            return 'features-grid-3col'
+        }
+
+        // ── Marketing — Testimonials ──
+        case 'testimonials': {
+            if (lower.includes('slider') || lower.includes('carousel')) return 'testimonials-slider-arrows'
+            if (lower.includes('split') && lower.includes('right')) return 'testimonials-split-right'
+            if (lower.includes('split')) return 'testimonials-split-left'
+            if (lower.includes('simple') && lower.includes('star')) return 'testimonials-simple-stars'
+            if (lower.includes('simple')) return 'testimonials-simple-default'
+            if (lower.includes('image') || lower.includes('photo')) return 'testimonials-card-image-3'
+            if (lower.includes('bg') || lower.includes('background')) return 'testimonials-card-bg-3'
+            if (lower.includes('cta')) return 'testimonials-cards-cta'
+            if (lower.includes('2') || lower.includes('two') || lower.includes('pair')) return 'testimonials-cards-2'
+            return 'testimonials-cards-3-centered'
+        }
+
+        // ── Marketing — Pricing ──
+        case 'pricing': {
+            if (lower.includes('comparison') || lower.includes('table') || lower.includes('compare')) return 'pricing-comparison-3plan'
+            if (lower.includes('split') || lower.includes('side')) return 'pricing-split-default'
+            if (lower.includes('left') || lower.includes('header')) return 'pricing-left-header-3tier'
+            if (lower.includes('4') || lower.includes('four') || lower.includes('enterprise')) return 'pricing-cards-4tier'
+            if (lower.includes('2') || lower.includes('two') || lower.includes('simple')) return 'pricing-cards-2tier'
+            return 'pricing-cards-3tier'
+        }
+
+        // ── Marketing — FAQ ──
+        case 'faq': {
+            if (lower.includes('split') || lower.includes('side')) return 'faq-accordion-split'
+            if (lower.includes('card') || lower.includes('grid')) return 'faq-accordion-cards'
+            if (lower.includes('categor') || lower.includes('group')) return 'faq-accordion-categories'
+            if (lower.includes('two col') || lower.includes('2 col') || lower.includes('flat')) return 'faq-twocol-flat'
+            if (lower.includes('left') || lower.includes('align')) return 'faq-accordion-left'
+            return 'faq-accordion-centered'
+        }
+
+        // ── Marketing — CTA ──
+        case 'cta': {
+            if (lower.includes('split') || lower.includes('side') || lower.includes('image')) return 'cta-split-default'
+            if (lower.includes('minimal') || lower.includes('simple') || lower.includes('text')) return 'cta-minimal-centered'
+            if (lower.includes('accent') || lower.includes('bold') || lower.includes('color')) return 'cta-banner-accent'
+            if (lower.includes('light') || lower.includes('subtle')) return 'cta-banner-light'
+            return 'cta-banner-centered'
+        }
+
+        // ── Marketing — Contact ──
+        case 'contact': {
+            if (lower.includes('map') || lower.includes('location') && !lower.includes('office')) return 'contact-map-default'
+            if (lower.includes('info') && lower.includes('grid')) return 'contact-info-grid'
+            if (lower.includes('info') && lower.includes('list')) return 'contact-info-list'
+            if (lower.includes('info')) return 'contact-info-split'
+            if (lower.includes('office') || lower.includes('branch') || lower.includes('location')) return 'contact-locations-images'
+            if (lower.includes('simple') || lower.includes('minimal')) return 'contact-simple-default'
+            if (lower.includes('reversed') || lower.includes('right')) return 'contact-split-reversed'
+            return 'contact-split-default'
+        }
+
+        // ── Marketing — Footer ──
+        case 'footer': {
+            if (lower.includes('simple') || lower.includes('minimal')) return 'footer-simple-default'
+            if (lower.includes('cta') || lower.includes('newsletter') || lower.includes('subscribe')) return 'footer-cta-default'
+            if (lower.includes('big') || lower.includes('large') || lower.includes('mega')) return 'footer-big-default'
+            if (lower.includes('center')) return 'footer-centered-default'
+            if (lower.includes('brand') || lower.includes('logo')) return 'footer-branded-default'
+            return 'footer-columns-4'
+        }
+
+        // ── Marketing — Navbar ──
+        case 'navbar': {
+            if (lower.includes('center') && lower.includes('logo')) return 'navbar-centered-default'
+            if (lower.includes('mega') || lower.includes('dropdown')) return 'navbar-mega-default'
+            if (lower.includes('float') || lower.includes('glass')) return 'navbar-floating-default'
+            if (lower.includes('double') || lower.includes('two row')) return 'navbar-double-default'
+            if (lower.includes('fullscreen') || lower.includes('overlay')) return 'navbar-fullscreen-grid'
+            if (lower.includes('search')) return 'navbar-standard-search'
+            return 'navbar-standard-default'
+        }
+
+        // ── Marketing — Content ──
+        case 'content': case 'about': {
+            if (lower.includes('video')) return 'content-11'
+            if (lower.includes('tab')) return 'content-4'
+            if (lower.includes('step') || lower.includes('process')) return 'content-6'
+            if (lower.includes('comparison') || lower.includes('compare')) return 'content-7'
+            if (lower.includes('card')) return 'content-8'
+            return 'content-1'
+        }
+
+        // ── Marketing — Team ──
+        case 'team': {
+            if (lower.includes('carousel') || lower.includes('slider')) return 'team-2'
+            if (lower.includes('compact') || lower.includes('small')) return 'team-3'
+            return 'team-1'
+        }
+
+        // ── Marketing — Gallery ──
+        case 'gallery': {
+            if (lower.includes('mosaic') || lower.includes('masonry')) return 'gallery-2'
+            if (lower.includes('slider') || lower.includes('carousel')) return 'gallery-3'
+            return 'gallery-1'
+        }
+
+        // ── Marketing — Blog ──
+        case 'blog': case 'blog-list': {
+            if (lower.includes('featured') || lower.includes('highlight')) return 'blog-2'
+            if (lower.includes('list') || lower.includes('sidebar')) return 'blog-3'
+            return 'blog-1'
+        }
+
+        // ── Marketing — Stats ──
+        case 'stats': {
+            if (lower.includes('highlight') || lower.includes('big number')) return 'stats-2'
+            if (lower.includes('timeline') || lower.includes('history')) return 'stats-3'
+            return 'stats-1'
+        }
+
+        // ── Marketing — Logos ──
+        case 'logos': {
+            if (lower.includes('grid') || lower.includes('large')) return 'logos-2'
+            return 'logos-1'
+        }
+
+        default:
+            return FALLBACK_COMPONENT_IDS[sectionType] || `${sectionType}-1`
+    }
+}
+
+/**
+ * Infer the section design category from a section name.
+ * Order matters: more-specific compound patterns first, generic single-word patterns last.
+ */
 function inferSectionType(name: string): string {
-    const lowerName = name.toLowerCase()
+    const n = name.toLowerCase()
 
-    // Marketing section types
-    if (lowerName.includes('hero') || lowerName.includes('header')) return 'hero'
-    if (lowerName.includes('feature')) return 'features'
-    if (lowerName.includes('testimonial') || lowerName.includes('review')) return 'testimonials'
-    if (lowerName.includes('pricing')) return 'pricing'
-    if (lowerName.includes('faq') || lowerName.includes('question')) return 'faq'
-    if (lowerName.includes('cta') || lowerName.includes('call')) return 'cta'
-    if (lowerName.includes('contact')) return 'contact'
-    if (lowerName.includes('team')) return 'team'
-    if (lowerName.includes('about')) return 'about'
-    if (lowerName.includes('stat') || lowerName.includes('number')) return 'stats'
-    if (lowerName.includes('logo') || lowerName.includes('partner')) return 'logos'
-    if (lowerName.includes('gallery')) return 'gallery'
-    if (lowerName.includes('blog')) return 'blog-list'
-    if (lowerName.includes('footer')) return 'footer'
-    if (lowerName.includes('nav')) return 'navbar'
+    // ───── Auth (check early — very specific names) ─────
+    if (/\b(login|log[- ]?in|sign[- ]?in|sign[- ]?up|signup|register|forgot[- ]?password|reset[- ]?password|verify|verification|auth)\b/.test(n))
+        return 'auth'
 
-    // Application section types (SaaS)
-    if (lowerName.includes('dashboard') || lowerName.includes('overview') || lowerName.includes('metrics') || lowerName.includes('kpi')) return 'dashboard'
-    if (lowerName.includes('table') || lowerName.includes('records') || lowerName.includes('list view')) return 'data-table'
-    if (lowerName.includes('list') || lowerName.includes('grid') || lowerName.includes('directory') || lowerName.includes('people') || lowerName.includes('team members')) return 'app-list'
-    if (lowerName.includes('chart') || lowerName.includes('analytics') || lowerName.includes('graph') || lowerName.includes('report')) return 'chart'
-    if (lowerName.includes('form') || lowerName.includes('settings') || lowerName.includes('preferences') || lowerName.includes('profile') || lowerName.includes('account') || lowerName.includes('payment')) return 'app-form'
-    if (lowerName.includes('empty') || lowerName.includes('getting started') || lowerName.includes('zero')) return 'empty-state'
+    // ───── Application section types (compound names — check before marketing) ─────
+    // Page Header / Breadcrumb (app chrome)
+    if (/\bpage header\b|\bbreadcrumb\b|\btitle bar\b/.test(n)) return 'dashboard'
+    // Dashboard / Stats
+    if (/\b(dashboard|stats overview|stat cards?|metrics|kpi|key performance)\b/.test(n)) return 'dashboard'
+    // Data Table
+    if (/\b(data table|table|records|transactions|invoices|orders table|user table|list view)\b/.test(n)) return 'data-table'
+    // Chart / Analytics
+    if (/\b(chart|graph|analytics|trend|revenue chart|pie chart|bar chart|line chart|area chart|report)\b/.test(n)) return 'chart'
+    // App Form / Settings
+    if (/\b(form|settings|preferences|profile settings|account settings|notification settings|payment method|billing form|edit profile)\b/.test(n)) return 'app-form'
+    // App List (compound names to avoid collision with marketing "features list")
+    if (/\b(activity feed|notification list|task list|recent orders|item list|member list|file list|team members list|directory)\b/.test(n)) return 'app-list'
+    // Empty State
+    if (/\b(empty state|empty|no data|getting started|zero state|onboarding steps)\b/.test(n)) return 'empty-state'
 
-    // Auth section types
-    if (lowerName.includes('login') || lowerName.includes('sign in') || lowerName.includes('sign up') || lowerName.includes('register') || lowerName.includes('forgot') || lowerName.includes('verify') || lowerName.includes('onboarding')) return 'auth'
+    // ───── Structural (navbar / footer) ─────
+    if (/\bnavbar\b|\bnav\b|\bnavigation\b/.test(n)) return 'navbar'
+    if (/\bfooter\b/.test(n)) return 'footer'
+
+    // ───── Marketing section types ─────
+    if (/\bhero\b/.test(n)) return 'hero'
+    if (/\bfeature/.test(n)) return 'features'
+    if (/\btestimonial|\breview|\bsocial proof\b/.test(n)) return 'testimonials'
+    if (/\bpricing\b/.test(n)) return 'pricing'
+    if (/\bfaq\b|\bfrequently asked\b/.test(n)) return 'faq'
+    if (/\bcta\b|\bcall to action\b/.test(n)) return 'cta'
+    if (/\bcontact\b/.test(n)) return 'contact'
+    if (/\bteam\b/.test(n)) return 'team'
+    if (/\babout\b/.test(n)) return 'about'
+    if (/\bstat/.test(n)) return 'stats'
+    if (/\blog(o|os?)\b|\bpartner/.test(n)) return 'logos'
+    if (/\bgallery\b|\bportfolio\b/.test(n)) return 'gallery'
+    if (/\bblog\b/.test(n)) return 'blog-list'
+
+    // ───── Broad App fallbacks (after marketing to avoid collisions) ─────
+    if (/\blist\b|\bgrid\b/.test(n)) return 'app-list'
+    if (/\bheader\b/.test(n)) return 'hero'
 
     return 'content'
 }
@@ -217,16 +446,20 @@ export function inferPageLayout(context: PageContext): PageLayout {
 // Resolves the preset from the design registry to initialize with real content and controls,
 // so sections render with actual pre-designed layouts instead of empty placeholders.
 function createSection(
-    data: string | { id?: string; name: string; description?: string },
+    data: string | { id?: string; name: string; description?: string; type?: string; componentId?: string },
     index: number
 ): WireframeSection {
     const isString = typeof data === 'string'
     const name = isString ? data : data.name
     const description = isString ? undefined : data.description
-    const id = isString ? `section-${Date.now()}-${index}` : (data.id || `section-${Date.now()}-${index}`)
+    // Use random suffix to guarantee uniqueness — Date.now() alone collides when
+    // flattenAIPages() creates sections for multiple pages in the same tick.
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${index}`
+    const id = isString ? `section-${uid}` : (data.id || `section-${uid}`)
 
-    const sectionType = inferSectionType(name)
-    const componentId = DEFAULT_COMPONENT_IDS[sectionType] || `${sectionType}-1`
+    // Use AI-provided type/componentId when available, otherwise infer
+    const sectionType = (!isString && data.type) ? data.type : inferSectionType(name)
+    const componentId = (!isString && data.componentId) ? data.componentId : resolveComponentIdForSection(sectionType, name, description)
 
     // Resolve preset → family to get real content and controls
     const preset = getPresetById(componentId)
@@ -404,6 +637,7 @@ function calculateTreeLayout(
 }
 
 // Convert AI pages to UnifiedPages (flatten hierarchy)
+// When AI pages have no sections (new lightweight prompt), section templates fill them.
 function flattenAIPages(
     aiPages: AIGeneratedPage[],
     parentId: string | null = null,
@@ -412,10 +646,15 @@ function flattenAIPages(
     const result: UnifiedPage[] = []
 
     aiPages.forEach((aiPage, index) => {
-        const sections = aiPage.sections.map((s, i) => createSection(s, i))
-
         const pageContext = inferPageContext(aiPage.label, aiPage.slug)
         const pageLayout = inferPageLayout(pageContext)
+
+        // Use AI-provided sections if present, otherwise apply deterministic templates
+        const rawSections = aiPage.sections && aiPage.sections.length > 0
+            ? aiPage.sections
+            : getSectionsForPage(aiPage.label, aiPage.slug, pageContext)
+
+        const sections = rawSections.map((s, i) => createSection(s, i))
 
         const page: UnifiedPage = {
             id: aiPage.id,
@@ -627,7 +866,7 @@ interface UnifiedState {
     // ============================================
     // Actions - Sections
     // ============================================
-    addSection: (pageId: string, section: WireframeSection | string | { id?: string; name: string; description?: string }, afterIndex?: number) => void
+    addSection: (pageId: string, section: WireframeSection | string | { id?: string; name: string; description?: string; type?: string; componentId?: string }, afterIndex?: number) => void
     updateSection: (pageId: string, sectionId: string, updates: Partial<WireframeSection>) => void
     updateSectionContent: (pageId: string, sectionId: string, content: Partial<WireframeSectionContent>) => void
     updateSectionControls: (pageId: string, sectionId: string, controls: Partial<WireframeSectionControls>) => void
@@ -947,46 +1186,47 @@ export const useUnifiedStore = create<UnifiedState>()(
                     const order = siblings.indexOf(node.id)
 
                     // Merge sections: preserve existing rich WireframeSection data where possible
-                    const sitemapSections = data.sections || []
-                    const mergedSections: WireframeSection[] = sitemapSections.map((s, idx) => {
-                        const sectionName = typeof s === 'string' ? s : s.name
-                        const sectionId = typeof s === 'string' ? `${node.id}-section-${idx}` : (s.id || `${node.id}-section-${idx}`)
-                        const sectionDesc = typeof s === 'string' ? undefined : s.description
-
-                        // Try to find matching existing section by id, then by name
-                        const existingSection = existing?.sections.find(es => es.id === sectionId)
-                            || existing?.sections.find(es => es.name === sectionName)
-
-                        if (existingSection) {
-                            // Preserve rich wireframe data, but update name/description/order
-                            return {
-                                ...existingSection,
-                                name: sectionName,
-                                description: sectionDesc ?? existingSection.description,
-                                order: idx,
-                            }
-                        }
-
-                        // New section — create a lightweight stub
-                        return {
-                            id: sectionId,
-                            type: sectionName.toLowerCase().replace(/\s+/g, '-'),
-                            name: sectionName,
-                            description: sectionDesc,
-                            componentId: '',
-                            isGlobal: false,
-                            order: idx,
-                            content: {
-                                heading: sectionName,
-                                body: sectionDesc || '',
-                            } as WireframeSectionContent,
-                            controls: {} as WireframeSectionControls,
-                        }
-                    })
-
+                    // If sitemap has no sections, use templates (new lightweight sitemap AI)
                     const pageName = data.label || existing?.name || 'Untitled'
                     const pageSlug = data.slug || existing?.slug || `/${(data.label || 'untitled').toLowerCase().replace(/\s+/g, '-')}`
                     const ctx = existing?.pageContext || inferPageContext(pageName, pageSlug)
+
+                    const sitemapSections = data.sections && data.sections.length > 0
+                        ? data.sections
+                        : getSectionsForPage(pageName, pageSlug, ctx)
+
+                    // If existing page already has rich sections, preserve them on resync
+                    let mergedSections: WireframeSection[]
+                    if (existing && existing.sections.length > 0 && (!data.sections || data.sections.length === 0)) {
+                        // Keep existing sections when sitemap has none (template already applied)
+                        mergedSections = existing.sections
+                    } else {
+                        mergedSections = sitemapSections.map((s, idx) => {
+                            const sectionName = typeof s === 'string' ? s : s.name
+                            const sectionId = typeof s === 'string' ? `${node.id}-section-${idx}` : ((s as { id?: string }).id || `${node.id}-section-${idx}`)
+                            const sectionDesc = typeof s === 'string' ? undefined : (s as { description?: string }).description
+
+                            // Try to find matching existing section by id, then by name
+                            const existingSection = existing?.sections.find(es => es.id === sectionId)
+                                || existing?.sections.find(es => es.name === sectionName)
+
+                            if (existingSection) {
+                                return {
+                                    ...existingSection,
+                                    name: sectionName,
+                                    description: sectionDesc ?? existingSection.description,
+                                    order: idx,
+                                }
+                            }
+
+                            // New section — resolve using createSection helper to get real designs
+                            const created = createSection(
+                                { id: sectionId, name: sectionName, description: sectionDesc },
+                                idx,
+                            )
+                            return created
+                        })
+                    }
 
                     newPages.push({
                         id: node.id,
@@ -1368,12 +1608,12 @@ export const useUnifiedStore = create<UnifiedState>()(
                     let newSection: WireframeSection
                     if (typeof section === 'string') {
                         newSection = createSection(section, afterIndex ?? page.sections.length)
-                    } else if ('type' in section && 'componentId' in section) {
-                        // Full WireframeSection
+                    } else if ('content' in section && 'controls' in section && 'type' in section && 'componentId' in section) {
+                        // Fully resolved WireframeSection (has content + controls) — use directly
                         newSection = section as WireframeSection
                     } else {
-                        // Simple { id?, name, description? } object from SectionPickerPanel
-                        newSection = createSection(section, afterIndex ?? page.sections.length)
+                        // Partial object (from AI response or SectionPicker) — resolve via createSection
+                        newSection = createSection(section as { id?: string; name: string; description?: string; type?: string; componentId?: string }, afterIndex ?? page.sections.length)
                     }
 
                     if (afterIndex !== undefined) {

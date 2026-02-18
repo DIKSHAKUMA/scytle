@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useUnifiedStore } from '@/store'
 import type { WireframeSection, WireframeSectionContent } from '@/types'
 import { createJWT } from '@/lib/appwrite'
+import { getPresetById, getPresetsForCategory, getFamilyById } from '@/lib/designs/registry'
 
 interface GenerationState {
     isGenerating: boolean
@@ -53,6 +54,7 @@ export function useGeneration(): UseGenerationReturn {
         updatePage,
         getPageById,
         getSectionById,
+        addSection,
     } = useUnifiedStore()
 
     /**
@@ -79,6 +81,10 @@ export function useGeneration(): UseGenerationReturn {
 
             setState(s => ({ ...s, progress: 10, message: 'Connecting to AI...' }))
 
+            // Get page context to send to the API
+            const page = pages.find(p => p.id === pageId)
+            const pageContext = page?.pageContext || 'marketing'
+
             const response = await fetch('/api/wireframe/generate', {
                 method: 'POST',
                 headers: {
@@ -89,6 +95,7 @@ export function useGeneration(): UseGenerationReturn {
                     pageId,
                     pageName,
                     pageDescription,
+                    pageContext,
                 }),
                 signal: controller.signal,
             })
@@ -104,9 +111,21 @@ export function useGeneration(): UseGenerationReturn {
 
             setState(s => ({ ...s, progress: 80, message: 'Applying sections...' }))
 
-            // Update the page with new sections
+            // Clear existing sections and add new ones via addSection so they get
+            // resolved through createSection() with proper componentId and controls
             if (data.sections && Array.isArray(data.sections)) {
-                updatePage(pageId, { sections: data.sections })
+                // First clear the page sections
+                updatePage(pageId, { sections: [] })
+                // Then add each section through addSection which runs createSection()
+                for (const section of data.sections) {
+                    addSection(pageId, {
+                        id: section.id,
+                        name: section.name,
+                        description: section.description,
+                        type: section.type,
+                        componentId: section.componentId,
+                    })
+                }
             }
 
             setState(s => ({ ...s, progress: 100, message: 'Done!' }))
@@ -140,7 +159,7 @@ export function useGeneration(): UseGenerationReturn {
                 abortController: null,
             })
         }
-    }, [updatePage])
+    }, [pages, updatePage, addSection])
 
     /**
      * Generate copy for a single section
@@ -321,19 +340,24 @@ export function useGeneration(): UseGenerationReturn {
         if (!result) return
 
         const { section, page } = result
+        if (!section.componentId) return
 
-        // Get current component number
-        const match = section.componentId.match(/^(.+)-(\d+)$/)
-        if (!match) return
+        // Find current preset and get all presets in the same category
+        const currentPreset = getPresetById(section.componentId)
+        if (!currentPreset) return
 
-        const [, type, numStr] = match
-        const currentNum = parseInt(numStr, 10)
+        const family = getFamilyById(currentPreset.familyId)
+        if (!family) return
 
-        // Cycle through variants (1-5)
-        const nextNum = (currentNum % 5) + 1
-        const newComponentId = `${type}-${nextNum}`
+        const categoryPresets = getPresetsForCategory(family.category)
+        if (categoryPresets.length <= 1) return
 
-        updateSection(page.id, sectionId, { componentId: newComponentId })
+        // Cycle to next preset in the category
+        const currentIndex = categoryPresets.findIndex(p => p.id === section.componentId)
+        const nextIndex = (currentIndex + 1) % categoryPresets.length
+        const nextPreset = categoryPresets[nextIndex]
+
+        updateSection(page.id, sectionId, { componentId: nextPreset.id })
     }, [getSectionById, updateSection])
 
     /**

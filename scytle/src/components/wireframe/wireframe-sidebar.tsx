@@ -86,6 +86,7 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
                 <PagePanel
                     page={selectedPage}
                     onCloseAction={handleClose}
+                    className="flex-1"
                 />
             )}
 
@@ -96,6 +97,7 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
                     page={selectedPage}
                     onCloseAction={handleClose}
                     onOpenLibraryAction={handleOpenLibrary}
+                    className="flex-1"
                 />
             )}
 
@@ -104,6 +106,7 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
                 <ComponentLibraryPanel
                     section={selectedSection}
                     onBackAction={handleBackFromLibrary}
+                    className="flex-1"
                 />
             )}
         </div>

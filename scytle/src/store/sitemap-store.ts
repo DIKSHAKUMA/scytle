@@ -302,7 +302,7 @@ interface AIGeneratedPage {
     id: string
     label: string
     slug: string
-    sections: (string | SectionData)[]
+    sections?: (string | SectionData)[]
     children?: AIGeneratedPage[]
 }
 
@@ -882,7 +882,16 @@ export const useSitemapStore = create<SitemapState>()(
         },
 
         loadSitemap: (pages, projectName = 'My Project') => {
-            // Convert AI-generated pages to ReactFlow nodes and edges
+            // Convert AI-generated pages to ReactFlow nodes and edges.
+            // Pull resolved sections from the unified store (which runs templates)
+            // since the raw AI pages may not include sections.
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const unifiedMod = require('@/store/unified-store') as { useUnifiedStore: { getState: () => { pages: Array<{ id: string; sections: Array<{ id: string; name: string; description?: string }> }> } } }
+            const unifiedPages = new Map<string, { id: string; name: string; description?: string }[]>()
+            for (const up of unifiedMod.useUnifiedStore.getState().pages) {
+                unifiedPages.set(up.id, up.sections.map(s => ({ id: s.id, name: s.name, description: s.description })))
+            }
+
             const rawNodes: Node[] = []
             const rawEdges: Edge[] = []
 
@@ -899,6 +908,13 @@ export const useSitemapStore = create<SitemapState>()(
             const homePage = pages.find(p => p.slug === '/' || p.id === 'home') || pages[0]
             const otherPages = pages.filter(p => p !== homePage)
 
+            // Helper: resolve sections for a page — prefer unified store (template-resolved)
+            const getSections = (pageId: string, rawSections?: unknown[]) => {
+                const unified = unifiedPages.get(pageId)
+                if (unified && unified.length > 0) return unified
+                return rawSections || []
+            }
+
             // Add home page
             if (homePage) {
                 rawNodes.push({
@@ -908,7 +924,7 @@ export const useSitemapStore = create<SitemapState>()(
                     data: {
                         label: homePage.label,
                         slug: homePage.slug,
-                        sections: homePage.sections,
+                        sections: getSections(homePage.id, homePage.sections),
                         isHome: true,
                     },
                 })
@@ -930,7 +946,7 @@ export const useSitemapStore = create<SitemapState>()(
                         data: {
                             label: page.label,
                             slug: page.slug,
-                            sections: page.sections,
+                            sections: getSections(page.id, page.sections),
                         },
                     })
 
@@ -952,7 +968,7 @@ export const useSitemapStore = create<SitemapState>()(
                                 data: {
                                     label: child.label,
                                     slug: child.slug,
-                                    sections: child.sections,
+                                    sections: getSections(child.id, child.sections),
                                 },
                             })
 

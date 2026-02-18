@@ -17,6 +17,7 @@ import {
     MoreHorizontal,
 } from 'lucide-react'
 import type { ViewportDevice } from '@/types'
+import { useUnifiedStore } from '@/store'
 
 /**
  * Sidebar level determines which elements are shown:
@@ -81,6 +82,27 @@ const BOTTOM_NAV: NavItem[] = [
     { icon: Settings, label: 'Settings' },
 ]
 
+/* ─── Helpers for dynamic nav items ─── */
+
+function getIconForPage(name: string): React.ComponentType<{ className?: string }> {
+    const n = name.toLowerCase()
+    if (n.includes('dashboard') || n.includes('overview')) return LayoutDashboard
+    if (n.includes('analytics') || n.includes('report') || n.includes('trend')) return TrendingUp
+    if (n.includes('project') || n.includes('document') || n.includes('file')) return FolderOpen
+    if (n.includes('chart') || n.includes('stats') || n.includes('metric')) return BarChart3
+    if (n.includes('setting') || n.includes('preference')) return Settings
+    if (n.includes('support') || n.includes('help')) return HelpCircle
+    if (n.includes('saved') || n.includes('bookmark') || n.includes('favorite')) return Bookmark
+    if (n.includes('history') || n.includes('activity') || n.includes('log')) return History
+    if (n.includes('home')) return Home
+    return FileText
+}
+
+function isBottomNavPage(name: string): boolean {
+    const n = name.toLowerCase()
+    return /\b(setting|support|help|preference)/.test(n)
+}
+
 /* ─── Component ─── */
 
 export interface AppSidebarProps {
@@ -90,6 +112,8 @@ export interface AppSidebarProps {
     showBadges?: boolean
     viewport?: ViewportDevice
     className?: string
+    /** Current page name — highlights matching sidebar item */
+    currentPageName?: string
 }
 
 export function AppSidebar({
@@ -99,9 +123,43 @@ export function AppSidebar({
     showBadges = false,
     viewport = 'desktop',
     className,
+    currentPageName,
 }: AppSidebarProps) {
+    const { pages } = useUnifiedStore()
     const isCollapsed = collapsed || viewport === 'tablet'
     const isHidden = viewport === 'mobile'
+
+    // Derive nav items from project pages when available
+    const appPages = pages.filter(p => p.pageContext === 'application')
+    const hasProjectPages = appPages.length > 0
+
+    const dynamicMainItems: NavItem[] = hasProjectPages
+        ? appPages
+            .filter(p => !isBottomNavPage(p.name))
+            .map(p => ({
+                icon: getIconForPage(p.name),
+                label: p.name,
+                active: currentPageName === p.name,
+            }))
+        : []
+
+    const dynamicBottomItems: NavItem[] = hasProjectPages
+        ? appPages
+            .filter(p => isBottomNavPage(p.name))
+            .map(p => ({
+                icon: getIconForPage(p.name),
+                label: p.name,
+                active: currentPageName === p.name,
+            }))
+        : []
+
+    const activeNavGroups = hasProjectPages
+        ? [{ items: dynamicMainItems }]
+        : NAV_GROUPS
+
+    const activeBottomNav = hasProjectPages && dynamicBottomItems.length > 0
+        ? dynamicBottomItems
+        : BOTTOM_NAV
 
     if (isHidden) return null
 
@@ -146,7 +204,7 @@ export function AppSidebar({
 
             {/* Nav Groups */}
             <nav className="flex-1 flex flex-col gap-0.5 px-2 py-1 overflow-y-auto">
-                {(showGroups ? NAV_GROUPS : [{ items: NAV_GROUPS.flatMap((g) => g.items) }]).map(
+                {(showGroups ? activeNavGroups : [{ items: activeNavGroups.flatMap((g) => g.items) }]).map(
                     (group, gi) => (
                         <div key={gi} className={cn(gi > 0 && 'mt-3')}>
                             {/* Group header — only when showGroups is true, expanded, and header exists */}
@@ -167,7 +225,7 @@ export function AppSidebar({
                             ))}
 
                             {/* Separator between groups */}
-                            {gi < (showGroups ? NAV_GROUPS : []).length - 1 && (
+                            {gi < (showGroups ? activeNavGroups : []).length - 1 && (
                                 <div className="mx-2 my-1 border-t border-gray-800" />
                             )}
                         </div>
@@ -180,7 +238,7 @@ export function AppSidebar({
 
             {/* Bottom nav — Support/Settings */}
             <div className="px-2 py-1 shrink-0">
-                {BOTTOM_NAV.map((item) => (
+                {activeBottomNav.map((item) => (
                     <NavItemRow key={item.label} item={item} collapsed={isCollapsed} showBadges={false} level={level} />
                 ))}
             </div>

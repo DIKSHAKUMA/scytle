@@ -130,6 +130,33 @@ function Header5Thumbnail() {
     )
 }
 
+/** Header 16 Thumbnail: Dark bg, left text, mosaic images */
+function Header16Thumbnail() {
+    return (
+        <div className="w-full h-full bg-neutral-950 p-1.5 flex flex-col">
+            <div className="space-y-0.5 mb-1">
+                <div className="text-[6px] font-medium text-white leading-tight">
+                    Long heading is what you see here
+                </div>
+                <div className="text-[3px] text-white/60">Lorem ipsum dolor sit amet</div>
+                <div className="flex gap-0.5 mt-0.5">
+                    <div className="bg-[#2b5c8a] text-white text-[3px] px-1 py-0.5">Button</div>
+                </div>
+            </div>
+            <div className="flex gap-0.5 flex-1 overflow-hidden">
+                <div className="w-4 h-6 bg-neutral-800 flex-shrink-0" />
+                <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <div className="w-3 h-3 bg-neutral-800" />
+                    <div className="w-3 h-4 bg-neutral-800" />
+                </div>
+                <div className="w-4 h-4 bg-neutral-800 flex-shrink-0" />
+                <div className="w-5 h-8 bg-neutral-800 flex-shrink-0" />
+                <div className="w-4 h-5 bg-neutral-800 flex-shrink-0" />
+            </div>
+        </div>
+    )
+}
+
 // ===== PRESETS =====
 
 /** Header 1 — Split layout: text left, image right */
@@ -560,6 +587,62 @@ export const Header15Preset: DesignPreset = {
     Thumbnail: Header15Thumbnail,
 }
 
+/** Header 16 — Gallery hero: dark bg, left text, mosaic images */
+export const Header16Preset: DesignPreset = {
+    id: 'hero-gallery',
+    familyId: 'hero-gallery',
+    name: 'Header 16',
+    description: 'Dark hero with mosaic image collage',
+    controls: {
+        buttonCount: '2',
+        showDescription: true,
+    },
+    Thumbnail: Header16Thumbnail,
+}
+
+/** Header 17 Thumbnail: Centered text, symmetric mosaic images */
+function Header17Thumbnail() {
+    return (
+        <div className="w-full h-full bg-white p-1.5 flex flex-col">
+            <div className="text-center space-y-0.5 mb-1">
+                <div className="text-[6px] font-medium text-gray-800 leading-tight">
+                    Medium length hero heading
+                </div>
+                <div className="text-[3px] text-gray-400">Lorem ipsum dolor sit amet</div>
+                <div className="flex justify-center mt-0.5">
+                    <div className="bg-gray-800 text-white text-[3px] px-1 py-0.5">Button</div>
+                </div>
+            </div>
+            <div className="flex gap-0.5 flex-1 items-center justify-center overflow-hidden">
+                <div className="w-3 h-5 bg-gray-100 flex-shrink-0" />
+                <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <div className="w-3 h-3 bg-gray-100" />
+                    <div className="w-3 h-4 bg-gray-100" />
+                </div>
+                <div className="w-6 h-8 bg-gray-100 flex-shrink-0" />
+                <div className="flex flex-col gap-0.5 flex-shrink-0">
+                    <div className="w-3 h-4 bg-gray-100" />
+                    <div className="w-3 h-3 bg-gray-100" />
+                </div>
+                <div className="w-3 h-5 bg-gray-100 flex-shrink-0" />
+            </div>
+        </div>
+    )
+}
+
+/** Header 17 — Mosaic hero: centered text, symmetric image collage */
+export const Header17Preset: DesignPreset = {
+    id: 'hero-mosaic',
+    familyId: 'hero-mosaic',
+    name: 'Header 17',
+    description: 'Centered hero with symmetric image mosaic',
+    controls: {
+        buttonCount: '1',
+        showDescription: true,
+    },
+    Thumbnail: Header17Thumbnail,
+}
+
 /** All hero presets for registry */
 export const heroPresets: DesignPreset[] = [
     Header1Preset,
@@ -577,4 +660,6 @@ export const heroPresets: DesignPreset[] = [
     Header13Preset,
     Header14Preset,
     Header15Preset,
+    Header16Preset,
+    Header17Preset,
 ]

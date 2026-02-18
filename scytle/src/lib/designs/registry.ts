@@ -214,6 +214,40 @@ export function searchPresets(query: string): DesignPreset[] {
     })
 }
 
+/**
+ * Generate a compact preset catalog string for AI prompts.
+ * Groups presets by family within each category, filtered by page context.
+ * This lets the AI select specific preset IDs for varied, accurate wireframes.
+ */
+export function generatePresetCatalog(context?: PageContext): string {
+    const categories = context
+        ? DESIGN_CATEGORIES.filter(c => c.context === context)
+        : DESIGN_CATEGORIES
+
+    const lines: string[] = []
+    for (const cat of categories) {
+        const presets = getPresetsForCategory(cat.id)
+        if (presets.length === 0) continue
+
+        // Group presets by family for readable context
+        const byFamily = new Map<string, { familyName: string; presetIds: string[] }>()
+        for (const p of presets) {
+            const family = getFamilyById(p.familyId)
+            if (!byFamily.has(p.familyId)) {
+                byFamily.set(p.familyId, { familyName: family?.name || p.familyId, presetIds: [] })
+            }
+            byFamily.get(p.familyId)!.presetIds.push(p.id)
+        }
+
+        const familyEntries = Array.from(byFamily.values())
+            .map(f => `${f.familyName}: ${f.presetIds.join(', ')}`)
+            .join(' | ')
+
+        lines.push(`[${cat.id}] ${familyEntries}`)
+    }
+    return lines.join('\n')
+}
+
 // ===== BACKWARD COMPATIBILITY =====
 
 /**

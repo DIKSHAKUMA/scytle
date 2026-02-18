@@ -58,75 +58,56 @@ export async function POST(request: NextRequest) {
         const sectionCount = rawSectionCount || (context === 'auth' ? 1 : context === 'application' ? 4 : 5)
 
         // 3. Generate page sections using AI
-        const systemPrompt = `You are an expert web designer. Your task is to generate sections for a web page based on the page name, context, and layout.
-
-INSTRUCTIONS:
-1. Analyze the page name, description, and context
-2. Generate appropriate sections for this type of page
-3. Consider the project context and industry
-4. Use clear, descriptive section names
-5. Follow the rules for the page context
+        const systemPrompt = `You are an expert web designer. Generate sections for a web page.
 
 PAGE CONTEXT RULES:
 
-"marketing" pages (layout: stacked):
-  - Use section types: hero, features, about, team, testimonials, pricing, faq, cta, contact, gallery, services, stats, blog, content, navbar, footer
-  - Include navbar at top and footer at bottom
+"marketing" pages:
+  - Types: hero, features, about, team, testimonials, pricing, faq, cta, contact, gallery, stats, blog, content, logos
+  - Include navbar at top, footer at bottom
+  - Use descriptive names: "Hero", "Key Features", "Customer Testimonials", "Pricing Plans"
 
-"application" pages (layout: app-shell):
-  - Use section types: dashboard, data-table, chart, app-form, app-list, app-header, empty-state
-  - Do NOT include navbar or footer sections (the app shell provides built-in chrome)
-  - Use descriptive names: "Stats Overview", "Revenue Chart", "Recent Orders Table", "User Settings Form"
+"application" pages:
+  - Types: dashboard, data-table, chart, app-form, app-list, empty-state
+  - Do NOT include navbar or footer (app shell provides chrome)
+  - Use VERY SPECIFIC descriptive names — the name picks the right wireframe design:
+    • "Page Header" → title bar with breadcrumbs (type: dashboard)
+    • "Stats Overview" → stat cards (type: dashboard)
+    • "Revenue Trend Chart" → line chart (type: chart, name contains "trend")
+    • "Distribution Breakdown Chart" → pie chart (type: chart, name contains "breakdown")
+    • "Recent Orders Table" → data table (type: data-table)
+    • "Filtered Transactions Table" → filterable table (type: data-table, name contains "filter")
+    • "Profile Settings Form" → profile form (type: app-form)
+    • "Payment Method Form" → payment form (type: app-form, name contains "payment")
+    • "Notification Preferences" → toggle form (type: app-form, name contains "preference")
+    • "Activity Feed" → stacked list (type: app-list)
+    • "Project Card Grid" → card grid (type: app-list, name contains "grid")
 
-"auth" pages (layout: centered):
-  - Use section type: auth
-  - Generate only 1-2 sections (just the auth form)
-  - Do NOT include navbar or footer sections
+"auth" pages:
+  - Type: auth (ONLY). 1 section.
+  - Name EXACTLY: "Login Form", "Signup Form", or "Reset Password Form"
 
 RESPONSE FORMAT (JSON ONLY):
 {
   "sections": [
-    {
-      "id": "stats-overview",
-      "name": "Stats Overview",
-      "type": "dashboard",
-      "description": "Row of stat cards showing key metrics"
-    }
+    {"id": "stats-overview", "name": "Stats Overview", "type": "dashboard", "description": "Row of stat cards showing key metrics"}
   ],
-  "pageTitle": "Page Title Suggestion",
-  "metaDescription": "SEO meta description for this page"
+  "pageTitle": "Page Title",
+  "metaDescription": "SEO description"
 }
 
-SECTION TYPES (marketing):
-- hero, features, about, team, testimonials, pricing, faq, cta, contact, gallery, services, stats, blog, header, footer
+Generate ${sectionCount} sections. JSON only, no markdown.`
 
-SECTION TYPES (application):
-- dashboard: Stat cards, KPI widgets, overview panels
-- data-table: Sortable/filterable data tables
-- chart: Line charts, bar charts, pie charts, analytics
-- app-form: Settings forms, profile editors, input forms
-- app-list: Activity feeds, task lists, item lists
-- app-header: Page title with actions and breadcrumbs
-- empty-state: Zero-data state with illustration and CTA
-
-SECTION TYPES (auth):
-- auth: Login form, signup form, forgot password, verify email
-
-IMPORTANT:
-- Generate ${sectionCount} sections
-- Order sections logically
-- Only respond with valid JSON, no markdown`
-
-        const userMessage = `Generate sections for the following page:
+        const userMessage = `Generate sections for:
 
 PAGE NAME: ${pageName}
 PAGE CONTEXT: ${context}
-${pageDescription ? `PAGE DESCRIPTION: ${pageDescription}` : ''}
-${projectDescription ? `PROJECT CONTEXT: ${projectDescription}` : ''}
+${pageDescription ? `DESCRIPTION: ${pageDescription}` : ''}
+${projectDescription ? `PROJECT: ${projectDescription}` : ''}
 ${industry ? `INDUSTRY: ${industry}` : ''}
-${existingSections?.length ? `EXISTING SECTIONS (for context): ${existingSections.join(', ')}` : ''}
+${existingSections?.length ? `EXISTING: ${existingSections.join(', ')}` : ''}
 
-Generate ${sectionCount} appropriate sections for this "${context}" page. Follow the rules for "${context}" context strictly.`
+Generate ${sectionCount} sections for "${context}" context. Section names must be specific and descriptive.`
 
         const aiResponse = await generate(userMessage, [], {
             model: 'fast',

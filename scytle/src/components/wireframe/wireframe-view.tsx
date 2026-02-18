@@ -418,12 +418,19 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
             >
                 {/* Pages container - horizontal row layout (no wrap, like Relume) */}
                 <div className="flex flex-row flex-nowrap items-start gap-12 pb-24">
-                    {pages.map((page) => (
+                    {pages.map((page, idx) => (
                         <DraggablePageBlock key={page.id} pageId={page.id}>
-                            <PageViewports
-                                page={page}
-                                scale={1}
-                            />
+                            <div
+                                style={{
+                                    opacity: 0,
+                                    animation: `wireframe-page-in 0.4s ease-out ${idx * 120}ms forwards`,
+                                }}
+                            >
+                                <PageViewports
+                                    page={page}
+                                    scale={1}
+                                />
+                            </div>
                         </DraggablePageBlock>
                     ))}
 

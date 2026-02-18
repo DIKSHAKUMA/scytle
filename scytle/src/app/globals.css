@@ -290,6 +290,19 @@ body {
   animation: var(--animate-fade-in);
 }
 
+/* Wireframe page staggered entry animation */
+@keyframes wireframe-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Typography */
 .font-display {
   font-family: var(--font-display);
