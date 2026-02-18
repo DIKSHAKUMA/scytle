@@ -15,6 +15,10 @@ import {
     getPresetById,
     type DesignCategoryId,
 } from '@/lib/designs'
+import {
+    getTemplatesByCategory,
+    type LayoutCategory,
+} from '@/lib/designs/v2/layouts'
 import type { WireframeSection } from '@/types'
 
 // Component variant interface — one entry per preset
@@ -27,13 +31,41 @@ export interface ComponentVariant {
     tags: string[]
     /** Thumbnail component matching the wireframe canvas design */
     Thumbnail?: React.FC
+    /** Whether this is a V2 layout template */
+    isV2?: boolean
 }
 
 /**
- * Get component variants for a section type — one entry per family.
- * For each family we pick its first preset as the representative entry.
+ * V2 layout categories that are ready to use.
+ * When a category has V2 layouts, we show ONLY V2 (hiding V1).
+ */
+const V2_READY_CATEGORIES: LayoutCategory[] = ['hero']
+
+/**
+ * Get component variants for a section type.
+ * If V2 layouts exist for this category, returns V2 exclusively.
+ * Otherwise falls back to V1 families.
  */
 function getVariantsForType(sectionType: string): ComponentVariant[] {
+    // Check if V2 templates exist for this category
+    const v2Category = sectionType as LayoutCategory
+    if (V2_READY_CATEGORIES.includes(v2Category)) {
+        const templates = getTemplatesByCategory(v2Category)
+        if (templates.length > 0) {
+            return templates.map(t => ({
+                id: t.id,
+                sectionType,
+                variant: t.id,
+                name: t.name,
+                description: t.description,
+                tags: t.tags ?? [],
+                Thumbnail: undefined, // V2 layouts render directly; thumbnails come later
+                isV2: true,
+            }))
+        }
+    }
+
+    // Fallback to V1 families
     const families = getFamiliesForCategory(sectionType as DesignCategoryId)
     const presets = getPresetsForCategory(sectionType as DesignCategoryId)
 

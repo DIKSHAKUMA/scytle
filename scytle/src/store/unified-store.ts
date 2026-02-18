@@ -21,6 +21,7 @@ import type {
     PageLayout,
 } from '@/types'
 import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
+import { getTemplateById } from '@/lib/designs/v2/layouts'
 import { createJWT } from '@/lib/appwrite'
 import { getSectionsForPage } from '@/lib/ai/section-templates'
 
@@ -1714,7 +1715,17 @@ export const useUnifiedStore = create<UnifiedState>()(
                     if (section) {
                         section.componentId = componentId
 
-                        // Try preset → family resolution first
+                        // V2: Check template registry first — skip V1 resolution
+                        const v2Template = getTemplateById(componentId)
+                        if (v2Template) {
+                            section.layoutVariant = undefined
+                            // V2 layouts don't use V1 controls — clear them
+                            section.controls = {}
+                            state.isDirty = true
+                            return
+                        }
+
+                        // V1: Try preset → family resolution first
                         const preset = getPresetById(componentId)
                         if (preset) {
                             const family = getFamilyById(preset.familyId)

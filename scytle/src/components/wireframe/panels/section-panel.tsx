@@ -14,6 +14,7 @@ import {
     getPresetById,
     getFamilyById,
 } from '@/lib/designs'
+import { getTemplateById } from '@/lib/designs/v2/layouts'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
 
@@ -54,19 +55,41 @@ export function SectionPanel({
         selectedPageId,
     } = useUnifiedStore()
 
-    // Look up the current preset + family from the registry
-    const { currentPreset, currentFamily } = useMemo(() => {
-        if (!section.componentId) return { currentPreset: undefined, currentFamily: undefined }
+    // Look up the current preset + family from the registry (V2 first, then V1)
+    const { displayName, displaySubtitle, currentPreset, currentFamily } = useMemo(() => {
+        if (!section.componentId) return { displayName: undefined, displaySubtitle: undefined, currentPreset: undefined, currentFamily: undefined }
 
+        // V2: Check template registry first
+        const v2Template = getTemplateById(section.componentId)
+        if (v2Template) {
+            return {
+                displayName: v2Template.name,
+                displaySubtitle: v2Template.category.charAt(0).toUpperCase() + v2Template.category.slice(1),
+                currentPreset: undefined,
+                currentFamily: undefined,
+            }
+        }
+
+        // V1: Try preset → family
         const preset = getPresetById(section.componentId)
         if (preset) {
             const family = getFamilyById(preset.familyId)
-            return { currentPreset: preset, currentFamily: family }
+            return {
+                displayName: preset.name,
+                displaySubtitle: family?.name,
+                currentPreset: preset,
+                currentFamily: family,
+            }
         }
 
-        // Try as family directly
+        // V1: Try as family directly
         const family = getFamilyById(section.componentId)
-        return { currentPreset: undefined, currentFamily: family }
+        return {
+            displayName: family?.name,
+            displaySubtitle: undefined,
+            currentPreset: undefined,
+            currentFamily: family,
+        }
     }, [section.componentId])
 
     // Sync local state when section changes
@@ -115,6 +138,14 @@ export function SectionPanel({
             updateSectionControls(selectedPageId, section.id, { [key]: value })
         }
     }, [section.id, selectedPageId, updateSectionControls])
+
+    // V2: When axis controls resolve a new layout, update componentId via setComponent
+    const { setComponent } = useUnifiedStore()
+    const handleComponentChange = useCallback((newComponentId: string) => {
+        if (selectedPageId) {
+            setComponent(selectedPageId, section.id, newComponentId)
+        }
+    }, [section.id, selectedPageId, setComponent])
 
     return (
         <div className={cn(
@@ -212,10 +243,10 @@ export function SectionPanel({
                         </div>
                         <div className="flex-1 min-w-0 overflow-hidden">
                             <div className="text-sm font-medium truncate">
-                                {currentPreset?.name ?? currentFamily?.name ?? section.name}
+                                {displayName ?? section.name}
                             </div>
                             <div className="text-xs text-muted-foreground capitalize truncate">
-                                {currentFamily?.name ?? section.type}
+                                {displaySubtitle ?? currentFamily?.name ?? section.type}
                             </div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -229,6 +260,7 @@ export function SectionPanel({
                         sectionType={section.type}
                         controls={section.controls}
                         onControlChangeAction={handleControlChange}
+                        onComponentChangeAction={handleComponentChange}
                     />
 
                     <Separator />

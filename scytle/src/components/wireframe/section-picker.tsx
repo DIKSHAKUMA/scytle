@@ -17,12 +17,11 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
 import {
-    DESIGN_CATEGORIES,
     getPresetsForCategory,
     getCategoriesForContext,
-    type DesignPreset,
-    type CategoryMeta,
 } from '@/lib/designs'
+import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
+import type { LayoutCategory } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
 
 interface SectionPickerProps {
@@ -55,21 +54,76 @@ export function SectionPicker({
 
     // Get categories for this page's context from registry
     const contextCategories = useMemo(
-        () => getCategoriesForContext(pageContext).filter(
-            cat => getPresetsForCategory(cat.id).length > 0,
-        ),
+        () => getCategoriesForContext(pageContext).filter(cat => {
+            // Include if V2 templates exist OR V1 presets exist
+            const v2t = getTemplatesByCategory(cat.id as LayoutCategory)
+            if (v2t.length > 0) return true
+            return getPresetsForCategory(cat.id).length > 0
+        }),
         [pageContext],
     )
 
-    // Build flat preset list from registry
+    // Unified preset item shape for both V1 and V2
+    type PickerItem = {
+        id: string
+        name: string
+        description: string
+        categoryId: string
+        categoryName: string
+        familyId?: string
+        Thumbnail?: React.FC
+        isV2?: boolean
+    }
+
+    // Build flat preset list — V2 templates first, then V1 fallback
     const allPresets = useMemo(() => {
-        const presets: (DesignPreset & { categoryId: string; categoryName: string })[] = []
+        const items: PickerItem[] = []
         for (const cat of contextCategories) {
-            for (const p of getPresetsForCategory(cat.id)) {
-                presets.push({ ...p, categoryId: cat.id, categoryName: cat.name })
+            const v2Templates = getTemplatesByCategory(cat.id as LayoutCategory)
+            if (v2Templates.length > 0) {
+                // V2: Show representative layouts (one per primary axis value)
+                const controlDef = getControlDef(cat.id as LayoutCategory)
+                if (controlDef && controlDef.axes[0]) {
+                    const primaryAxis = controlDef.axes[0]
+                    for (const opt of primaryAxis.options) {
+                        const resolvedId = controlDef.resolve({ [primaryAxis.key]: opt.value })
+                        const tmpl = resolvedId ? v2Templates.find(t => t.id === resolvedId) : undefined
+                        if (tmpl) {
+                            items.push({
+                                id: tmpl.id,
+                                name: tmpl.name,
+                                description: tmpl.description,
+                                categoryId: cat.id,
+                                categoryName: cat.name,
+                                isV2: true,
+                            })
+                        }
+                    }
+                } else {
+                    // No axis controls — show all V2 templates
+                    for (const tmpl of v2Templates.slice(0, 6)) {
+                        items.push({
+                            id: tmpl.id,
+                            name: tmpl.name,
+                            description: tmpl.description,
+                            categoryId: cat.id,
+                            categoryName: cat.name,
+                            isV2: true,
+                        })
+                    }
+                }
+            } else {
+                // V1 fallback
+                for (const p of getPresetsForCategory(cat.id)) {
+                    items.push({
+                        ...p,
+                        categoryId: cat.id,
+                        categoryName: cat.name,
+                    })
+                }
             }
         }
-        return presets
+        return items
     }, [contextCategories])
 
     // Filter by category + search
@@ -93,14 +147,14 @@ export function SectionPicker({
     }, [allPresets, activeCategory, searchQuery])
 
     // Handle preset selection
-    const handleSelectPreset = useCallback((preset: typeof allPresets[number]) => {
+    const handleSelectPreset = useCallback((preset: PickerItem) => {
         const newSection: WireframeSection = {
             id: `section-${Date.now()}`,
             type: preset.categoryId,
             name: preset.name,
             description: preset.description,
             componentId: preset.id,
-            layoutVariant: preset.familyId,
+            layoutVariant: preset.isV2 ? undefined : preset.familyId,
             order: insertIndex,
             isGlobal: preset.categoryId === 'navbar' || preset.categoryId === 'footer',
             content: {},

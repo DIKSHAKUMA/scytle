@@ -25,6 +25,7 @@ import { SortableSectionBlock } from './section-block'
 import { PlaceholderRenderer } from './placeholder-renderer'
 import { AppTopbar } from './app-topbar'
 import { AppSidebar } from './app-sidebar'
+import { TokenProvider, SectionTokenProvider } from '@/lib/designs/v2/tokens/provider'
 
 interface PageFrameProps {
     page: WireframePage
@@ -229,42 +230,44 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
             </div>
 
             {/* Figma-style frame — clean white artboard */}
-            <div
-                ref={containerRef}
-                className={cn(
-                    'flex flex-col bg-white',
-                    isPageSelected
-                        ? 'ring-2 ring-violet-500'
-                        : isResizing
+            <TokenProvider>
+                <div
+                    ref={containerRef}
+                    className={cn(
+                        'flex flex-col bg-white',
+                        isPageSelected
                             ? 'ring-2 ring-violet-500'
-                            : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
-                    className
-                )}
-                style={{ width: scaledWidth }}
-                onClick={handleFrameClick}
-            >
-                {/* Layout-aware rendering */}
-                <LayoutRenderer
-                    page={page}
-                    viewport={viewport}
-                    scale={scale}
-                    sensors={sensors}
-                    handleDragEnd={handleDragEnd}
-                    handleAddSection={handleAddSection}
-                    showGhostPreview={showGhostPreview}
-                    showGhostPreviewForAdd={showGhostPreviewForAdd}
-                    showGhostPreviewForReplace={showGhostPreviewForReplace}
-                    ghostPreviewLayout={ghostPreviewLayout}
-                    addSidebarInsertIndex={addSidebarInsertIndex}
-                    selectedSectionId={selectedSectionId}
-                    selectSection={selectSection}
-                    updateSectionContent={updateSectionContent}
-                    deleteSection={deleteSection}
-                    duplicateSection={duplicateSection}
-                    toggleGlobalSection={toggleGlobalSection}
-                    syncGlobalSection={syncGlobalSection}
-                />
-            </div>
+                            : isResizing
+                                ? 'ring-2 ring-violet-500'
+                                : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
+                        className
+                    )}
+                    style={{ width: scaledWidth }}
+                    onClick={handleFrameClick}
+                >
+                    {/* Layout-aware rendering */}
+                    <LayoutRenderer
+                        page={page}
+                        viewport={viewport}
+                        scale={scale}
+                        sensors={sensors}
+                        handleDragEnd={handleDragEnd}
+                        handleAddSection={handleAddSection}
+                        showGhostPreview={showGhostPreview}
+                        showGhostPreviewForAdd={showGhostPreviewForAdd}
+                        showGhostPreviewForReplace={showGhostPreviewForReplace}
+                        ghostPreviewLayout={ghostPreviewLayout}
+                        addSidebarInsertIndex={addSidebarInsertIndex}
+                        selectedSectionId={selectedSectionId}
+                        selectSection={selectSection}
+                        updateSectionContent={updateSectionContent}
+                        deleteSection={deleteSection}
+                        duplicateSection={duplicateSection}
+                        toggleGlobalSection={toggleGlobalSection}
+                        syncGlobalSection={syncGlobalSection}
+                    />
+                </div>
+            </TokenProvider>
 
             {/* Width indicator (visible while resizing) */}
             {isResizing && (
@@ -478,25 +481,27 @@ function SectionsContent({
                                     presetId={ghostPreviewLayout.presetId}
                                 />
                             ) : (
-                                <SortableSectionBlock
-                                    section={section}
-                                    isSelected={selectedSectionId === section.id}
-                                    viewport={viewport}
-                                    editable
-                                    onSelectAction={selectSection}
-                                    onContentChange={(key, value) => {
-                                        updateSectionContent(page.id, section.id, { [key]: value })
-                                    }}
-                                    onAddBelowAction={() => handleAddSection(index + 1)}
-                                    onDeleteAction={() => deleteSection(page.id, section.id)}
-                                    onDuplicateAction={() => duplicateSection(page.id, section.id)}
-                                    onToggleGlobalAction={() => {
-                                        toggleGlobalSection(page.id, section.id)
-                                        if (!section.isGlobal) {
-                                            syncGlobalSection(section.id)
-                                        }
-                                    }}
-                                />
+                                <SectionTokenProvider sectionId={section.id}>
+                                    <SortableSectionBlock
+                                        section={section}
+                                        isSelected={selectedSectionId === section.id}
+                                        viewport={viewport}
+                                        editable
+                                        onSelectAction={selectSection}
+                                        onContentChange={(key, value) => {
+                                            updateSectionContent(page.id, section.id, { [key]: value })
+                                        }}
+                                        onAddBelowAction={() => handleAddSection(index + 1)}
+                                        onDeleteAction={() => deleteSection(page.id, section.id)}
+                                        onDuplicateAction={() => duplicateSection(page.id, section.id)}
+                                        onToggleGlobalAction={() => {
+                                            toggleGlobalSection(page.id, section.id)
+                                            if (!section.isGlobal) {
+                                                syncGlobalSection(section.id)
+                                            }
+                                        }}
+                                    />
+                                </SectionTokenProvider>
                             )}
 
                             {showGhostPreviewForAdd && ghostPreviewLayout && addSidebarInsertIndex === index + 1 && (

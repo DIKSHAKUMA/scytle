@@ -31,13 +31,12 @@ import {
 import { useUnifiedStore } from '@/store'
 import { WireframeThumbnail } from './wireframe-thumbnail'
 import {
-    DESIGN_CATEGORIES,
     getPresetsForCategory,
     getCategoriesForContext,
-    type DesignCategoryId,
     type DesignPreset,
-    type CategoryMeta,
 } from '@/lib/designs'
+import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
+import type { LayoutCategory, LayoutControlDef, LayoutTemplate as V2LayoutTemplate } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
 
 /**
@@ -88,16 +87,84 @@ function presetToLayout(preset: DesignPreset, category: string): SectionLayout {
     }
 }
 
-// Build categories from registry for a given context — zero hardcoding
+// For V2 categories with axis controls, pick representative layouts
+// Shows one per value of the first axis (e.g. one left, one split, one center)
+// to avoid overwhelming the user — controls handle the rest
+
+function getRepresentativeLayouts(
+    templates: V2LayoutTemplate[],
+    controlDef: LayoutControlDef,
+): SectionLayout[] {
+    const primaryAxis = controlDef.axes[0]
+    if (!primaryAxis) {
+        // No axes — just show first 6
+        return templates.slice(0, 6).map(t => ({
+            id: t.id,
+            name: t.name,
+            type: controlDef.category,
+            preview: t.description,
+        }))
+    }
+
+    // Pick the first template matching each primary axis value
+    const seen = new Set<string>()
+    const result: SectionLayout[] = []
+
+    for (const opt of primaryAxis.options) {
+        const resolvedId = controlDef.resolve({ [primaryAxis.key]: opt.value })
+        if (resolvedId && !seen.has(resolvedId)) {
+            seen.add(resolvedId)
+            const tmpl = templates.find(t => t.id === resolvedId)
+            if (tmpl) {
+                result.push({
+                    id: tmpl.id,
+                    name: tmpl.name,
+                    type: controlDef.category,
+                    preview: tmpl.description,
+                })
+            }
+        }
+    }
+
+    return result
+}
+
+// Build categories from registry for a given context — V2-first with V1 fallback
 function buildCategoriesForContext(context: PageContext): SectionCategory[] {
     const metas = getCategoriesForContext(context)
     return metas
-        .map(cat => ({
-            id: cat.id,
-            name: cat.name,
-            description: cat.description,
-            layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
-        }))
+        .map(cat => {
+            // V2: If this category has V2 templates, use them instead of V1 presets
+            const v2Templates = getTemplatesByCategory(cat.id as LayoutCategory)
+            if (v2Templates.length > 0) {
+                // If this V2 category has axis controls, show fewer representative layouts
+                // (one per alignment to avoid overwhelming — controls handle the rest)
+                const controlDef = getControlDef(cat.id as LayoutCategory)
+                const layouts: SectionLayout[] = controlDef
+                    ? getRepresentativeLayouts(v2Templates, controlDef)
+                    : v2Templates.map(t => ({
+                        id: t.id,
+                        name: t.name,
+                        type: cat.id,
+                        variant: undefined,
+                        preview: `${t.name} layout`,
+                    }))
+                return {
+                    id: cat.id,
+                    name: cat.name,
+                    description: cat.description,
+                    layouts,
+                }
+            }
+
+            // V1: Use preset registry
+            return {
+                id: cat.id,
+                name: cat.name,
+                description: cat.description,
+                layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
+            }
+        })
         .filter(cat => cat.layouts.length > 0) // Only show categories that have presets
 }
 

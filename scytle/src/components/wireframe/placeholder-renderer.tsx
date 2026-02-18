@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import type { WireframeSection, ViewportDevice } from '@/types'
 import { getFamilyById, getPresetById, getDesignById } from '@/lib/designs'
+import { getTemplateById } from '@/lib/designs/v2/layouts'
 
 interface PlaceholderRendererProps {
     section: WireframeSection
@@ -17,14 +18,27 @@ interface PlaceholderRendererProps {
 /**
  * PlaceholderRenderer
  * 
- * Renders section content using two strategies:
- * 1. Preset → Family pipeline (preferred) — three-layer merge
+ * Renders section content using three strategies:
+ * 0. V2 Layout pipeline (new) — renders via LayoutTemplate.component
+ * 1. Preset → Family pipeline (V1) — three-layer merge
  * 2. Design registry fallback (backward compat via getDesignById)
- * 
- * All 15 categories (45 families, 71 presets) are registered in the design
- * registry. No legacy layout fallback is needed.
  */
 export function PlaceholderRenderer({ section, viewport, className, onContentChange, editable }: PlaceholderRendererProps) {
+    // Strategy 0: V2 Layout Template — check first
+    const v2Template = useMemo(() => {
+        if (!section.componentId) return null
+        return getTemplateById(section.componentId) ?? null
+    }, [section.componentId])
+
+    if (v2Template) {
+        const V2Component = v2Template.component
+        return (
+            <div className={className}>
+                <V2Component sectionId={section.id} className="" />
+            </div>
+        )
+    }
+
     // Strategy 1: Resolve via preset → family pipeline with three-layer merge
     const resolved = useMemo(() => {
         if (!section.componentId) return null
