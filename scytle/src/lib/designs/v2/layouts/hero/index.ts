@@ -19,6 +19,9 @@ export { DEFAULT_HERO_CONTENT } from './types'
 export { HeroSection } from './hero-section'
 export type { HeroSectionProps } from './hero-section'
 
+// Thumbnails
+export { HeroThumbnail, createHeroThumbnail } from './hero-thumbnails'
+
 // Preset configs
 export {
     HERO_1,
@@ -88,6 +91,7 @@ export {
 // ============================================
 
 import type { LayoutTemplate } from '../types'
+import { createHeroThumbnail } from './hero-thumbnails'
 import {
     Hero1,
     Hero2,
@@ -171,6 +175,7 @@ export const HERO_LAYOUT_TEMPLATES: LayoutTemplate[] = ALL_HERO_PRESETS.map((pre
     component: HERO_COMPONENTS[preset.id],
     defaultBlocks: () => [],
     tags: getTags(preset.alignment, preset.background, preset.actions),
+    Thumbnail: createHeroThumbnail(preset),
 }))
 
 /** Quick lookup by layout ID */

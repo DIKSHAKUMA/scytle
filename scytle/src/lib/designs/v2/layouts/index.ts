@@ -8,6 +8,7 @@
 
 import type { LayoutTemplate, LayoutCategory, LayoutRegistry } from './types'
 import { HERO_LAYOUT_TEMPLATES } from './hero'
+import { GALLERY_LAYOUT_TEMPLATES } from './gallery'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -19,6 +20,9 @@ export { getControlDef, getControlDefForLayout } from './controls'
 // Re-export hero
 export * from './hero'
 
+// Re-export gallery
+export * from './gallery'
+
 // ============================================
 // Global Layout Registry
 // ============================================
@@ -26,6 +30,7 @@ export * from './hero'
 /** All registered layout templates, grouped by category */
 export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     hero: HERO_LAYOUT_TEMPLATES,
+    gallery: GALLERY_LAYOUT_TEMPLATES,
     // Future: navbar, footer, features, etc. will be added here
 }
 

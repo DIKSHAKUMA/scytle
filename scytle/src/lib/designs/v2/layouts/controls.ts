@@ -10,6 +10,7 @@
 
 import type { LayoutCategory } from './types'
 import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero'
+import { ALL_GALLERY_PRESETS, GALLERY_PRESETS_MAP } from './gallery'
 
 // ============================================
 // Generic Control Types
@@ -101,12 +102,66 @@ const HERO_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// Gallery Control Definition
+// ============================================
+
+const GALLERY_CONTROL_DEF: LayoutControlDef = {
+    category: 'gallery',
+    axes: [
+        {
+            key: 'style',
+            label: 'Layout',
+            options: [
+                { value: 'grid', label: 'Grid', icon: 'Grid3X3' },
+                { value: 'masonry', label: 'Masonry', icon: 'LayoutDashboard' },
+                { value: 'fullbleed', label: 'Full Bleed', icon: 'Maximize' },
+                { value: 'slider', label: 'Slider', icon: 'GalleryHorizontal' },
+                { value: 'split', label: 'Split', icon: 'PanelLeft' },
+            ],
+        },
+        {
+            key: 'columns',
+            label: 'Columns',
+            options: [
+                { value: '1', label: '1' },
+                { value: '2', label: '2' },
+                { value: '3', label: '3' },
+                { value: '4', label: '4' },
+            ],
+        },
+    ],
+    resolve: (values) => {
+        const style = values.style ?? 'grid'
+        const columns = parseInt(values.columns ?? '3', 10)
+
+        // Find best match: exact style+columns, else nearest
+        const exact = ALL_GALLERY_PRESETS.find(
+            (p) => p.style === style && p.columns === columns
+        )
+        if (exact) return exact.id
+
+        // Fallback: same style, any columns
+        const sameStyle = ALL_GALLERY_PRESETS.find((p) => p.style === style)
+        return sameStyle?.id ?? 'gallery-3'
+    },
+    extract: (layoutId: string): Record<string, string> => {
+        const preset = GALLERY_PRESETS_MAP[layoutId]
+        if (!preset) return {} as Record<string, string>
+        return {
+            style: preset.style,
+            columns: String(preset.columns),
+        } as Record<string, string>
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
 /** All registered control definitions, keyed by category */
 const CONTROL_REGISTRY: Partial<Record<LayoutCategory, LayoutControlDef>> = {
     hero: HERO_CONTROL_DEF,
+    gallery: GALLERY_CONTROL_DEF,
 }
 
 /** Get the control definition for a category (if V2 controls exist) */

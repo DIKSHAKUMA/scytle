@@ -53,6 +53,8 @@ export interface LayoutTemplate {
     defaultBlocks: () => Block[]
     /** Tags for search/filtering */
     tags?: string[]
+    /** Thumbnail component for the component library panel */
+    Thumbnail?: React.FC
 }
 
 // ============================================

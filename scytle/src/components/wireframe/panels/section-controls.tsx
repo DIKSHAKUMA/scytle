@@ -98,7 +98,8 @@ export function SectionControls({
                                 type="single"
                                 value={currentValue}
                                 onValueChange={(v) => v && handleV2AxisChange(axis.key, v)}
-                                className="justify-start"
+                                className="justify-start flex-wrap w-auto gap-1.5"
+                                spacing={1}
                             >
                                 {axis.options.map((opt) => {
                                     const IconComp = opt.icon ? ICON_MAP[opt.icon] : undefined
@@ -107,7 +108,7 @@ export function SectionControls({
                                             key={opt.value}
                                             value={opt.value}
                                             aria-label={opt.label}
-                                            className="h-8 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                                            className="h-7 px-2.5 text-xs rounded-md border-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                                         >
                                             {IconComp ? (
                                                 <>

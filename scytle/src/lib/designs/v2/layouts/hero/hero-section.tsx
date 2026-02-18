@@ -5,7 +5,11 @@
  * Axes: alignment (left|split|center) × background (dark|neutral|image) × actions (buttons|form|none)
  *
  * Reads --sg-* CSS custom properties for theming.
- * All text/button/input blocks use V2 block primitives.
+ * Uses container queries (@container) for responsive because sections
+ * render inside fixed-width canvas frames — viewport queries don't fire.
+ *
+ * When no TokenProvider is present (wireframe view), the BackgroundLayer
+ * sets sensible CSS var defaults so all children render correctly.
  */
 
 'use client'
@@ -46,7 +50,7 @@ function Tagline({ text, centered }: { text: string; centered?: boolean }) {
 function Heading({ text, centered }: { text: string; centered?: boolean }) {
     return (
         <h1
-            className={`font-[var(--sg-font-display)] font-medium leading-[1.2] tracking-[-0.01em] text-[var(--sg-text)] text-[clamp(2.75rem,5vw,4.5rem)] ${centered ? 'text-center' : ''}`}
+            className={`font-[var(--sg-font-display)] font-medium leading-[1.2] tracking-[-0.01em] text-[var(--sg-text)] text-[clamp(2rem,5vw,4.5rem)] ${centered ? 'text-center' : ''}`}
             data-layer-type="heading"
         >
             {text}
@@ -66,14 +70,16 @@ function Description({ text, centered }: { text: string; centered?: boolean }) {
     )
 }
 
-/** Primary filled button */
+/** Primary filled button — dark on light bg, light on dark bg */
 function PrimaryButton({ text, variant }: { text: string; variant: HeroBackground }) {
-    const isOnDark = variant === 'dark'
+    // dark/image = dark overlays → white button with dark text
+    // neutral = light surface → dark button with white text
+    const onDarkSurface = variant === 'dark' || variant === 'image'
     return (
         <button
-            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors ${isOnDark
-                    ? 'bg-[var(--sg-accent)] border-[var(--sg-accent)] text-white'
-                    : 'bg-white border-white text-[var(--sg-bg)]'
+            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors ${onDarkSurface
+                ? 'bg-white border-white text-[var(--sg-bg)]'
+                : 'bg-[var(--sg-bg)] border-[var(--sg-bg)] text-white'
                 }`}
             data-layer-type="button"
             type="button"
@@ -85,12 +91,12 @@ function PrimaryButton({ text, variant }: { text: string; variant: HeroBackgroun
 
 /** Secondary outline button */
 function SecondaryButton({ text, variant }: { text: string; variant: HeroBackground }) {
-    const isOnDark = variant === 'dark'
+    const onDarkSurface = variant === 'dark' || variant === 'image'
     return (
         <button
-            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-normal text-base leading-[1.5] border transition-colors ${isOnDark
-                    ? 'bg-transparent border-[var(--sg-text)]/15 text-[var(--sg-text)]'
-                    : 'bg-transparent border-white text-white'
+            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-normal text-base leading-[1.5] border transition-colors ${onDarkSurface
+                ? 'bg-transparent border-white/20 text-white'
+                : 'bg-transparent border-[var(--sg-bg)]/20 text-[var(--sg-bg)]'
                 }`}
             data-layer-type="button"
             type="button"
@@ -112,23 +118,23 @@ function ButtonActions({ content, variant }: { content: HeroContent; variant: He
 
 /** Email signup form (input + button + terms) */
 function FormActions({ content, variant, centered }: { content: HeroContent; variant: HeroBackground; centered?: boolean }) {
-    const isOnImage = variant === 'image' || variant === 'neutral'
+    const onDarkSurface = variant === 'dark' || variant === 'image'
     return (
         <div className={`flex flex-col gap-4 w-full max-w-[513px] ${centered ? 'mx-auto' : ''}`}>
-            <div className="flex gap-4 w-full max-sm:flex-col">
+            <div className="flex gap-4 w-full @max-sm:flex-col">
                 <input
-                    className={`flex-1 p-3 font-[var(--sg-font-body)] text-base leading-[1.5] bg-transparent border outline-none ${isOnImage
-                            ? 'border-white/60 text-white placeholder:text-white/65'
-                            : 'border-[var(--sg-text)]/30 text-[var(--sg-text)] placeholder:text-[var(--sg-text)]/50'
+                    className={`flex-1 min-w-0 p-3 font-[var(--sg-font-body)] text-base leading-[1.5] bg-transparent border outline-none ${onDarkSurface
+                        ? 'border-white/60 text-white placeholder:text-white/65'
+                        : 'border-[var(--sg-bg)]/30 text-[var(--sg-text)] placeholder:text-[var(--sg-text)]/50'
                         }`}
                     data-layer-type="input"
                     placeholder={content.inputPlaceholder ?? 'Enter your email'}
                     type="email"
                 />
                 <button
-                    className={`shrink-0 px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors max-sm:w-full ${isOnImage
-                            ? 'bg-white border-white text-[var(--sg-bg)]'
-                            : 'bg-[var(--sg-accent)] border-[var(--sg-accent)] text-white'
+                    className={`shrink-0 px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors @max-sm:w-full ${onDarkSurface
+                        ? 'bg-white border-white text-[var(--sg-bg)]'
+                        : 'bg-[var(--sg-bg)] border-[var(--sg-bg)] text-white'
                         }`}
                     data-layer-type="button"
                     type="button"
@@ -151,6 +157,21 @@ function FormActions({ content, variant, centered }: { content: HeroContent; var
 // Background wrapper
 // ============================================
 
+/**
+ * Default CSS custom property values for the hero section.
+ * Bridges the gap between the short `--sg-*` names used inside the hero
+ * and the full `--sg-*-primary` names from the TokenProvider.
+ * When no TokenProvider is present (wireframe view), hardcoded fallbacks apply.
+ */
+const CSS_VAR_DEFAULTS: Record<string, string> = {
+    '--sg-bg': 'var(--sg-bg-primary, #1a1a1a)',
+    '--sg-surface': 'var(--sg-bg-secondary, #f5f5f5)',
+    '--sg-text': 'var(--sg-text-primary, #1a1a1a)',
+    '--sg-accent': 'var(--sg-bg-accent, #4f46e5)',
+    '--sg-font-display': 'var(--sg-font-heading, system-ui)',
+    '--sg-font-body': 'var(--sg-font-body, system-ui)',
+}
+
 function BackgroundLayer({ background, children, className }: {
     background: HeroBackground
     children: React.ReactNode
@@ -165,7 +186,8 @@ function BackgroundLayer({ background, children, className }: {
 
     return (
         <section
-            className={`relative flex flex-col items-center w-full px-[clamp(1.25rem,5vw,4rem)] py-[clamp(4rem,8vw,7rem)] ${bgClass} ${className ?? ''}`}
+            className={`@container relative flex flex-col items-center w-full overflow-hidden px-[clamp(1rem,5vw,4rem)] py-[clamp(3rem,8vw,7rem)] ${bgClass} ${className ?? ''}`}
+            style={CSS_VAR_DEFAULTS as React.CSSProperties}
             data-layout-type="hero"
         >
             {background === 'image' && (
@@ -180,7 +202,7 @@ function BackgroundLayer({ background, children, className }: {
 }
 
 // ============================================
-// Layout variants
+// Layout variants — use @container queries
 // ============================================
 
 /** Left-aligned single column */
@@ -197,11 +219,11 @@ function LeftLayout({
 }) {
     return (
         <div className="relative z-10 w-full max-w-[1280px]">
-            <div className="flex flex-col items-start max-w-[768px] gap-8">
+            <div className="flex flex-col items-start max-w-[768px] gap-6 @max-sm:gap-5">
                 {/* Section title */}
                 <div className="flex flex-col items-start w-full gap-4">
                     {hasTagline && content.tagline && <Tagline text={content.tagline} />}
-                    <div className="flex flex-col items-start w-full gap-6">
+                    <div className="flex flex-col items-start w-full gap-5">
                         <Heading text={content.heading} />
                         <Description text={content.description} />
                     </div>
@@ -233,15 +255,15 @@ function SplitLayout({
 }) {
     return (
         <div className="relative z-10 w-full max-w-[1280px]">
-            <div className="flex items-start w-full gap-20 max-md:flex-col max-md:gap-5">
+            <div className="flex items-start w-full gap-20 @max-lg:gap-12 @max-md:flex-col @max-md:gap-6">
                 {/* Left column: tagline + heading */}
-                <div className="flex-1 flex flex-col items-start gap-4">
+                <div className="flex-1 min-w-0 flex flex-col items-start gap-4">
                     {hasTagline && content.tagline && <Tagline text={content.tagline} />}
                     <Heading text={content.heading} />
                 </div>
 
                 {/* Right column: description + actions */}
-                <div className="flex-1 flex flex-col items-start gap-8">
+                <div className="flex-1 min-w-0 flex flex-col items-start gap-6">
                     <Description text={content.description} />
                     {actions === 'buttons' && (
                         <ButtonActions content={content} variant={background} />
@@ -269,11 +291,11 @@ function CenterLayout({
 }) {
     return (
         <div className="relative z-10 w-full max-w-[1280px] flex flex-col items-center">
-            <div className="flex flex-col items-center max-w-[768px] w-full gap-8">
+            <div className="flex flex-col items-center max-w-[768px] w-full gap-6 @max-sm:gap-5">
                 {/* Section title */}
                 <div className="flex flex-col items-center w-full gap-4">
                     {hasTagline && content.tagline && <Tagline text={content.tagline} centered />}
-                    <div className="flex flex-col items-center w-full gap-6">
+                    <div className="flex flex-col items-center w-full gap-5">
                         <Heading text={content.heading} centered />
                         <Description text={content.description} centered />
                     </div>
