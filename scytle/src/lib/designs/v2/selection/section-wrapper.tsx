@@ -44,40 +44,15 @@ export function SectionSelectionWrapper({
     const hoverId = useSelectionStore((s) =>
         s.hoverTarget?.type === 'section' ? s.hoverTarget.id : null,
     )
-    const selectSection = useSelectionStore((s) => s.selectSection)
-    const enterSection = useSelectionStore((s) => s.enterSection)
     const setHover = useSelectionStore((s) => s.setHover)
 
     const isSelected = selectedSectionId === sectionId
     const isEntered = isSelected && (mode === 'entered' || mode === 'block-selected')
     const isHovered = hoverId === sectionId && !isSelected
 
-    // ── Click: select section (only in idle or section-selected mode) ──
-    const handleClick = useCallback(
-        (e: React.MouseEvent) => {
-            // If we're inside entered/block-selected mode, clicks propagate
-            // to block LayerWrappers. Only section-level clicks when not entered.
-            if (mode === 'entered' || mode === 'block-selected') {
-                // If the user clicks the section background (not a block),
-                // we stay in entered mode. This is a no-op.
-                return
-            }
-            e.stopPropagation()
-            selectSection(sectionId)
-        },
-        [mode, selectSection, sectionId],
-    )
-
-    // ── Double-click: enter section ──
-    const handleDoubleClick = useCallback(
-        (e: React.MouseEvent) => {
-            if (mode === 'section-selected' && isSelected) {
-                e.stopPropagation()
-                enterSection()
-            }
-        },
-        [mode, isSelected, enterSection],
-    )
+    // ── Click / double-click are handled by SectionBlock (outer wrapper)
+    // which bridges both unified store and selection store.
+    // SectionSelectionWrapper only provides visual indicators + hover. ──
 
     // ── Hover ──
     const handleMouseEnter = useCallback(() => {
@@ -101,8 +76,6 @@ export function SectionSelectionWrapper({
                     className,
                 )}
                 style={getSectionOutlineStyle(isSelected, isEntered, isHovered)}
-                onClick={handleClick}
-                onDoubleClick={handleDoubleClick}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
                 data-section-id={sectionId}

@@ -274,13 +274,8 @@ function resolveComponentIdForSection(
 
         // ── Marketing — Hero ──
         case 'hero': {
-            if (lower.includes('video')) return 'hero-video-centered'
-            if (lower.includes('form') || lower.includes('subscribe') || lower.includes('waitlist')) return 'hero-form-inline'
-            if (lower.includes('minimal') || lower.includes('text only')) return 'hero-minimal-text-only'
-            if (lower.includes('image') && lower.includes('bg')) return 'hero-image-bg-centered'
-            if (lower.includes('card')) return 'hero-card-centered'
-            if (lower.includes('landscape') || lower.includes('wide')) return 'hero-split-landscape'
-            return 'hero-split'
+            if (lower.includes('split') || lower.includes('two col') || lower.includes('2 col')) return 'hero-57'
+            return 'hero-44'
         }
 
         // ── Marketing — Features ──
@@ -528,6 +523,10 @@ function createSection(
     const resolvedContent = { heading: name, subheading: description }
     const resolvedControls = {}
 
+    // V2: Populate blocks from template's defaultBlocks() factory
+    const v2Template = getTemplateById(componentId)
+    const blocks = v2Template?.defaultBlocks() ?? undefined
+
     return {
         id,
         type: sectionType,
@@ -538,6 +537,7 @@ function createSection(
         order: index,
         content: resolvedContent as WireframeSectionContent,
         controls: resolvedControls as WireframeSectionControls,
+        ...(blocks ? { blocks } : {}),
     }
 }
 
@@ -1787,12 +1787,14 @@ export const useUnifiedStore = create<UnifiedState>()(
                     if (section) {
                         section.componentId = componentId
 
-                        // V2: Check template registry first — skip V1 resolution
+                        // V2: Check template registry first — populate blocks + skip V1 resolution
                         const v2Template = getTemplateById(componentId)
                         if (v2Template) {
                             section.layoutVariant = undefined
                             // V2 layouts don't use V1 controls — clear them
                             section.controls = {}
+                            // Populate blocks from template factory
+                            section.blocks = v2Template.defaultBlocks() as typeof section.blocks
                             state.isDirty = true
                             return
                         }
