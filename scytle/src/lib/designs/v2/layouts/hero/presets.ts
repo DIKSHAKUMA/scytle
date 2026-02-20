@@ -178,6 +178,7 @@ function buildHero57Blocks(): Block[] {
     }
 
     // Left column: tagline + heading
+    // Desktop: gap-16 (4)  |  Mobile: gap-12 (3)
     const leftColumn: Block = {
         id: uid(),
         type: 'frame',
@@ -185,12 +186,14 @@ function buildHero57Blocks(): Block[] {
             direction: 'vertical',
             gap: 16,
             layoutClassName: 'flex-1',
+            className: '@max-sm:!gap-3',
         },
         content: {},
         children: [tagline, heading],
     }
 
     // Right column: body + buttons
+    // Desktop: gap-32 (8)  |  Mobile: gap-24 (6)
     const rightColumn: Block = {
         id: uid(),
         type: 'frame',
@@ -199,19 +202,21 @@ function buildHero57Blocks(): Block[] {
             gap: 32,
             alignment: { main: 'start', cross: 'start' },
             layoutClassName: 'flex-1',
+            className: '@max-sm:!gap-6',
         },
         content: {},
         children: [body, buttonGroup],
     }
 
     // Two-column container
+    // Desktop: flex-row gap-80 (20)  |  Mobile: flex-col gap-20 (5)
     const columnsFrame: Block = {
         id: uid(),
         type: 'frame',
         props: {
             direction: 'horizontal',
             gap: 80,
-            layoutClassName: '@max-sm:flex-col @max-sm:gap-5',
+            className: '@max-sm:!flex-col @max-sm:!gap-5',
         },
         content: {},
         children: [leftColumn, rightColumn],

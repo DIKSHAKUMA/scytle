@@ -162,7 +162,7 @@ function PlainLayerDiv({ block, children, className }: LayerWrapperProps) {
             ref={ref}
             className={cn(
                 'relative transition-[outline,box-shadow] duration-100',
-                !isBlockEditing && 'cursor-pointer',
+                !isBlockEditing && 'cursor-pointer select-none',
                 isBlockEditing && 'cursor-text',
                 className,
             )}
@@ -177,7 +177,6 @@ function PlainLayerDiv({ block, children, className }: LayerWrapperProps) {
             data-layer-editing={isBlockEditing || undefined}
         >
             {isSelected && <LabelBadge label={label} />}
-            {isSelected && !isBlockEditing && <SelectionHandles />}
             {children}
         </div>
     )
@@ -223,7 +222,7 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
             ref={mergedRef}
             className={cn(
                 'relative',
-                !isBlockEditing && !isDragging && 'cursor-pointer',
+                !isBlockEditing && !isDragging && 'cursor-pointer select-none',
                 isBlockEditing && 'cursor-text',
                 isDragging && 'z-50 shadow-lg ring-2 ring-blue-400 rounded cursor-grabbing opacity-90',
                 className,
@@ -249,7 +248,6 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
             data-layer-editing={isBlockEditing || undefined}
         >
             {isSelected && !isDragging && <LabelBadge label={label} />}
-            {isSelected && !isBlockEditing && !isDragging && <SelectionHandles />}
             {children}
         </div>
     )
@@ -277,35 +275,6 @@ function LabelBadge({ label }: { label: string }) {
         >
             {label}
         </div>
-    )
-}
-
-// ============================================
-// Selection Handles — 4 corner dots (Figma/Relume style)
-// ============================================
-
-const HANDLE_SIZE = 8
-const HANDLE_OFFSET = -(HANDLE_SIZE / 2)
-
-const HANDLE_BASE: React.CSSProperties = {
-    position: 'absolute',
-    width: `${HANDLE_SIZE}px`,
-    height: `${HANDLE_SIZE}px`,
-    borderRadius: '50%',
-    backgroundColor: '#ffffff',
-    border: '2px solid #2563eb',
-    pointerEvents: 'none',
-    zIndex: 50,
-}
-
-function SelectionHandles() {
-    return (
-        <>
-            <div style={{ ...HANDLE_BASE, top: HANDLE_OFFSET, left: HANDLE_OFFSET }} />
-            <div style={{ ...HANDLE_BASE, top: HANDLE_OFFSET, right: HANDLE_OFFSET }} />
-            <div style={{ ...HANDLE_BASE, bottom: HANDLE_OFFSET, left: HANDLE_OFFSET }} />
-            <div style={{ ...HANDLE_BASE, bottom: HANDLE_OFFSET, right: HANDLE_OFFSET }} />
-        </>
     )
 }
 

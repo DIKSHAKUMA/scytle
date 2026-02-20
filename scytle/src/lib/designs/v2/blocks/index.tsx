@@ -150,7 +150,7 @@ function resolveBlock(
         case 'button':
             return <ButtonBlock block={block} />
         case 'button-group':
-            return <ButtonGroupBlock block={block} />
+            return <ButtonGroupBlock block={block} renderChild={renderChild} />
         case 'image':
             return <ImageBlock block={block} />
         case 'card':
