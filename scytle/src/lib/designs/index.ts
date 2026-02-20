@@ -1,58 +1,34 @@
 /**
- * Design System - Main Export
- * 
- * Two-tier model: Template Families + Design Presets
- * 
- * Usage:
- *   import { getFamilyById, getPresetById, getPresetsForCategory } from '@/lib/designs'
- *   import { getDesignById } from '@/lib/designs'  // backward compat
+ * Design System — V2 Only
+ *
+ * V1 families/presets have been removed.
+ * All layout rendering now goes through V2 layout templates.
+ *
+ * Re-exports the V2 layout system for convenience.
  */
 
-// Re-export registries
 export {
-    FAMILY_REGISTRY,
-    PRESET_REGISTRY,
-    DESIGN_CATEGORIES,
-} from './registry'
+    LAYOUT_REGISTRY,
+    ALL_LAYOUT_TEMPLATES,
+    LAYOUT_TEMPLATES_MAP,
+    getTemplatesByCategory,
+    getTemplateById,
+} from './v2/layouts'
 
-// Re-export family + preset helpers
-export {
-    getFamilyById,
-    getFamiliesForCategory,
-    getCategoriesForContext,
-    getPresetById,
-    getPresetsForCategory,
-    getPresetsForFamily,
-    resolvePreset,
-    searchPresets,
-} from './registry'
-
-// Re-export backward-compatible helpers
-export {
-    getDesignById,
-    getDesignsForCategory,
-    getActiveCategories,
-    searchDesigns,
-    designToVariant,
-    designToLayout,
-    getCategoryVariants,
-    getCategoryLayouts,
-} from './registry'
-
-// Re-export types
 export type {
-    TemplateFamily,
-    DesignPreset,
-    DesignDefinition,
-    CanvasProps,
-    ControlType,
-    ControlDefinition,
-    ControlOption,
-    DesignCategory,
-    DesignCategoryId,
-    ComponentVariant,
-    SectionLayout,
-} from './types'
+    LayoutTemplate,
+    LayoutCategory,
+    LayoutRegistry,
+    LayoutProps,
+} from './v2/layouts'
 
-// Re-export CategoryMeta type from registry
-export type { CategoryMeta } from './registry'
+export type {
+    LayoutControlAxis,
+    LayoutControlOption,
+    LayoutControlDef,
+} from './v2/layouts'
+
+export {
+    getControlDef,
+    getControlDefForLayout,
+} from './v2/layouts'

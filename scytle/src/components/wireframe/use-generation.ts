@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { useUnifiedStore } from '@/store'
 import type { WireframeSection, WireframeSectionContent } from '@/types'
 import { createJWT } from '@/lib/appwrite'
-import { getPresetById, getPresetsForCategory, getFamilyById } from '@/lib/designs/registry'
+import { getTemplatesByCategory, getTemplateById } from '@/lib/designs/v2/layouts'
+import type { LayoutCategory } from '@/lib/designs/v2/layouts'
 
 interface GenerationState {
     isGenerating: boolean
@@ -333,7 +334,7 @@ export function useGeneration(): UseGenerationReturn {
     }, [getPageById, updateSectionContent])
 
     /**
-     * Shuffle to a different component variant
+     * Shuffle to a different component variant (V2)
      */
     const shuffleComponent = useCallback((sectionId: string) => {
         const result = getSectionById(sectionId)
@@ -342,22 +343,18 @@ export function useGeneration(): UseGenerationReturn {
         const { section, page } = result
         if (!section.componentId) return
 
-        // Find current preset and get all presets in the same category
-        const currentPreset = getPresetById(section.componentId)
-        if (!currentPreset) return
+        // V2: Find current template and cycle within same category
+        const currentTemplate = getTemplateById(section.componentId)
+        if (!currentTemplate) return
 
-        const family = getFamilyById(currentPreset.familyId)
-        if (!family) return
+        const categoryTemplates = getTemplatesByCategory(currentTemplate.category as LayoutCategory)
+        if (categoryTemplates.length <= 1) return
 
-        const categoryPresets = getPresetsForCategory(family.category)
-        if (categoryPresets.length <= 1) return
+        const currentIndex = categoryTemplates.findIndex(t => t.id === section.componentId)
+        const nextIndex = (currentIndex + 1) % categoryTemplates.length
+        const nextTemplate = categoryTemplates[nextIndex]
 
-        // Cycle to next preset in the category
-        const currentIndex = categoryPresets.findIndex(p => p.id === section.componentId)
-        const nextIndex = (currentIndex + 1) % categoryPresets.length
-        const nextPreset = categoryPresets[nextIndex]
-
-        updateSection(page.id, sectionId, { componentId: nextPreset.id })
+        updateSection(page.id, sectionId, { componentId: nextTemplate.id })
     }, [getSectionById, updateSection])
 
     /**

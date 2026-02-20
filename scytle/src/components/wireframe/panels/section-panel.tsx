@@ -10,10 +10,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
-import {
-    getPresetById,
-    getFamilyById,
-} from '@/lib/designs'
 import { getTemplateById } from '@/lib/designs/v2/layouts'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
@@ -55,41 +51,20 @@ export function SectionPanel({
         selectedPageId,
     } = useUnifiedStore()
 
-    // Look up the current preset + family from the registry (V2 first, then V1)
-    const { displayName, displaySubtitle, currentPreset, currentFamily } = useMemo(() => {
-        if (!section.componentId) return { displayName: undefined, displaySubtitle: undefined, currentPreset: undefined, currentFamily: undefined }
+    // Look up the current template from the V2 registry
+    const { displayName, displaySubtitle } = useMemo(() => {
+        if (!section.componentId) return { displayName: undefined, displaySubtitle: undefined }
 
-        // V2: Check template registry first
+        // V2: Check template registry
         const v2Template = getTemplateById(section.componentId)
         if (v2Template) {
             return {
                 displayName: v2Template.name,
                 displaySubtitle: v2Template.category.charAt(0).toUpperCase() + v2Template.category.slice(1),
-                currentPreset: undefined,
-                currentFamily: undefined,
             }
         }
 
-        // V1: Try preset → family
-        const preset = getPresetById(section.componentId)
-        if (preset) {
-            const family = getFamilyById(preset.familyId)
-            return {
-                displayName: preset.name,
-                displaySubtitle: family?.name,
-                currentPreset: preset,
-                currentFamily: family,
-            }
-        }
-
-        // V1: Try as family directly
-        const family = getFamilyById(section.componentId)
-        return {
-            displayName: family?.name,
-            displaySubtitle: undefined,
-            currentPreset: undefined,
-            currentFamily: family,
-        }
+        return { displayName: undefined, displaySubtitle: undefined }
     }, [section.componentId])
 
     // Sync local state when section changes
@@ -246,7 +221,7 @@ export function SectionPanel({
                                 {displayName ?? section.name}
                             </div>
                             <div className="text-xs text-muted-foreground capitalize truncate">
-                                {displaySubtitle ?? currentFamily?.name ?? section.type}
+                                {displaySubtitle ?? section.type}
                             </div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />

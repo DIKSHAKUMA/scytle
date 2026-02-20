@@ -20,7 +20,6 @@ import type {
     PageContext,
     PageLayout,
 } from '@/types'
-import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
 import { getTemplateById } from '@/lib/designs/v2/layouts'
 import { createJWT } from '@/lib/appwrite'
 import { getSectionsForPage } from '@/lib/ai/section-templates'
@@ -525,17 +524,9 @@ function createSection(
     const sectionType = (!isString && data.type) ? data.type : inferSectionType(name)
     const componentId = (!isString && data.componentId) ? data.componentId : resolveComponentIdForSection(sectionType, name, description)
 
-    // Resolve preset → family to get real content and controls
-    const preset = getPresetById(componentId)
-    const family = preset ? getFamilyById(preset.familyId) : getFamilyById(componentId)
-
-    const resolvedContent = family
-        ? { ...family.defaultContent, ...(preset?.content ?? {}), heading: name, subheading: description }
-        : { heading: name, subheading: description }
-
-    const resolvedControls = family
-        ? { ...family.defaultControls, ...(preset?.controls ?? {}) }
-        : {}
+    // V2: Content is embedded in block trees, not in section.content
+    const resolvedContent = { heading: name, subheading: description }
+    const resolvedControls = {}
 
     return {
         id,
@@ -1806,44 +1797,8 @@ export const useUnifiedStore = create<UnifiedState>()(
                             return
                         }
 
-                        // V1: Try preset → family resolution first
-                        const preset = getPresetById(componentId)
-                        if (preset) {
-                            const family = getFamilyById(preset.familyId)
-                            if (family) {
-                                section.layoutVariant = preset.familyId
-                                // Reset controls to preset's curated values
-                                section.controls = { ...(preset.controls ?? {}) }
-                                // Reset content to family defaults + preset overrides
-                                section.content = {
-                                    ...(family.defaultContent ?? {}),
-                                    ...(preset.content ?? {}),
-                                } as WireframeSectionContent
-                            }
-                        } else {
-                            // Try as family directly
-                            const family = getFamilyById(componentId)
-                            if (family) {
-                                section.layoutVariant = family.id
-                                section.controls = { ...family.defaultControls }
-                                section.content = { ...family.defaultContent } as WireframeSectionContent
-                            } else {
-                                // Fallback: try legacy getDesignById
-                                const design = getDesignById(componentId)
-                                if (design) {
-                                    section.layoutVariant = design.layout
-                                    if (design.defaultControls) {
-                                        section.controls = { ...design.defaultControls }
-                                    }
-                                } else {
-                                    // Last resort: infer variant from componentId
-                                    const typePrefix = section.type ? `${section.type}-` : ''
-                                    section.layoutVariant = typePrefix && componentId.startsWith(typePrefix)
-                                        ? componentId.slice(typePrefix.length)
-                                        : undefined
-                                }
-                            }
-                        }
+                        // No V2 template matched — clear variant
+                        section.layoutVariant = undefined
                         state.isDirty = true
                     }
                 })

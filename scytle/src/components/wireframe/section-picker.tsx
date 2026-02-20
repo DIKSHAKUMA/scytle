@@ -16,10 +16,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
-import {
-    getPresetsForCategory,
-    getCategoriesForContext,
-} from '@/lib/designs'
 import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
 import type { LayoutCategory } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
@@ -52,18 +48,34 @@ export function SectionPicker({
     const currentPage = useMemo(() => pages.find(p => p.id === pageId), [pages, pageId])
     const pageContext: PageContext = currentPage?.pageContext ?? 'marketing'
 
-    // Get categories for this page's context from registry
+    // V2 category metadata for context filtering
+    const V2_CATEGORY_META: Record<string, { name: string; contexts: PageContext[] }> = {
+        hero: { name: 'Hero', contexts: ['marketing'] },
+        navbar: { name: 'Navbar', contexts: ['marketing', 'application', 'auth'] },
+        footer: { name: 'Footer', contexts: ['marketing', 'application', 'auth'] },
+        features: { name: 'Features', contexts: ['marketing'] },
+        cta: { name: 'CTA', contexts: ['marketing'] },
+        pricing: { name: 'Pricing', contexts: ['marketing'] },
+        testimonials: { name: 'Testimonials', contexts: ['marketing'] },
+        faq: { name: 'FAQ', contexts: ['marketing'] },
+        contact: { name: 'Contact', contexts: ['marketing'] },
+        content: { name: 'Content', contexts: ['marketing', 'application'] },
+        team: { name: 'Team', contexts: ['marketing'] },
+        blog: { name: 'Blog', contexts: ['marketing'] },
+        stats: { name: 'Stats', contexts: ['marketing'] },
+        gallery: { name: 'Gallery', contexts: ['marketing'] },
+    }
+
+    // Get categories for this page's context — V2 only
     const contextCategories = useMemo(
-        () => getCategoriesForContext(pageContext).filter(cat => {
-            // Include if V2 templates exist OR V1 presets exist
-            const v2t = getTemplatesByCategory(cat.id as LayoutCategory)
-            if (v2t.length > 0) return true
-            return getPresetsForCategory(cat.id).length > 0
-        }),
+        () => Object.entries(V2_CATEGORY_META)
+            .filter(([, meta]) => meta.contexts.includes(pageContext))
+            .filter(([catId]) => getTemplatesByCategory(catId as LayoutCategory).length > 0)
+            .map(([catId, meta]) => ({ id: catId, name: meta.name })),
         [pageContext],
     )
 
-    // Unified preset item shape for both V1 and V2
+    // Unified preset item shape
     type PickerItem = {
         id: string
         name: string
@@ -75,13 +87,12 @@ export function SectionPicker({
         isV2?: boolean
     }
 
-    // Build flat preset list — V2 templates first, then V1 fallback
+    // Build flat preset list from V2 templates
     const allPresets = useMemo(() => {
         const items: PickerItem[] = []
         for (const cat of contextCategories) {
             const v2Templates = getTemplatesByCategory(cat.id as LayoutCategory)
             if (v2Templates.length > 0) {
-                // V2: Show representative layouts (one per primary axis value)
                 const controlDef = getControlDef(cat.id as LayoutCategory)
                 if (controlDef && controlDef.axes[0]) {
                     const primaryAxis = controlDef.axes[0]
@@ -100,7 +111,6 @@ export function SectionPicker({
                         }
                     }
                 } else {
-                    // No axis controls — show all V2 templates
                     for (const tmpl of v2Templates.slice(0, 6)) {
                         items.push({
                             id: tmpl.id,
@@ -111,15 +121,6 @@ export function SectionPicker({
                             isV2: true,
                         })
                     }
-                }
-            } else {
-                // V1 fallback
-                for (const p of getPresetsForCategory(cat.id)) {
-                    items.push({
-                        ...p,
-                        categoryId: cat.id,
-                        categoryName: cat.name,
-                    })
                 }
             }
         }

@@ -30,11 +30,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useUnifiedStore } from '@/store'
 import { WireframeThumbnail } from './wireframe-thumbnail'
-import {
-    getPresetsForCategory,
-    getCategoriesForContext,
-    type DesignPreset,
-} from '@/lib/designs'
 import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
 import type { LayoutCategory, LayoutControlDef, LayoutTemplate as V2LayoutTemplate } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
@@ -75,15 +70,13 @@ interface SectionCategory {
     layouts: SectionLayout[]
 }
 
-// Convert preset to layout format
-function presetToLayout(preset: DesignPreset, category: string): SectionLayout {
+// Convert V2 template to layout format
+function templateToLayout(tmpl: V2LayoutTemplate): SectionLayout {
     return {
-        id: preset.id,
-        name: preset.name,
-        type: category,
-        variant: preset.familyId,
-        preview: preset.description,
-        Thumbnail: preset.Thumbnail,
+        id: tmpl.id,
+        name: tmpl.name,
+        type: tmpl.category,
+        preview: tmpl.description,
     }
 }
 
@@ -129,43 +122,42 @@ function getRepresentativeLayouts(
     return result
 }
 
-// Build categories from registry for a given context — V2-first with V1 fallback
-function buildCategoriesForContext(context: PageContext): SectionCategory[] {
-    const metas = getCategoriesForContext(context)
-    return metas
-        .map(cat => {
-            // V2: If this category has V2 templates, use them instead of V1 presets
-            const v2Templates = getTemplatesByCategory(cat.id as LayoutCategory)
-            if (v2Templates.length > 0) {
-                // If this V2 category has axis controls, show fewer representative layouts
-                // (one per alignment to avoid overwhelming — controls handle the rest)
-                const controlDef = getControlDef(cat.id as LayoutCategory)
-                const layouts: SectionLayout[] = controlDef
-                    ? getRepresentativeLayouts(v2Templates, controlDef)
-                    : v2Templates.map(t => ({
-                        id: t.id,
-                        name: t.name,
-                        type: cat.id,
-                        variant: undefined,
-                        preview: `${t.name} layout`,
-                    }))
-                return {
-                    id: cat.id,
-                    name: cat.name,
-                    description: cat.description,
-                    layouts,
-                }
-            }
+// V2 category metadata — used to populate the sidebar
+const V2_CATEGORY_META: Record<string, { name: string; description?: string; contexts: PageContext[] }> = {
+    hero: { name: 'Hero', description: 'Hero headers & banners', contexts: ['marketing'] },
+    navbar: { name: 'Navbar', description: 'Navigation bars', contexts: ['marketing', 'application', 'auth'] },
+    footer: { name: 'Footer', description: 'Page footers', contexts: ['marketing', 'application', 'auth'] },
+    features: { name: 'Features', description: 'Feature showcases', contexts: ['marketing'] },
+    cta: { name: 'CTA', description: 'Call-to-action sections', contexts: ['marketing'] },
+    pricing: { name: 'Pricing', description: 'Pricing tables & plans', contexts: ['marketing'] },
+    testimonials: { name: 'Testimonials', description: 'Social proof & quotes', contexts: ['marketing'] },
+    faq: { name: 'FAQ', description: 'Question & answer sections', contexts: ['marketing'] },
+    contact: { name: 'Contact', description: 'Contact forms & info', contexts: ['marketing'] },
+    content: { name: 'Content', description: 'General content sections', contexts: ['marketing', 'application'] },
+    team: { name: 'Team', description: 'Team member showcases', contexts: ['marketing'] },
+    blog: { name: 'Blog', description: 'Blog post grids & lists', contexts: ['marketing'] },
+    stats: { name: 'Stats', description: 'Statistics & metrics', contexts: ['marketing'] },
+    gallery: { name: 'Gallery', description: 'Image galleries', contexts: ['marketing'] },
+}
 
-            // V1: Use preset registry
-            return {
-                id: cat.id,
-                name: cat.name,
-                description: cat.description,
-                layouts: getPresetsForCategory(cat.id).map(p => presetToLayout(p, cat.id)),
-            }
-        })
-        .filter(cat => cat.layouts.length > 0) // Only show categories that have presets
+// Build categories from V2 layout registry for a given context
+function buildCategoriesForContext(context: PageContext): SectionCategory[] {
+    const result: SectionCategory[] = []
+    for (const [catId, meta] of Object.entries(V2_CATEGORY_META)) {
+        if (!meta.contexts.includes(context)) continue
+        const v2Templates = getTemplatesByCategory(catId as LayoutCategory)
+        if (v2Templates.length === 0) continue
+
+        const controlDef = getControlDef(catId as LayoutCategory)
+        const layouts: SectionLayout[] = controlDef
+            ? getRepresentativeLayouts(v2Templates, controlDef)
+            : v2Templates.map(t => templateToLayout(t))
+
+        if (layouts.length > 0) {
+            result.push({ id: catId, name: meta.name, description: meta.description, layouts })
+        }
+    }
+    return result
 }
 
 // Context tab metadata

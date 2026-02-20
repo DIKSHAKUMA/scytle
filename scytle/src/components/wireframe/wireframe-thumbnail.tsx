@@ -2,27 +2,13 @@
 
 import { ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getDesignById } from '@/lib/designs'
 
 /**
  * WireframeThumbnail - Shared component for sidebar thumbnails
  * 
- * Renders actual wireframe layouts (not skeletons) that match
- * the canvas designs. Used in:
- * - AddSectionSidebar (layout picker)
- * - ComponentLibraryPanel (replace component)
- * - Ghost preview on canvas
- * 
- * Design philosophy:
- * - Match the actual design registry family Canvas components
- * - Scaled-down but recognizable
- * - Real text placeholders
- * - Image placeholders with icons
- * 
- * MIGRATION NOTE:
- * This component now uses the centralized design registry.
- * New designs should be added to lib/designs/ folder.
- * Legacy switch-case fallback for non-migrated designs.
+ * V2-only: Uses the ThumbnailContent switch-case for
+ * legacy layout key thumbnails. V2 templates provide their
+ * own Thumbnail components via the registry.
  */
 
 interface WireframeThumbnailProps {
@@ -35,14 +21,8 @@ interface WireframeThumbnailProps {
     ghost?: boolean
 }
 
-export function WireframeThumbnail({ type, variant, designId, className, ghost = false }: WireframeThumbnailProps) {
+export function WireframeThumbnail({ type, variant, className, ghost = false }: WireframeThumbnailProps) {
     const legacyKey = variant ? `${type}-${variant}` : type
-
-    // Priority: designId → variant (may be a presetId) → legacy key
-    const design =
-        (designId ? getDesignById(designId) : undefined) ??
-        (variant ? getDesignById(variant) : undefined) ??
-        getDesignById(legacyKey)
 
     return (
         <div className={cn(
@@ -50,13 +30,7 @@ export function WireframeThumbnail({ type, variant, designId, className, ghost =
             ghost && 'opacity-50',
             className
         )}>
-            {design ? (
-                // Use new centralized design thumbnail from registry
-                <design.Thumbnail />
-            ) : (
-                // Fallback to legacy switch-case for non-migrated designs
-                <ThumbnailContent layoutKey={legacyKey} type={type} variant={variant} />
-            )}
+            <ThumbnailContent layoutKey={legacyKey} type={type} variant={variant} />
         </div>
     )
 }

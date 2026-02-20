@@ -3,14 +3,9 @@
  *
  * Each category defines control axes that form a matrix of layout variants.
  * Changing any control resolves the new combination and updates the componentId.
- *
- * Example: Hero has 3 axes (alignment × background × actions) = 27 variants.
- * The user picks "Text: Center" → "Background: Image" → "Element: Form" → hero-26.
  */
 
 import type { LayoutCategory } from './types'
-import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero'
-import { ALL_GALLERY_PRESETS, GALLERY_PRESETS_MAP } from './gallery'
 
 // ============================================
 // Generic Control Types
@@ -46,122 +41,12 @@ export interface LayoutControlDef {
 }
 
 // ============================================
-// Hero Control Definition
-// ============================================
-
-const HERO_CONTROL_DEF: LayoutControlDef = {
-    category: 'hero',
-    axes: [
-        {
-            key: 'alignment',
-            label: 'Text',
-            options: [
-                { value: 'left', label: 'Left', icon: 'AlignLeft' },
-                { value: 'split', label: 'Split', icon: 'Columns2' },
-                { value: 'center', label: 'Center', icon: 'AlignCenter' },
-            ],
-        },
-        {
-            key: 'background',
-            label: 'Background',
-            options: [
-                { value: 'dark', label: 'None' },
-                { value: 'neutral', label: 'None' },
-                { value: 'image', label: 'Image', icon: 'Image' },
-            ],
-        },
-        {
-            key: 'element',
-            label: 'Element',
-            options: [
-                { value: 'none', label: 'None' },
-                { value: 'form', label: 'Form' },
-                { value: 'buttons', label: 'Button' },
-            ],
-        },
-    ],
-    resolve: (values) => {
-        const alignment = values.alignment ?? 'left'
-        const background = values.background ?? 'neutral'
-        const element = values.element ?? 'buttons'
-
-        const match = ALL_HERO_PRESETS.find(
-            (p) => p.alignment === alignment && p.background === background && p.actions === element
-        )
-        return match?.id
-    },
-    extract: (layoutId: string): Record<string, string> => {
-        const preset = HERO_PRESETS_MAP[layoutId]
-        if (!preset) return {} as Record<string, string>
-        return {
-            alignment: preset.alignment,
-            background: preset.background,
-            element: preset.actions,
-        } as Record<string, string>
-    },
-}
-
-// ============================================
-// Gallery Control Definition
-// ============================================
-
-const GALLERY_CONTROL_DEF: LayoutControlDef = {
-    category: 'gallery',
-    axes: [
-        {
-            key: 'style',
-            label: 'Layout',
-            options: [
-                { value: 'grid', label: 'Grid', icon: 'Grid3X3' },
-                { value: 'masonry', label: 'Masonry', icon: 'LayoutDashboard' },
-                { value: 'fullbleed', label: 'Full Bleed', icon: 'Maximize' },
-                { value: 'slider', label: 'Slider', icon: 'GalleryHorizontal' },
-                { value: 'split', label: 'Split', icon: 'PanelLeft' },
-            ],
-        },
-        {
-            key: 'columns',
-            label: 'Columns',
-            options: [
-                { value: '1', label: '1' },
-                { value: '2', label: '2' },
-                { value: '3', label: '3' },
-                { value: '4', label: '4' },
-            ],
-        },
-    ],
-    resolve: (values) => {
-        const style = values.style ?? 'grid'
-        const columns = parseInt(values.columns ?? '3', 10)
-
-        // Find best match: exact style+columns, else nearest
-        const exact = ALL_GALLERY_PRESETS.find(
-            (p) => p.style === style && p.columns === columns
-        )
-        if (exact) return exact.id
-
-        // Fallback: same style, any columns
-        const sameStyle = ALL_GALLERY_PRESETS.find((p) => p.style === style)
-        return sameStyle?.id ?? 'gallery-3'
-    },
-    extract: (layoutId: string): Record<string, string> => {
-        const preset = GALLERY_PRESETS_MAP[layoutId]
-        if (!preset) return {} as Record<string, string>
-        return {
-            style: preset.style,
-            columns: String(preset.columns),
-        } as Record<string, string>
-    },
-}
-
-// ============================================
 // Control Registry
 // ============================================
 
 /** All registered control definitions, keyed by category */
 const CONTROL_REGISTRY: Partial<Record<LayoutCategory, LayoutControlDef>> = {
-    hero: HERO_CONTROL_DEF,
-    gallery: GALLERY_CONTROL_DEF,
+    // Categories will be added here as they are built
 }
 
 /** Get the control definition for a category (if V2 controls exist) */

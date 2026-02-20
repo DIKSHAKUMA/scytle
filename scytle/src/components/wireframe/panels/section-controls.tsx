@@ -14,9 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import { getDesignById, getFamilyById, getPresetById } from '@/lib/designs'
 import { getControlDefForLayout } from '@/lib/designs/v2/layouts'
-import type { ControlDefinition } from '@/lib/designs/types'
 import type { LayoutControlDef } from '@/lib/designs/v2/layouts'
 import type { WireframeSectionControls } from '@/types'
 
@@ -129,175 +127,31 @@ export function SectionControls({
         )
     }
 
-    // ── V1 Fallback: Schema-driven Controls ───────────────
-    // Resolve controls from family/preset system
-    const { controlsDef: designControls, defaultControls: designDefaults } = useMemo(() => {
-        if (!componentId) return { controlsDef: undefined, defaultControls: undefined }
-
-        // Try preset → family
-        const preset = getPresetById(componentId)
-        if (preset) {
-            const family = getFamilyById(preset.familyId)
-            if (family) {
-                return {
-                    controlsDef: family.controlsDef,
-                    defaultControls: { ...family.defaultControls, ...preset.controls },
-                }
-            }
-        }
-
-        // Try family directly
-        const family = getFamilyById(componentId)
-        if (family) {
-            return {
-                controlsDef: family.controlsDef,
-                defaultControls: family.defaultControls,
-            }
-        }
-
-        // Backward compat: getDesignById
-        const design = getDesignById(componentId)
-        return {
-            controlsDef: design?.controlsDef,
-            defaultControls: design?.defaultControls,
-        }
-    }, [componentId])
-
-    // Nothing to render
-    if (!designControls?.length) {
-        return (
-            <div className={cn('space-y-3', className)}>
-                <p className="text-xs text-muted-foreground">
-                    No controls available for this section type.
-                </p>
-            </div>
-        )
-    }
-
-    // Helper to get effective value for a control key
-    const getEffectiveValue = (key: string, defaultVal?: string | number | boolean) => {
-        return controls[key] ?? designDefaults?.[key] ?? defaultVal
-    }
-
-    // Filter controls by showWhen condition
-    const visibleControls = designControls.filter(def => {
-        if (!def.showWhen) return true
-        const currentValue = getEffectiveValue(def.showWhen.key)
-        return currentValue === def.showWhen.value
-    })
-
+    // No V2 axis controls for this section — show "no controls" message
     return (
-        <div className={cn('space-y-4', className)}>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Controls
-            </Label>
-            {visibleControls.map((def) => {
-                const effectiveValue = getEffectiveValue(def.key, def.defaultValue)
-
-                // Toggle Group
-                if (def.type === 'toggle-group' && def.options) {
-                    return (
-                        <div key={def.key} className="space-y-1.5">
-                            <Label className="text-xs font-medium">{def.label}</Label>
-                            <ToggleGroup
-                                type="single"
-                                value={String(effectiveValue)}
-                                onValueChange={(v) => v && onControlChangeAction(def.key, v)}
-                                className="justify-start"
-                            >
-                                {def.options.map((opt) => {
-                                    const IconComp = opt.icon ? ICON_MAP[opt.icon] : undefined
-                                    return (
-                                        <ToggleGroupItem
-                                            key={opt.value}
-                                            value={opt.value}
-                                            aria-label={opt.label}
-                                            className="h-8 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                                        >
-                                            {IconComp ? (
-                                                <IconComp className="h-3.5 w-3.5" />
-                                            ) : (
-                                                opt.label
-                                            )}
-                                        </ToggleGroupItem>
-                                    )
-                                })}
-                            </ToggleGroup>
-                        </div>
-                    )
-                }
-
-                // Switch
-                if (def.type === 'switch') {
-                    return (
-                        <div key={def.key} className="flex items-center justify-between">
-                            <Label htmlFor={def.key} className="text-xs font-medium">
-                                {def.label}
-                            </Label>
-                            <Switch
-                                id={def.key}
-                                checked={Boolean(effectiveValue)}
-                                onCheckedChange={(v) => onControlChangeAction(def.key, v)}
-                            />
-                        </div>
-                    )
-                }
-
-                // Slider
-                if (def.type === 'slider') {
-                    return (
-                        <SliderWidget
-                            key={def.key}
-                            def={def}
-                            value={Number(effectiveValue)}
-                            onChange={(v) => onControlChangeAction(def.key, v)}
-                        />
-                    )
-                }
-
-                // Select
-                if (def.type === 'select' && def.options) {
-                    return (
-                        <SelectWidget
-                            key={def.key}
-                            def={def}
-                            value={String(effectiveValue)}
-                            onChange={(v) => onControlChangeAction(def.key, v)}
-                        />
-                    )
-                }
-
-                // Number
-                if (def.type === 'number') {
-                    return (
-                        <NumberWidget
-                            key={def.key}
-                            def={def}
-                            value={Number(effectiveValue)}
-                            onChange={(v) => onControlChangeAction(def.key, v)}
-                        />
-                    )
-                }
-
-                // Color
-                if (def.type === 'color' && def.options) {
-                    return (
-                        <ColorWidget
-                            key={def.key}
-                            def={def}
-                            value={String(effectiveValue)}
-                            onChange={(v) => onControlChangeAction(def.key, v)}
-                        />
-                    )
-                }
-
-                return null
-            })}
+        <div className={cn('space-y-3', className)}>
+            <p className="text-xs text-muted-foreground">
+                No controls available for this section type.
+            </p>
         </div>
     )
 }
 
 // ===== WIDGET COMPONENTS =====
+// Kept for future use when V2 categories add custom control widgets
+
+/** Generic control definition shape for widget components */
+interface ControlDefinition {
+    key: string
+    label: string
+    type: 'toggle-group' | 'switch' | 'slider' | 'select' | 'number' | 'color'
+    defaultValue?: string | number | boolean
+    options?: { value: string; label: string; icon?: string }[]
+    min?: number
+    max?: number
+    step?: number
+    showWhen?: { key: string; value: string | number | boolean }
+}
 
 /**
  * SliderWidget — Range input with value label

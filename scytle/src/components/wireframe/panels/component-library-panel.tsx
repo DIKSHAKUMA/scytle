@@ -10,12 +10,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
 import { ComponentCard } from './component-card'
 import {
-    getFamiliesForCategory,
-    getPresetsForCategory,
-    getPresetById,
-    type DesignCategoryId,
-} from '@/lib/designs'
-import {
     getTemplatesByCategory,
     type LayoutCategory,
 } from '@/lib/designs/v2/layouts'
@@ -39,15 +33,13 @@ export interface ComponentVariant {
  * V2 layout categories that are ready to use.
  * When a category has V2 layouts, we show ONLY V2 (hiding V1).
  */
-const V2_READY_CATEGORIES: LayoutCategory[] = ['hero', 'gallery']
+const V2_READY_CATEGORIES: LayoutCategory[] = []
 
 /**
  * Get component variants for a section type.
- * If V2 layouts exist for this category, returns V2 exclusively.
- * Otherwise falls back to V1 families.
+ * Returns V2 layout templates for the category.
  */
 function getVariantsForType(sectionType: string): ComponentVariant[] {
-    // Check if V2 templates exist for this category
     const v2Category = sectionType as LayoutCategory
     if (V2_READY_CATEGORIES.includes(v2Category)) {
         const templates = getTemplatesByCategory(v2Category)
@@ -65,30 +57,8 @@ function getVariantsForType(sectionType: string): ComponentVariant[] {
         }
     }
 
-    // Fallback to V1 families
-    const families = getFamiliesForCategory(sectionType as DesignCategoryId)
-    const presets = getPresetsForCategory(sectionType as DesignCategoryId)
-
-    // Group presets by familyId, pick the first preset per family
-    const firstPresetByFamily = new Map<string, typeof presets[number]>()
-    for (const preset of presets) {
-        if (!firstPresetByFamily.has(preset.familyId)) {
-            firstPresetByFamily.set(preset.familyId, preset)
-        }
-    }
-
-    return families.map(family => {
-        const preset = firstPresetByFamily.get(family.id)
-        return {
-            id: preset?.id ?? family.id,
-            sectionType: sectionType as DesignCategoryId,
-            variant: family.id,
-            name: family.name,
-            description: family.description,
-            tags: family.tags ?? [],
-            Thumbnail: preset?.Thumbnail,
-        }
-    })
+    // No V2 templates available for this category
+    return []
 }
 
 interface ComponentLibraryPanelProps {
