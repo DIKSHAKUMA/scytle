@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback } from 'react'
 import { useUnifiedStore } from '@/store'
+import { useSelectionStore } from '@/store/selection-store'
 import { useGeneration } from './use-generation'
 import { toast } from 'sonner'
 
@@ -20,6 +21,10 @@ interface UseKeyboardShortcutsOptions {
  * - Cmd/Ctrl + G: Generate copy for selection
  * - Arrow keys: Navigate between sections
  * - G: Mark section as global
+ *
+ * IMPORTANT: When the V2 selection system is active (entered / block-selected),
+ * most shortcuts are handled by SelectionKeyboardHandler instead. This hook
+ * only processes Undo/Redo (which V2 doesn't handle) and defers everything else.
  */
 export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) {
     const { enabled = true } = options
@@ -61,6 +66,14 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
         const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey
 
+        // ── V2 selection guard ──
+        // When V2 is in entered or block-selected mode, SelectionKeyboardHandler
+        // handles Escape, Enter, Delete, Tab, Cmd+C/X/V/D. We only process
+        // Undo/Redo here (which V2 doesn't handle). Otherwise we'd corrupt state
+        // by e.g. calling deselectAll() while a block is still selected.
+        const v2Mode = useSelectionStore.getState().mode
+        const v2Active = v2Mode === 'entered' || v2Mode === 'block-selected'
+
         // Undo: Cmd/Ctrl + Z
         if (cmdOrCtrl && e.key === 'z' && !e.shiftKey) {
             e.preventDefault()
@@ -80,6 +93,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
             }
             return
         }
+
+        // ── Defer to V2 SelectionKeyboardHandler when blocks are active ──
+        // Undo/Redo (above) still run; everything below is section-level and
+        // would conflict with V2's block-level handlers (Escape, Delete, etc.)
+        if (v2Active) return
 
         // Generate: Cmd/Ctrl + G
         if (cmdOrCtrl && e.key === 'g') {

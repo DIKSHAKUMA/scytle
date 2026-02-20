@@ -199,6 +199,12 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
         handleMouseLeave,
     } = useLayerInteraction(block)
 
+    // Drag is only enabled when the section is entered / a block is selected.
+    // useSortable is always called (DOM stability), but disabled prevents
+    // the sensor from activating — no listeners, no transform.
+    const mode = useSelectionStore((s) => s.mode)
+    const sortingDisabled = mode !== 'entered' && mode !== 'block-selected'
+
     const {
         attributes,
         listeners,
@@ -206,7 +212,7 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: block.id })
+    } = useSortable({ id: block.id, disabled: sortingDisabled })
 
     // Merge refs — @dnd-kit needs setNodeRef, we need localRef for hover rects
     const mergedRef = useCallback(
@@ -240,8 +246,8 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
             onMouseLeave={handleMouseLeave}
             // Sortable attributes (role, tabIndex, aria-*)
             {...attributes}
-            // Drag listeners — disabled during text editing so text selection works
-            {...(isBlockEditing ? {} : listeners)}
+            // Drag listeners — disabled during text editing or when sorting is off
+            {...(isBlockEditing || sortingDisabled ? {} : listeners)}
             data-layer-id={block.id}
             data-layer-type={block.type}
             data-layer-label={label}

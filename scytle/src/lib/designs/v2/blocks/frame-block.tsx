@@ -206,8 +206,12 @@ export function FrameBlock({ block, renderChild }: FrameBlockComponentProps) {
     const content = block.content as FrameBlockContent
     const children = block.children ?? []
 
-    const mode = useSelectionStore((s) => s.mode)
-    const isSortable = (mode === 'entered' || mode === 'block-selected') && children.length > 1
+    // Always wrap multi-child frames in SortableChildren so the DOM element
+    // type (SortableLayerDiv) never changes — this prevents browser double-click
+    // detection from breaking when mode transitions cause re-renders.
+    // Actual drag activation is controlled inside SortableLayerDiv via
+    // useSortable({ disabled }) based on selection mode.
+    const hasMultipleChildren = children.length > 1
 
     const chrome = content._chrome ? renderChrome(content._chrome) : null
 
@@ -219,8 +223,8 @@ export function FrameBlock({ block, renderChild }: FrameBlockComponentProps) {
             {/* Absolute chrome (slider arrows overlaid on the frame) */}
             {chrome?.overlay}
 
-            {/* Render child blocks — sortable when section is entered */}
-            {isSortable ? (
+            {/* Render child blocks — always in SortableContext for DOM stability */}
+            {hasMultipleChildren ? (
                 <SortableChildren block={block} childBlocks={children} renderChild={renderChild} />
             ) : (
                 children.map(child => renderChild(child))

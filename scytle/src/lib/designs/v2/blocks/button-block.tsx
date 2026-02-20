@@ -8,11 +8,16 @@
  *   --sg-button-style (solid | outline | ghost | brick | gradient)
  *   --sg-font-body
  *   --sg-bg-accent (for gradient style)
+ *
+ * Supports inline contentEditable editing via the V2 selection store.
  */
 
 'use client'
 
+import { useCallback, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { useSelectionStore } from '@/store/selection-store'
+import { useUnifiedStore } from '@/store'
 import type { Block, ButtonBlockProps, ButtonBlockContent, ButtonVariant } from './types'
 
 // ============================================
@@ -39,6 +44,7 @@ const SIZE_CLASSES: Record<string, string> = {
 // ============================================
 
 export function ButtonBlock({ block, className }: Props) {
+    const elRef = useRef<HTMLSpanElement>(null)
     const props = block.props as unknown as ButtonBlockProps
     const content = block.content as unknown as ButtonBlockContent
 
@@ -48,15 +54,70 @@ export function ButtonBlock({ block, className }: Props) {
 
     const sizeClass = SIZE_CLASSES[size] ?? SIZE_CLASSES.md
 
+    // Selection / editing state
+    const isEditing = useSelectionStore((s) => s.isEditing && s.blockId === block.id)
+    const stopEditing = useSelectionStore((s) => s.stopEditing)
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const updateBlockContent = useUnifiedStore((s) => s.updateBlockContent)
+    const selectedPageId = useUnifiedStore((s) => s.selectedPageId)
+
+    // Focus the element when entering edit mode
+    useEffect(() => {
+        if (isEditing && elRef.current) {
+            elRef.current.focus()
+            // Place cursor at end
+            const sel = window.getSelection()
+            if (sel) {
+                sel.selectAllChildren(elRef.current)
+                sel.collapseToEnd()
+            }
+        }
+    }, [isEditing])
+
+    // Commit text on blur
+    const handleBlur = useCallback(() => {
+        if (!elRef.current) return
+        const newText = elRef.current.textContent ?? ''
+        if (newText !== text && selectedPageId && selSectionId) {
+            updateBlockContent(selectedPageId, selSectionId, block.id, { text: newText })
+        }
+        stopEditing()
+    }, [block.id, text, selectedPageId, selSectionId, updateBlockContent, stopEditing])
+
+    // Enter key commits (no newlines in buttons), Escape cancels
+    const handleKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault()
+                elRef.current?.blur()
+            } else if (e.key === 'Escape') {
+                e.preventDefault()
+                if (elRef.current) {
+                    elRef.current.textContent = text
+                }
+                stopEditing()
+            }
+            // Stop propagation of all keys when editing so keyboard handler doesn't intercept
+            e.stopPropagation()
+        },
+        [text, stopEditing],
+    )
+
     return (
         <span
+            ref={elRef}
             role="button"
             className={cn(
                 'inline-flex items-center justify-center font-medium transition-colors whitespace-nowrap',
                 sizeClass,
+                isEditing && 'outline-none cursor-text',
                 className,
             )}
             style={getButtonStyle(variant)}
+            contentEditable={isEditing}
+            suppressContentEditableWarning
+            onBlur={isEditing ? handleBlur : undefined}
+            onKeyDown={isEditing ? handleKeyDown : undefined}
             data-layer-id={block.id}
             data-layer-type={block.type}
             data-layer-label={`${variant} Button`}

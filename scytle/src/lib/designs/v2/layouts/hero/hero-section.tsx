@@ -13,19 +13,36 @@
 
 'use client'
 
+import { useEffect } from 'react'
 import type { LayoutProps } from '../types'
 import { RenderBlock } from '../../blocks'
 import type { Block } from '../../blocks/types'
 import { SectionSelectionWrapper } from '../../selection'
-import { PageIdContext, SectionIdContext } from '../../selection/contexts'
-import { useContext } from 'react'
+import { SectionIdContext } from '../../selection/contexts'
+import { useSelectionStore } from '@/store/selection-store'
+
+// ============================================
+// Register blocks with selection store so keyboard
+// handler can navigate them (Tab, Enter, Shift+Enter)
+// ============================================
+
+function useRegisterSectionBlocks(sectionId: string, blocks?: Block[]) {
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const setCurrentBlocks = useSelectionStore((s) => s.setCurrentBlocks)
+
+    useEffect(() => {
+        if (selSectionId === sectionId && blocks && blocks.length > 0) {
+            setCurrentBlocks(blocks)
+        }
+    }, [selSectionId, sectionId, blocks, setCurrentBlocks])
+}
 
 // ============================================
 // Hero 44 — Left-aligned, single column
 // ============================================
 
 export function Hero44({ sectionId, blocks, className }: LayoutProps) {
-    const pageId = useContext(PageIdContext)
+    useRegisterSectionBlocks(sectionId, blocks)
 
     return (
         <SectionSelectionWrapper sectionId={sectionId}>
@@ -61,7 +78,7 @@ export function Hero44({ sectionId, blocks, className }: LayoutProps) {
 // ============================================
 
 export function Hero57({ sectionId, blocks, className }: LayoutProps) {
-    const pageId = useContext(PageIdContext)
+    useRegisterSectionBlocks(sectionId, blocks)
 
     return (
         <SectionSelectionWrapper sectionId={sectionId}>

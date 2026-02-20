@@ -1,16 +1,18 @@
 /**
- * SelectionKeyboardHandler — Global keyboard shortcut handler for selection
+ * SelectionKeyboardHandler — Figma-like keyboard navigation & shortcuts
  *
  * Mounts once inside the canvas wrapper. Listens for:
- *   Escape     → escape() (go up one selection level)
- *   Enter      → enterSection() (dive into selected section)
- *   Delete/Bksp → fires onDeleteBlock callback when block selected
- *   Tab        → select next block in section
- *   Shift+Tab  → select previous block in section
- *   Cmd+C      → copy block to clipboard
- *   Cmd+X      → cut (copy+flag for delete)
- *   Cmd+V      → paste (fires callback)
- *   Cmd+D      → duplicate (fires callback)
+ *   Escape       → go up one level (editing → selected → entered → section → idle)
+ *   Enter        → drill down: section → enter section; container block → select first child;
+ *                   editable block → inline text editing
+ *   Shift+Enter  → go to parent container (or up to entered mode if at top-level)
+ *   Delete/Bksp  → fires onDeleteBlock callback when block selected
+ *   Tab          → select next block (flattened tree walk)
+ *   Shift+Tab    → select previous block
+ *   Cmd+C        → copy block to clipboard
+ *   Cmd+X        → cut (copy+flag for delete)
+ *   Cmd+V        → paste (fires callback)
+ *   Cmd+D        → duplicate (fires callback)
  *
  * Block mutation callbacks (delete, paste, duplicate) are delegated up
  * to the parent via props, because the selection store doesn't own block data.
@@ -18,10 +20,60 @@
 
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useSelectionStore } from '@/store/selection-store'
 import type { ClipboardPayload } from '@/store/selection-store'
 import type { Block } from '@/lib/designs/v2/blocks/types'
+import { CONTAINER_BLOCK_TYPES } from '@/lib/designs/v2/blocks/types'
+
+// ============================================
+// Block tree helpers
+// ============================================
+
+/** Block types that support inline contentEditable editing */
+const EDITABLE_BLOCK_TYPES = new Set(['heading', 'text', 'button'])
+
+/** Flatten a block tree into a depth-first ordered list (pre-order) */
+function flattenBlocks(blocks: Block[]): Block[] {
+    const result: Block[] = []
+    function walk(items: Block[]) {
+        for (const b of items) {
+            result.push(b)
+            if (b.children && b.children.length > 0) walk(b.children)
+        }
+    }
+    walk(blocks)
+    return result
+}
+
+/** Find a block by ID anywhere in the tree */
+function findBlock(blocks: Block[], id: string): Block | null {
+    for (const b of blocks) {
+        if (b.id === id) return b
+        if (b.children) {
+            const found = findBlock(b.children, id)
+            if (found) return found
+        }
+    }
+    return null
+}
+
+/**
+ * Find the parent of a block by ID in the tree.
+ * Returns null if the block is a top-level item (no parent container).
+ */
+function findParent(blocks: Block[], childId: string): Block | null {
+    for (const b of blocks) {
+        if (b.children) {
+            for (const c of b.children) {
+                if (c.id === childId) return b
+            }
+            const found = findParent(b.children, childId)
+            if (found) return found
+        }
+    }
+    return null
+}
 
 // ============================================
 // Visual Feedback — brief flash on copy/cut/paste
@@ -74,7 +126,7 @@ function flashBlock(blockId: string, color: string, label?: string) {
 // ============================================
 
 interface KeyboardHandlerProps {
-    /** All blocks in the currently entered section */
+    /** All blocks in the currently entered section (tree structure) */
     sectionBlocks?: Block[]
     /** Called when Delete/Backspace is pressed with a block selected */
     onDeleteBlock?: (blockId: string) => void
@@ -106,6 +158,12 @@ export function SelectionKeyboardHandler({
     const startEditing = useSelectionStore((s) => s.startEditing)
     const copyToClipboard = useSelectionStore((s) => s.copyToClipboard)
 
+    // Flatten the block tree for Tab cycling (depth-first, all blocks)
+    const flatBlocks = useMemo(
+        () => (sectionBlocks ? flattenBlocks(sectionBlocks) : []),
+        [sectionBlocks],
+    )
+
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
             const isMeta = e.metaKey || e.ctrlKey
@@ -134,15 +192,50 @@ export function SelectionKeyboardHandler({
                     break
                 }
 
-                // ── Enter: dive into selected section, or start editing selected block ──
+                // ── Enter: Figma-style drill-down ──
+                // section-selected → enter section
+                // block-selected + container → select first child (drill into container)
+                // block-selected + editable → start inline editing
                 case 'Enter': {
+                    if (e.shiftKey) {
+                        // ── Shift+Enter: go to parent container ──
+                        if (mode === 'block-selected' && blockId && sectionBlocks) {
+                            e.preventDefault()
+                            const parent = findParent(sectionBlocks, blockId)
+                            if (parent) {
+                                // Select the parent container
+                                selectBlock(parent.id)
+                            } else {
+                                // At top level — back to entered mode (like Escape from block)
+                                escape()
+                            }
+                        }
+                        break
+                    }
+
                     if (mode === 'section-selected') {
                         e.preventDefault()
                         enterSection()
                     } else if (mode === 'block-selected' && blockId) {
-                        // Enter on a selected block → start inline editing (if editable)
                         e.preventDefault()
-                        startEditing()
+                        // Check if selected block is a container with children
+                        const block = sectionBlocks ? findBlock(sectionBlocks, blockId) : null
+                        if (
+                            block &&
+                            CONTAINER_BLOCK_TYPES.has(block.type) &&
+                            block.children &&
+                            block.children.length > 0
+                        ) {
+                            // Drill into container — select its first child
+                            selectBlock(block.children[0].id)
+                        } else if (block && EDITABLE_BLOCK_TYPES.has(block.type)) {
+                            // Start inline editing for editable blocks
+                            startEditing()
+                        }
+                    } else if (mode === 'entered' && sectionBlocks && sectionBlocks.length > 0) {
+                        // Entered mode with no block selected → select first block
+                        e.preventDefault()
+                        selectBlock(sectionBlocks[0].id)
                     }
                     break
                 }
@@ -157,16 +250,15 @@ export function SelectionKeyboardHandler({
                     break
                 }
 
-                // ── Tab / Shift+Tab: cycle through blocks ──
+                // ── Tab / Shift+Tab: cycle through ALL blocks (flattened tree) ──
                 case 'Tab': {
                     if (
                         (mode === 'entered' || mode === 'block-selected') &&
-                        sectionBlocks &&
-                        sectionBlocks.length > 0
+                        flatBlocks.length > 0
                     ) {
                         e.preventDefault()
                         const currentIndex = blockId
-                            ? sectionBlocks.findIndex((b) => b.id === blockId)
+                            ? flatBlocks.findIndex((b) => b.id === blockId)
                             : -1
 
                         let nextIndex: number
@@ -174,17 +266,17 @@ export function SelectionKeyboardHandler({
                             // Previous
                             nextIndex =
                                 currentIndex <= 0
-                                    ? sectionBlocks.length - 1
+                                    ? flatBlocks.length - 1
                                     : currentIndex - 1
                         } else {
                             // Next
                             nextIndex =
-                                currentIndex >= sectionBlocks.length - 1
+                                currentIndex >= flatBlocks.length - 1
                                     ? 0
                                     : currentIndex + 1
                         }
 
-                        selectBlock(sectionBlocks[nextIndex].id)
+                        selectBlock(flatBlocks[nextIndex].id)
                     }
                     break
                 }
@@ -193,7 +285,7 @@ export function SelectionKeyboardHandler({
                 case 'c': {
                     if (isMeta && mode === 'block-selected' && blockId && sectionBlocks) {
                         e.preventDefault()
-                        const block = sectionBlocks.find((b) => b.id === blockId)
+                        const block = findBlock(sectionBlocks, blockId)
                         if (block) {
                             const payload: ClipboardPayload = {
                                 scytle: true,
@@ -219,7 +311,7 @@ export function SelectionKeyboardHandler({
                 case 'x': {
                     if (isMeta && mode === 'block-selected' && blockId && sectionBlocks) {
                         e.preventDefault()
-                        const block = sectionBlocks.find((b) => b.id === blockId)
+                        const block = findBlock(sectionBlocks, blockId)
                         if (block) {
                             const payload: ClipboardPayload = {
                                 scytle: true,
@@ -267,6 +359,7 @@ export function SelectionKeyboardHandler({
             blockId,
             sectionId,
             sectionBlocks,
+            flatBlocks,
             clipboard,
             isEditing,
             escape,

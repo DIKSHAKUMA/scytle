@@ -62,15 +62,17 @@ export function ButtonGroupBlock({ block, renderChild, className }: Props) {
     const align = props.align ?? 'left'
     const gap = props.gap ?? 12
 
-    const mode = useSelectionStore((s) => s.mode)
-    const isSortable = (mode === 'entered' || mode === 'block-selected') && children.length > 1
+    // Always wrap multi-child groups in SortableButtonChildren for DOM stability
+    // (prevents DOM element switching that breaks double-click detection).
+    // Drag activation is controlled by useSortable({ disabled }) in LayerWrapper.
+    const hasMultipleChildren = children.length > 1
 
     return (
         <div
             className={cn('flex flex-wrap items-center', JUSTIFY_CLASS[align], className)}
             style={{ gap: `${gap}px` }}
         >
-            {isSortable ? (
+            {hasMultipleChildren ? (
                 <SortableButtonChildren block={block} childBlocks={children} renderChild={renderChild} />
             ) : (
                 children.map(child => renderChild(child))
