@@ -8,6 +8,9 @@
 
 import type { LayoutTemplate, LayoutCategory, LayoutRegistry } from './types'
 
+// ── Category imports ────────────────────────────────────────────
+import { LAYOUT_TEMPLATES as HERO_TEMPLATES } from './hero'
+
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
 
@@ -21,7 +24,7 @@ export { getControlDef, getControlDefForLayout } from './controls'
 
 /** All registered layout templates, grouped by category */
 export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
-    // Categories will be added here as they are built
+    hero: HERO_TEMPLATES,
 }
 
 /** Flat array of all layout templates */

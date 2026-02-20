@@ -6,6 +6,7 @@
  */
 
 import type { LayoutCategory } from './types'
+import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero/presets'
 
 // ============================================
 // Generic Control Types
@@ -41,12 +42,40 @@ export interface LayoutControlDef {
 }
 
 // ============================================
+// Hero Controls
+// ============================================
+
+const HERO_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero',
+    axes: [
+        {
+            key: 'alignment',
+            label: 'Alignment',
+            options: [
+                { value: 'left', label: 'Left', icon: 'AlignLeft' },
+                { value: 'split', label: 'Split', icon: 'Columns2' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const alignment = values.alignment ?? 'left'
+        const match = ALL_HERO_PRESETS.find(p => p.alignment === alignment)
+        return match?.id
+    },
+    extract(layoutId: string): Record<string, string> {
+        const preset = HERO_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { alignment: preset.alignment }
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
 /** All registered control definitions, keyed by category */
 const CONTROL_REGISTRY: Partial<Record<LayoutCategory, LayoutControlDef>> = {
-    // Categories will be added here as they are built
+    hero: HERO_CONTROL_DEF,
 }
 
 /** Get the control definition for a category (if V2 controls exist) */
