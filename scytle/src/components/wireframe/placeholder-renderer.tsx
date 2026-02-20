@@ -34,7 +34,11 @@ export function PlaceholderRenderer({ section, viewport, className, onContentCha
         const V2Component = v2Template.component
         return (
             <div className={className}>
-                <V2Component sectionId={section.id} className="" />
+                <V2Component
+                    sectionId={section.id}
+                    blocks={section.blocks}
+                    className=""
+                />
             </div>
         )
     }

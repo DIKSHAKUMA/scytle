@@ -16,7 +16,7 @@ export type {
 export { DEFAULT_HERO_CONTENT } from './types'
 
 // Core composable component
-export { HeroSection } from './hero-section'
+export { HeroSection, buildHeroBlocks } from './hero-section'
 export type { HeroSectionProps } from './hero-section'
 
 // Thumbnails
@@ -90,8 +90,10 @@ export {
 // Hero Layout Templates (for registry)
 // ============================================
 
-import type { LayoutTemplate } from '../types'
+import type { LayoutTemplate, LayoutProps } from '../types'
 import { createHeroThumbnail } from './hero-thumbnails'
+import { buildHeroBlocks } from './hero-section'
+import { DEFAULT_HERO_CONTENT } from './types'
 import {
     Hero1,
     Hero2,
@@ -124,7 +126,7 @@ import {
 import { ALL_HERO_PRESETS } from './presets'
 
 /** Map preset config → component */
-const HERO_COMPONENTS: Record<string, React.ComponentType<{ sectionId: string; className?: string }>> = {
+const HERO_COMPONENTS: Record<string, React.ComponentType<LayoutProps>> = {
     'hero-1': Hero1,
     'hero-2': Hero2,
     'hero-3': Hero3,
@@ -173,7 +175,7 @@ export const HERO_LAYOUT_TEMPLATES: LayoutTemplate[] = ALL_HERO_PRESETS.map((pre
     description: getDescription(preset.alignment, preset.background, preset.actions),
     relumeId: `header-${preset.relumeHeader}`,
     component: HERO_COMPONENTS[preset.id],
-    defaultBlocks: () => [],
+    defaultBlocks: () => buildHeroBlocks(preset.id, DEFAULT_HERO_CONTENT, preset.alignment, preset.actions),
     tags: getTags(preset.alignment, preset.background, preset.actions),
     Thumbnail: createHeroThumbnail(preset),
 }))

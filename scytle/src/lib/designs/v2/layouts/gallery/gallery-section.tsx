@@ -1,21 +1,29 @@
 /**
- * GallerySection — Composable gallery layout component (Desktop-first)
+ * GallerySection — Composable gallery layout component (V2 Nested Frame Block Tree)
  *
  * Single component that renders all 27 gallery variations.
- * Dispatches to sub-renderers based on variant number.
+ * buildGalleryBlocks() returns a NESTED FRAME BLOCK TREE — every structural
+ * wrapper div is a `frame` block with `children`. The layout component
+ * simply walks the tree via RenderBlock.
  *
- * Uses desktop-first approach (matching hero pattern):
+ * Structural chrome (slider arrows, dots) uses the FrameBlock `_chrome` system
+ * rather than being hardcoded JSX.
+ *
+ * Uses desktop-first approach:
  *   - Default = desktop layout
  *   - @max-sm: overrides for mobile viewport (375px)
  *
- * Reads --sg-* CSS custom properties for theming.
+ * Reads --sg-* CSS custom properties for theming via TokenProvider.
  */
 
 'use client'
 
-import { Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useMemo, useEffect } from 'react'
 import type { GalleryContent } from './types'
 import { DEFAULT_GALLERY_CONTENT } from './types'
+import { RenderBlock } from '../../blocks'
+import type { Block } from '../../blocks/types'
+import { useSelectionStore } from '@/store/selection-store'
 
 // ============================================
 // Props
@@ -25,103 +33,433 @@ export interface GallerySectionProps {
     sectionId: string
     variant: number
     content?: Partial<GalleryContent>
+    /** Externally-stored blocks (from unified store) — overrides derived blocks */
+    blocks?: Block[]
     className?: string
 }
 
 // ============================================
-// Shared Sub-components
+// Block helpers
 // ============================================
 
-/** Image placeholder — grey box with icon */
-function Placeholder({ className = '', ratio }: { className?: string; ratio?: string }) {
-    const style = ratio ? { aspectRatio: ratio } : undefined
-    return (
-        <div
-            className={`bg-[var(--sg-bg-secondary,#e5e7eb)] flex items-center justify-center relative overflow-hidden ${className}`}
-            style={style}
-            data-layer-type="image"
-        >
-            <ImageIcon className="w-8 h-8 text-[var(--sg-text-muted,#9ca3af)] opacity-50" />
-        </div>
-    )
+/** Build heading block */
+function mkHeading(sid: string, content: GalleryContent): Block {
+    return { id: `${sid}--heading`, type: 'heading', props: { level: 2, align: 'center' }, content: { text: content.heading } }
 }
 
-/** Section heading */
-function SectionHeading({ text, className = '' }: { text: string; className?: string }) {
-    return (
-        <h2
-            className={`font-[var(--sg-font-heading,Inter)] font-medium leading-[1.2] tracking-[-0.01em] text-[var(--sg-text,var(--sg-text-primary,#111827))] text-[clamp(2rem,4vw,3.25rem)] ${className}`}
-            data-layer-type="heading"
-        >
-            {text}
-        </h2>
-    )
+/** Build description block */
+function mkDesc(sid: string, content: GalleryContent): Block {
+    return { id: `${sid}--description`, type: 'text', props: { variant: 'body-large', align: 'center' }, content: { text: content.description } }
 }
 
-/** Section description */
-function SectionDescription({ text, className = '' }: { text: string; className?: string }) {
-    return (
-        <p
-            className={`font-[var(--sg-font-body,Inter)] font-normal leading-[1.5] text-[var(--sg-text,var(--sg-text-secondary,#6b7280))] text-[clamp(0.75rem,1.2vw,1.125rem)] opacity-90 ${className}`}
-            data-layer-type="text"
-        >
-            {text}
-        </p>
-    )
+/** Build image block */
+function mkImg(sid: string, i: number, ratio: string = '1:1'): Block {
+    return { id: `${sid}--img-${i}`, type: 'image', props: { ratio, shape: 'rectangle', position: 'center', fillMode: 'cover' }, content: { alt: `Gallery image ${i + 1}` } }
 }
 
-/** Slider arrow button */
-function SliderArrow({ direction }: { direction: 'left' | 'right' }) {
-    const Icon = direction === 'left' ? ChevronLeft : ChevronRight
-    return (
-        <button
-            type="button"
-            className="flex items-center justify-center w-12 h-12 rounded-full border border-[var(--sg-border,rgba(255,255,255,0.2))] bg-transparent text-[var(--sg-text,white)] shrink-0"
-            data-layer-type="button"
-        >
-            <Icon className="w-6 h-6" />
-        </button>
-    )
+/** Build image block with layoutClassName */
+function mkImgL(sid: string, i: number, layoutCls: string, ratio: string = '1:1'): Block {
+    return { id: `${sid}--img-${i}`, type: 'image', props: { ratio, shape: 'rectangle', position: 'center', fillMode: 'cover', layoutClassName: layoutCls }, content: { alt: `Gallery image ${i + 1}` } }
 }
 
-/** Slider dots indicator */
-function SliderDots({ count = 3, activeIndex = 0 }: { count?: number; activeIndex?: number }) {
-    return (
-        <div className="flex items-center gap-[9px] py-2.5" data-layer-type="dots">
-            {Array.from({ length: count }).map((_, i) => (
-                <div
-                    key={i}
-                    className={`w-2 h-2 rounded-full ${i === activeIndex
-                            ? 'bg-[var(--sg-text,white)]'
-                            : 'bg-[var(--sg-text,white)] opacity-20'
-                        }`}
-                />
-            ))}
-        </div>
-    )
+/** Build the section title frame (heading + description centered) */
+function titleFrame(sid: string, content: GalleryContent): Block {
+    return {
+        id: `${sid}--title`, type: 'frame',
+        props: { direction: 'vertical' as const, gap: 24, alignment: { cross: 'center' as const }, sizing: { width: 'fill' as const }, maxWidth: 768, className: 'mx-auto text-center @max-sm:gap-5' },
+        content: { label: 'Section Title' },
+        children: [mkHeading(sid, content), mkDesc(sid, content)],
+    }
 }
 
-/** Arrows LEFT + Dots RIGHT (for slider-below and split) */
-function SliderControlsBelow() {
-    return (
-        <div className="flex items-center justify-between w-full">
-            <div className="flex gap-2">
-                <SliderArrow direction="left" />
-                <SliderArrow direction="right" />
-            </div>
-            <SliderDots count={7} />
-        </div>
-    )
+/** Convenience: wrap in the standard gallery outer frame (max 1280, centered, gap-20) */
+function outerFrame(sid: string, content: GalleryContent, gridChildren: Block[]): Block[] {
+    return [{
+        id: `${sid}--root`, type: 'frame',
+        props: { direction: 'vertical' as const, gap: 80, alignment: { cross: 'center' as const }, sizing: { width: 'fill' as const }, maxWidth: 1280, className: 'mx-auto @max-sm:gap-12' },
+        content: { label: 'Gallery Container' },
+        children: [titleFrame(sid, content), ...gridChildren],
+    }]
 }
 
-/** Common centered section title block */
-function SectionTitle({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="flex flex-col items-center text-center max-w-[768px] w-full mx-auto gap-6 @max-sm:gap-5">
-            <SectionHeading text={heading} className="w-full text-center" />
-            <SectionDescription text={description} className="w-full text-center" />
-        </div>
-    )
+/** A frame block that only exists to render chrome (dots, controls-below) */
+function chromeFrame(sid: string, suffix: string, chrome: string, cls?: string): Block {
+    return { id: `${sid}--${suffix}`, type: 'frame', props: cls ? { className: cls } : {}, content: { _chrome: chrome }, children: [] }
+}
+
+// ============================================
+// Block Factory — Nested Frame Block Tree
+// ============================================
+
+/**
+ * Build nested frame block tree for a gallery section.
+ * Every structural container is a frame block with children.
+ */
+export function buildGalleryBlocks(
+    sectionId: string,
+    content: GalleryContent,
+    variant: number,
+): Block[] {
+    const sid = sectionId
+
+    switch (variant) {
+        // ────────────────────────────── Static Grids (1-6) ──────────────────────────────
+
+        case 1: // Single full-width landscape
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { sizing: { width: 'fill' as const } },
+                content: { label: 'Image Grid' },
+                children: [mkImg(sid, 0, '16:9')],
+            }])
+
+        case 2: // 2-col, 1 row
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 2 }, (_, i) => mkImgL(sid, i, 'flex-1')),
+            }])
+
+        case 3: // 3-col, 1 row
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 3 }, (_, i) => mkImgL(sid, i, 'flex-1')),
+            }])
+
+        case 4: // 4-col, 1 row (mobile: 2x2 grid)
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { gap: 32, sizing: { width: 'fill' as const }, className: 'grid grid-cols-4 @max-sm:grid-cols-2 @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 4 }, (_, i) => mkImg(sid, i)),
+            }])
+
+        case 5: // 3x2 grid (6 images)
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { gap: 32, sizing: { width: 'fill' as const }, className: 'grid grid-cols-3 @max-sm:grid-cols-2 @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 6 }, (_, i) => mkImg(sid, i)),
+            }])
+
+        case 6: // 4x2 grid (8 images)
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { gap: 32, sizing: { width: 'fill' as const }, className: 'grid grid-cols-4 @max-sm:grid-cols-2 @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 8 }, (_, i) => mkImg(sid, i)),
+            }])
+
+        // ────────────────────────────── Masonry (7-10) ──────────────────────────────
+
+        case 7: // Tall portrait left + 2 stacked landscape right
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Masonry Grid' },
+                children: [
+                    mkImgL(sid, 0, 'flex-1', '3:4'),
+                    {
+                        id: `${sid}--col-r`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Right Column' },
+                        children: [mkImg(sid, 1, '16:9'), mkImg(sid, 2, '16:9')],
+                    },
+                ],
+            }])
+
+        case 8: // Cross-staggered 2-col (tall+short, short+tall)
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Masonry Grid' },
+                children: [
+                    {
+                        id: `${sid}--col-l`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Left Column' },
+                        children: [mkImg(sid, 0, '3:4'), mkImg(sid, 1, '3:2')],
+                    },
+                    {
+                        id: `${sid}--col-r`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Right Column' },
+                        children: [mkImg(sid, 2, '3:2'), mkImg(sid, 3, '3:4')],
+                    },
+                ],
+            }])
+
+        case 9: // 1 large square left + 2×2 grid right
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Masonry Grid' },
+                children: [
+                    mkImgL(sid, 0, 'flex-1'),
+                    {
+                        id: `${sid}--col-r`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Right Column' },
+                        children: [
+                            {
+                                id: `${sid}--row-t`, type: 'frame',
+                                props: { direction: 'horizontal' as const, gap: 32, className: '@max-sm:gap-6' },
+                                content: { label: 'Top Row' },
+                                children: [mkImgL(sid, 1, 'flex-1'), mkImgL(sid, 2, 'flex-1')],
+                            },
+                            {
+                                id: `${sid}--row-b`, type: 'frame',
+                                props: { direction: 'horizontal' as const, gap: 32, className: '@max-sm:gap-6' },
+                                content: { label: 'Bottom Row' },
+                                children: [mkImgL(sid, 3, 'flex-1'), mkImgL(sid, 4, 'flex-1')],
+                            },
+                        ],
+                    },
+                ],
+            }])
+
+        case 10: // 3-col masonry
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Masonry Grid' },
+                children: [
+                    {
+                        id: `${sid}--col-1`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Column 1' },
+                        children: [mkImg(sid, 0), mkImg(sid, 1)],
+                    },
+                    {
+                        id: `${sid}--col-2`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Column 2' },
+                        children: [mkImg(sid, 2, '16:9'), mkImg(sid, 3, '16:9'), mkImg(sid, 4)],
+                    },
+                    {
+                        id: `${sid}--col-3`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1', className: '@max-sm:gap-6' },
+                        content: { label: 'Column 3' },
+                        children: [mkImg(sid, 5), mkImg(sid, 6)],
+                    },
+                ],
+            }])
+
+        // ────────────────────────────── Full-bleed (11-12) ──────────────────────────────
+
+        case 11: // 2-col no gap
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 0, sizing: { width: 'fill' as const }, className: 'overflow-hidden @max-sm:flex-col' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 2 }, (_, i) => mkImgL(sid, i, 'flex-1')),
+            }])
+
+        case 12: // 2×2 no gap
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 0, sizing: { width: 'fill' as const }, className: 'overflow-hidden' },
+                content: { label: 'Image Grid' },
+                children: [
+                    {
+                        id: `${sid}--row-t`, type: 'frame',
+                        props: { direction: 'horizontal' as const, gap: 0, className: '@max-sm:flex-col' },
+                        content: { label: 'Top Row' },
+                        children: Array.from({ length: 2 }, (_, i) => mkImgL(sid, i, 'flex-1')),
+                    },
+                    {
+                        id: `${sid}--row-b`, type: 'frame',
+                        props: { direction: 'horizontal' as const, gap: 0, className: '@max-sm:flex-col' },
+                        content: { label: 'Bottom Row' },
+                        children: Array.from({ length: 2 }, (_, i) => mkImgL(sid, i + 2, 'flex-1')),
+                    },
+                ],
+            }])
+
+        // ────────────────────────────── Slider Overlaid (13-19) ──────────────────────────────
+
+        case 13: // Full-bleed single + overlaid arrows + dots
+        case 14: // Same as 13, contained
+            return outerFrame(sid, content, [{
+                id: `${sid}--slider`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 32, alignment: { cross: 'center' as const }, sizing: { width: 'fill' as const } },
+                content: { label: 'Slider' },
+                children: [
+                    {
+                        id: `${sid}--slide-area`, type: 'frame',
+                        props: { sizing: { width: 'fill' as const }, className: 'relative' },
+                        content: { label: 'Slide Area', _chrome: 'arrows-inset' },
+                        children: [mkImg(sid, 0, '16:9')],
+                    },
+                    chromeFrame(sid, 'dots', 'dots'),
+                ],
+            }])
+
+        case 15: // Centered 85% image + edge arrows + dots
+            return outerFrame(sid, content, [{
+                id: `${sid}--slider`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 32, alignment: { cross: 'center' as const }, sizing: { width: 'fill' as const }, className: 'relative' },
+                content: { label: 'Slider' },
+                children: [
+                    {
+                        id: `${sid}--slide-area`, type: 'frame',
+                        props: { sizing: { width: 'hug' as const }, className: 'w-[85%] @max-sm:w-full' },
+                        content: { label: 'Slide Area' },
+                        children: [mkImg(sid, 0, '3:2')],
+                    },
+                    chromeFrame(sid, 'chrome', 'arrows-edge dots', 'w-full'),
+                ],
+            }])
+
+        case 16: // 2-col slider + overlaid arrows + dots
+        case 17: // 2-col slider + overlaid arrows + dots (variant)
+            return buildSliderOverlaid(sid, content, 2)
+        case 18: // 3-col slider + overlaid arrows + dots
+            return buildSliderOverlaid(sid, content, 3)
+        case 19: // 4-col slider + overlaid arrows + dots
+            return buildSliderOverlaid(sid, content, 4)
+
+        // ────────────────────────────── Slider Below (20-23) ──────────────────────────────
+
+        case 20: // 1-col landscape slider + controls below
+            return buildSliderBelow(sid, content, 1, '16:9')
+        case 21: // 2-col slider + controls below
+            return buildSliderBelow(sid, content, 2, '1:1')
+        case 22: // 3-col slider + controls below
+            return buildSliderBelow(sid, content, 3, '1:1')
+        case 23: // 4-col slider + controls below
+            return buildSliderBelow(sid, content, 4, '1:1')
+
+        // ────────────────────────────── Peek Carousel (24) ──────────────────────────────
+
+        case 24:
+            return outerFrame(sid, content, [{
+                id: `${sid}--slider`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: 'overflow-hidden @max-sm:gap-6' },
+                content: { label: 'Peek Carousel' },
+                children: Array.from({ length: 2 }, (_, i) => mkImgL(sid, i, 'w-[87.5%] shrink-0', '16:9')),
+            }])
+
+        // ────────────────────────────── Split (25-27) ──────────────────────────────
+
+        case 25:
+            return buildSplit(sid, content, 1)
+        case 26:
+            return buildSplit(sid, content, 2)
+        case 27:
+            return buildSplit(sid, content, 3)
+
+        // ────────────────────────────── Fallback ──────────────────────────────
+
+        default:
+            return outerFrame(sid, content, [{
+                id: `${sid}--grid`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col @max-sm:gap-6' },
+                content: { label: 'Image Grid' },
+                children: Array.from({ length: 3 }, (_, i) => mkImgL(sid, i, 'flex-1')),
+            }])
+    }
+}
+
+// ── Parameterized builders ──────────────────────────────────────
+
+function buildSliderOverlaid(sid: string, content: GalleryContent, cols: number): Block[] {
+    const images: Block[] = [
+        ...Array.from({ length: cols }, (_, i) => mkImgL(sid, i, 'flex-1 shrink-0')),
+        mkImgL(sid, cols, 'w-[10%] shrink-0'),  // Peek: partial next slide
+    ]
+
+    return outerFrame(sid, content, [{
+        id: `${sid}--slider`, type: 'frame',
+        props: { direction: 'vertical' as const, gap: 32, alignment: { cross: 'center' as const }, sizing: { width: 'fill' as const }, className: 'relative' },
+        content: { label: 'Slider' },
+        children: [
+            {
+                id: `${sid}--slide-track`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: 'overflow-hidden @max-sm:gap-6' },
+                content: { label: 'Slide Track', _chrome: 'arrows-offset' },
+                children: images,
+            },
+            chromeFrame(sid, 'dots', 'dots'),
+        ],
+    }])
+}
+
+function buildSliderBelow(sid: string, content: GalleryContent, cols: number, ratio: string): Block[] {
+    const images: Block[] = [
+        ...Array.from({ length: cols }, (_, i) => mkImgL(sid, i, 'flex-1 shrink-0', ratio)),
+        mkImgL(sid, cols, 'w-[8%] shrink-0 opacity-50', ratio),  // Peek hint
+    ]
+
+    return outerFrame(sid, content, [{
+        id: `${sid}--slider`, type: 'frame',
+        props: { direction: 'vertical' as const, gap: 32, sizing: { width: 'fill' as const }, className: '@max-sm:gap-5' },
+        content: { label: 'Slider' },
+        children: [
+            {
+                id: `${sid}--slide-track`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 32, sizing: { width: 'fill' as const }, className: 'overflow-hidden @max-sm:gap-6' },
+                content: { label: 'Slide Track' },
+                children: images,
+            },
+            chromeFrame(sid, 'controls', 'controls-below'),
+        ],
+    }])
+}
+
+function buildSplit(sid: string, content: GalleryContent, cols: number): Block[] {
+    const images: Block[] = [
+        ...Array.from({ length: cols }, (_, i) => mkImgL(sid, i, 'flex-1 shrink-0')),
+        mkImgL(sid, cols, 'w-[10%] shrink-0 opacity-60'),  // Peek hint
+    ]
+
+    return [{
+        id: `${sid}--root`, type: 'frame',
+        props: { direction: 'horizontal' as const, gap: 80, sizing: { width: 'fill' as const }, maxWidth: 1280, className: 'mx-auto @max-sm:flex-col @max-sm:gap-12' },
+        content: { label: 'Gallery Container' },
+        children: [
+            {
+                id: `${sid}--title-col`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 24, alignment: { main: 'center' as const, cross: 'start' as const }, layoutClassName: 'w-[35%] shrink-0 @max-sm:w-full' },
+                content: { label: 'Title Column' },
+                children: [
+                    { ...mkHeading(sid, content), props: { ...mkHeading(sid, content).props, align: 'left' } },
+                    { ...mkDesc(sid, content), props: { ...mkDesc(sid, content).props, align: 'left' } },
+                ],
+            },
+            {
+                id: `${sid}--carousel-col`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 32, layoutClassName: 'flex-1 min-w-0', className: '@max-sm:gap-5' },
+                content: { label: 'Carousel Column' },
+                children: [
+                    {
+                        id: `${sid}--slide-track`, type: 'frame',
+                        props: { direction: 'horizontal' as const, gap: 32, className: 'overflow-hidden @max-sm:gap-6' },
+                        content: { label: 'Slide Track' },
+                        children: images,
+                    },
+                    chromeFrame(sid, 'controls', 'controls-below'),
+                ],
+            },
+        ],
+    }]
+}
+
+// ============================================
+// Image count per variant (kept for external consumers)
+// ============================================
+
+const VARIANT_IMAGE_COUNT: Record<number, number> = {
+    1: 1, 2: 2, 3: 3, 4: 4, 5: 6, 6: 8,
+    7: 3, 8: 4, 9: 5, 10: 7,
+    11: 2, 12: 4,
+    13: 3, 14: 3, 15: 3, 16: 5, 17: 5, 18: 7, 19: 9,
+    20: 4, 21: 5, 22: 7, 23: 9,
+    24: 3,
+    25: 8, 26: 8, 27: 8,
 }
 
 // ============================================
@@ -133,14 +471,14 @@ function BackgroundLayer({ children, className = '' }: { children: React.ReactNo
         <section
             className={`@container w-full ${className}`}
             style={{
-                '--sg-bg': 'var(--sg-bg-primary, #0c0a05)',
-                '--sg-text': 'var(--sg-text-primary, white)',
-                '--sg-border': 'var(--sg-border, rgba(255,255,255,0.2))',
+                '--sg-text-primary': '#ffffff',
+                '--sg-text-secondary': 'rgba(255,255,255,0.9)',
+                '--sg-text-muted': 'rgba(255,255,255,0.3)',
+                '--sg-border': 'rgba(255,255,255,0.2)',
                 '--sg-bg-secondary': 'var(--sg-bg-secondary, #2d2b26)',
-                '--sg-text-muted': 'var(--sg-text-muted, rgba(255,255,255,0.3))',
             } as React.CSSProperties}
         >
-            <div className="bg-[var(--sg-bg)] text-[var(--sg-text)] px-16 py-28 @max-sm:px-5 @max-sm:py-16">
+            <div className="bg-(--sg-bg-primary,#0c0a05) text-(--sg-text-primary,white) px-16 py-28 @max-sm:px-5 @max-sm:py-16">
                 {children}
             </div>
         </section>
@@ -148,432 +486,38 @@ function BackgroundLayer({ children, className = '' }: { children: React.ReactNo
 }
 
 // ============================================
-// Layout Renderers — Static Grids (1-6)
+// Main Component — Just walks the block tree
 // ============================================
 
-/** Gallery 1: Single full-width landscape image */
-function Gallery1Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <Placeholder className="w-full" ratio="16/9" />
-        </div>
-    )
-}
-
-/** Gallery 2: 2-col grid, 1 row */
-function Gallery2Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <Placeholder className="flex-1" ratio="1/1" />
-                <Placeholder className="flex-1" ratio="1/1" />
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 3: 3-col grid, 1 row */
-function Gallery3Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <Placeholder className="flex-1" ratio="1/1" />
-                <Placeholder className="flex-1" ratio="1/1" />
-                <Placeholder className="flex-1" ratio="1/1" />
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 4: 4-col grid, 1 row (mobile: 2×2) */
-function Gallery4Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full grid grid-cols-4 gap-8 @max-sm:grid-cols-2 @max-sm:gap-6">
-                {Array.from({ length: 4 }).map((_, i) => (
-                    <Placeholder key={i} ratio="1/1" />
-                ))}
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 5: 3×2 grid (6 images, mobile: 2-col) */
-function Gallery5Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full grid grid-cols-3 gap-8 @max-sm:grid-cols-2 @max-sm:gap-6">
-                {Array.from({ length: 6 }).map((_, i) => (
-                    <Placeholder key={i} ratio="1/1" />
-                ))}
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 6: 4×2 grid (8 equal squares, mobile: 2-col) */
-function Gallery6Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full grid grid-cols-4 gap-8 @max-sm:grid-cols-2 @max-sm:gap-6">
-                {Array.from({ length: 8 }).map((_, i) => (
-                    <Placeholder key={i} ratio="1/1" />
-                ))}
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderers — Masonry (7-10)
-// ============================================
-
-/** Gallery 7: 1 tall portrait left + 2 stacked landscape right */
-function Gallery7Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <Placeholder className="flex-1" ratio="624/752" />
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="624/360" />
-                    <Placeholder className="w-full" ratio="624/360" />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 8: Cross-staggered 2-col (tall+short, short+tall) */
-function Gallery8Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="624/640" />
-                    <Placeholder className="w-full" ratio="640/426" />
-                </div>
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="640/426" />
-                    <Placeholder className="w-full" ratio="624/640" />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 9: 1 large square left + 2×2 grid right */
-function Gallery9Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <Placeholder className="flex-1" ratio="1/1" />
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <div className="flex gap-8 @max-sm:gap-6">
-                        <Placeholder className="flex-1" ratio="1/1" />
-                        <Placeholder className="flex-1" ratio="1/1" />
-                    </div>
-                    <div className="flex gap-8 @max-sm:gap-6">
-                        <Placeholder className="flex-1" ratio="1/1" />
-                        <Placeholder className="flex-1" ratio="1/1" />
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 10: 3-col masonry — col1: 2sq, col2: 3 landscape, col3: 2sq */
-function Gallery10Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row gap-8 @max-sm:flex-col @max-sm:gap-6">
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="1/1" />
-                    <Placeholder className="w-full" ratio="1/1" />
-                </div>
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="416/234" />
-                    <Placeholder className="w-full" ratio="416/234" />
-                    <Placeholder className="w-full" ratio="1/1" />
-                </div>
-                <div className="flex flex-col gap-8 flex-1 @max-sm:gap-6">
-                    <Placeholder className="w-full" ratio="1/1" />
-                    <Placeholder className="w-full" ratio="1/1" />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderers — Full-bleed (11-12)
-// ============================================
-
-/** Gallery 11: 2-col no gap */
-function Gallery11Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-row overflow-hidden @max-sm:flex-col">
-                <Placeholder className="flex-1" ratio="1/1" />
-                <Placeholder className="flex-1" ratio="1/1" />
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 12: 2×2 no gap */
-function Gallery12Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full overflow-hidden">
-                <div className="flex flex-row @max-sm:flex-col">
-                    <Placeholder className="flex-1" ratio="1/1" />
-                    <Placeholder className="flex-1" ratio="1/1" />
-                </div>
-                <div className="flex flex-row @max-sm:flex-col">
-                    <Placeholder className="flex-1" ratio="1/1" />
-                    <Placeholder className="flex-1" ratio="1/1" />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderers — Sliders with Overlaid Arrows (13-19)
-// ============================================
-
-/** Gallery 13: Full-bleed single image + overlaid arrows + dots */
-function Gallery13Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-col items-center gap-8">
-                <div className="w-full relative">
-                    <Placeholder className="w-full" ratio="16/9" />
-                    {/* Overlaid arrows — always visible */}
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
-                        <SliderArrow direction="left" />
-                    </div>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10">
-                        <SliderArrow direction="right" />
-                    </div>
-                </div>
-                <SliderDots />
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 14: Full-width contained slider + overlaid arrows + dots */
-function Gallery14Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-col items-center gap-8">
-                <div className="w-full relative">
-                    <Placeholder className="w-full" ratio="16/9" />
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
-                        <SliderArrow direction="left" />
-                    </div>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 z-10">
-                        <SliderArrow direction="right" />
-                    </div>
-                </div>
-                <SliderDots />
-            </div>
-        </div>
-    )
-}
-
-/** Gallery 15: Centered image (85% width) + arrows at container edges + dots */
-function Gallery15Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-col items-center gap-8 relative">
-                <div className="w-[85%] @max-sm:w-full">
-                    <Placeholder className="w-full" ratio="1088/726" />
-                </div>
-                {/* Arrows at container edges to frame the centered image */}
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10">
-                    <SliderArrow direction="left" />
-                </div>
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10">
-                    <SliderArrow direction="right" />
-                </div>
-                <SliderDots />
-            </div>
-        </div>
-    )
-}
-
-/** Multi-col slider with overlaid arrows (Gallery 16-19) */
-function SliderOverlaidLayout({ heading, description, cols }: { heading: string; description: string; cols: number }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-col items-center gap-8 relative">
-                <div className="w-full overflow-hidden">
-                    <div className="flex gap-8 @max-sm:gap-6">
-                        {Array.from({ length: cols }).map((_, i) => (
-                            <Placeholder key={i} className="flex-1 shrink-0" ratio="1/1" />
-                        ))}
-                        {/* Peek: partial next slide */}
-                        <Placeholder className="w-[10%] shrink-0" ratio="1/1" />
-                    </div>
-                </div>
-                {/* Overlaid arrows — always visible */}
-                <div className="absolute left-0 top-[calc(50%-24px)] -translate-y-1/2 z-10">
-                    <SliderArrow direction="left" />
-                </div>
-                <div className="absolute right-0 top-[calc(50%-24px)] -translate-y-1/2 z-10">
-                    <SliderArrow direction="right" />
-                </div>
-                <SliderDots />
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderers — Sliders with Controls Below (20-23)
-// ============================================
-
-/** Multi-col slider with arrows+dots below (Gallery 20-23) */
-function SliderBelowLayout({ heading, description, cols, landscape }: { heading: string; description: string; cols: number; landscape?: boolean }) {
-    const ratio = landscape ? '16/9' : '1/1'
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full flex flex-col gap-8 @max-sm:gap-5">
-                <div className="w-full overflow-hidden">
-                    <div className="flex gap-8 @max-sm:gap-6">
-                        {Array.from({ length: cols }).map((_, i) => (
-                            <Placeholder key={i} className="flex-1 shrink-0" ratio={ratio} />
-                        ))}
-                        {/* Peek hint */}
-                        <Placeholder className="w-[8%] shrink-0 opacity-50" ratio={ratio} />
-                    </div>
-                </div>
-                <SliderControlsBelow />
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderer — Peek Carousel (24)
-// ============================================
-
-/** Gallery 24: Horizontal peek carousel — no arrows/dots */
-function Gallery24Layout({ heading, description }: { heading: string; description: string }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-col items-center gap-20 @max-sm:gap-12">
-            <SectionTitle heading={heading} description={description} />
-            <div className="w-full overflow-hidden">
-                <div className="flex gap-8 @max-sm:gap-6">
-                    <Placeholder className="w-[87.5%] shrink-0" ratio="16/10" />
-                    <Placeholder className="w-[87.5%] shrink-0" ratio="16/10" />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Layout Renderers — Split (25-27)
-// ============================================
-
-/** Split layout: Title LEFT + image carousel RIGHT */
-function SplitLayout({ heading, description, cols }: { heading: string; description: string; cols: number }) {
-    return (
-        <div className="max-w-[1280px] mx-auto flex flex-row gap-20 @max-sm:flex-col @max-sm:gap-12">
-            {/* Left: Title area */}
-            <div className="flex flex-col justify-center gap-6 w-[35%] shrink-0 @max-sm:w-full">
-                <SectionHeading text={heading} />
-                <SectionDescription text={description} />
-            </div>
-            {/* Right: Carousel */}
-            <div className="flex-1 flex flex-col gap-8 min-w-0 @max-sm:gap-5">
-                <div className="overflow-hidden">
-                    <div className="flex gap-8 @max-sm:gap-6">
-                        {Array.from({ length: cols }).map((_, i) => (
-                            <Placeholder key={i} className="flex-1 shrink-0" ratio="1/1" />
-                        ))}
-                        {/* Peek: partial next slide hint */}
-                        <Placeholder className="w-[10%] shrink-0 opacity-60" ratio="1/1" />
-                    </div>
-                </div>
-                <SliderControlsBelow />
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Main Component — Dispatcher
-// ============================================
-
-export function GallerySection({ sectionId, variant, content, className }: GallerySectionProps) {
+export function GallerySection({ sectionId, variant, content, blocks: externalBlocks, className }: GallerySectionProps) {
     const c = { ...DEFAULT_GALLERY_CONTENT, ...content }
+    const _imageCount = VARIANT_IMAGE_COUNT[variant] ?? 6
 
-    const renderContent = () => {
-        switch (variant) {
-            // Static grids (1-6)
-            case 1: return <Gallery1Layout heading={c.heading} description={c.description} />
-            case 2: return <Gallery2Layout heading={c.heading} description={c.description} />
-            case 3: return <Gallery3Layout heading={c.heading} description={c.description} />
-            case 4: return <Gallery4Layout heading={c.heading} description={c.description} />
-            case 5: return <Gallery5Layout heading={c.heading} description={c.description} />
-            case 6: return <Gallery6Layout heading={c.heading} description={c.description} />
-            // Masonry (7-10)
-            case 7: return <Gallery7Layout heading={c.heading} description={c.description} />
-            case 8: return <Gallery8Layout heading={c.heading} description={c.description} />
-            case 9: return <Gallery9Layout heading={c.heading} description={c.description} />
-            case 10: return <Gallery10Layout heading={c.heading} description={c.description} />
-            // Full-bleed (11-12)
-            case 11: return <Gallery11Layout heading={c.heading} description={c.description} />
-            case 12: return <Gallery12Layout heading={c.heading} description={c.description} />
-            // Slider — overlaid arrows (13-19)
-            case 13: return <Gallery13Layout heading={c.heading} description={c.description} />
-            case 14: return <Gallery14Layout heading={c.heading} description={c.description} />
-            case 15: return <Gallery15Layout heading={c.heading} description={c.description} />
-            case 16: return <SliderOverlaidLayout heading={c.heading} description={c.description} cols={2} />
-            case 17: return <SliderOverlaidLayout heading={c.heading} description={c.description} cols={2} />
-            case 18: return <SliderOverlaidLayout heading={c.heading} description={c.description} cols={3} />
-            case 19: return <SliderOverlaidLayout heading={c.heading} description={c.description} cols={4} />
-            // Slider — below (20-23)
-            case 20: return <SliderBelowLayout heading={c.heading} description={c.description} cols={1} landscape />
-            case 21: return <SliderBelowLayout heading={c.heading} description={c.description} cols={2} />
-            case 22: return <SliderBelowLayout heading={c.heading} description={c.description} cols={3} />
-            case 23: return <SliderBelowLayout heading={c.heading} description={c.description} cols={4} />
-            // Peek slider (24)
-            case 24: return <Gallery24Layout heading={c.heading} description={c.description} />
-            // Split (25-27)
-            case 25: return <SplitLayout heading={c.heading} description={c.description} cols={1} />
-            case 26: return <SplitLayout heading={c.heading} description={c.description} cols={2} />
-            case 27: return <SplitLayout heading={c.heading} description={c.description} cols={3} />
-            // Fallback
-            default: return <Gallery3Layout heading={c.heading} description={c.description} />
+    // Build nested frame block tree — memoized for stable selection
+    const derivedBlocks = useMemo(
+        () => buildGalleryBlocks(sectionId, c, variant),
+        [sectionId, c, variant],
+    )
+
+    // Use stored blocks if available, fallback to derived
+    const blocks = externalBlocks ?? derivedBlocks
+
+    // Register blocks with selection store when this section is entered
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const selMode = useSelectionStore((s) => s.mode)
+    const setCurrentBlocks = useSelectionStore((s) => s.setCurrentBlocks)
+
+    useEffect(() => {
+        if (selSectionId === sectionId && (selMode === 'entered' || selMode === 'block-selected')) {
+            setCurrentBlocks(blocks)
         }
-    }
+    }, [selSectionId, sectionId, selMode, blocks, setCurrentBlocks])
 
     return (
         <BackgroundLayer className={className}>
-            {renderContent()}
+            {blocks.map(block => (
+                <RenderBlock key={block.id} block={block} />
+            ))}
         </BackgroundLayer>
     )
 }

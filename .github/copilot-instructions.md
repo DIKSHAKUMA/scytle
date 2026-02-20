@@ -70,11 +70,26 @@ Middleware is pass-through only (`src/middleware.ts`). Appwrite uses localStorag
 - **Logging**: Emoji prefixes: 🤖 AI, 📦 Project, ✅ Success, ❌ Error, ⚠️ Warning, 🔄 State, 🔐 Auth.
 - **Env vars**: Vertex AI uses `GOOGLE_CLOUD_PROJECT` + ADC (not API key). Appwrite needs `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID` (client) and `APPWRITE_API_KEY` (server).
 
-### Adding a New Design Section Category
+### Adding a New Design Section Category (V1 — Legacy)
 1. Create `src/lib/designs/{category}/` with `families/`, `presets.tsx`, and `index.ts`
 2. `TemplateFamily`: define `Canvas` component (receives `CanvasProps`), `controlsDef`, `defaultControls`, `defaultContent`
 3. `DesignPreset`: frozen control snapshot with `Thumbnail` component
 4. Register in `src/lib/designs/registry.ts` — add to `FAMILY_REGISTRY` and `PRESET_REGISTRY`
+
+### Adding a New V2 Layout Category
+1. **Get Figma designs**: Ask for Figma URL, use `get_metadata` to find desktop-only child nodes (`"Breakpoint = Desktop"`)
+2. **Create category dir** at `src/lib/designs/v2/layouts/{category}/` with 6 files:
+   - `types.ts` — enums, content types, `DEFAULT_CONTENT`, `defaultBlocks: Block[]` per preset
+   - `presets.ts` — one config per variant, `ALL_PRESETS` array, each with `defaultBlocks` as **nested frame block trees** (NOT flat lists)
+   - `{cat}-section.tsx` — core renderer (desktop-first, `@max-sm:` for mobile). Layout JSX: only `<section>` + `blocks.map(b => <RenderBlock>)`. **NO hardcoded wrapper `<div>`s** — the block tree IS the layout
+   - `{cat}-layouts.tsx` — named wrapper components via factory
+   - `{cat}-thumbnails.tsx` — `<img>` from `/thumbnails/{cat}/` with fallback
+   - `index.ts` — barrel exports + `LAYOUT_TEMPLATES` + `TEMPLATES_MAP`
+3. **Wire registry**: Add control def to `controls.ts`, add to `LAYOUT_REGISTRY` in `layouts/index.ts`, add to `V2_READY_CATEGORIES` in `component-library-panel.tsx`
+4. **Download thumbnails**: Get desktop node IDs via Figma MCP `get_metadata`, create/update download script, run `npx tsx --env-file=.env.local scripts/download-{cat}-thumbnails.ts` → PNGs go to `public/thumbnails/{category}/`
+5. **Verify**: `npm run build` must pass clean
+
+> **CRITICAL — Nested Frame Block Trees**: Every structural wrapper `<div>` in a layout MUST be a `frame` block with `children: Block[]`. The `buildXBlocks()` factory returns a nested tree, and the layout component just walks it via `<RenderBlock>`. This makes every container hoverable, selectable, draggable on canvas — matching Figma. NO hardcoded wrapper divs, NO flat block lists, NO sidebar layer panel. All interaction is canvas-only. See Section 3C in `WIREFRAME-V2-ARCHITECTURE.md`.
 
 ## Key Specs (in `docs/`)
 `SCYTLE-BUILD-PHASES.md` (roadmap) · `SITEMAP-RELUME-SPEC.md` (sitemap gen) · `WIREFRAME-SPEC.md` · `WIREFRAME-DEVELOPMENT-PLAN.md` · `SCYTLE-UX-FLOW.md` · `DESIGN-SYSTEM-MIGRATION.md`

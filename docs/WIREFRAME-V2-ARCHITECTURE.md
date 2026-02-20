@@ -244,6 +244,7 @@ Blocks are the atomic building units. Each block:
 | **InputBlock** | `input` | `placeholder`, `type: text｜email｜password`, `label?` | Input field with token styles |
 | **AvatarBlock** | `avatar` | `src?`, `name?`, `size`, `shape: circle｜square` | User avatar placeholder |
 | **SocialBlock** | `social` | `links: string[]` | Social media icon row |
+| **FrameBlock** | `frame` | `direction`, `gap`, `padding`, `sizing`, `alignment`, `wrap` | Auto-layout container (Figma Frame). Wraps children with flex layout — every structural wrapper div MUST be a frame block so it's hoverable/selectable on canvas |
 
 #### Block Interface
 
@@ -263,7 +264,30 @@ type BlockType =
     | 'divider' | 'spacer' | 'icon' | 'logo'
     | 'video' | 'form' | 'input'
     | 'avatar' | 'social'
+    | 'frame'   // structural auto-layout container — see FrameBlock below
+
+// FrameBlock is the structural backbone of every layout.
+// Every wrapper <div> that creates layout structure (rows, columns, content groups)
+// MUST be a frame block so the user can hover, select, resize, drag, and rearrange it
+// directly on canvas — exactly like Figma Frames.
+interface FrameBlockProps {
+    direction: 'horizontal' | 'vertical'
+    gap: number                       // px gap between children
+    padding: { top: number; right: number; bottom: number; left: number }
+    alignment: {
+        main: 'start' | 'center' | 'end' | 'space-between'
+        cross: 'start' | 'center' | 'end' | 'stretch'
+    }
+    sizing: {
+        width: 'fill' | 'hug' | number   // fill = 100%, hug = fit-content, number = fixed px
+        height: 'fill' | 'hug' | number
+    }
+    maxWidth?: number                  // optional max-width constraint (e.g., 768, 1280)
+    wrap?: boolean                     // flex-wrap: wrap
+}
 ```
+
+> **CRITICAL — Frame Block is NOT optional.** Every `<div>` that creates spatial layout in a section (rows, columns, content containers, image wrappers) MUST be a `frame` block with `children: Block[]`. This is what makes every container hoverable, selectable, draggable, and rearrangeable directly on the canvas — matching the Figma editing experience. Raw `<div>` wrappers in layout JSX are **forbidden** because they are invisible to the selection system.
 
 #### LayerWrapper Component
 
@@ -291,22 +315,25 @@ function LayerWrapper({ block, children }: LayerWrapperProps) {
 
 ---
 
-### 3C. Layout Templates (Replaces Families)
+### 3C. Layout Templates (Replaces Families) — Nested Frame Block Trees
 
-A layout template defines **spatial arrangement** of blocks. It does NOT define colors, fonts, or any styling — those come from tokens.
+A layout template defines **spatial arrangement** using a **nested tree of frame blocks**. It does NOT define colors, fonts, or any styling — those come from tokens.
+
+> **KEY PRINCIPLE**: Every structural `<div>` in a layout is a **frame block**, not a hardcoded HTML element. The block tree IS the layout tree. The layout component simply walks the tree and renders each block via `RenderBlock`. This makes every container hoverable, selectable, draggable, and rearrangeable on canvas — matching Figma's editing model.
 
 ```typescript
 interface LayoutTemplate {
-    id: string                          // 'hero-split', 'hero-centered', ...
+    id: string                          // 'hero-1', 'hero-2', ...
     category: SectionCategory           // 'hero', 'features', 'pricing', ...
     name: string                        // Human-readable name
     description: string
     tags: string[]
     
-    // The default blocks this template starts with
+    // The default blocks this template starts with — MUST be a nested tree
+    // with frame blocks as containers (NOT a flat list + hardcoded divs)
     defaultBlocks: Block[]
     
-    // Layout renderer — positions blocks in the arrangement
+    // Layout renderer — walks block tree and renders via RenderBlock
     Layout: React.FC<LayoutProps>
     
     // Thumbnail for the preset browser sidebar
@@ -314,46 +341,29 @@ interface LayoutTemplate {
 }
 
 interface LayoutProps {
-    blocks: Block[]                     // The actual blocks (may differ from defaults)
+    blocks: Block[]                     // Root-level blocks (frame block tree)
     viewport: 'desktop' | 'tablet' | 'mobile'
     sectionId: string
     editable: boolean
-    onBlockChange: (blockId: string, updates: Partial<Block>) => void
-    onBlockDelete: (blockId: string) => void
-    onBlockAdd: (afterBlockId: string | null, block: Block) => void
-    onBlockReorder: (blockId: string, newIndex: number) => void
 }
 ```
 
-**Example: Hero Split Layout**
+#### How Block Trees Replace Layout JSX
 
+**OLD PATTERN (❌ FORBIDDEN — hardcoded wrapper divs):**
 ```tsx
-function HeroSplitLayout({ blocks, viewport, sectionId, editable, ...handlers }: LayoutProps) {
-    const isMobile = viewport === 'mobile'
-    
-    // Layout knows: "I have a left column and a right column"
-    // It looks for blocks by type to place them
+// ❌ DON'T DO THIS — wrapper divs are invisible to selection system
+function HeroSplitLayout({ blocks }: LayoutProps) {
     const heading = blocks.find(b => b.type === 'heading')
-    const description = blocks.find(b => b.type === 'text')
-    const buttons = blocks.filter(b => b.type === 'button')
-    const badge = blocks.find(b => b.type === 'badge')
     const image = blocks.find(b => b.type === 'image')
-    
     return (
-        <section className="py-16 md:py-28 px-5 md:px-16">
-            <div className={`max-w-7xl mx-auto ${isMobile ? 'flex flex-col gap-8' : 'flex items-center gap-12'}`}>
-                <div className="flex-1 space-y-4">
-                    {badge && <RenderBlock block={badge} {...handlers} />}
-                    {heading && <RenderBlock block={heading} {...handlers} />}
-                    {description && <RenderBlock block={description} {...handlers} />}
-                    {buttons.length > 0 && (
-                        <div className="flex gap-3 pt-2">
-                            {buttons.map(b => <RenderBlock key={b.id} block={b} {...handlers} />)}
-                        </div>
-                    )}
+        <section>
+            <div className="max-w-7xl mx-auto flex items-center gap-12"> {/* invisible! */}
+                <div className="flex-1 space-y-4">  {/* invisible! */}
+                    {heading && <RenderBlock block={heading} />}
                 </div>
-                <div className={isMobile ? 'w-full' : 'flex-1'}>
-                    {image && <RenderBlock block={image} {...handlers} />}
+                <div className="flex-1">  {/* invisible! */}
+                    {image && <RenderBlock block={image} />}
                 </div>
             </div>
         </section>
@@ -361,7 +371,90 @@ function HeroSplitLayout({ blocks, viewport, sectionId, editable, ...handlers }:
 }
 ```
 
-The layout template is pure structure. `RenderBlock` dispatches to the correct block primitive, which reads tokens for all styling. **Swapping the layout preserves all blocks and their content.**
+**NEW PATTERN (✅ REQUIRED — nested frame block tree):**
+```tsx
+// The block FACTORY builds a nested tree — every wrapper is a frame block:
+function buildHeroSplitBlocks(content: HeroContent): Block[] {
+    return [{
+        id: generateId(), type: 'frame',
+        props: { direction: 'horizontal', gap: 48, alignment: { main: 'center', cross: 'center' },
+                 sizing: { width: 'fill', height: 'hug' }, maxWidth: 1280 },
+        content: { label: 'Hero Container' },
+        children: [
+            {
+                id: generateId(), type: 'frame',
+                props: { direction: 'vertical', gap: 16, sizing: { width: 'fill', height: 'hug' } },
+                content: { label: 'Content Column' },
+                children: [
+                    { id: generateId(), type: 'badge', props: {}, content: { text: content.tagline } },
+                    { id: generateId(), type: 'heading', props: { level: 1 }, content: { text: content.heading } },
+                    { id: generateId(), type: 'text', props: { variant: 'body' }, content: { text: content.description } },
+                    { id: generateId(), type: 'button-group', props: { align: 'left' },
+                      content: {}, children: [
+                        { id: generateId(), type: 'button', props: { variant: 'primary' }, content: { text: 'Get Started' } },
+                        { id: generateId(), type: 'button', props: { variant: 'secondary' }, content: { text: 'Learn More' } },
+                      ]
+                    },
+                ]
+            },
+            {
+                id: generateId(), type: 'frame',
+                props: { direction: 'vertical', gap: 0, sizing: { width: 'fill', height: 'hug' } },
+                content: { label: 'Image Column' },
+                children: [
+                    { id: generateId(), type: 'image', props: { ratio: '3:2' }, content: { alt: 'Hero image' } },
+                ]
+            }
+        ]
+    }]
+}
+
+// The layout component just WALKS the tree — no hardcoded divs:
+function HeroSplitLayout({ blocks, sectionId }: LayoutProps) {
+    return (
+        <section className="py-16 @max-sm:py-12 px-5 @max-sm:px-4">
+            {blocks.map(block => (
+                <RenderBlock key={block.id} block={block} sectionId={sectionId} />
+            ))}
+        </section>
+    )
+}
+```
+
+#### Why This Matters — Canvas-Only Interaction
+
+With every container as a frame block, users get **Figma-like on-canvas editing without needing a layers panel**:
+
+| Action | How It Works |
+|--------|-------------|
+| **Hover any container** | `LayerWrapper` on each frame block shows dashed outline — user sees exactly what's hoverable |
+| **Select a container** | Click the frame block → solid blue outline, resize handles |
+| **Enter a container** | Double-click frame → enters it, children become directly clickable |
+| **Rearrange blocks** | Drag a child block within its parent frame to re-order |
+| **Move between containers** | Drag a block from one frame to another (cross-parent drag-drop) |
+| **Copy/paste across sections** | Cmd+C on any block (including frames with children) → Cmd+V in another section |
+| **Resize a container** | Drag the frame's handles to change its sizing props |
+| **Delete a container** | Select frame → Delete key removes it and all its children |
+
+All of this happens **directly on the canvas**. No sidebar layer panel is needed — the hover outlines and progressive click model provide all the spatial navigation Figma's canvas offers.
+
+#### Block Tree Visualization
+
+```
+Section (hero-7, "Hero / Split / Image / Buttons")
+└── frame (horizontal, gap:48, maxWidth:1280)     ← "Hero Container"
+    ├── frame (vertical, gap:16)                    ← "Content Column"
+    │   ├── badge ("Web Design Agency")
+    │   ├── heading ("Build better websites")
+    │   ├── text ("Lorem ipsum dolor sit amet...")
+    │   └── button-group
+    │       ├── button/primary ("Get Started")
+    │       └── button/secondary ("Learn More")
+    └── frame (vertical)                            ← "Image Column"
+        └── image (ratio:3:2)
+```
+
+Every node in this tree is a selectable, hoverable, draggable block on the canvas. The user can click the "Content Column" frame to select it, then drag it after the "Image Column" frame to mirror the layout. Or enter the "Content Column" frame and drag the heading above the badge.
 
 ---
 
@@ -414,7 +507,7 @@ interface SelectionState {
 | Hover (any mode) | Dashed light-blue outline on hovered element |
 | `SECTION_SELECTED` | Solid blue 2px outline on section, section toolbar (move up/down, duplicate, delete, scheme selector) visible |
 | `ENTERED` | Section has faint blue background tint, all blocks show dashed outlines on hover |
-| `BLOCK_SELECTED` | Solid blue 2px outline on block, 4 resize handles on corners (if applicable), right sidebar shows block properties |
+| `BLOCK_SELECTED` | Solid blue 2px outline on block, 4 resize handles on corners (if applicable), floating property popover for block-specific settings (no sidebar panel) |
 
 ### 4C. Keyboard Shortcuts
 
@@ -888,8 +981,8 @@ This can run lazily (on first project load) or as a batch migration.
 | **~~1~~** | ~~Design tokens + CSS custom properties + `useStyleGuideStore`~~ | ~~Token system that paints an entire page from one store~~ | ✅ Done |
 | **~~2~~** | ~~Block primitives (HeadingBlock, TextBlock, ButtonBlock, ImageBlock, CardBlock, BadgeBlock, ListBlock, DividerBlock)~~ | ~~17 block components + RenderBlock dispatcher~~ | ✅ Done |
 | **~~3~~** | ~~`LayerWrapper` + selection state machine (click/dblclick/escape)~~ | ~~Figma-like selection model~~ | ✅ Done |
-| **4** | V2 layout templates — rebuild ALL major marketing categories from Figma designs | Pixel-perfect, token-driven, block-composed layouts for every category | 🚧 GATE |
-| **5** | Block operations: delete, copy/paste (Cmd+C/V), duplicate, reorder | Full block interaction | 1-2 |
+| **4** | V2 layout templates — rebuild ALL major marketing categories from Figma designs. Layouts MUST use **nested frame block trees** (`frame` blocks as containers with `children: Block[]`). NO hardcoded wrapper divs. Every container the user sees must be a selectable block. | Pixel-perfect, token-driven, fully-selectable layouts for every category | 🚧 GATE |
+| **5** | Block operations: delete, copy/paste (Cmd+C/V), duplicate, reorder, **drag-and-drop within/across frame containers**. All interaction is canvas-only (no layer panel). Wire keyboard handler + context menu to unified store mutations. Requires layouts to use nested frame block trees. | Full block interaction — click any element in a section to select, delete, copy, paste, drag to rearrange | 1-2 |
 | **6** | Style Guide store + Colors panel (light/dark, accents, shuffle, per-section schemes) | First visible "wow" feature — toggle dark mode, entire page repaints | 2-3 |
 | **7** | Typography panel + font pair library + Google Fonts loading | Heading/body font switching | 1-2 |
 | **8** | UI Styling panels (buttons, cards, radius presets) | Complete style guide | 1-2 |
@@ -898,9 +991,13 @@ This can run lazily (on first project load) or as a batch migration.
 | **11** | Image management (upload to Appwrite, image property panel) | Full image controls | 2-3 |
 | **12** | Right-click context menu + keyboard shortcuts polish | UX polish | 1 |
 | **13** | Figma plugin bridge (export section/page to Figma) | Copy to Figma workflow | 3-5 |
-| **14** | Block property panel (per-block settings in right sidebar) | Complete editing experience | 2-3 |
+| **14** | Block property panel (per-block settings — inline popover or floating panel, NOT a sidebar layer panel) | Complete editing experience | 2-3 |
 
 **Total estimated: 22-35 focused sessions**
+
+> **🎯 Canvas-Only Interaction — No Layer Panel**
+> 
+> All block interaction (select, hover, edit, drag, rearrange, copy/paste) happens **directly on the canvas** via progressive clicks and the nested frame block tree. There is NO sidebar layers panel. The hover outlines, selection indicators, and progressive click model (click section → enter → click block → double-click to edit) provide all the spatial navigation needed — exactly like working directly on a Figma canvas. The `LayerWrapper` on every block (including frame containers) provides hover outlines, click handling, and context menus. Frame blocks enable the same container-level interaction Figma offers — without requiring a layers panel to navigate the hierarchy.
 
 ### 🚧 Step 4 Gate Rules — READ BEFORE PROCEEDING
 
@@ -912,7 +1009,7 @@ All of the following marketing section categories must be rebuilt as V2 layout t
 
 | # | Category | Status | Figma Provided |
 |---|----------|--------|----------------|
-| 1 | **Hero** | ✅ Done (27 layouts) | ✅ |
+| 1 | **Hero** | ⚠️ Rendered (27 layouts) — needs Block refactor | ✅ |
 | 2 | **Navbar** | ❌ Not started | ❌ |
 | 3 | **Footer** | ❌ Not started | ❌ |
 | 4 | **Features** | ❌ Not started | ❌ |
@@ -925,7 +1022,7 @@ All of the following marketing section categories must be rebuilt as V2 layout t
 | 11 | **Team** | ❌ Not started | ❌ |
 | 12 | **Blog** | ❌ Not started | ❌ |
 | 13 | **Stats / Logos** | ❌ Not started | ❌ |
-| 14 | **Gallery** | ❌ Not started | ❌ |
+| 14 | **Gallery** | ⚠️ Rendered (27 layouts) — needs Block refactor | ✅ |
 
 #### Workflow Per Category
 
@@ -935,24 +1032,164 @@ All of the following marketing section categories must be rebuilt as V2 layout t
 
 2. EXTRACT design specs using Figma MCP:
    → get_design_context / get_screenshot for exact layout, spacing, sizing
+   → Each Figma section has "Breakpoint = Desktop" + "Breakpoint = Mobile" children
+   → Focus on the Desktop frame (1440px) for implementation
 
-3. BUILD layout template(s) matching the Figma design exactly:
+3. CREATE the category directory: src/lib/designs/v2/layouts/{category}/
+   Required files (see "V2 Category File Checklist" below):
+   a) types.ts       — Category-specific types, enums, default content
+   b) presets.ts      — Preset config for EVERY layout variant
+   c) {cat}-section.tsx — Core composable renderer (all layout logic)
+   d) {cat}-layouts.tsx — Named wrapper components (one per variant)
+   e) {cat}-thumbnails.tsx — PNG image thumbnails with fallback
+   f) index.ts        — Barrel exports + LAYOUT_TEMPLATES array + TEMPLATES_MAP
+
+4. BUILD layout templates matching the Figma design exactly:
+   → Desktop-first approach: default = desktop, @max-sm: for mobile overrides
+   → Use container queries (@container on section wrapper)
    → Pixel-perfect padding, gap, max-width, responsive breakpoints
-   → Use V2 blocks (HeadingBlock, TextBlock, etc.) — never hardcoded styles
    → All styling via --sg-* CSS custom properties
+   
+   → ⛔ MANDATORY: Build a NESTED FRAME BLOCK TREE for every layout.
+     The block factory (buildXBlocks) MUST return a tree where:
+     • Every structural <div> is a `frame` block with `children: Block[]`
+     • Leaf content (headings, text, buttons, images) are child blocks inside frames
+     • The layout component just walks the tree: `blocks.map(b => <RenderBlock ... />)`
+     • NO hardcoded wrapper <div>s in the layout JSX — the block tree IS the layout
+     • This is what makes every container hoverable, selectable, draggable on canvas
+     
+   → See Section 3C "Layout Templates — Nested Frame Block Trees" for the full pattern
+   → Each preset MUST define a defaultBlocks: Block[] tree (nested, not flat)
 
-4. BUILD default blocks (the content each layout starts with)
+5. WIRE the registry:
+   a) Add control def to src/lib/designs/v2/layouts/controls.ts
+   b) Add to LAYOUT_REGISTRY in src/lib/designs/v2/layouts/index.ts
+   c) Add to V2_READY_CATEGORIES in component-library-panel.tsx
 
-5. TEST build passes cleanly
+6. DOWNLOAD desktop-only PNG thumbnails from Figma:
+   a) Get desktop child node IDs using get_metadata ("Breakpoint = Desktop")
+   b) Add to the download script: scripts/download-{category}-thumbnails.ts
+      (or extend the universal script — see "Thumbnail Download" section)
+   c) Run: npx tsx --env-file=.env.local scripts/download-{category}-thumbnails.ts
+   d) Verify PNGs in public/thumbnails/{category}/
 
-6. MARK category as ✅ Done in the table above
+7. TEST build passes cleanly: npm run build
 
-7. ASK user: "Which category next?" + "Please share the Figma link."
+8. MARK category as ✅ Done in the table above
 
-8. REPEAT until all categories are ✅ Done
+9. ASK user: "Which category next?" + "Please share the Figma link."
 
-9. ONLY when user says "let's move to the next step" → proceed to Step 5
+10. REPEAT until all categories are ✅ Done
+
+11. ONLY when user says "let's move to the next step" → proceed to Step 5
 ```
+
+#### V2 Category File Checklist
+
+Every new V2 category MUST produce these files:
+
+```
+src/lib/designs/v2/layouts/{category}/
+├── types.ts              — Enums, content types, DEFAULT_CONTENT
+├── presets.ts            — One config per variant (ALL_PRESETS array)
+│                           Each preset's defaultBlocks MUST be a nested
+│                           frame block tree (NOT a flat list)
+├── {cat}-section.tsx     — Core renderer — desktop-first, @max-sm: mobile
+│                           Layout JSX only: <section> + blocks.map(RenderBlock)
+│                           NO hardcoded wrapper <div>s — block tree IS the layout
+├── {cat}-layouts.tsx     — createComponent() factory → named exports
+├── {cat}-thumbnails.tsx  — <img> from /thumbnails/{cat}/ + fallback
+└── index.ts              — Barrel exports + LAYOUT_TEMPLATES + TEMPLATES_MAP
+
+public/thumbnails/{category}/
+├── {cat}-1.png           — Desktop-only Figma screenshot (scale=2)
+├── {cat}-2.png
+└── ...
+```
+
+> **Frame Block Tree Rule**: The `buildXBlocks()` factory function in `presets.ts` returns a **nested tree** where every structural container is a `frame` block with `children: Block[]`. The layout component (`{cat}-section.tsx`) simply iterates root blocks via `<RenderBlock>` — it does NOT create any wrapper `<div>` elements. See Section 3C for the full pattern.
+
+#### Thumbnail Download Process
+
+Thumbnails are PNG screenshots of the **desktop breakpoint only** from the Figma source file, stored at `public/thumbnails/{category}/`.
+
+**How Figma nodes are structured**:
+```
+Frame: "Gallery / 1 /" (node 4174:40811)   ← Parent (contains desktop + mobile)
+  ├── Symbol: "Breakpoint = Desktop" (node 4174:40812)  ← 1440px — USE THIS
+  └── Symbol: "Breakpoint = Mobile" (node 4174:40817)   ← 375px — SKIP
+```
+
+**Steps to get desktop-only node IDs**:
+1. For each layout, call `get_metadata` on the parent node ID
+2. Find the child named `"Breakpoint = Desktop"`
+3. Use that child's node ID in the Figma Images API
+
+**Download script pattern** (see `scripts/download-gallery-thumbnails.ts` as reference):
+```bash
+# Token is stored in .env.local as FIGMA_TOKEN
+npx tsx --env-file=.env.local scripts/download-{category}-thumbnails.ts
+```
+
+**Figma Images API call** — batch all nodes in one request:
+```
+GET https://api.figma.com/v1/images/{FILE_KEY}?ids={nodeIds}&format=png&scale=2
+Header: X-Figma-Token: {token}
+```
+
+**Figma file key**: `Ehft8P02yDqutz3LhXtJqZ` (Relume Kit)
+
+**Thumbnail component pattern** (`{cat}-thumbnails.tsx`):
+```tsx
+'use client'
+import { useState } from 'react'
+import { Image as ImageIcon } from 'lucide-react'
+
+function FallbackThumbnail({ variant }: { variant: number }) {
+    return (
+        <div className="w-full h-full flex items-center justify-center bg-[#1a1a1a]">
+            <ImageIcon className="w-5 h-5 text-white/30" />
+        </div>
+    )
+}
+
+export function CategoryThumbnail({ variant }: { variant: number }) {
+    const [failed, setFailed] = useState(false)
+    if (failed) return <FallbackThumbnail variant={variant} />
+    return (
+        <img
+            src={`/thumbnails/{category}/{cat}-${variant}.png`}
+            alt={`Category ${variant}`}
+            className="w-full h-full object-cover object-top"
+            loading="lazy"
+            onError={() => setFailed(true)}
+        />
+    )
+}
+```
+
+#### ⛔ Block Composition Debt — Hero & Gallery (MUST FIX)
+
+Hero and Gallery were built before the nested frame block tree pattern was established. They currently have **two critical problems**:
+
+1. **Flat block lists**: `buildHeroBlocks()` / `buildGalleryBlocks()` return a flat `Block[]` — no nesting, no frame containers
+2. **Hardcoded wrapper divs**: Layout functions (`LeftLayout`, `SplitLayout`, `CenterLayout`, etc.) use raw `<div>` elements for all structural layout (rows, columns, content groups). These divs are **invisible to the selection system** — the user cannot hover, select, drag, or rearrange them.
+
+**This must be fixed before building any new categories or proceeding to Step 5.**
+
+Refactoring each layout means:
+1. Convert `buildXBlocks()` factory to return a **nested frame block tree** (see Section 3C pattern)
+   - Every wrapper `<div>` becomes a `{ type: 'frame', props: { direction, gap, ... }, children: [...] }`
+   - Leaf content blocks (heading, text, button, image) are nested as children of frame blocks
+2. Simplify the layout component to just walk the block tree: `blocks.map(b => <RenderBlock ... />)`
+   - **Remove** all hardcoded `<div>` wrappers from layout JSX
+   - The only JSX the layout should have is `<section>` + `<RenderBlock>` calls
+3. `RenderBlock` dispatches frame blocks to `FrameBlock` component, which renders its `children` recursively
+4. Every block in the tree is wrapped by `LayerWrapper` → all containers are hoverable, selectable, draggable on canvas
+
+**Visual output stays the same** — the frame block's flex props produce the same CSS the hardcoded divs used. But now the user can interact with every container directly on canvas, matching the Figma editing experience.
+
+**⛔ DO NOT build new categories (Features, CTA, Pricing, etc.) using the old flat-block + hardcoded-div pattern. All new categories MUST follow the nested frame block tree pattern from Section 3C.**
 
 #### V1 Family Handling
 
@@ -1084,10 +1321,11 @@ src/lib/designs/
 
 When rebuilding a category:
 1. Read the legacy family to understand the layout pattern
-2. Break it down into blocks
-3. Build the V2 `LayoutTemplate` that composes those blocks
-4. Create presets that define `defaultBlocks` arrays (different block configurations)
-5. Remove from `_legacy/` once V2 layout fully replaces it
+2. Break it down into a **nested frame block tree** — every wrapper div becomes a frame block
+3. Build the V2 `LayoutTemplate` whose factory returns a tree of frame blocks with children
+4. Create presets that define `defaultBlocks` as nested block trees (not flat arrays)
+5. Layout component just walks the tree via `<RenderBlock>` — no hardcoded wrapper divs
+6. Remove from `_legacy/` once V2 layout fully replaces it
 
 ---
 
@@ -1111,6 +1349,7 @@ src/
 │       │   │   ├── index.ts            ← Barrel export + RenderBlock dispatcher
 │       │   │   ├── types.ts            ← Block, BlockType, BlockProps interfaces
 │       │   │   ├── layer-wrapper.tsx    ← LayerWrapper (selection, hover, context menu)
+│       │   │   ├── frame-block.tsx      ← FrameBlock — auto-layout container, renders children recursively
 │       │   │   ├── heading-block.tsx
 │       │   │   ├── text-block.tsx
 │       │   │   ├── button-block.tsx

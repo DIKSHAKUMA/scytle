@@ -7,11 +7,16 @@
  *   --sg-heading-weight
  *   --sg-heading-letter-spacing
  *   --sg-text-primary
+ *
+ * Supports inline contentEditable editing via the V2 selection store.
  */
 
 'use client'
 
+import { useCallback, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { useSelectionStore } from '@/store/selection-store'
+import { useUnifiedStore } from '@/store'
 import type { Block, HeadingBlockProps, HeadingBlockContent, TextAlign } from './types'
 
 // ============================================
@@ -51,6 +56,7 @@ const LEVEL_STYLES: Record<number, { sizeVar: string; lineHeight: string }> = {
 // ============================================
 
 export function HeadingBlock({ block, className }: Props) {
+    const elRef = useRef<HTMLHeadingElement>(null)
     const props = block.props as unknown as HeadingBlockProps
     const content = block.content as unknown as HeadingBlockContent
 
@@ -58,12 +64,67 @@ export function HeadingBlock({ block, className }: Props) {
     const align = props.align ?? 'left'
     const text = content.text ?? ''
 
+    // Selection / editing state
+    const isEditing = useSelectionStore((s) => s.isEditing && s.blockId === block.id)
+    const stopEditing = useSelectionStore((s) => s.stopEditing)
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const updateBlockContent = useUnifiedStore((s) => s.updateBlockContent)
+    const selectedPageId = useUnifiedStore((s) => s.selectedPageId)
+
+    // Focus the element when entering edit mode
+    useEffect(() => {
+        if (isEditing && elRef.current) {
+            elRef.current.focus()
+            // Place cursor at end
+            const sel = window.getSelection()
+            if (sel) {
+                sel.selectAllChildren(elRef.current)
+                sel.collapseToEnd()
+            }
+        }
+    }, [isEditing])
+
+    // Commit text on blur
+    const handleBlur = useCallback(() => {
+        if (!elRef.current) return
+        const newText = elRef.current.textContent ?? ''
+        if (newText !== text && selectedPageId && selSectionId) {
+            updateBlockContent(selectedPageId, selSectionId, block.id, { text: newText })
+        }
+        stopEditing()
+    }, [block.id, text, selectedPageId, selSectionId, updateBlockContent, stopEditing])
+
+    // Enter key commits (no newlines in headings), Escape cancels
+    const handleKeyDown = useCallback(
+        (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault()
+                elRef.current?.blur()
+            } else if (e.key === 'Escape') {
+                e.preventDefault()
+                // Restore original text and blur
+                if (elRef.current) {
+                    elRef.current.textContent = text
+                }
+                stopEditing()
+            }
+            // Stop propagation of all keys when editing so keyboard handler doesn't intercept
+            e.stopPropagation()
+        },
+        [text, stopEditing],
+    )
+
     const Tag = `h${level}` as const
     const levelStyle = LEVEL_STYLES[level] ?? LEVEL_STYLES[1]
 
     return (
         <Tag
-            className={cn(ALIGN_CLASS[align], className)}
+            ref={elRef as React.Ref<HTMLHeadingElement>}
+            className={cn(
+                ALIGN_CLASS[align],
+                isEditing && 'outline-none cursor-text',
+                className,
+            )}
             style={{
                 fontSize: levelStyle.sizeVar,
                 lineHeight: levelStyle.lineHeight,
@@ -72,6 +133,10 @@ export function HeadingBlock({ block, className }: Props) {
                 letterSpacing: 'var(--sg-heading-letter-spacing)',
                 color: 'var(--sg-text-primary)',
             } as React.CSSProperties}
+            contentEditable={isEditing}
+            suppressContentEditableWarning
+            onBlur={isEditing ? handleBlur : undefined}
+            onKeyDown={isEditing ? handleKeyDown : undefined}
             data-layer-id={block.id}
             data-layer-type={block.type}
             data-layer-label={`H${level}`}

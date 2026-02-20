@@ -26,6 +26,69 @@ import { createJWT } from '@/lib/appwrite'
 import { getSectionsForPage } from '@/lib/ai/section-templates'
 
 // ============================================
+// Block Tree Helpers — Recursive traversal for nested frame blocks
+// ============================================
+
+interface BlockLike {
+    id: string
+    children?: BlockLike[]
+    [key: string]: unknown
+}
+
+/** Find a block by ID anywhere in a nested block tree */
+function findBlockInTree<T extends BlockLike>(blocks: T[], id: string): T | null {
+    for (const block of blocks) {
+        if (block.id === id) return block
+        if (block.children) {
+            const found = findBlockInTree(block.children as T[], id)
+            if (found) return found
+        }
+    }
+    return null
+}
+
+/** Find a block and return its parent array + index so we can splice */
+function findBlockWithParent<T extends BlockLike>(
+    blocks: T[],
+    id: string,
+): { parent: T[]; index: number } | null {
+    for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].id === id) return { parent: blocks, index: i }
+        if (blocks[i].children) {
+            const found = findBlockWithParent(blocks[i].children as T[], id)
+            if (found) return found
+        }
+    }
+    return null
+}
+
+/** Remove a block by ID from anywhere in the tree. Returns true if found and removed. */
+function removeBlockFromTree<T extends BlockLike>(blocks: T[], id: string): boolean {
+    for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].id === id) {
+            blocks.splice(i, 1)
+            return true
+        }
+        if (blocks[i].children) {
+            if (removeBlockFromTree(blocks[i].children as T[], id)) return true
+        }
+    }
+    return false
+}
+
+/** Deep clone a block tree, assigning fresh IDs to all nodes */
+function deepCloneBlock<T extends BlockLike>(block: T): T {
+    const copy = JSON.parse(JSON.stringify(block)) as T
+    const now = Date.now()
+    const reassignIds = (b: BlockLike) => {
+        b.id = `${b.id}-copy-${now}`
+        if (b.children) b.children.forEach(reassignIds)
+    }
+    reassignIds(copy)
+    return copy
+}
+
+// ============================================
 // Type Definitions
 // ============================================
 
@@ -878,6 +941,24 @@ interface UnifiedState {
     duplicateSection: (pageId: string, sectionId: string) => void
     toggleGlobalSection: (pageId: string, sectionId: string) => void
     syncGlobalSection: (sectionId: string) => void
+
+    // ============================================
+    // Actions - Blocks (V2 block-level operations)
+    // ============================================
+    /** Replace the entire blocks array for a section */
+    updateSectionBlocks: (pageId: string, sectionId: string, blocks: import('@/lib/designs/v2/blocks/types').Block[]) => void
+    /** Update a single block's content (e.g. text editing) */
+    updateBlockContent: (pageId: string, sectionId: string, blockId: string, content: Record<string, unknown>) => void
+    /** Delete a single block from a section */
+    deleteBlock: (pageId: string, sectionId: string, blockId: string) => void
+    /** Duplicate a block and insert the copy after the original */
+    duplicateBlock: (pageId: string, sectionId: string, blockId: string) => void
+    /** Insert a block into a section after a given block (or at the end) */
+    insertBlock: (pageId: string, sectionId: string, block: import('@/lib/designs/v2/blocks/types').Block, afterBlockId?: string | null) => void
+    /** Reorder children of a parent frame block (within-container drag) */
+    reorderBlockChildren: (pageId: string, sectionId: string, parentBlockId: string, oldIndex: number, newIndex: number) => void
+    /** Move a block from one parent to another (cross-parent drag) */
+    moveBlockToParent: (pageId: string, sectionId: string, blockId: string, targetParentId: string, targetIndex: number) => void
 
     // ============================================
     // Actions - ReactFlow (Sitemap View)
@@ -1837,6 +1918,137 @@ export const useUnifiedStore = create<UnifiedState>()(
                         })
                     })
                     state.isDirty = true
+                })
+                triggerSave()
+            },
+
+            // ========================================
+            // Block-level Actions (V2)
+            // ========================================
+
+            updateSectionBlocks: (pageId, sectionId, blocks) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section) {
+                        section.blocks = blocks as typeof section.blocks
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            updateBlockContent: (pageId, sectionId, blockId, content) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    // Recursive find in nested block tree
+                    const block = findBlockInTree(section.blocks, blockId)
+                    if (block) {
+                        block.content = { ...block.content, ...content } as typeof block.content
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            deleteBlock: (pageId, sectionId, blockId) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    // Recursive delete from nested block tree
+                    if (removeBlockFromTree(section.blocks, blockId)) {
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            duplicateBlock: (pageId, sectionId, blockId) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    // Find the block and its parent array, then dup in place
+                    const result = findBlockWithParent(section.blocks, blockId)
+                    if (result) {
+                        const { parent, index } = result
+                        const original = parent[index]
+                        const copy = deepCloneBlock(original)
+                        parent.splice(index + 1, 0, copy)
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            insertBlock: (pageId, sectionId, block, afterBlockId) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section) {
+                        if (!section.blocks) section.blocks = []
+                        if (afterBlockId) {
+                            // Find the afterBlock in the tree and insert after it in the same parent
+                            const result = findBlockWithParent(section.blocks, afterBlockId)
+                            if (result) {
+                                result.parent.splice(result.index + 1, 0, block as typeof section.blocks[0])
+                            } else {
+                                section.blocks.push(block as typeof section.blocks[0])
+                            }
+                        } else {
+                            section.blocks.push(block as typeof section.blocks[0])
+                        }
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            reorderBlockChildren: (pageId, sectionId, parentBlockId, oldIndex, newIndex) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    const parent = findBlockInTree(section.blocks, parentBlockId)
+                    if (!parent?.children || oldIndex === newIndex) return
+
+                    const children = parent.children as typeof section.blocks
+                    const [moved] = children.splice(oldIndex, 1)
+                    if (moved) {
+                        children.splice(newIndex, 0, moved)
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            moveBlockToParent: (pageId, sectionId, blockId, targetParentId, targetIndex) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    // Find and remove the block from its current parent
+                    const sourceResult = findBlockWithParent(section.blocks, blockId)
+                    if (!sourceResult) return
+                    const block = sourceResult.parent[sourceResult.index]
+                    sourceResult.parent.splice(sourceResult.index, 1)
+
+                    // Find the target parent and insert
+                    const target = findBlockInTree(section.blocks, targetParentId)
+                    if (target) {
+                        if (!target.children) target.children = []
+                        const children = target.children as typeof section.blocks
+                        children.splice(Math.min(targetIndex, children.length), 0, block)
+                        state.isDirty = true
+                    }
                 })
                 triggerSave()
             },

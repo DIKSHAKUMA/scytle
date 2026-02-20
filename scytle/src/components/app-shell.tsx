@@ -8,7 +8,6 @@ import {
     FolderOpen,
     Settings,
     LogOut,
-    ChevronDown,
     Plus,
     User,
     CreditCard,
@@ -16,7 +15,6 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
     DropdownMenu,
@@ -51,36 +49,36 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
     return (
         <div className="min-h-screen bg-background">
             {/* Header */}
-            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
                 <div className="container flex h-14 items-center">
                     {/* Logo */}
-                    <Link href="/dashboard" className="flex items-center gap-2 mr-6">
-                        <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center">
-                            <Zap className="w-4 h-4 text-white" />
+                    <Link href="/dashboard" className="flex items-center gap-2.5 mr-8 group">
+                        <div className="w-7 h-7 rounded-lg bg-foreground flex items-center justify-center group-hover:scale-105 transition-transform">
+                            <Zap className="w-3.5 h-3.5 text-background" strokeWidth={2.5} />
                         </div>
-                        <span className="font-display font-semibold text-lg hidden sm:inline-block">
+                        <span className="font-display font-bold text-[17px] tracking-tight hidden sm:inline-block">
                             Scytle
                         </span>
                     </Link>
 
                     {/* Navigation */}
                     {!hideNav && (
-                        <nav className="flex items-center gap-1">
+                        <nav className="flex items-center gap-0.5">
                             {navigation.map((item) => {
                                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
                                 return (
-                                    <Link key={item.name} href={item.href}>
-                                        <Button
-                                            variant={isActive ? 'secondary' : 'ghost'}
-                                            size="sm"
-                                            className={cn(
-                                                'gap-2',
-                                                isActive && 'bg-secondary'
-                                            )}
-                                        >
-                                            <item.icon className="w-4 h-4" />
-                                            <span className="hidden sm:inline">{item.name}</span>
-                                        </Button>
+                                    <Link
+                                        key={item.name}
+                                        href={item.href}
+                                        className={cn(
+                                            'inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-150',
+                                            isActive
+                                                ? 'text-foreground bg-muted/80'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                                        )}
+                                    >
+                                        <item.icon className="w-4 h-4" />
+                                        <span className="hidden sm:inline">{item.name}</span>
                                     </Link>
                                 )
                             })}
@@ -91,34 +89,41 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                     <div className="flex-1" />
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                         <Link href="/dashboard/new">
-                            <Button size="sm" className="gap-2">
-                                <Plus className="w-4 h-4" />
-                                <span className="hidden sm:inline">New Project</span>
-                            </Button>
+                            <button className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity">
+                                <Plus className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">New</span>
+                            </button>
                         </Link>
 
                         {/* User Menu */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="gap-2 px-2">
-                                    <Avatar className="w-6 h-6">
+                                <button className="flex items-center rounded-full p-0.5 hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20">
+                                    <Avatar className="w-7 h-7">
                                         <AvatarImage src={undefined} />
-                                        <AvatarFallback className="text-xs bg-accent text-white">
+                                        <AvatarFallback className="text-[11px] font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
                                             {initials}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                                </Button>
+                                </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuLabel>
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{user?.name || 'User'}</span>
-                                        <span className="text-xs text-muted-foreground font-normal">
-                                            {user?.email}
-                                        </span>
+                            <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
+                                <DropdownMenuLabel className="pb-2">
+                                    <div className="flex items-center gap-3">
+                                        <Avatar className="w-8 h-8">
+                                            <AvatarImage src={undefined} />
+                                            <AvatarFallback className="text-xs font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
+                                                {initials}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium text-sm">{user?.name || 'User'}</span>
+                                            <span className="text-xs text-muted-foreground font-normal truncate max-w-[160px]">
+                                                {user?.email}
+                                            </span>
+                                        </div>
                                     </div>
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />

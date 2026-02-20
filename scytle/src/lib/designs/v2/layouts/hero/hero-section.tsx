@@ -1,21 +1,27 @@
 /**
- * HeroSection — Composable hero layout component
+ * HeroSection — Composable hero layout component (V2 Nested Frame Block Tree)
  *
  * Single component that renders all 27 hero variations.
  * Axes: alignment (left|split|center) × background (dark|neutral|image) × actions (buttons|form|none)
  *
- * Reads --sg-* CSS custom properties for theming.
- * Uses container queries (@container) for responsive because sections
- * render inside fixed-width canvas frames — viewport queries don't fire.
+ * buildHeroBlocks() returns a NESTED FRAME BLOCK TREE — every structural
+ * wrapper div is a `frame` block with `children`. The layout component
+ * simply walks the tree via RenderBlock. Every container is hoverable,
+ * selectable, and draggable on the canvas.
  *
- * When no TokenProvider is present (wireframe view), the BackgroundLayer
- * sets sensible CSS var defaults so all children render correctly.
+ * Reads --sg-* CSS custom properties for theming via TokenProvider.
+ * BackgroundLayer overrides surface-specific tokens (text/button colors)
+ * for dark and image backgrounds so blocks render correctly on any surface.
  */
 
 'use client'
 
+import { useMemo, useEffect } from 'react'
 import type { HeroAlignment, HeroBackground, HeroActions, HeroContent } from './types'
 import { DEFAULT_HERO_CONTENT } from './types'
+import { RenderBlock } from '../../blocks'
+import type { Block } from '../../blocks/types'
+import { useSelectionStore } from '@/store/selection-store'
 
 // ============================================
 // Props
@@ -27,150 +33,212 @@ export interface HeroSectionProps {
     background: HeroBackground
     actions: HeroActions
     content?: Partial<HeroContent>
+    /** Externally-stored blocks (from unified store) — overrides derived blocks */
+    blocks?: Block[]
     className?: string
 }
 
 // ============================================
-// Sub-components
+// Block Factory — Nested Frame Block Tree
 // ============================================
 
-/** Tagline badge */
-function Tagline({ text, centered }: { text: string; centered?: boolean }) {
-    return (
-        <p
-            className={`font-semibold text-[16px] leading-[1.5] text-[var(--sg-text)] ${centered ? 'text-center' : ''}`}
-            data-layer-type="tagline"
-        >
-            {text}
-        </p>
-    )
+/**
+ * Build a nested frame block tree for a hero section.
+ * Every structural container is a `frame` block with `children`.
+ * Block IDs are deterministic (sectionId + role) for stable selection.
+ */
+export function buildHeroBlocks(
+    sectionId: string,
+    content: HeroContent,
+    alignment: HeroAlignment,
+    actions: HeroActions,
+): Block[] {
+    const align = alignment === 'center' ? 'center' as const : 'left' as const
+    const cross = alignment === 'center' ? 'center' as const : 'start' as const
+
+    // ── Leaf content blocks ──
+    const taglineBlock: Block | null = (actions !== 'none' && content.tagline) ? {
+        id: `${sectionId}--tagline`, type: 'text',
+        props: { variant: 'small', align }, content: { text: content.tagline },
+    } : null
+
+    const headingBlock: Block = {
+        id: `${sectionId}--heading`, type: 'heading',
+        props: { level: 1, align }, content: { text: content.heading },
+    }
+
+    const descriptionBlock: Block = {
+        id: `${sectionId}--description`, type: 'text',
+        props: { variant: 'body-large', align }, content: { text: content.description },
+    }
+
+    // ── Build action blocks ──
+    const actionChildren: Block[] = []
+
+    if (actions === 'buttons') {
+        actionChildren.push({
+            id: `${sectionId}--buttons`, type: 'button-group',
+            props: { align, gap: 16 }, content: {},
+            children: [
+                { id: `${sectionId}--btn-primary`, type: 'button', props: { variant: 'primary', size: 'lg' }, content: { text: content.primaryButtonText ?? 'Button' } },
+                { id: `${sectionId}--btn-secondary`, type: 'button', props: { variant: 'secondary', size: 'lg' }, content: { text: content.secondaryButtonText ?? 'Button' } },
+            ],
+        })
+    } else if (actions === 'form') {
+        actionChildren.push({
+            id: `${sectionId}--form-row`, type: 'frame',
+            props: { direction: 'vertical' as const, gap: 16, sizing: { width: 'fill' as const }, maxWidth: 513, className: '' },
+            content: { label: 'Form' },
+            children: [
+                {
+                    id: `${sectionId}--form-inputs`, type: 'frame',
+                    props: { direction: 'horizontal' as const, gap: 16, sizing: { width: 'fill' as const }, className: '@max-sm:flex-col' },
+                    content: { label: 'Input Row' },
+                    children: [
+                        { id: `${sectionId}--input`, type: 'input', props: { fieldType: 'email', required: false, showLabel: false, layoutClassName: 'flex-1 min-w-0' }, content: { placeholder: content.inputPlaceholder ?? 'Enter your email' } },
+                        { id: `${sectionId}--submit`, type: 'button', props: { variant: 'primary', size: 'lg', layoutClassName: 'shrink-0 @max-sm:w-full' }, content: { text: content.submitButtonText ?? 'Sign up' } },
+                    ],
+                },
+                { id: `${sectionId}--terms`, type: 'text', props: { variant: 'caption', align }, content: { text: content.termsText ?? '' } },
+            ],
+        })
+    }
+
+    // ── Compose per alignment ──
+
+    if (alignment === 'left') {
+        // Single column, left-aligned, max 768px inner content
+        const titleChildren: Block[] = [
+            ...(taglineBlock ? [taglineBlock] : []),
+            {
+                id: `${sectionId}--title-text`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 20, sizing: { width: 'fill' as const }, alignment: { cross: 'start' as const } },
+                content: { label: 'Title' },
+                children: [headingBlock, descriptionBlock],
+            },
+        ]
+
+        return [{
+            id: `${sectionId}--root`, type: 'frame',
+            props: { direction: 'vertical' as const, sizing: { width: 'fill' as const }, maxWidth: 1280, className: 'relative z-10' },
+            content: { label: 'Hero Container' },
+            children: [{
+                id: `${sectionId}--content`, type: 'frame',
+                props: { direction: 'vertical' as const, gap: 24, sizing: { width: 'fill' as const }, maxWidth: 768, alignment: { cross: 'start' as const }, className: '@max-sm:gap-5' },
+                content: { label: 'Content' },
+                children: [
+                    {
+                        id: `${sectionId}--title-group`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 16, sizing: { width: 'fill' as const }, alignment: { cross: 'start' as const } },
+                        content: { label: 'Title Group' },
+                        children: titleChildren,
+                    },
+                    ...actionChildren,
+                ],
+            }],
+        }]
+    }
+
+    if (alignment === 'split') {
+        // Two columns: left = tagline+heading, right = description+actions
+        const leftChildren: Block[] = [
+            ...(taglineBlock ? [taglineBlock] : []),
+            headingBlock,
+        ]
+
+        const rightChildren: Block[] = [
+            descriptionBlock,
+            ...actionChildren,
+        ]
+
+        return [{
+            id: `${sectionId}--root`, type: 'frame',
+            props: { direction: 'vertical' as const, sizing: { width: 'fill' as const }, maxWidth: 1280, className: 'relative z-10' },
+            content: { label: 'Hero Container' },
+            children: [{
+                id: `${sectionId}--columns`, type: 'frame',
+                props: { direction: 'horizontal' as const, gap: 80, sizing: { width: 'fill' as const }, alignment: { cross: 'start' as const }, className: '@max-lg:gap-12 @max-md:flex-col @max-md:gap-6' },
+                content: { label: 'Columns' },
+                children: [
+                    {
+                        id: `${sectionId}--col-left`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 16, alignment: { cross: 'start' as const }, layoutClassName: 'flex-1 min-w-0' },
+                        content: { label: 'Left Column' },
+                        children: leftChildren,
+                    },
+                    {
+                        id: `${sectionId}--col-right`, type: 'frame',
+                        props: { direction: 'vertical' as const, gap: 24, alignment: { cross: 'start' as const }, layoutClassName: 'flex-1 min-w-0' },
+                        content: { label: 'Right Column' },
+                        children: rightChildren,
+                    },
+                ],
+            }],
+        }]
+    }
+
+    // alignment === 'center'
+    const titleChildren: Block[] = [
+        ...(taglineBlock ? [taglineBlock] : []),
+        {
+            id: `${sectionId}--title-text`, type: 'frame',
+            props: { direction: 'vertical' as const, gap: 20, sizing: { width: 'fill' as const }, alignment: { cross: 'center' as const } },
+            content: { label: 'Title' },
+            children: [headingBlock, descriptionBlock],
+        },
+    ]
+
+    return [{
+        id: `${sectionId}--root`, type: 'frame',
+        props: { direction: 'vertical' as const, sizing: { width: 'fill' as const }, maxWidth: 1280, alignment: { cross: 'center' as const }, className: 'relative z-10' },
+        content: { label: 'Hero Container' },
+        children: [{
+            id: `${sectionId}--content`, type: 'frame',
+            props: { direction: 'vertical' as const, gap: 24, sizing: { width: 'fill' as const }, maxWidth: 768, alignment: { cross: 'center' as const }, className: '@max-sm:gap-5' },
+            content: { label: 'Content' },
+            children: [
+                {
+                    id: `${sectionId}--title-group`, type: 'frame',
+                    props: { direction: 'vertical' as const, gap: 16, sizing: { width: 'fill' as const }, alignment: { cross: 'center' as const } },
+                    content: { label: 'Title Group' },
+                    children: titleChildren,
+                },
+                ...actionChildren,
+            ],
+        }],
+    }]
 }
 
-/** H1 heading */
-function Heading({ text, centered }: { text: string; centered?: boolean }) {
-    return (
-        <h1
-            className={`font-[var(--sg-font-display)] font-medium leading-[1.2] tracking-[-0.01em] text-[var(--sg-text)] text-[clamp(2rem,5vw,4.5rem)] ${centered ? 'text-center' : ''}`}
-            data-layer-type="heading"
-        >
-            {text}
-        </h1>
-    )
-}
+// ============================================
+// Surface-aware CSS variable overrides
+// ============================================
 
-/** Description text */
-function Description({ text, centered }: { text: string; centered?: boolean }) {
-    return (
-        <p
-            className={`font-[var(--sg-font-body)] font-normal leading-[1.5] text-[var(--sg-text)] text-[clamp(0.875rem,1.5vw,1.125rem)] opacity-90 ${centered ? 'text-center' : ''}`}
-            data-layer-type="text"
-        >
-            {text}
-        </p>
-    )
-}
-
-/** Primary filled button — dark on light bg, light on dark bg */
-function PrimaryButton({ text, variant }: { text: string; variant: HeroBackground }) {
-    // dark/image = dark overlays → white button with dark text
-    // neutral = light surface → dark button with white text
-    const onDarkSurface = variant === 'dark' || variant === 'image'
-    return (
-        <button
-            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors ${onDarkSurface
-                ? 'bg-white border-white text-[var(--sg-bg)]'
-                : 'bg-[var(--sg-bg)] border-[var(--sg-bg)] text-white'
-                }`}
-            data-layer-type="button"
-            type="button"
-        >
-            {text}
-        </button>
-    )
-}
-
-/** Secondary outline button */
-function SecondaryButton({ text, variant }: { text: string; variant: HeroBackground }) {
-    const onDarkSurface = variant === 'dark' || variant === 'image'
-    return (
-        <button
-            className={`inline-flex items-center justify-center px-6 py-3 font-[var(--sg-font-body)] font-normal text-base leading-[1.5] border transition-colors ${onDarkSurface
-                ? 'bg-transparent border-white/20 text-white'
-                : 'bg-transparent border-[var(--sg-bg)]/20 text-[var(--sg-bg)]'
-                }`}
-            data-layer-type="button"
-            type="button"
-        >
-            {text}
-        </button>
-    )
-}
-
-/** Button pair (primary + secondary) */
-function ButtonActions({ content, variant }: { content: HeroContent; variant: HeroBackground }) {
-    return (
-        <div className="flex gap-4 items-start flex-wrap" data-layer-type="button-group">
-            <PrimaryButton text={content.primaryButtonText ?? 'Button'} variant={variant} />
-            <SecondaryButton text={content.secondaryButtonText ?? 'Button'} variant={variant} />
-        </div>
-    )
-}
-
-/** Email signup form (input + button + terms) */
-function FormActions({ content, variant, centered }: { content: HeroContent; variant: HeroBackground; centered?: boolean }) {
-    const onDarkSurface = variant === 'dark' || variant === 'image'
-    return (
-        <div className={`flex flex-col gap-4 w-full max-w-[513px] ${centered ? 'mx-auto' : ''}`}>
-            <div className="flex gap-4 w-full @max-sm:flex-col">
-                <input
-                    className={`flex-1 min-w-0 p-3 font-[var(--sg-font-body)] text-base leading-[1.5] bg-transparent border outline-none ${onDarkSurface
-                        ? 'border-white/60 text-white placeholder:text-white/65'
-                        : 'border-[var(--sg-bg)]/30 text-[var(--sg-text)] placeholder:text-[var(--sg-text)]/50'
-                        }`}
-                    data-layer-type="input"
-                    placeholder={content.inputPlaceholder ?? 'Enter your email'}
-                    type="email"
-                />
-                <button
-                    className={`shrink-0 px-6 py-3 font-[var(--sg-font-body)] font-medium text-base leading-[1.5] border transition-colors @max-sm:w-full ${onDarkSurface
-                        ? 'bg-white border-white text-[var(--sg-bg)]'
-                        : 'bg-[var(--sg-bg)] border-[var(--sg-bg)] text-white'
-                        }`}
-                    data-layer-type="button"
-                    type="button"
-                >
-                    {content.submitButtonText ?? 'Sign up'}
-                </button>
-            </div>
-            <p
-                className={`text-xs leading-[1.5] opacity-70 ${centered ? 'text-center' : ''}`}
-                style={{ color: 'var(--sg-text)' }}
-                data-layer-type="text"
-            >
-                {content.termsText}
-            </p>
-        </div>
-    )
+/**
+ * Returns CSS custom property overrides for the section's background.
+ * Dark/image surfaces override text and button tokens so blocks
+ * render light-on-dark. Neutral surfaces keep inherited token values.
+ */
+function getSurfaceVars(background: HeroBackground): Record<string, string> {
+    if (background === 'dark' || background === 'image') {
+        return {
+            '--sg-text-primary': '#ffffff',
+            '--sg-text-secondary': 'rgba(255,255,255,0.9)',
+            '--sg-text-muted': 'rgba(255,255,255,0.7)',
+            '--sg-button-primary-bg': '#ffffff',
+            '--sg-button-primary-text': 'var(--sg-bg-primary, #1a1a1a)',
+            '--sg-button-secondary-bg': 'transparent',
+            '--sg-button-secondary-text': '#ffffff',
+            '--sg-button-secondary-border': 'rgba(255,255,255,0.2)',
+            '--sg-card-border': 'rgba(255,255,255,0.6)',
+            '--sg-card-bg': 'transparent',
+        }
+    }
+    return {}
 }
 
 // ============================================
 // Background wrapper
 // ============================================
-
-/**
- * Default CSS custom property values for the hero section.
- * Bridges the gap between the short `--sg-*` names used inside the hero
- * and the full `--sg-*-primary` names from the TokenProvider.
- * When no TokenProvider is present (wireframe view), hardcoded fallbacks apply.
- */
-const CSS_VAR_DEFAULTS: Record<string, string> = {
-    '--sg-bg': 'var(--sg-bg-primary, #1a1a1a)',
-    '--sg-surface': 'var(--sg-bg-secondary, #f5f5f5)',
-    '--sg-text': 'var(--sg-text-primary, #1a1a1a)',
-    '--sg-accent': 'var(--sg-bg-accent, #4f46e5)',
-    '--sg-font-display': 'var(--sg-font-heading, system-ui)',
-    '--sg-font-body': 'var(--sg-font-body, system-ui)',
-}
 
 function BackgroundLayer({ background, children, className }: {
     background: HeroBackground
@@ -179,20 +247,20 @@ function BackgroundLayer({ background, children, className }: {
 }) {
     const bgClass =
         background === 'dark'
-            ? 'bg-[var(--sg-bg)]'
+            ? 'bg-[var(--sg-bg-primary,#1a1a1a)]'
             : background === 'neutral'
-                ? 'bg-[var(--sg-surface)]'
-                : '' // image → transparent, image is absolute-positioned
+                ? 'bg-[var(--sg-bg-secondary,#f5f5f5)]'
+                : ''
 
     return (
         <section
             className={`@container relative flex flex-col items-center w-full overflow-hidden px-[clamp(1rem,5vw,4rem)] py-[clamp(3rem,8vw,7rem)] ${bgClass} ${className ?? ''}`}
-            style={CSS_VAR_DEFAULTS as React.CSSProperties}
+            style={getSurfaceVars(background) as React.CSSProperties}
             data-layout-type="hero"
         >
             {background === 'image' && (
                 <div aria-hidden="true" className="absolute inset-0 pointer-events-none">
-                    <div className="absolute inset-0 bg-[var(--sg-surface)]" />
+                    <div className="absolute inset-0 bg-(--sg-bg-secondary,#f5f5f5)" />
                     <div className="absolute inset-0 bg-black/40" />
                 </div>
             )}
@@ -202,119 +270,7 @@ function BackgroundLayer({ background, children, className }: {
 }
 
 // ============================================
-// Layout variants — use @container queries
-// ============================================
-
-/** Left-aligned single column */
-function LeftLayout({
-    content,
-    actions,
-    background,
-    hasTagline,
-}: {
-    content: HeroContent
-    actions: HeroActions
-    background: HeroBackground
-    hasTagline: boolean
-}) {
-    return (
-        <div className="relative z-10 w-full max-w-[1280px]">
-            <div className="flex flex-col items-start max-w-[768px] gap-6 @max-sm:gap-5">
-                {/* Section title */}
-                <div className="flex flex-col items-start w-full gap-4">
-                    {hasTagline && content.tagline && <Tagline text={content.tagline} />}
-                    <div className="flex flex-col items-start w-full gap-5">
-                        <Heading text={content.heading} />
-                        <Description text={content.description} />
-                    </div>
-                </div>
-
-                {/* Actions */}
-                {actions === 'buttons' && (
-                    <ButtonActions content={content} variant={background} />
-                )}
-                {actions === 'form' && (
-                    <FormActions content={content} variant={background} />
-                )}
-            </div>
-        </div>
-    )
-}
-
-/** Split two-column layout */
-function SplitLayout({
-    content,
-    actions,
-    background,
-    hasTagline,
-}: {
-    content: HeroContent
-    actions: HeroActions
-    background: HeroBackground
-    hasTagline: boolean
-}) {
-    return (
-        <div className="relative z-10 w-full max-w-[1280px]">
-            <div className="flex items-start w-full gap-20 @max-lg:gap-12 @max-md:flex-col @max-md:gap-6">
-                {/* Left column: tagline + heading */}
-                <div className="flex-1 min-w-0 flex flex-col items-start gap-4">
-                    {hasTagline && content.tagline && <Tagline text={content.tagline} />}
-                    <Heading text={content.heading} />
-                </div>
-
-                {/* Right column: description + actions */}
-                <div className="flex-1 min-w-0 flex flex-col items-start gap-6">
-                    <Description text={content.description} />
-                    {actions === 'buttons' && (
-                        <ButtonActions content={content} variant={background} />
-                    )}
-                    {actions === 'form' && (
-                        <FormActions content={content} variant={background} />
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-/** Center-aligned single column */
-function CenterLayout({
-    content,
-    actions,
-    background,
-    hasTagline,
-}: {
-    content: HeroContent
-    actions: HeroActions
-    background: HeroBackground
-    hasTagline: boolean
-}) {
-    return (
-        <div className="relative z-10 w-full max-w-[1280px] flex flex-col items-center">
-            <div className="flex flex-col items-center max-w-[768px] w-full gap-6 @max-sm:gap-5">
-                {/* Section title */}
-                <div className="flex flex-col items-center w-full gap-4">
-                    {hasTagline && content.tagline && <Tagline text={content.tagline} centered />}
-                    <div className="flex flex-col items-center w-full gap-5">
-                        <Heading text={content.heading} centered />
-                        <Description text={content.description} centered />
-                    </div>
-                </div>
-
-                {/* Actions */}
-                {actions === 'buttons' && (
-                    <ButtonActions content={content} variant={background} />
-                )}
-                {actions === 'form' && (
-                    <FormActions content={content} variant={background} centered />
-                )}
-            </div>
-        </div>
-    )
-}
-
-// ============================================
-// Main Component
+// Main Component — Just walks the block tree
 // ============================================
 
 export function HeroSection({
@@ -323,6 +279,7 @@ export function HeroSection({
     background,
     actions,
     content: contentOverrides,
+    blocks: externalBlocks,
     className,
 }: HeroSectionProps) {
     const content: HeroContent = {
@@ -330,34 +287,31 @@ export function HeroSection({
         ...contentOverrides,
     }
 
-    const hasTagline = actions !== 'none'
+    // Build nested frame block tree — memoized for stable selection
+    const derivedBlocks = useMemo(
+        () => buildHeroBlocks(sectionId, content, alignment, actions),
+        [sectionId, content, alignment, actions],
+    )
+
+    // Use stored blocks if available, fallback to derived
+    const blocks = externalBlocks ?? derivedBlocks
+
+    // Register blocks with selection store when this section is entered
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const selMode = useSelectionStore((s) => s.mode)
+    const setCurrentBlocks = useSelectionStore((s) => s.setCurrentBlocks)
+
+    useEffect(() => {
+        if (selSectionId === sectionId && (selMode === 'entered' || selMode === 'block-selected')) {
+            setCurrentBlocks(blocks)
+        }
+    }, [selSectionId, sectionId, selMode, blocks, setCurrentBlocks])
 
     return (
         <BackgroundLayer background={background} className={className}>
-            {alignment === 'left' && (
-                <LeftLayout
-                    content={content}
-                    actions={actions}
-                    background={background}
-                    hasTagline={hasTagline}
-                />
-            )}
-            {alignment === 'split' && (
-                <SplitLayout
-                    content={content}
-                    actions={actions}
-                    background={background}
-                    hasTagline={hasTagline}
-                />
-            )}
-            {alignment === 'center' && (
-                <CenterLayout
-                    content={content}
-                    actions={actions}
-                    background={background}
-                    hasTagline={hasTagline}
-                />
-            )}
+            {blocks.map(block => (
+                <RenderBlock key={block.id} block={block} />
+            ))}
         </BackgroundLayer>
     )
 }

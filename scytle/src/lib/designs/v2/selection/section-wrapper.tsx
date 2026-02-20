@@ -16,6 +16,7 @@
 import { useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useSelectionStore } from '@/store/selection-store'
+import { SectionIdContext } from './contexts'
 
 // ============================================
 // Props
@@ -91,24 +92,26 @@ export function SectionSelectionWrapper({
     }, [setHover])
 
     return (
-        <div
-            ref={ref}
-            className={cn(
-                'relative transition-[outline,background-color] duration-100',
-                isEntered && 'bg-blue-50/30 dark:bg-blue-950/10',
-                className,
-            )}
-            style={getSectionOutlineStyle(isSelected, isEntered, isHovered)}
-            onClick={handleClick}
-            onDoubleClick={handleDoubleClick}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            data-section-id={sectionId}
-            data-section-selected={isSelected || undefined}
-            data-section-entered={isEntered || undefined}
-        >
-            {children}
-        </div>
+        <SectionIdContext.Provider value={sectionId}>
+            <div
+                ref={ref}
+                className={cn(
+                    'relative transition-[outline,background-color] duration-100',
+                    isEntered && 'bg-blue-50/30 dark:bg-blue-950/10',
+                    className,
+                )}
+                style={getSectionOutlineStyle(isSelected, isEntered, isHovered)}
+                onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                data-section-id={sectionId}
+                data-section-selected={isSelected || undefined}
+                data-section-entered={isEntered || undefined}
+            >
+                {children}
+            </div>
+        </SectionIdContext.Provider>
     )
 }
 

@@ -15,6 +15,7 @@ export { SectionSelectionWrapper } from './section-wrapper'
 export { LayerWrapper } from './layer-wrapper'
 export { SelectionKeyboardHandler } from './keyboard-handler'
 export { BlockContextMenu } from './context-menu'
+export { PageIdContext, SectionIdContext } from './contexts'
 export {
     useSelectionStore,
     type SelectionMode,

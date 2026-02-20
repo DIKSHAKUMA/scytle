@@ -37,6 +37,7 @@ export type BlockType =
     | 'input'
     | 'avatar'
     | 'social'
+    | 'frame'
 
 // ============================================
 // Base Block Interface
@@ -319,6 +320,54 @@ export interface SocialBlockContent {
     platforms: SocialPlatform[]
 }
 
+// ---- FrameBlock ----
+
+/**
+ * FrameBlock is the structural backbone of every layout.
+ * Every wrapper <div> that creates spatial structure (rows, columns, content groups)
+ * MUST be a frame block so users can hover, select, resize, drag, and rearrange it
+ * directly on canvas — matching Figma Frames.
+ *
+ * If `direction` is provided, renders as flex container with inline styles.
+ * If `direction` is omitted, only `className` drives the layout (for CSS grid, etc.).
+ */
+export interface FrameBlockProps {
+    /** Flex direction. Omit to let className control display (e.g., CSS grid). */
+    direction?: 'horizontal' | 'vertical'
+    /** Gap between children in px */
+    gap?: number
+    /** Padding in px */
+    padding?: { top?: number; right?: number; bottom?: number; left?: number }
+    /** Flex alignment */
+    alignment?: {
+        main?: 'start' | 'center' | 'end' | 'space-between'
+        cross?: 'start' | 'center' | 'end' | 'stretch'
+    }
+    /** Width/height sizing */
+    sizing?: {
+        width?: 'fill' | 'hug' | number
+        height?: 'fill' | 'hug' | number
+    }
+    /** Optional max-width constraint in px */
+    maxWidth?: number
+    /** Enable flex-wrap */
+    wrap?: boolean
+    /** Additional Tailwind classes for the frame's own div (responsive overrides, grid, etc.) */
+    className?: string
+    /** Classes applied to the LayerWrapper (positioning within parent: flex-1, shrink-0, etc.) */
+    layoutClassName?: string
+}
+
+export interface FrameBlockContent {
+    /** Human-readable label shown in selection badge */
+    label?: string
+    /**
+     * Decorative chrome rendered after children (not editable blocks).
+     * Space-separated list: 'arrows-inset' | 'arrows-edge' | 'arrows-offset' | 'dots' | 'controls-below'
+     */
+    _chrome?: string
+}
+
 // ============================================
 // Block Factory Helpers
 // ============================================
@@ -344,6 +393,7 @@ export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
     input: 'Input',
     avatar: 'Avatar',
     social: 'Social Links',
+    frame: 'Frame',
 }
 
 /**
@@ -353,4 +403,5 @@ export const CONTAINER_BLOCK_TYPES: Set<BlockType> = new Set([
     'card',
     'button-group',
     'form',
+    'frame',
 ])

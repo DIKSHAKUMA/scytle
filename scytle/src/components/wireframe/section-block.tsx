@@ -6,6 +6,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
 import { useUnifiedStore } from '@/store'
+import { useSelectionStore } from '@/store/selection-store'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -67,10 +68,58 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const zoomLevel = useUnifiedStore(state => state.zoomLevel)
 
+    // V2 selection store — Figma-style progressive click selection
+    const v2SelectSection = useSelectionStore((s) => s.selectSection)
+    const v2EnterSection = useSelectionStore((s) => s.enterSection)
+    const v2Mode = useSelectionStore((s) => s.mode)
+    const v2SectionId = useSelectionStore((s) => s.sectionId)
+
+    /**
+     * Figma-style progressive click:
+     *  - idle / different section selected → select this section
+     *  - this section already selected → enter it (enable block selection)
+     *  - entered / block-selected → DON'T intercept, let click fall through to LayerWrapper
+     */
     const handleClick = useCallback((e: React.MouseEvent) => {
+        const isThisSection = v2SectionId === section.id
+        const isEntered = isThisSection && (v2Mode === 'entered' || v2Mode === 'block-selected')
+
+        // When entered, let clicks pass through to block LayerWrappers
+        if (isEntered) return
+
         e.stopPropagation()
-        onSelectAction(section.id)
-    }, [section.id, onSelectAction])
+
+        if (isThisSection && v2Mode === 'section-selected') {
+            // Already selected → enter the section (enable block interaction)
+            v2EnterSection()
+        } else {
+            // Not selected → select it
+            onSelectAction(section.id)
+            v2SelectSection(section.id)
+        }
+    }, [section.id, onSelectAction, v2SelectSection, v2EnterSection, v2Mode, v2SectionId])
+
+    /**
+     * Double-click shortcut: directly enter the section from any state
+     * (Figma: double-click → drill into group)
+     */
+    const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+        const isThisSection = v2SectionId === section.id
+        const isEntered = isThisSection && (v2Mode === 'entered' || v2Mode === 'block-selected')
+
+        // If already entered, let double-click pass through to blocks (for text editing)
+        if (isEntered) return
+
+        e.stopPropagation()
+
+        if (!isThisSection) {
+            // Select first, then enter
+            onSelectAction(section.id)
+            v2SelectSection(section.id)
+        }
+        // Enter immediately (works because selectSection is synchronous with immer)
+        v2EnterSection()
+    }, [section.id, onSelectAction, v2SelectSection, v2EnterSection, v2Mode, v2SectionId])
 
     const handleContextMenu = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
@@ -98,17 +147,21 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                     'relative overflow-hidden cursor-pointer',
                     'transition-all duration-150 ease-out',
                     'bg-white border-b border-gray-100',
-                    // Selection / hover states
-                    isSelected
+                    // Selection / hover states (only when NOT entered — entered shows block-level outlines instead)
+                    isSelected && !(v2SectionId === section.id && (v2Mode === 'entered' || v2Mode === 'block-selected'))
                         ? 'outline outline-2 outline-violet-500 z-[1]'
-                        : isHovered
+                        : isHovered && !(v2SectionId === section.id && (v2Mode === 'entered' || v2Mode === 'block-selected'))
                             ? 'outline outline-1 outline-violet-300 z-[1]'
                             : '',
+                    // Entered state — subtle container indicator
+                    v2SectionId === section.id && (v2Mode === 'entered' || v2Mode === 'block-selected')
+                    && 'outline outline-1 outline-violet-200 z-[1]',
                     // Dragging state
                     isDragging && 'opacity-50 outline outline-2 outline-violet-400 shadow-lg z-[1]',
                     className
                 )}
                 onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
                 onContextMenu={handleContextMenu}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
@@ -211,30 +264,30 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
 
             {/* Add Section Button - Between sections on hover (hidden when zoomed out, inverse-scaled when visible) */}
             {zoomLevel >= 15 && (
-            <div
-                className={cn(
-                    'absolute -bottom-3.5 left-1/2',
-                    'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
-                    'z-30 pointer-events-auto'
-                )}
-                style={{
-                    transform: `translateX(-50%) scale(${Math.min(100 / zoomLevel, 2)})`,
-                }}
-            >
-                <button
-                    onClick={handleAddClick}
+                <div
                     className={cn(
-                        'flex items-center gap-1 px-2.5 py-1',
-                        'bg-violet-500 hover:bg-violet-600 text-white',
-                        'rounded-full text-xs font-medium',
-                        'shadow-md hover:shadow-lg transition-all duration-150',
-                        'transform hover:scale-105'
+                        'absolute -bottom-3.5 left-1/2',
+                        'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
+                        'z-30 pointer-events-auto'
                     )}
+                    style={{
+                        transform: `translateX(-50%) scale(${Math.min(100 / zoomLevel, 2)})`,
+                    }}
                 >
-                    <Plus className="w-3 h-3" />
-                    <span>Section</span>
-                </button>
-            </div>
+                    <button
+                        onClick={handleAddClick}
+                        className={cn(
+                            'flex items-center gap-1 px-2.5 py-1',
+                            'bg-violet-500 hover:bg-violet-600 text-white',
+                            'rounded-full text-xs font-medium',
+                            'shadow-md hover:shadow-lg transition-all duration-150',
+                            'transform hover:scale-105'
+                        )}
+                    >
+                        <Plus className="w-3 h-3" />
+                        <span>Section</span>
+                    </button>
+                </div>
             )}
         </div>
     )
@@ -246,6 +299,11 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
  * Wrapper that makes SectionBlock draggable with dnd-kit.
  */
 export function SortableSectionBlock(props: Omit<SectionBlockProps, 'isDragging' | 'dragHandleProps'>) {
+    // Disable section drag when user is editing blocks inside this section
+    const v2Mode = useSelectionStore(s => s.mode)
+    const v2SectionId = useSelectionStore(s => s.sectionId)
+    const isEntered = v2SectionId === props.section.id && (v2Mode === 'entered' || v2Mode === 'block-selected')
+
     const {
         attributes,
         listeners,
@@ -253,7 +311,7 @@ export function SortableSectionBlock(props: Omit<SectionBlockProps, 'isDragging'
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: props.section.id })
+    } = useSortable({ id: props.section.id, disabled: isEntered })
 
     const style = {
         transform: CSS.Transform.toString(transform),

@@ -24,6 +24,52 @@ import type { ClipboardPayload } from '@/store/selection-store'
 import type { Block } from '@/lib/designs/v2/blocks/types'
 
 // ============================================
+// Visual Feedback — brief flash on copy/cut/paste
+// ============================================
+
+function flashBlock(blockId: string, color: string, label?: string) {
+    const el = document.querySelector(`[data-layer-id="${blockId}"]`) as HTMLElement | null
+    if (!el) return
+
+    // Save current outline
+    const prevOutline = el.style.outline
+    const prevOffset = el.style.outlineOffset
+
+    el.style.outline = `2px solid ${color}`
+    el.style.outlineOffset = '2px'
+    el.style.transition = 'outline 150ms ease-out'
+
+    // Optional floating label
+    let badge: HTMLDivElement | null = null
+    if (label) {
+        badge = document.createElement('div')
+        Object.assign(badge.style, {
+            position: 'absolute',
+            top: '-24px',
+            right: '0',
+            fontSize: '10px',
+            fontWeight: '600',
+            padding: '2px 8px',
+            borderRadius: '3px',
+            backgroundColor: color,
+            color: '#fff',
+            whiteSpace: 'nowrap',
+            fontFamily: 'system-ui, sans-serif',
+            zIndex: '100',
+            pointerEvents: 'none',
+        })
+        badge.textContent = label
+        el.appendChild(badge)
+    }
+
+    setTimeout(() => {
+        el.style.outline = prevOutline
+        el.style.outlineOffset = prevOffset
+        if (badge) badge.remove()
+    }, 500)
+}
+
+// ============================================
 // Props
 // ============================================
 
@@ -52,10 +98,12 @@ export function SelectionKeyboardHandler({
     const blockId = useSelectionStore((s) => s.blockId)
     const sectionId = useSelectionStore((s) => s.sectionId)
     const clipboard = useSelectionStore((s) => s.clipboard)
+    const isEditing = useSelectionStore((s) => s.isEditing)
 
     const escape = useSelectionStore((s) => s.escape)
     const enterSection = useSelectionStore((s) => s.enterSection)
     const selectBlock = useSelectionStore((s) => s.selectBlock)
+    const startEditing = useSelectionStore((s) => s.startEditing)
     const copyToClipboard = useSelectionStore((s) => s.copyToClipboard)
 
     const handleKeyDown = useCallback(
@@ -63,8 +111,20 @@ export function SelectionKeyboardHandler({
             const isMeta = e.metaKey || e.ctrlKey
             const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
 
-            // Don't intercept when user is typing in an input/textarea
+            // Don't intercept when user is typing in an input/textarea/contentEditable
             if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+            if ((e.target as HTMLElement)?.isContentEditable) return
+
+            // Don't intercept when inline-editing a block (contentEditable handles keys)
+            if (isEditing) {
+                // Only intercept Escape to exit editing (handled by block's onKeyDown,
+                // but also handle it here as a safety net)
+                if (e.key === 'Escape') {
+                    e.preventDefault()
+                    escape()
+                }
+                return
+            }
 
             switch (e.key) {
                 // ── Escape: go up one selection level ──
@@ -74,11 +134,15 @@ export function SelectionKeyboardHandler({
                     break
                 }
 
-                // ── Enter: dive into selected section ──
+                // ── Enter: dive into selected section, or start editing selected block ──
                 case 'Enter': {
                     if (mode === 'section-selected') {
                         e.preventDefault()
                         enterSection()
+                    } else if (mode === 'block-selected' && blockId) {
+                        // Enter on a selected block → start inline editing (if editable)
+                        e.preventDefault()
+                        startEditing()
                     }
                     break
                 }
@@ -138,6 +202,7 @@ export function SelectionKeyboardHandler({
                                 data: block,
                             }
                             copyToClipboard(payload)
+                            flashBlock(blockId, '#22c55e', 'Copied')
 
                             // Also write to system clipboard
                             navigator.clipboard
@@ -163,6 +228,7 @@ export function SelectionKeyboardHandler({
                                 data: block,
                             }
                             copyToClipboard(payload)
+                            flashBlock(blockId, '#ef4444', 'Cut')
                             onDeleteBlock?.(blockId)
                         }
                     }
@@ -202,9 +268,11 @@ export function SelectionKeyboardHandler({
             sectionId,
             sectionBlocks,
             clipboard,
+            isEditing,
             escape,
             enterSection,
             selectBlock,
+            startEditing,
             copyToClipboard,
             onDeleteBlock,
             onDuplicateBlock,

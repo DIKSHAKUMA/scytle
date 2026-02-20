@@ -30,6 +30,7 @@ import { FormBlock } from './form-block'
 import { InputBlock } from './input-block'
 import { AvatarBlock } from './avatar-block'
 import { SocialBlock } from './social-block'
+import { FrameBlock } from './frame-block'
 
 // ── Re-exports ──────────────────────────────────────────────────
 export { HeadingBlock } from './heading-block'
@@ -49,6 +50,7 @@ export { FormBlock } from './form-block'
 export { InputBlock } from './input-block'
 export { AvatarBlock } from './avatar-block'
 export { SocialBlock } from './social-block'
+export { FrameBlock } from './frame-block'
 
 // Re-export types
 export type {
@@ -87,6 +89,8 @@ export type {
     SocialBlockProps,
     SocialBlockContent,
     SocialPlatform,
+    FrameBlockProps,
+    FrameBlockContent,
     TextAlign,
     TextVariant,
     ButtonVariant,
@@ -111,14 +115,23 @@ interface RenderBlockProps {
  * Universal block renderer. Resolves `block.type` → component.
  * Container blocks receive a recursive `renderChild` callback.
  * Every block is wrapped in `<LayerWrapper>` for selection/hover.
+ *
+ * Editable blocks (heading, text) call the unified store directly
+ * for content changes — no callback threading needed.
  */
 export function RenderBlock({ block, className }: RenderBlockProps) {
-    const renderChild = (child: Block) => (
-        <RenderBlock block={child} />
-    )
+    const renderChild = (child: Block) => {
+        // Pass layoutClassName from any child's props as className to LayerWrapper
+        const childLayoutClass = (child.props as { layoutClassName?: string }).layoutClassName
+        return <RenderBlock key={child.id} block={child} className={childLayoutClass} />
+    }
+
+    // Use layoutClassName from props if no explicit className was provided
+    const propsLayoutClass = (block.props as { layoutClassName?: string }).layoutClassName
+    const resolvedClass = className ?? propsLayoutClass
 
     return (
-        <LayerWrapper block={block} className={className}>
+        <LayerWrapper block={block} className={resolvedClass}>
             {resolveBlock(block.type, block, renderChild)}
         </LayerWrapper>
     )
@@ -164,6 +177,8 @@ function resolveBlock(
             return <AvatarBlock block={block} />
         case 'social':
             return <SocialBlock block={block} />
+        case 'frame':
+            return <FrameBlock block={block} renderChild={renderChild} />
         default: {
             // Exhaustive check — should never reach here
             const _exhaustive: never = type

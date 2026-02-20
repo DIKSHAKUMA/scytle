@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Plus, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUnifiedStore } from '@/store'
+import { useSelectionStore } from '@/store/selection-store'
 import { PageViewports } from './viewport-frame'
 import { WireframeSidebar } from './wireframe-sidebar'
 import { AddSectionSidebar } from './add-section-sidebar'
@@ -213,13 +214,19 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
                 return
             }
 
+            // Check V2 selection mode — don't hijack keys when blocks are active
+            const v2Mode = useSelectionStore.getState().mode
+
             if (e.code === 'Space' && !e.repeat) {
-                e.preventDefault()
-                setIsPanning(true)
+                // Only enable Space-to-pan when nothing is deeply selected
+                if (v2Mode === 'idle' || v2Mode === 'section-selected') {
+                    e.preventDefault()
+                    setIsPanning(true)
+                }
             }
 
-            // Escape to deselect
-            if (e.code === 'Escape') {
+            // Escape to deselect — only when V2 is idle (V2 keyboard handler handles its own escape)
+            if (e.code === 'Escape' && v2Mode === 'idle') {
                 deselectAll()
             }
         }
@@ -367,12 +374,14 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
     }, [])
 
     // Click on canvas to deselect
+    const v2Clear = useSelectionStore((s) => s.clear)
     const handleCanvasClick = useCallback((e: React.MouseEvent) => {
         // Only deselect if clicking directly on canvas (not on a page/section)
         if (e.target === canvasRef.current || e.target === containerRef.current) {
             deselectAll()
+            v2Clear()
         }
-    }, [deselectAll])
+    }, [deselectAll, v2Clear])
 
     // Cursor based on state
     const cursorClass = isPanning ? 'cursor-grabbing' : 'cursor-default'

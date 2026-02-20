@@ -21,6 +21,11 @@ import { Button } from '@/components/ui/button'
 import type { WireframePage, ViewportDevice, PageLayout } from '@/types'
 import { VIEWPORT_CONFIGS } from '@/types'
 import { useUnifiedStore } from '@/store'
+import { useSelectionStore } from '@/store/selection-store'
+import type { ClipboardPayload } from '@/store/selection-store'
+import { SelectionKeyboardHandler } from '@/lib/designs/v2/selection'
+import { PageIdContext } from '@/lib/designs/v2/selection/contexts'
+import type { Block } from '@/lib/designs/v2/blocks/types'
 import { SortableSectionBlock } from './section-block'
 import { PlaceholderRenderer } from './placeholder-renderer'
 import { AppTopbar } from './app-topbar'
@@ -63,6 +68,10 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
         toggleGlobalSection,
         syncGlobalSection,
         updateSectionContent,
+        updateSectionBlocks,
+        deleteBlock,
+        duplicateBlock: duplicateBlockAction,
+        insertBlock,
         openAddSidebar,
         // Ghost preview state
         ghostPreviewLayout,
@@ -71,6 +80,11 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
         isAddSidebarOpen,
         activePanelView,
     } = useUnifiedStore()
+
+    // V2 selection store — for block-level operations
+    const selMode = useSelectionStore((s) => s.mode)
+    const selSectionId = useSelectionStore((s) => s.sectionId)
+    const currentBlocks = useSelectionStore((s) => s.currentBlocks)
 
     const isPageSelected = selectedPageId === page.id && !selectedSectionId
 
@@ -85,6 +99,43 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
     const showGhostPreview = showGhostPreviewForAdd || showGhostPreviewForReplace
 
     const scaledWidth = frameWidth * scale
+
+    // ===== BLOCK MUTATION CALLBACKS (V2 keyboard handler) =====
+
+    /**
+     * Ensure blocks are initialized in the store before mutating.
+     * If section.blocks is undefined (first mutation), snapshot current
+     * blocks from the selection store into the section.
+     */
+    const ensureBlocksInitialized = useCallback((sectionId: string) => {
+        const section = page.sections.find(s => s.id === sectionId)
+        if (section && !section.blocks && currentBlocks.length > 0) {
+            updateSectionBlocks(page.id, sectionId, currentBlocks)
+        }
+    }, [page.id, page.sections, currentBlocks, updateSectionBlocks])
+
+    const handleDeleteBlock = useCallback((blockId: string) => {
+        if (!selSectionId) return
+        ensureBlocksInitialized(selSectionId)
+        deleteBlock(page.id, selSectionId, blockId)
+    }, [selSectionId, page.id, deleteBlock, ensureBlocksInitialized])
+
+    const handleDuplicateBlock = useCallback((blockId: string) => {
+        if (!selSectionId) return
+        ensureBlocksInitialized(selSectionId)
+        duplicateBlockAction(page.id, selSectionId, blockId)
+    }, [selSectionId, page.id, duplicateBlockAction, ensureBlocksInitialized])
+
+    const handlePasteBlock = useCallback((payload: ClipboardPayload, afterBlockId: string | null) => {
+        if (!selSectionId || payload.type !== 'block') return
+        ensureBlocksInitialized(selSectionId)
+        const blockData = payload.data as Block
+        const newBlock: Block = {
+            ...blockData,
+            id: `${blockData.id}-paste-${Date.now()}`,
+        }
+        insertBlock(page.id, selSectionId, newBlock, afterBlockId)
+    }, [selSectionId, page.id, insertBlock, ensureBlocksInitialized])
 
     // ===== SIDE RESIZE HANDLES =====
     const handleResizeStart = useCallback((e: React.MouseEvent, side: 'left' | 'right') => {
@@ -146,6 +197,11 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!selectedSectionId) return
+
+            // When V2 selection is in entered/block-selected mode,
+            // let SelectionKeyboardHandler handle all keys instead
+            if (selMode === 'entered' || selMode === 'block-selected') return
+
             const currentIndex = page.sections.findIndex(s => s.id === selectedSectionId)
             if (currentIndex === -1) return
 
@@ -186,13 +242,18 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedSectionId, page.sections, page.id, selectSection, selectPage, deselectAll, deleteSection])
+    }, [selectedSectionId, selMode, page.sections, page.id, selectSection, selectPage, deselectAll, deleteSection])
+
+    // V2 selection clear
+    const v2Clear = useSelectionStore((s) => s.clear)
 
     const handleFrameClick = useCallback((e: React.MouseEvent) => {
         // Select the page/frame when clicking its background
         // The sections call e.stopPropagation(), so this only fires for frame bg
         selectPage(page.id)
-    }, [page.id, selectPage])
+        // Also clear V2 selection state
+        v2Clear()
+    }, [page.id, selectPage, v2Clear])
 
     // Open add section sidebar
     const handleAddSection = useCallback((index: number) => {
@@ -231,42 +292,51 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
 
             {/* Figma-style frame — clean white artboard */}
             <TokenProvider>
-                <div
-                    ref={containerRef}
-                    className={cn(
-                        'flex flex-col bg-white',
-                        isPageSelected
-                            ? 'ring-2 ring-violet-500'
-                            : isResizing
-                                ? 'ring-2 ring-violet-500'
-                                : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
-                        className
-                    )}
-                    style={{ width: scaledWidth }}
-                    onClick={handleFrameClick}
-                >
-                    {/* Layout-aware rendering */}
-                    <LayoutRenderer
-                        page={page}
-                        viewport={viewport}
-                        scale={scale}
-                        sensors={sensors}
-                        handleDragEnd={handleDragEnd}
-                        handleAddSection={handleAddSection}
-                        showGhostPreview={showGhostPreview}
-                        showGhostPreviewForAdd={showGhostPreviewForAdd}
-                        showGhostPreviewForReplace={showGhostPreviewForReplace}
-                        ghostPreviewLayout={ghostPreviewLayout}
-                        addSidebarInsertIndex={addSidebarInsertIndex}
-                        selectedSectionId={selectedSectionId}
-                        selectSection={selectSection}
-                        updateSectionContent={updateSectionContent}
-                        deleteSection={deleteSection}
-                        duplicateSection={duplicateSection}
-                        toggleGlobalSection={toggleGlobalSection}
-                        syncGlobalSection={syncGlobalSection}
+                <PageIdContext.Provider value={page.id}>
+                    {/* V2 block-level keyboard handler — renders nothing */}
+                    <SelectionKeyboardHandler
+                        sectionBlocks={currentBlocks}
+                        onDeleteBlock={handleDeleteBlock}
+                        onDuplicateBlock={handleDuplicateBlock}
+                        onPasteBlock={handlePasteBlock}
                     />
-                </div>
+                    <div
+                        ref={containerRef}
+                        className={cn(
+                            'flex flex-col bg-white',
+                            isPageSelected
+                                ? 'ring-2 ring-violet-500'
+                                : isResizing
+                                    ? 'ring-2 ring-violet-500'
+                                    : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
+                            className
+                        )}
+                        style={{ width: scaledWidth }}
+                        onClick={handleFrameClick}
+                    >
+                        {/* Layout-aware rendering */}
+                        <LayoutRenderer
+                            page={page}
+                            viewport={viewport}
+                            scale={scale}
+                            sensors={sensors}
+                            handleDragEnd={handleDragEnd}
+                            handleAddSection={handleAddSection}
+                            showGhostPreview={showGhostPreview}
+                            showGhostPreviewForAdd={showGhostPreviewForAdd}
+                            showGhostPreviewForReplace={showGhostPreviewForReplace}
+                            ghostPreviewLayout={ghostPreviewLayout}
+                            addSidebarInsertIndex={addSidebarInsertIndex}
+                            selectedSectionId={selectedSectionId}
+                            selectSection={selectSection}
+                            updateSectionContent={updateSectionContent}
+                            deleteSection={deleteSection}
+                            duplicateSection={duplicateSection}
+                            toggleGlobalSection={toggleGlobalSection}
+                            syncGlobalSection={syncGlobalSection}
+                        />
+                    </div>
+                </PageIdContext.Provider>
             </TokenProvider>
 
             {/* Width indicator (visible while resizing) */}

@@ -16,7 +16,7 @@ export type {
 export { DEFAULT_GALLERY_CONTENT } from './types'
 
 // Core composable component
-export { GallerySection } from './gallery-section'
+export { GallerySection, buildGalleryBlocks } from './gallery-section'
 export type { GallerySectionProps } from './gallery-section'
 
 // Thumbnails
@@ -50,8 +50,10 @@ export {
 // Gallery Layout Templates (for registry)
 // ============================================
 
-import type { LayoutTemplate } from '../types'
+import type { LayoutTemplate, LayoutProps } from '../types'
 import { createGalleryThumbnail } from './gallery-thumbnails'
+import { buildGalleryBlocks } from './gallery-section'
+import { DEFAULT_GALLERY_CONTENT } from './types'
 import {
     Gallery1, Gallery2, Gallery3, Gallery4, Gallery5, Gallery6,
     Gallery7, Gallery8, Gallery9, Gallery10,
@@ -64,7 +66,7 @@ import {
 import { ALL_GALLERY_PRESETS } from './presets'
 
 /** Map preset config → component */
-const GALLERY_COMPONENTS: Record<string, React.ComponentType<{ sectionId: string; className?: string }>> = {
+const GALLERY_COMPONENTS: Record<string, React.ComponentType<LayoutProps>> = {
     'gallery-1': Gallery1,
     'gallery-2': Gallery2,
     'gallery-3': Gallery3,
@@ -115,7 +117,7 @@ export const GALLERY_LAYOUT_TEMPLATES: LayoutTemplate[] = ALL_GALLERY_PRESETS.ma
     description: getDescription(preset),
     relumeId: `gallery-${preset.relumeGallery}`,
     component: GALLERY_COMPONENTS[preset.id],
-    defaultBlocks: () => [],
+    defaultBlocks: () => buildGalleryBlocks(preset.id, DEFAULT_GALLERY_CONTENT, preset.relumeGallery),
     tags: getTags(preset),
     Thumbnail: createGalleryThumbnail(preset),
 }))
