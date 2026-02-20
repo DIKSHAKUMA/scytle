@@ -87,15 +87,19 @@ export function TextBlock({ block, className }: Props) {
     const selectedPageId = useUnifiedStore((s) => s.selectedPageId)
 
     // Focus the element when entering edit mode
+    // Use requestAnimationFrame to ensure DOM is fully painted after React commit
     useEffect(() => {
         if (isEditing && elRef.current) {
-            elRef.current.focus()
-            // Place cursor at end
-            const sel = window.getSelection()
-            if (sel) {
-                sel.selectAllChildren(elRef.current)
-                sel.collapseToEnd()
-            }
+            const el = elRef.current
+            requestAnimationFrame(() => {
+                el.focus()
+                // Place cursor at end
+                const sel = window.getSelection()
+                if (sel) {
+                    sel.selectAllChildren(el)
+                    sel.collapseToEnd()
+                }
+            })
         }
     }, [isEditing])
 
@@ -131,7 +135,7 @@ export function TextBlock({ block, className }: Props) {
             ref={elRef}
             className={cn(
                 ALIGN_CLASS[align],
-                isEditing && 'outline-none cursor-text',
+                isEditing && 'outline-none cursor-text select-text',
                 className,
             )}
             style={{

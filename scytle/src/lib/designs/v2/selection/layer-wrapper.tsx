@@ -163,7 +163,7 @@ function PlainLayerDiv({ block, children, className }: LayerWrapperProps) {
             className={cn(
                 'relative transition-[outline,box-shadow] duration-100',
                 !isBlockEditing && 'cursor-pointer select-none',
-                isBlockEditing && 'cursor-text',
+                isBlockEditing && 'cursor-text select-text',
                 className,
             )}
             style={getOutlineStyle(isSelected, isHovered)}
@@ -229,7 +229,7 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
             className={cn(
                 'relative',
                 !isBlockEditing && !isDragging && 'cursor-pointer select-none',
-                isBlockEditing && 'cursor-text',
+                isBlockEditing && 'cursor-text select-text',
                 isDragging && 'z-50 shadow-lg ring-2 ring-blue-400 rounded cursor-grabbing opacity-90',
                 className,
             )}
