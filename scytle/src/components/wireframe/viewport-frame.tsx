@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import {
     Plus,
     Monitor,
@@ -120,8 +121,22 @@ const DEVICE_ICONS: Record<ViewportDevice, typeof Monitor> = {
 export function PageViewports({ page, scale = 1, className }: PageViewportsProps) {
     const { activeViewports, addViewport, removeViewport, selectPage } = useUnifiedStore()
 
+    // Clicking the beige container bg (not on a frame/section) selects the page → opens page panel
+    const handleContainerClick = useCallback((e: React.MouseEvent) => {
+        // Only if the click target is this container or the header area (not a child frame)
+        const target = e.target as HTMLElement
+        const isContainerOrHeader = target.closest('[data-page-header]') || target === e.currentTarget
+        if (isContainerOrHeader) {
+            e.stopPropagation()
+            selectPage(page.id)
+        }
+    }, [page.id, selectPage])
+
     return (
-        <div className={cn('flex flex-col rounded-[3px] bg-[#eeeee8] border border-black/[0.06] p-6 pb-8', className)}>
+        <div
+            className={cn('flex flex-col rounded-[3px] bg-[#eeeee8] border border-black/[0.06] p-6 pb-8', className)}
+            onClick={handleContainerClick}
+        >
             {/* Page Header Row — Figma Sites style, drag handle for free movement */}
             <div data-page-header className="flex items-center justify-between mb-3 px-0.5 cursor-grab active:cursor-grabbing">
                 <div className="flex items-center gap-2">

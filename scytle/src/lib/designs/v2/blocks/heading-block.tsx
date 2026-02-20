@@ -81,9 +81,16 @@ export function HeadingBlock({ block, className }: Props) {
     useLayoutEffect(() => {
         if (!isEditing || !elRef.current) return
         const el = elRef.current
-        // Immediate focus in layout phase
+
+        // If another viewport instance of this block already has focus, skip
+        // (prevents cross-viewport focus race that triggers blur → stopEditing)
+        const activeEl = document.activeElement as HTMLElement | null
+        if (activeEl && activeEl !== el && activeEl.getAttribute('data-layer-id') === block.id) {
+            return
+        }
+
         el.focus()
-        // Fallback: retry after paint + place cursor at end
+        // Place cursor at end after paint
         requestAnimationFrame(() => {
             if (document.activeElement !== el) el.focus()
             const sel = window.getSelection()
@@ -92,7 +99,7 @@ export function HeadingBlock({ block, className }: Props) {
                 sel.collapseToEnd()
             }
         })
-    }, [isEditing])
+    }, [isEditing, block.id])
 
     // Direct double-click on this element — safety net if LayerWrapper
     // event handling has stale closures or timing issues
@@ -107,7 +114,14 @@ export function HeadingBlock({ block, className }: Props) {
     )
 
     // Commit text on blur
-    const handleBlur = useCallback(() => {
+    const handleBlur = useCallback((e: React.FocusEvent) => {
+        // If focus is moving to another viewport instance of the same block, don't stop editing.
+        // This prevents the cross-viewport blur race (desktop ↔ mobile share block.id).
+        const related = e.relatedTarget as HTMLElement | null
+        if (related?.closest(`[data-layer-id="${block.id}"]`)) {
+            return
+        }
+
         if (!elRef.current) return
         const newText = elRef.current.textContent ?? ''
         if (newText !== text && selectedPageId && selSectionId) {

@@ -248,12 +248,13 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
     const v2Clear = useSelectionStore((s) => s.clear)
 
     const handleFrameClick = useCallback((e: React.MouseEvent) => {
-        // Select the page/frame when clicking its background
-        // The sections call e.stopPropagation(), so this only fires for frame bg
-        selectPage(page.id)
-        // Also clear V2 selection state
+        // Clicking the frame background (between sections / padding)
+        // should just deselect the current section — NOT open the page panel.
+        // Page panel is opened only via the page name label or the grid button.
+        e.stopPropagation()
+        deselectAll()
         v2Clear()
-    }, [page.id, selectPage, v2Clear])
+    }, [deselectAll, v2Clear])
 
     // Open add section sidebar
     const handleAddSection = useCallback((index: number) => {

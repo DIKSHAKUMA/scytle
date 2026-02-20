@@ -95,6 +95,13 @@ export function TextBlock({ block, className }: Props) {
     useLayoutEffect(() => {
         if (!isEditing || !elRef.current) return
         const el = elRef.current
+
+        // If another viewport instance of this block already has focus, skip
+        const activeEl = document.activeElement as HTMLElement | null
+        if (activeEl && activeEl !== el && activeEl.getAttribute('data-layer-id') === block.id) {
+            return
+        }
+
         el.focus()
         requestAnimationFrame(() => {
             if (document.activeElement !== el) el.focus()
@@ -104,7 +111,7 @@ export function TextBlock({ block, className }: Props) {
                 sel.collapseToEnd()
             }
         })
-    }, [isEditing])
+    }, [isEditing, block.id])
 
     // Direct double-click on this element — safety net
     const handleSelfDoubleClick = useCallback(
@@ -118,7 +125,12 @@ export function TextBlock({ block, className }: Props) {
     )
 
     // Commit text on blur
-    const handleBlur = useCallback(() => {
+    const handleBlur = useCallback((e: React.FocusEvent) => {
+        const related = e.relatedTarget as HTMLElement | null
+        if (related?.closest(`[data-layer-id="${block.id}"]`)) {
+            return
+        }
+
         if (!elRef.current) return
         const newText = elRef.current.textContent ?? ''
         if (newText !== text && selectedPageId && selSectionId) {

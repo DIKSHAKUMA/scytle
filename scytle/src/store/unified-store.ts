@@ -30,6 +30,8 @@ import { getSectionsForPage } from '@/lib/ai/section-templates'
 
 interface BlockLike {
     id: string
+    type?: string
+    content?: Record<string, unknown>
     children?: BlockLike[]
     [key: string]: unknown
 }
@@ -85,6 +87,57 @@ function deepCloneBlock<T extends BlockLike>(block: T): T {
     }
     reassignIds(copy)
     return copy
+}
+
+/** Content-bearing block types whose user edits should be preserved across layout swaps */
+const CONTENT_BLOCK_TYPES = new Set(['heading', 'text', 'button', 'badge'])
+
+/**
+ * Flatten a nested block tree into a list of content-bearing (leaf) blocks
+ * in document order, preserving their type for matching.
+ */
+function flattenContentBlocks(blocks: BlockLike[]): BlockLike[] {
+    const result: BlockLike[] = []
+    for (const b of blocks) {
+        if (CONTENT_BLOCK_TYPES.has(b.type as string)) {
+            result.push(b)
+        }
+        if (b.children) {
+            result.push(...flattenContentBlocks(b.children))
+        }
+    }
+    return result
+}
+
+/**
+ * Carry over user-edited content from old blocks to new blocks.
+ * Matches by block type in document order (first heading → first heading, etc.).
+ * Only copies `content`; structural props/layout stay from the new template.
+ */
+function mergeUserContent(oldBlocks: BlockLike[], newBlocks: BlockLike[]): void {
+    const oldFlat = flattenContentBlocks(oldBlocks)
+    const newFlat = flattenContentBlocks(newBlocks)
+
+    // Group old blocks by type, preserving order
+    const oldByType = new Map<string, BlockLike[]>()
+    for (const b of oldFlat) {
+        const t = b.type as string
+        if (!oldByType.has(t)) oldByType.set(t, [])
+        oldByType.get(t)!.push(b)
+    }
+
+    // Walk new blocks and assign content from matching old blocks (by type, in order)
+    const usedIndexes = new Map<string, number>()
+    for (const nb of newFlat) {
+        const t = nb.type as string
+        const pool = oldByType.get(t)
+        if (!pool) continue
+        const idx = usedIndexes.get(t) ?? 0
+        if (idx < pool.length) {
+            nb.content = { ...pool[idx].content }
+            usedIndexes.set(t, idx + 1)
+        }
+    }
 }
 
 // ============================================
@@ -1793,8 +1846,14 @@ export const useUnifiedStore = create<UnifiedState>()(
                             section.layoutVariant = undefined
                             // V2 layouts don't use V1 controls — clear them
                             section.controls = {}
-                            // Populate blocks from template factory
-                            section.blocks = v2Template.defaultBlocks() as typeof section.blocks
+                            // Populate blocks from template factory,
+                            // but preserve user-edited content from existing blocks
+                            const oldBlocks = section.blocks
+                            const newBlocks = v2Template.defaultBlocks() as typeof section.blocks
+                            if (oldBlocks && oldBlocks.length > 0) {
+                                mergeUserContent(oldBlocks as BlockLike[], newBlocks as BlockLike[])
+                            }
+                            section.blocks = newBlocks
                             state.isDirty = true
                             return
                         }
