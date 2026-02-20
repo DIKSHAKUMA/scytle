@@ -12,10 +12,11 @@
 
 'use client'
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useContext, useLayoutEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useSelectionStore } from '@/store/selection-store'
 import { useUnifiedStore } from '@/store'
+import { SectionIdContext } from '../selection/contexts'
 import type { Block, TextBlockProps, TextBlockContent, TextVariant, TextAlign } from './types'
 
 // ============================================
@@ -79,29 +80,42 @@ export function TextBlock({ block, className }: Props) {
 
     const variantStyle = VARIANT_STYLES[variant] ?? VARIANT_STYLES.body
 
+    const sectionId = useContext(SectionIdContext)
+
     // Selection / editing state
     const isEditing = useSelectionStore((s) => s.isEditing && s.blockId === block.id)
     const stopEditing = useSelectionStore((s) => s.stopEditing)
+    const startEditingSel = useSelectionStore((s) => s.startEditing)
+    const autoEnterAndSelectBlock = useSelectionStore((s) => s.autoEnterAndSelectBlock)
     const selSectionId = useSelectionStore((s) => s.sectionId)
     const updateBlockContent = useUnifiedStore((s) => s.updateBlockContent)
     const selectedPageId = useUnifiedStore((s) => s.selectedPageId)
 
     // Focus the element when entering edit mode
-    // Use requestAnimationFrame to ensure DOM is fully painted after React commit
-    useEffect(() => {
-        if (isEditing && elRef.current) {
-            const el = elRef.current
-            requestAnimationFrame(() => {
-                el.focus()
-                // Place cursor at end
-                const sel = window.getSelection()
-                if (sel) {
-                    sel.selectAllChildren(el)
-                    sel.collapseToEnd()
-                }
-            })
-        }
+    useLayoutEffect(() => {
+        if (!isEditing || !elRef.current) return
+        const el = elRef.current
+        el.focus()
+        requestAnimationFrame(() => {
+            if (document.activeElement !== el) el.focus()
+            const sel = window.getSelection()
+            if (sel) {
+                sel.selectAllChildren(el)
+                sel.collapseToEnd()
+            }
+        })
     }, [isEditing])
+
+    // Direct double-click on this element — safety net
+    const handleSelfDoubleClick = useCallback(
+        (e: React.MouseEvent) => {
+            if (isEditing) return
+            e.stopPropagation()
+            if (sectionId) autoEnterAndSelectBlock(block.id, sectionId)
+            startEditingSel()
+        },
+        [isEditing, sectionId, autoEnterAndSelectBlock, block.id, startEditingSel],
+    )
 
     // Commit text on blur
     const handleBlur = useCallback(() => {
@@ -144,9 +158,11 @@ export function TextBlock({ block, className }: Props) {
                 fontFamily: 'var(--sg-font-body)',
                 fontWeight: 'var(--sg-body-weight)',
                 color: variantStyle.colorVar,
+                ...(isEditing ? { userSelect: 'text', WebkitUserSelect: 'text' } : {}),
             } as React.CSSProperties}
             contentEditable={isEditing}
             suppressContentEditableWarning
+            onDoubleClick={!isEditing ? handleSelfDoubleClick : undefined}
             onBlur={isEditing ? handleBlur : undefined}
             onKeyDown={isEditing ? handleKeyDown : undefined}
             data-layer-id={block.id}

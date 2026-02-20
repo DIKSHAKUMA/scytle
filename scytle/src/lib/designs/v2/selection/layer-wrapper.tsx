@@ -246,6 +246,9 @@ function SortableLayerDiv({ block, children, className }: LayerWrapperProps) {
             onMouseLeave={handleMouseLeave}
             // Sortable attributes (role, tabIndex, aria-*)
             {...attributes}
+            // When editing, override tabIndex to prevent focus competition
+            // and remove button role so contentEditable children work correctly
+            {...(isBlockEditing ? { tabIndex: -1, role: undefined } : {})}
             // Drag listeners — disabled during text editing or when sorting is off
             {...(isBlockEditing || sortingDisabled ? {} : listeners)}
             data-layer-id={block.id}
