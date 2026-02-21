@@ -20,6 +20,7 @@
 
 import { useMemo } from 'react'
 import { useStyleGuideStore } from '@/store/style-guide-store'
+import { computeSchemeOverrideCSS } from './defaults'
 import type { CSSTokenMap } from './index'
 
 // ============================================
@@ -77,7 +78,20 @@ export function SectionTokenProvider({
     children,
     className,
 }: SectionTokenProviderProps) {
-    const schemeCSS = useStyleGuideStore((s) => s.getSectionSchemeCSS(sectionId))
+    // Select raw state directly — never call store getters inside selectors
+    // (calling get() inside a selector causes "getSnapshot should be cached" infinite loop)
+    const scheme = useStyleGuideStore(
+        (s) => s.data.sectionSchemeOverrides[sectionId] ?? null,
+    )
+    const concept = useStyleGuideStore((s) => {
+        const d = s.data
+        return d.concepts.find((c) => c.id === d.activeConceptId) ?? d.concepts[0]
+    })
+
+    const schemeCSS = useMemo(() => {
+        if (!scheme) return null
+        return computeSchemeOverrideCSS(scheme, concept)
+    }, [scheme, concept])
 
     // No override → render children directly (no extra div)
     if (!schemeCSS) {

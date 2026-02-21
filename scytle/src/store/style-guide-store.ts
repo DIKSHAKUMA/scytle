@@ -190,20 +190,65 @@ const RADIUS_PRESETS: RadiusPreset[] = [0, 4, 8, 12, 9999]
 const SCHEMES: ColorScheme[] = ['light', 'dark', 'accent']
 
 // ============================================
+// Persistence — localStorage key per project
+// ============================================
+
+const STORAGE_KEY_PREFIX = 'scytle-sg-'
+
+/** Get project-scoped localStorage key */
+function getStorageKey(): string {
+    // Try to read the project ID from the URL (/project/[id])
+    if (typeof window !== 'undefined') {
+        const match = window.location.pathname.match(/\/project\/([^/?]+)/)
+        if (match) return `${STORAGE_KEY_PREFIX}${match[1]}`
+    }
+    return `${STORAGE_KEY_PREFIX}default`
+}
+
+/** Attempt to load persisted data from localStorage */
+function loadPersistedData(): StyleGuideData | null {
+    if (typeof window === 'undefined') return null
+    try {
+        const raw = localStorage.getItem(getStorageKey())
+        if (!raw) return null
+        return JSON.parse(raw) as StyleGuideData
+    } catch {
+        return null
+    }
+}
+
+/** Debounced save to localStorage */
+let _saveTimer: ReturnType<typeof setTimeout> | null = null
+function persistData(data: StyleGuideData) {
+    if (typeof window === 'undefined') return
+    if (_saveTimer) clearTimeout(_saveTimer)
+    _saveTimer = setTimeout(() => {
+        try {
+            localStorage.setItem(getStorageKey(), JSON.stringify(data))
+            console.log('💾 Style guide persisted to localStorage')
+        } catch {
+            // Storage full or not available — ignore
+        }
+    }, 500)
+}
+
+// ============================================
 // Store
 // ============================================
 
 export const useStyleGuideStore = create<StyleGuideState>()(
     subscribeWithSelector(
         immer((set, get) => {
-            const defaultData = createDefaultStyleGuideData()
+            // Hydrate from localStorage if available, else use defaults
+            const persisted = loadPersistedData()
+            const initialData = persisted ?? createDefaultStyleGuideData()
 
             return {
                 // ---- Core Data ----
-                data: defaultData,
+                data: initialData,
                 activePaletteId: null,
                 activeFontPairId: null,
-                computedCSS: recompute(defaultData),
+                computedCSS: recompute(initialData),
 
                 // ============================================
                 // Data Lifecycle
@@ -223,7 +268,7 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                 }),
 
                 exportData: () => {
-                    return structuredClone(get().data)
+                    return JSON.parse(JSON.stringify(get().data)) as StyleGuideData
                 },
 
                 // ============================================
@@ -248,8 +293,9 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     set((state) => {
                         const active = state.data.concepts.find(c => c.id === state.data.activeConceptId)
                         if (!active) return
+                        // JSON round-trip to escape immer Proxy (structuredClone fails on drafts)
                         const clone: Concept = {
-                            ...structuredClone(active),
+                            ...JSON.parse(JSON.stringify(active)),
                             id: newId,
                             name: name ?? `Concept ${state.data.concepts.length + 1}`,
                             createdAt: new Date().toISOString(),
@@ -266,8 +312,9 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     set((state) => {
                         const source = state.data.concepts.find(c => c.id === conceptId)
                         if (!source) return
+                        // JSON round-trip to escape immer Proxy (structuredClone fails on drafts)
                         const clone: Concept = {
-                            ...structuredClone(source),
+                            ...JSON.parse(JSON.stringify(source)),
                             id: newId,
                             name: `${source.name} (Copy)`,
                             createdAt: new Date().toISOString(),
@@ -559,3 +606,16 @@ export const useStyleGuideStore = create<StyleGuideState>()(
         })
     )
 )
+
+// ============================================
+// Auto-persist: subscribe to data changes → localStorage
+// ============================================
+
+if (typeof window !== 'undefined') {
+    useStyleGuideStore.subscribe(
+        (state) => state.data,
+        (data) => {
+            persistData(data)
+        }
+    )
+}

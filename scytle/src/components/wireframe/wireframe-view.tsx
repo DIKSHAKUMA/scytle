@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Plus, LayoutGrid } from 'lucide-react'
+import { Plus, LayoutGrid, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUnifiedStore } from '@/store'
 import { useSelectionStore } from '@/store/selection-store'
@@ -496,6 +496,27 @@ export function WireframeView({ projectId, className }: WireframeViewProps) {
                     title="Add section"
                 >
                     <Plus className="h-5 w-5" />
+                </button>
+
+                {/* Style Guide Button */}
+                <button
+                    onClick={() => {
+                        if (activePanelView === 'style-guide') {
+                            setActivePanelView(null)
+                        } else {
+                            if (isAddSidebarOpen) closeAddSidebar()
+                            setActivePanelView('style-guide')
+                        }
+                    }}
+                    className={cn(
+                        'w-10 h-10 flex items-center justify-center transition-colors',
+                        activePanelView === 'style-guide'
+                            ? 'bg-gray-100 text-gray-900'
+                            : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    )}
+                    title="Style Guide"
+                >
+                    <Palette className="h-5 w-5" />
                 </button>
             </div>
 

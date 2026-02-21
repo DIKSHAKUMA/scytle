@@ -6,6 +6,7 @@ import { useUnifiedStore } from '@/store'
 import { PagePanel } from './panels/page-panel'
 import { SectionPanel } from './panels/section-panel'
 import { ComponentLibraryPanel } from './panels/component-library-panel'
+import { StyleGuidePanel } from './panels/style-guide-panel'
 
 interface WireframeSidebarProps {
     className?: string
@@ -48,7 +49,7 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
     }, [selectedPage, selectedSectionId])
 
     // Determine if sidebar should be visible
-    const isVisible = activePanelView === 'page' || activePanelView === 'section' || activePanelView === 'library'
+    const isVisible = activePanelView === 'page' || activePanelView === 'section' || activePanelView === 'library' || activePanelView === 'style-guide'
 
     // Handle close
     const handleClose = () => {
@@ -106,6 +107,14 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
                 <ComponentLibraryPanel
                     section={selectedSection}
                     onBackAction={handleBackFromLibrary}
+                    className="flex-1"
+                />
+            )}
+
+            {/* Style Guide Panel */}
+            {activePanelView === 'style-guide' && (
+                <StyleGuidePanel
+                    onCloseAction={handleClose}
                     className="flex-1"
                 />
             )}

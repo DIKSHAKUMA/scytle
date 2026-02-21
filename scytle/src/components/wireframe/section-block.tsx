@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { WireframeSection, ViewportDevice } from '@/types'
 import { PlaceholderRenderer } from './placeholder-renderer'
+import { SectionSchemeOverlay } from './section-scheme-overlay'
 
 interface SectionBlockProps {
     section: WireframeSection
@@ -217,6 +218,12 @@ export const SectionBlock = forwardRef<HTMLDivElement, SectionBlockProps>(functi
                         </button>
                     </div>
                 </div>
+
+                {/* Section Scheme Overlay — color scheme chips on hover */}
+                <SectionSchemeOverlay
+                    sectionId={section.id}
+                    visible={isHovered || isSelected}
+                />
 
                 {/* Placeholder Content */}
                 <PlaceholderRenderer

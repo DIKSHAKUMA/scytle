@@ -1,285 +1,119 @@
-# V2 Layout Rebuild Plan
+# Style Guide Editor — Feature Summary
 
-Rebuild layout categories from scratch. Foundation-first approach: prove the pattern with 1 category (2 variants), validate end-to-end, then scale one category at a time from Figma designs.
-
-## Strategy
-
-> **Build once, prove everything, then scale.** The first V2 attempt (hero + gallery, 54 variants) failed because the pattern was wrong (flat blocks, hardcoded divs, responsive in block props). This time we start with 2 hero variants, validate the full pipeline (blocks → responsive → tokens → selection → drag → registry → add-section → controls), and only scale after confirming foundation is solid.
-
-## Decisions
-
-| Decision | Choice |
-|---|---|
-| Approach | Clean slate — delete V1 + current V2 layouts, rebuild from scratch |
-| Foundation | Hero × 2 variants first, validate everything end-to-end |
-| Scale | One category at a time, gated on user approval |
-| Responsive | Container queries (`@container`) with desktop-first (`@max-sm:`, `@max-lg:`) |
-| Design source | Figma designs — ask for URL before building each category |
-
-## Key Architecture Rules
-
-### 1. Section-Owned Responsive
-**Responsive classes belong on the `<section>` wrapper in the layout component**, NOT scattered inside `buildXBlocks()` factory functions as `className`/`layoutClassName` props on nested frame blocks. The block tree is purely structural; the section component owns responsive behavior.
-
-### 2. Nested Frame Block Trees
-Every structural `<div>` MUST be a `frame` block with `children: Block[]`. The `buildXBlocks()` factory returns a nested tree. The layout component just walks it via `<RenderBlock>`. NO hardcoded wrapper divs. This makes every container hoverable, selectable, draggable on canvas.
-
-### 3. Token-Driven Styling
-All colors, fonts, radius values come from `--sg-*` CSS custom properties. Zero hardcoded Tailwind color/font classes in layout code.
+> Summary of the Style Guide Editor feature for Scytle V2 wireframes.  
+> Deep implementation details live in `WIREFRAME-V2-ARCHITECTURE.md` §5.  
+> We'll do focused deep-dives per panel when we build them.
 
 ---
 
-## Phase 0 — Archive & Clean
+## What It Is
 
-### 0A. Git Tag + Commit
-```bash
-git tag v1-archive
-git add -A && git commit -m "chore: archive before V1/V2 layout cleanup"
-```
-
-### 0B. Delete V1 Designs (~191 files, 22 categories)
-Delete all category directories under `src/lib/designs/`:
-- 15 marketing: hero, cta, navbar, footer, features, testimonials, pricing, faq, contact, content, gallery, team, blog, stats, logos
-- 6 SaaS: saas-hero, saas-features, saas-pricing, saas-testimonials, saas-cta, saas-faq
-- 1 auth: auth
-
-Delete V1 root files:
-- `src/lib/designs/registry.ts` (394 lines)
-- `src/lib/designs/types.ts`
-- Gut `src/lib/designs/index.ts` to re-export from `./v2/`
-
-### 0C. Delete V2 Hero + Gallery Layouts (12 files)
-- `src/lib/designs/v2/layouts/hero/` (6 files)
-- `src/lib/designs/v2/layouts/gallery/` (6 files)
-
-### 0D. Update 8 Consumer Files (remove V1 imports)
-| File | Action |
-|---|---|
-| `src/store/unified-store.ts` | Remove `getDesignById`, `getFamilyById`, `getPresetById` imports |
-| `src/components/wireframe/placeholder-renderer.tsx` | Remove V1 fallback strategies, keep V2-only resolution |
-| `src/components/wireframe/panels/component-library-panel.tsx` | Remove V1 family/preset rendering, clear `V2_READY_CATEGORIES` |
-| `src/components/wireframe/add-section-sidebar.tsx` | Remove V1 preset references |
-| `src/components/wireframe/section-picker.tsx` | Remove V1 references |
-| `src/components/wireframe/panels/section-controls.tsx` | Remove V1 `getDesignById`/`getFamilyById` |
-| `src/components/wireframe/panels/section-panel.tsx` | Remove V1 references |
-| `src/components/wireframe/wireframe-thumbnail.tsx` | Remove V1 `getDesignById` |
-
-### 0E. Clear Registries
-- Empty `LAYOUT_REGISTRY` in `src/lib/designs/v2/layouts/index.ts`
-- Clear `V2_READY_CATEGORIES` in `component-library-panel.tsx`
-- Empty control defs in `src/lib/designs/v2/layouts/controls.ts`
-
-### 0F. Verify Build
-```bash
-npm run build   # Must pass clean with zero errors
-```
+A left-sidebar panel that controls **global design tokens** for the entire wireframe. Changing any token instantly repaints all sections — no per-component updates needed. Has 4 sub-panels: **Colors**, **Typography**, **UI Styling**, **Concepts**.
 
 ---
 
-## Phase 1 — Foundation: Hero × 2 Variants
+## What's Already Built ✅
 
-Build 2 hero variants that prove the entire architecture end-to-end. These are chosen to cover the two core layout patterns (single-column centered & two-column split):
+### Token System (`src/lib/designs/v2/tokens/`)
+- **44 CSS custom properties** (`--sg-*`) covering colors, typography, borders, buttons, cards, scheme
+- `TokenProvider` wrapper applies computed CSS to the canvas
+- `SectionTokenProvider` handles per-section color scheme overrides
+- All blocks already read tokens via `var(--sg-*)` — zero hardcoded values
 
-| ID | Layout | Why this variant |
-|---|---|---|
-| `hero-1` (center + buttons) | Centered heading + subtext + button group | Simplest layout — validates vertical stack, tokens, responsive stacking |
-| `hero-2` (split + image) | 50/50 text-left + image-right | Validates 2-column → stacked responsive, frame nesting, cross-column interaction |
+### Curated Libraries
+- **~60 color palettes** across 8 categories (Warm, Cool, Earth, Vibrant, Pastel, Monochrome, Tech, Nature) in `palettes.ts`
+- **~80 font pairs** across 5 categories (Modern, Classic, Creative, Clean, Bold) in `font-pairs.ts`
 
-### 1A. File Structure
-```
-src/lib/designs/v2/layouts/hero/
-├── types.ts              — HeroContent, DEFAULT_CONTENT
-├── presets.ts            — 2 presets with nested frame block trees
-├── hero-section.tsx      — Core renderer: <section @container> + blocks.map → <RenderBlock>
-├── hero-layouts.tsx      — Named wrapper components via factory
-├── hero-thumbnails.tsx   — Placeholder thumbnails (Figma PNGs added later)
-└── index.ts              — Barrel exports + LAYOUT_TEMPLATES + TEMPLATES_MAP
-```
+### Style Guide Store (`src/store/style-guide-store.ts` — 562 lines)
+Every action is fully implemented with Zustand + immer:
 
-### 1B. Wire Into Registry
-- Add hero control def to `controls.ts`
-- Register 2 templates in `LAYOUT_REGISTRY`
-- Add `'hero'` to `V2_READY_CATEGORIES`
-- Update `PlaceholderRenderer` to resolve `hero-1`, `hero-2`
+| Group | Actions |
+|-------|---------|
+| **Lifecycle** | `loadData`, `resetToDefaults`, `exportData` |
+| **Concepts** | `getActiveConcept`, `switchConcept`, `createConcept`, `duplicateConcept`, `deleteConcept`, `renameConcept` |
+| **Colors** | `toggleMode`, `setMode`, `applyPalette`, `shuffleColors`, `updateAccent`, `addAccent`, `removeAccent`, `setMainAccent` |
+| **Typography** | `applyFontPair`, `shuffleTypography`, `setHeadingFont`, `setBodyFont`, `setHeadingWeight`, `setBodyWeight`, `setSizeScale`, `setLetterSpacingStyle` |
+| **UI Styling** | `setButtonStyle`, `setButtonRadius`, `setCardStyle`, `setCardRadius`, `setImageRadius`, `shuffleUI` |
+| **Section Schemes** | `setSectionScheme`, `getSectionScheme`, `getSectionSchemeCSS`, `shuffleSectionScheme`, `clearAllSectionSchemes` |
 
-### 1C. Foundation Validation Checklist
-
-Every item MUST pass before moving to Phase 2:
-
-**Rendering**
-- [ ] `hero-1` renders pixel-perfect at 1280px (desktop)
-- [ ] `hero-2` renders pixel-perfect at 1280px (desktop)
-- [ ] Both collapse correctly at 768px (tablet) and 375px (mobile)
-- [ ] All text/colors/fonts come from `--sg-*` tokens (zero hardcoded values)
-- [ ] `@container` queries fire on section wrapper, not media queries
-
-**Block Tree**
-- [ ] `buildBlocks()` returns nested frame tree (not flat list)
-- [ ] No hardcoded wrapper `<div>` in section component JSX
-- [ ] Every container is a `frame` block visible to selection system
-
-**Selection & Interaction**
-- [ ] Hover outlines on every block at every nesting level
-- [ ] Click selects block, Enter enters frame, Escape exits
-- [ ] Drag-drop reorders blocks within a frame
-- [ ] Cross-frame drag works (move block between content column and image column)
-
-**Pipeline**
-- [ ] Add Section sidebar shows hero category with 2 variants
-- [ ] Clicking a variant inserts section with correct `defaultBlocks` tree
-- [ ] Control panel switches between `hero-1` ↔ `hero-2`
-- [ ] `npm run build` passes clean
-
-### 1D. User Gate
-
-> **STOP HERE.** Review the 2 hero variants in the browser. Test responsive, selection, drag-drop. Confirm "foundation is solid" before proceeding to Phase 2.
+### Token Types (`src/lib/designs/v2/tokens/index.ts`)
+- `ColorTokens` — mode, backgrounds, text, borders, neutrals, accents
+- `TypographyTokens` — heading/body font, weights, sizeScale, letterSpacingStyle
+- `UITokens` — buttonStyle, buttonRadius, cardStyle, cardRadius, imageRadius
+- `Concept` — complete snapshot (colors + typography + UI)
+- `StyleGuideData` — activeConceptId + concepts[] + sectionSchemeOverrides
+- `ColorScheme` — `'light' | 'dark' | 'accent'` (per-section)
 
 ---
 
-## Phase 2 — Scale: One Category at a Time
+## What Needs to Be Built ❌
 
-Only after Phase 1 gate passes. Each category follows the same proven pattern. Figma designs drive exact layout specs.
+**Zero UI panel components exist.** The store is 100% done — we just need the panels that call it.
 
-### Workflow Per Category
-1. **Ask** for Figma link (desktop + mobile frames)
-2. **Extract** design specs using Figma MCP (`get_design_context` / `get_screenshot`)
-3. **Build** category directory with standard 6-file structure
-4. **Wire** registry + controls + `V2_READY_CATEGORIES`
-5. **Download** thumbnails from Figma (desktop-only PNGs)
-6. **Verify** `npm run build` passes clean
-7. **User reviews** → confirm or iterate → next category
+### Panel 1: Colors (Step 6 — ~2-3 sessions)
+- Light/Dark mode toggle
+- Shuffle button (random palette from curated library)
+- Neutral swatch strip (auto-derived from neutralBase)
+- Accent color cards (name, hex, shade slider, main badge)
+- Add/remove accent buttons
+- Per-section scheme override bar (light/dark/accent per section)
 
-### Categories & Planned Variants
+### Panel 2: Typography (Step 7 — ~1-2 sessions)
+- Size scale selector (Small / Regular / Large)
+- Heading weight selector
+- Letter spacing style selector (default / tight / wide)
+- Shuffle button (random font pair)
+- Heading font preview + picker
+- Body font preview + picker
+- **Google Fonts dynamic loading** (`loadGoogleFonts()` exists in font-pairs.ts but no `<link>` injection yet)
+- Font browser overlay (search, browse, liked fonts — stretch goal)
 
-> Variant counts and layouts below are starting points. Final variants per category will be determined from the Figma designs when we get there. Ask for Figma URL before building each.
+### Panel 3: UI Styling (Step 8 — ~1-2 sessions)
+- **Buttons & Forms sub-panel**
+  - Corner radius presets (sharp → slight → medium → large → pill)
+  - Style selector (solid / outline / ghost / brick / gradient) with live preview
+  - Primary + secondary button previews
+- **Cards & Images sub-panel**
+  - Corner radius presets
+  - Style selector (default / outlined / flat) with live preview
+- Shuffle button (random style + radius combo)
 
-#### Hero (expand from Phase 1's 2 → 3-5 total)
-| ID | Layout | Description |
-|---|---|---|
-| `hero-1` | Center heading + subtext + buttons | ✅ Built in Phase 1 |
-| `hero-2` | 50/50 text-left + image-right | ✅ Built in Phase 1 |
-| `hero-3` | Left-aligned heading + buttons | Classic SaaS hero |
-| `hero-4` | Center text over background image | Bold visual impact |
-| `hero-5` | Left text + right form/signup | Lead generation |
+### Panel 4: Concepts (Step 9 — ~1 session)
+- Concept switcher dropdown at top of style guide panel
+- Create new concept (clones active)
+- Duplicate / delete / rename
+- Same wireframe → different visual treatment per concept
+- All concepts exported when doing Figma export (future)
 
-#### Navbar (3 variants)
-| ID | Layout | Description |
-|---|---|---|
-| `navbar-1` | Logo left / nav links center / CTA right | Most common pattern |
-| `navbar-2` | Logo left / nav links right / 2 CTAs | SaaS dashboard-style |
-| `navbar-3` | Logo center / links split left+right | Brand-focused |
-
-#### Footer (3 variants)
-| ID | Layout | Description |
-|---|---|---|
-| `footer-1` | 4-column links + bottom bar (logo + copyright + socials) | Standard marketing |
-| `footer-2` | Single row: logo + links + socials | Minimal/startup |
-| `footer-3` | Big CTA section on top + 4-column links below | Conversion-focused |
-
-#### Features (3-4 variants)
-| ID | Layout | Description |
-|---|---|---|
-| `features-1` | Section heading + 3 icon-card columns | Classic feature grid |
-| `features-2` | Alternating image-left/text-right rows | Storytelling / zigzag |
-| `features-3` | Left heading + 2×2 card grid on right | Dashboard-style |
-| `features-4` | Large heading + 4-column icon+text list | Dense feature list |
-
-#### CTA (3 variants)
-| ID | Layout | Description |
-|---|---|---|
-| `cta-1` | Center heading + subtext + 2 buttons | Simple conversion block |
-| `cta-2` | Left text + right buttons | Directional flow |
-| `cta-3` | Full-width banner with inline email + submit | Newsletter/signup |
-
-#### Testimonials (3 variants)
-| ID | Layout | Description |
-|---|---|---|
-| `testimonials-1` | 3 testimonial cards in a row | Social proof grid |
-| `testimonials-2` | Single large quote with avatar + attribution | Featured testimonial |
-| `testimonials-3` | Left big quote + right stacked smaller cards | Hierarchical proof |
-
-### Control Definitions (built per category as we go)
-- **Hero**: layout (left/center/split) × media (none/image/bg-image) × action (buttons/form)
-- **Navbar**: alignment (standard/right/center)
-- **Footer**: style (columns/simple/cta)
-- **Features**: layout (grid/zigzag/2x2/list)
-- **CTA**: layout (centered/split/banner)
-- **Testimonials**: layout (3col/single/split)
-
-> Final control axes will be determined from actual Figma designs, not guessed up front.
+### Integration Work
+- **Panel host**: Style guide panel inside left sidebar (tab or toggle)
+- **Google Fonts `<link>` injection**: Dynamic loading when font pair changes
+- **Persistence**: Wire `exportData()` → Appwrite `STYLE_GUIDES` collection on autosave
+- **Keyboard shortcuts**: `C` for shuffle colors, `T` for shuffle typography (stretch)
 
 ---
 
-## Phase 3 — Polish & QA
+## Build Order
 
-After all categories are built:
+| Order | Panel | Store Ready? | Notes |
+|-------|-------|:---:|-------|
+| 1 | **Colors** | ✅ | Biggest visual impact — dark mode toggle repaints everything |
+| 2 | **Typography** | ✅ | Needs Google Fonts loading mechanism |
+| 3 | **UI Styling** | ✅ | Buttons + Cards, relatively straightforward |
+| 4 | **Concepts** | ✅ | Lightweight — just CRUD UI + switcher dropdown |
 
-### 3A. Responsive QA
-Test every variant at:
-- **Desktop**: 1280px (full layout)
-- **Tablet**: 768px (intermediate collapse)
-- **Mobile**: 375px (fully stacked)
-
-### 3B. Interaction QA
-- [ ] Hover highlights correct block at each nesting level
-- [ ] Click selects block, Enter enters frame, Escape exits
-- [ ] Drag-drop reorders blocks within a frame
-- [ ] Cross-section drag moves blocks between sections
-- [ ] Copy/cut/paste works with visual flash feedback
-- [ ] Undo/redo preserves block tree integrity
-
-### 3C. Build Verification
-```bash
-npm run build   # Must pass clean with zero errors
-npm run lint     # No new lint warnings
-```
+> **Strategy**: Build each panel → test with hero layout (hero-44 / hero-57) → confirm tokens flow correctly → move to next panel. Scale layout categories *after* style guide is fully working.
 
 ---
 
-## File Structure Per Category (Reference)
+## Key Files Reference
 
-```
-src/lib/designs/v2/layouts/{category}/
-├── types.ts              — Enums, content types, DEFAULT_CONTENT
-├── presets.ts            — One config per variant (ALL_PRESETS array)
-│                           Each preset's defaultBlocks = nested frame block tree
-├── {cat}-section.tsx     — Core renderer: <section @container> + blocks.map(RenderBlock)
-│                           Responsive classes HERE, not in block props
-│                           NO hardcoded wrapper <div>s
-├── {cat}-layouts.tsx     — createComponent() factory → named exports
-├── {cat}-thumbnails.tsx  — <img> from /thumbnails/{cat}/ + fallback
-└── index.ts              — Barrel exports + LAYOUT_TEMPLATES + TEMPLATES_MAP
-
-public/thumbnails/{category}/
-├── {cat}-1.png           — Desktop-only Figma screenshot (scale=2)
-├── {cat}-2.png
-└── ...
-```
-
----
-
-## What We're Keeping (Untouched)
-
-| System | Files | Notes |
-|---|---|---|
-| V2 Blocks | 21 files in `src/lib/designs/v2/blocks/` | 18 block types + RenderBlock + types.ts + frame-block.tsx |
-| V2 Selection | 6 files in `src/lib/designs/v2/selection/` | LayerWrapper (Sortable/Plain), SectionWrapper, keyboard-handler, contexts |
-| V2 Tokens | 5 files in `src/lib/designs/v2/tokens/` | CSS variables, palettes, font-pairs, TokenProvider, SectionTokenProvider |
-| Selection Store | `src/store/selection-store.ts` (251 lines) | 4-state machine: idle→section-selected→entered→block-selected |
-| Layout Types | `src/lib/designs/v2/layouts/types.ts` | LayoutCategory, LayoutTemplate, LayoutProps interfaces |
-
----
-
-## Execution Order
-
-```
-Phase 0 — Archive, delete V1 + old V2 layouts, clean imports, verify build
-    ↓
-Phase 1 — Foundation: build hero × 2 variants, wire full pipeline, validate checklist
-    ↓
-  ⛔ USER GATE — review & confirm foundation is solid
-    ↓
-Phase 2 — Scale: add remaining hero variants + 5 more categories (one at a time, from Figma)
-    ↓
-Phase 3 — Polish: responsive QA + interaction QA across all variants
-```
+| File | What | LOC |
+|------|------|-----|
+| `src/store/style-guide-store.ts` | Zustand store (all actions) | 562 |
+| `src/lib/designs/v2/tokens/index.ts` | Type definitions | 256 |
+| `src/lib/designs/v2/tokens/defaults.ts` | Default values + `computeTokenCSS()` | 303 |
+| `src/lib/designs/v2/tokens/palettes.ts` | ~60 curated color palettes | 658 |
+| `src/lib/designs/v2/tokens/font-pairs.ts` | ~80 curated font pairs + `loadGoogleFonts()` | 645 |
+| `src/lib/designs/v2/tokens/provider.tsx` | `TokenProvider` + `SectionTokenProvider` | ~140 |
+| `docs/WIREFRAME-V2-ARCHITECTURE.md` §5 | Full spec (panel layouts, token tables, wireframes) | — |

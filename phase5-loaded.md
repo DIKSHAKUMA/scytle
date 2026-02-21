@@ -1,0 +1,500 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e15]:
+    - banner [ref=e16]:
+      - generic [ref=e17]:
+        - link "Scytle" [ref=e18] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e20]
+          - generic [ref=e22]: Scytle
+        - generic [ref=e23]:
+          - link "New" [ref=e24] [cursor=pointer]:
+            - /url: /dashboard/new
+            - button "New" [ref=e25]:
+              - img [ref=e26]
+              - generic [ref=e27]: New
+          - button "DK" [ref=e28]:
+            - generic [ref=e30]: DK
+    - main [ref=e31]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - generic [ref=e35]:
+            - heading "Page" [level=2] [ref=e36]
+            - button [ref=e37] [cursor=pointer]:
+              - img
+          - paragraph [ref=e39]: Select a node to edit
+        - generic [ref=e40]:
+          - generic [ref=e41]:
+            - heading "Add" [level=2] [ref=e42]
+            - button [ref=e43] [cursor=pointer]:
+              - img
+          - generic [ref=e45]:
+            - img [ref=e46]
+            - textbox "Search" [ref=e49]
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - paragraph [ref=e55]: Global sections
+              - button "Navbar 0 instances" [ref=e56]:
+                - img [ref=e58]
+                - generic [ref=e61]:
+                  - paragraph [ref=e62]: Navbar
+                  - paragraph [ref=e63]: 0 instances
+                - img [ref=e64]
+              - button "Footer 0 instances" [ref=e65]:
+                - img [ref=e67]
+                - generic [ref=e70]:
+                  - paragraph [ref=e71]: Footer
+                  - paragraph [ref=e72]: 0 instances
+                - img [ref=e73]
+            - generic [ref=e74]:
+              - paragraph [ref=e75]: Saved
+              - button "Page Templates 0 saved" [ref=e76]:
+                - generic [ref=e79]:
+                  - paragraph [ref=e80]: Page Templates
+                  - paragraph [ref=e81]: 0 saved
+                - img [ref=e82]
+            - generic [ref=e84]:
+              - paragraph [ref=e85]: Categories
+              - button "Blank Section" [ref=e86]:
+                - paragraph [ref=e92]: Blank Section
+                - img [ref=e93]
+              - button "About" [ref=e94]:
+                - paragraph [ref=e100]: About
+                - img [ref=e101]
+              - button "Announcement Banner" [ref=e102]:
+                - paragraph [ref=e108]: Announcement Banner
+                - img [ref=e109]
+              - button "Benefits" [ref=e110]:
+                - paragraph [ref=e116]: Benefits
+                - img [ref=e117]
+              - button "Blog List Header" [ref=e118]:
+                - paragraph [ref=e124]: Blog List Header
+                - img [ref=e125]
+              - button "Blog List" [ref=e126]:
+                - paragraph [ref=e132]: Blog List
+                - img [ref=e133]
+              - button "Blog Post Body" [ref=e134]:
+                - paragraph [ref=e140]: Blog Post Body
+                - img [ref=e141]
+              - button "Blog Post Header" [ref=e142]:
+                - paragraph [ref=e148]: Blog Post Header
+                - img [ref=e149]
+              - button "Contact" [ref=e150]:
+                - paragraph [ref=e156]: Contact
+                - img [ref=e157]
+              - button "CTA" [ref=e158]:
+                - paragraph [ref=e164]: CTA
+                - img [ref=e165]
+              - button "Event Item Header" [ref=e166]:
+                - paragraph [ref=e172]: Event Item Header
+                - img [ref=e173]
+              - button "Events List" [ref=e174]:
+                - paragraph [ref=e180]: Events List
+                - img [ref=e181]
+              - button "FAQ" [ref=e182]:
+                - paragraph [ref=e188]: FAQ
+                - img [ref=e189]
+              - button "Feature" [ref=e190]:
+                - paragraph [ref=e196]: Feature
+                - img [ref=e197]
+              - button "Features List" [ref=e198]:
+                - paragraph [ref=e204]: Features List
+                - img [ref=e205]
+              - button "Gallery" [ref=e206]:
+                - paragraph [ref=e212]: Gallery
+                - img [ref=e213]
+              - button "Header" [ref=e214]:
+                - paragraph [ref=e220]: Header
+                - img [ref=e221]
+              - button "Hero" [ref=e222]:
+                - paragraph [ref=e228]: Hero
+                - img [ref=e229]
+              - button "Hero Header" [ref=e230]:
+                - paragraph [ref=e236]: Hero Header
+                - img [ref=e237]
+              - button "How It Works" [ref=e238]:
+                - paragraph [ref=e244]: How It Works
+                - img [ref=e245]
+              - button "Job Listings" [ref=e246]:
+                - paragraph [ref=e252]: Job Listings
+                - img [ref=e253]
+              - button "Logo List" [ref=e254]:
+                - paragraph [ref=e260]: Logo List
+                - img [ref=e261]
+              - button "Portfolio Item Body" [ref=e262]:
+                - paragraph [ref=e268]: Portfolio Item Body
+                - img [ref=e269]
+              - button "Portfolio Item Header" [ref=e270]:
+                - paragraph [ref=e276]: Portfolio Item Header
+                - img [ref=e277]
+              - button "Portfolio List" [ref=e278]:
+                - paragraph [ref=e284]: Portfolio List
+                - img [ref=e285]
+              - button "Pricing" [ref=e286]:
+                - paragraph [ref=e292]: Pricing
+                - img [ref=e293]
+              - button "Services" [ref=e294]:
+                - paragraph [ref=e300]: Services
+                - img [ref=e301]
+              - button "Stats" [ref=e302]:
+                - paragraph [ref=e308]: Stats
+                - img [ref=e309]
+              - button "Team" [ref=e310]:
+                - paragraph [ref=e316]: Team
+                - img [ref=e317]
+              - button "Testimonials" [ref=e318]:
+                - paragraph [ref=e324]: Testimonials
+                - img [ref=e325]
+              - button "Timeline" [ref=e326]:
+                - paragraph [ref=e332]: Timeline
+                - img [ref=e333]
+              - button "Video" [ref=e334]:
+                - paragraph [ref=e340]: Video
+                - img [ref=e341]
+        - generic [ref=e342]:
+          - tablist [ref=e344]:
+            - tab "Sitemap" [ref=e345]:
+              - img
+              - text: Sitemap
+            - tab "Wireframe" [selected] [ref=e346]:
+              - img
+              - text: Wireframe
+            - tab "Design" [ref=e347]:
+              - img
+              - text: Design
+            - tab "Dev Mode" [ref=e348]:
+              - img
+              - text: Dev Mode
+          - generic [ref=e349]:
+            - button "Preview" [ref=e350] [cursor=pointer]
+            - button "Export" [ref=e351] [cursor=pointer]
+        - generic [ref=e354]:
+          - generic [ref=e356]:
+            - generic [ref=e359]:
+              - generic [ref=e360]:
+                - generic [ref=e362]: Home
+                - button "Add viewport" [ref=e363]:
+                  - img [ref=e364]
+              - generic [ref=e365]:
+                - generic [ref=e366]:
+                  - generic [ref=e367]:
+                    - generic [ref=e368]: Desktop
+                    - generic [ref=e369]: ·
+                    - generic [ref=e370]: Primary
+                    - generic [ref=e371]: ·
+                    - generic [ref=e372]: 1280 +
+                    - button "Remove Desktop viewport" [ref=e373]:
+                      - img [ref=e374]
+                  - generic [ref=e384]:
+                    - generic [ref=e385]:
+                      - generic [ref=e388]:
+                        - generic [ref=e389] [cursor=pointer]:
+                          - button [ref=e390]:
+                            - img [ref=e392]
+                          - generic [ref=e399]:
+                            - generic [ref=e401]: Header 44
+                            - button "Delete section" [ref=e403]:
+                              - img [ref=e404]
+                          - generic [ref=e412]:
+                            - button "Tagline Medium length hero headline goes here" [disabled] [ref=e413]:
+                              - generic [ref=e414]:
+                                - button "Tagline" [disabled] [ref=e415]:
+                                  - generic [ref=e416]: Tagline
+                                - button "Medium length hero headline goes here" [disabled] [ref=e417]:
+                                  - heading "Medium length hero headline goes here" [level=1] [ref=e418]
+                                - status [ref=e419]
+                            - button "gi Hello there! Button" [disabled] [ref=e420]:
+                              - generic [ref=e421]:
+                                - button "gi" [disabled] [ref=e422]:
+                                  - paragraph [ref=e423]: gi
+                                - button "Hello there! Button" [disabled] [ref=e424]:
+                                  - generic [ref=e425]:
+                                    - button "Hello there!" [disabled] [ref=e426]:
+                                      - button "Hello there!" [disabled] [ref=e427]
+                                    - button "Button" [disabled] [ref=e428]:
+                                      - button "Button" [disabled] [ref=e429]
+                                    - status [ref=e430]
+                                - status [ref=e431]
+                            - status [ref=e432]
+                        - generic [ref=e433]: Context menu
+                        - button "Section" [ref=e435]:
+                          - img [ref=e436]
+                          - generic [ref=e437]: Section
+                      - generic [ref=e440]:
+                        - generic [ref=e441] [cursor=pointer]:
+                          - button [ref=e442]:
+                            - img [ref=e444]
+                          - generic [ref=e451]:
+                            - generic [ref=e453]: Header 57
+                            - button "Delete section" [ref=e455]:
+                              - img [ref=e456]
+                          - generic [ref=e464]:
+                            - button "Tagline Medium length hero headline goes here" [disabled] [ref=e465]:
+                              - generic [ref=e466]:
+                                - button "Tagline" [disabled] [ref=e467]:
+                                  - generic [ref=e468]: Tagline
+                                - button "Medium length hero headline goes here" [disabled] [ref=e469]:
+                                  - heading "Medium length hero headline goes here" [level=1] [ref=e470]
+                                - status [ref=e471]
+                            - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla. Button Button" [disabled] [ref=e472]:
+                              - generic [ref=e473]:
+                                - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla." [disabled] [ref=e474]:
+                                  - paragraph [ref=e475]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.
+                                - button "Button Button" [disabled] [ref=e476]:
+                                  - generic [ref=e477]:
+                                    - button "Button" [disabled] [ref=e478]:
+                                      - button "Button" [disabled] [ref=e479]
+                                    - button "Button" [disabled] [ref=e480]:
+                                      - button "Button" [disabled] [ref=e481]
+                                    - status [ref=e482]
+                                - status [ref=e483]
+                            - status [ref=e484]
+                        - generic [ref=e485]: Context menu
+                        - button "Section" [ref=e487]:
+                          - img [ref=e488]
+                          - generic [ref=e489]: Section
+                    - status [ref=e490]
+                - generic [ref=e491]:
+                  - generic [ref=e492]:
+                    - generic [ref=e493]: Mobile
+                    - generic [ref=e494]: ·
+                    - generic [ref=e495]: 1 - 799
+                    - button "Remove Mobile viewport" [ref=e496]:
+                      - img [ref=e497]
+                  - generic [ref=e507]:
+                    - generic [ref=e508]:
+                      - generic [ref=e511]:
+                        - generic [ref=e512] [cursor=pointer]:
+                          - button [ref=e513]:
+                            - img [ref=e515]
+                          - generic [ref=e522]:
+                            - generic [ref=e524]: Header 44
+                            - button "Delete section" [ref=e526]:
+                              - img [ref=e527]
+                          - generic [ref=e535]:
+                            - button "Tagline Medium length hero headline goes here" [disabled] [ref=e536]:
+                              - generic [ref=e537]:
+                                - button "Tagline" [disabled] [ref=e538]:
+                                  - generic [ref=e539]: Tagline
+                                - button "Medium length hero headline goes here" [disabled] [ref=e540]:
+                                  - heading "Medium length hero headline goes here" [level=1] [ref=e541]
+                                - status [ref=e542]
+                            - button "gi Hello there! Button" [disabled] [ref=e543]:
+                              - generic [ref=e544]:
+                                - button "gi" [disabled] [ref=e545]:
+                                  - paragraph [ref=e546]: gi
+                                - button "Hello there! Button" [disabled] [ref=e547]:
+                                  - generic [ref=e548]:
+                                    - button "Hello there!" [disabled] [ref=e549]:
+                                      - button "Hello there!" [disabled] [ref=e550]
+                                    - button "Button" [disabled] [ref=e551]:
+                                      - button "Button" [disabled] [ref=e552]
+                                    - status [ref=e553]
+                                - status [ref=e554]
+                            - status [ref=e555]
+                        - generic [ref=e556]: Context menu
+                        - button "Section" [ref=e558]:
+                          - img [ref=e559]
+                          - generic [ref=e560]: Section
+                      - generic [ref=e563]:
+                        - generic [ref=e564] [cursor=pointer]:
+                          - button [ref=e565]:
+                            - img [ref=e567]
+                          - generic [ref=e574]:
+                            - generic [ref=e576]: Header 57
+                            - button "Delete section" [ref=e578]:
+                              - img [ref=e579]
+                          - generic [ref=e587]:
+                            - button "Tagline Medium length hero headline goes here" [disabled] [ref=e588]:
+                              - generic [ref=e589]:
+                                - button "Tagline" [disabled] [ref=e590]:
+                                  - generic [ref=e591]: Tagline
+                                - button "Medium length hero headline goes here" [disabled] [ref=e592]:
+                                  - heading "Medium length hero headline goes here" [level=1] [ref=e593]
+                                - status [ref=e594]
+                            - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla. Button Button" [disabled] [ref=e595]:
+                              - generic [ref=e596]:
+                                - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla." [disabled] [ref=e597]:
+                                  - paragraph [ref=e598]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.
+                                - button "Button Button" [disabled] [ref=e599]:
+                                  - generic [ref=e600]:
+                                    - button "Button" [disabled] [ref=e601]:
+                                      - button "Button" [disabled] [ref=e602]
+                                    - button "Button" [disabled] [ref=e603]:
+                                      - button "Button" [disabled] [ref=e604]
+                                    - status [ref=e605]
+                                - status [ref=e606]
+                            - status [ref=e607]
+                        - generic [ref=e608]: Context menu
+                        - button "Section" [ref=e610]:
+                          - img [ref=e611]
+                          - generic [ref=e612]: Section
+                    - status [ref=e613]
+            - generic [ref=e616]:
+              - generic [ref=e617]:
+                - generic [ref=e619]: About
+                - button "Add viewport" [ref=e620]:
+                  - img [ref=e621]
+              - generic [ref=e622]:
+                - generic [ref=e623]:
+                  - generic [ref=e624]:
+                    - generic [ref=e625]: Desktop
+                    - generic [ref=e626]: ·
+                    - generic [ref=e627]: Primary
+                    - generic [ref=e628]: ·
+                    - generic [ref=e629]: 1280 +
+                    - button "Remove Desktop viewport" [ref=e630]:
+                      - img [ref=e631]
+                  - generic [ref=e641]:
+                    - generic [ref=e645]:
+                      - generic [ref=e646] [cursor=pointer]:
+                        - button [ref=e647]:
+                          - img [ref=e649]
+                        - generic [ref=e656]:
+                          - generic [ref=e658]: Header 44
+                          - button "Delete section" [ref=e660]:
+                            - img [ref=e661]
+                        - generic [ref=e669]:
+                          - button "Tagline Medium length hero headline goes here" [disabled] [ref=e670]:
+                            - generic [ref=e671]:
+                              - button "Tagline" [disabled] [ref=e672]:
+                                - generic [ref=e673]: Tagline
+                              - button "Medium length hero headline goes here" [disabled] [ref=e674]:
+                                - heading "Medium length hero headline goes here" [level=1] [ref=e675]
+                              - status [ref=e676]
+                          - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla. Button Button" [disabled] [ref=e677]:
+                            - generic [ref=e678]:
+                              - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla." [disabled] [ref=e679]:
+                                - paragraph [ref=e680]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.
+                              - button "Button Button" [disabled] [ref=e681]:
+                                - generic [ref=e682]:
+                                  - button "Button" [disabled] [ref=e683]:
+                                    - button "Button" [disabled] [ref=e684]
+                                  - button "Button" [disabled] [ref=e685]:
+                                    - button "Button" [disabled] [ref=e686]
+                                  - status [ref=e687]
+                              - status [ref=e688]
+                          - status [ref=e689]
+                      - generic [ref=e690]: Context menu
+                      - button "Section" [ref=e692]:
+                        - img [ref=e693]
+                        - generic [ref=e694]: Section
+                    - status [ref=e695]
+                - generic [ref=e696]:
+                  - generic [ref=e697]:
+                    - generic [ref=e698]: Mobile
+                    - generic [ref=e699]: ·
+                    - generic [ref=e700]: 1 - 799
+                    - button "Remove Mobile viewport" [ref=e701]:
+                      - img [ref=e702]
+                  - generic [ref=e712]:
+                    - generic [ref=e716]:
+                      - generic [ref=e717] [cursor=pointer]:
+                        - button [ref=e718]:
+                          - img [ref=e720]
+                        - generic [ref=e727]:
+                          - generic [ref=e729]: Header 44
+                          - button "Delete section" [ref=e731]:
+                            - img [ref=e732]
+                        - generic [ref=e740]:
+                          - button "Tagline Medium length hero headline goes here" [disabled] [ref=e741]:
+                            - generic [ref=e742]:
+                              - button "Tagline" [disabled] [ref=e743]:
+                                - generic [ref=e744]: Tagline
+                              - button "Medium length hero headline goes here" [disabled] [ref=e745]:
+                                - heading "Medium length hero headline goes here" [level=1] [ref=e746]
+                              - status [ref=e747]
+                          - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla. Button Button" [disabled] [ref=e748]:
+                            - generic [ref=e749]:
+                              - button "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla." [disabled] [ref=e750]:
+                                - paragraph [ref=e751]: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse varius enim in eros elementum tristique. Duis cursus, mi quis viverra ornare, eros dolor interdum nulla.
+                              - button "Button Button" [disabled] [ref=e752]:
+                                - generic [ref=e753]:
+                                  - button "Button" [disabled] [ref=e754]:
+                                    - button "Button" [disabled] [ref=e755]
+                                  - button "Button" [disabled] [ref=e756]:
+                                    - button "Button" [disabled] [ref=e757]
+                                  - status [ref=e758]
+                              - status [ref=e759]
+                          - status [ref=e760]
+                      - generic [ref=e761]: Context menu
+                      - button "Section" [ref=e763]:
+                        - img [ref=e764]
+                        - generic [ref=e765]: Section
+                    - status [ref=e766]
+            - generic [ref=e769]:
+              - generic [ref=e770]:
+                - generic [ref=e772]: Contact
+                - button "Add viewport" [ref=e773]:
+                  - img [ref=e774]
+              - generic [ref=e775]:
+                - generic [ref=e776]:
+                  - generic [ref=e777]:
+                    - generic [ref=e778]: Desktop
+                    - generic [ref=e779]: ·
+                    - generic [ref=e780]: Primary
+                    - generic [ref=e781]: ·
+                    - generic [ref=e782]: 1280 +
+                    - button "Remove Desktop viewport" [ref=e783]:
+                      - img [ref=e784]
+                  - generic [ref=e796]:
+                    - img [ref=e798]
+                    - paragraph [ref=e799]: Add sections to build your page
+                    - generic [ref=e800]:
+                      - button "Section" [ref=e801] [cursor=pointer]:
+                        - img
+                        - text: Section
+                      - button "Generate" [ref=e802] [cursor=pointer]:
+                        - img
+                        - text: Generate
+                - generic [ref=e803]:
+                  - generic [ref=e804]:
+                    - generic [ref=e805]: Mobile
+                    - generic [ref=e806]: ·
+                    - generic [ref=e807]: 1 - 799
+                    - button "Remove Mobile viewport" [ref=e808]:
+                      - img [ref=e809]
+                  - generic [ref=e821]:
+                    - img [ref=e823]
+                    - paragraph [ref=e824]: Add sections to build your page
+                    - generic [ref=e825]:
+                      - button "Section" [ref=e826] [cursor=pointer]:
+                        - img
+                        - text: Section
+                      - button "Generate" [ref=e827] [cursor=pointer]:
+                        - img
+                        - text: Generate
+          - generic [ref=e828]:
+            - button "Page" [ref=e829]:
+              - img [ref=e830]
+            - button "Add section" [ref=e835]:
+              - img [ref=e836]
+            - button "Style Guide" [ref=e837]:
+              - img [ref=e838]
+          - generic [ref=e844]:
+            - generic [ref=e845]: 21%
+            - generic [ref=e846]: Saved
+        - generic [ref=e848]:
+          - generic [ref=e849]:
+            - button [ref=e850] [cursor=pointer]:
+              - img
+            - button [ref=e851] [cursor=pointer]:
+              - img
+            - button [ref=e852] [cursor=pointer]:
+              - img
+          - generic [ref=e854]:
+            - button [ref=e855] [cursor=pointer]:
+              - img
+            - button "21%" [ref=e856]
+            - button [ref=e857] [cursor=pointer]:
+              - img
+            - button [ref=e858] [cursor=pointer]:
+              - img
+          - generic [ref=e860]:
+            - button [disabled]:
+              - img
+            - button [disabled]:
+              - img
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e10] [cursor=pointer]:
+    - img [ref=e11]
+  - alert [ref=e14]

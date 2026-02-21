@@ -3,6 +3,7 @@
 import { useEffect, useCallback } from 'react'
 import { useUnifiedStore } from '@/store'
 import { useSelectionStore } from '@/store/selection-store'
+import { useStyleGuideStore } from '@/store/style-guide-store'
 import { useGeneration } from './use-generation'
 import { toast } from 'sonner'
 
@@ -98,6 +99,37 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions = {}) 
         // Undo/Redo (above) still run; everything below is section-level and
         // would conflict with V2's block-level handlers (Escape, Delete, etc.)
         if (v2Active) return
+
+        // ── Style Guide shortcuts (C / T / U / Space) ──
+        const sgStore = useStyleGuideStore.getState()
+
+        // C: Shuffle Colors
+        if (e.key === 'c' && !cmdOrCtrl && !e.shiftKey) {
+            e.preventDefault()
+            sgStore.shuffleColors()
+            return
+        }
+
+        // T: Shuffle Typography
+        if (e.key === 't' && !cmdOrCtrl && !e.shiftKey) {
+            e.preventDefault()
+            sgStore.shuffleTypography()
+            return
+        }
+
+        // U: Shuffle UI
+        if (e.key === 'u' && !cmdOrCtrl && !e.shiftKey) {
+            e.preventDefault()
+            sgStore.shuffleUI()
+            return
+        }
+
+        // Space: Shuffle section scheme (requires selected section)
+        if (e.key === ' ' && !cmdOrCtrl && selectedSectionId) {
+            e.preventDefault()
+            sgStore.shuffleSectionScheme(selectedSectionId)
+            return
+        }
 
         // Generate: Cmd/Ctrl + G
         if (cmdOrCtrl && e.key === 'g') {
@@ -229,5 +261,9 @@ export function getKeyboardShortcuts() {
         { keys: [`${cmdSymbol}+G`], description: 'Generate copy' },
         { keys: [`${cmdSymbol}+Z`], description: 'Undo' },
         { keys: [`${cmdSymbol}+Shift+Z`], description: 'Redo' },
+        { keys: ['C'], description: 'Shuffle colors' },
+        { keys: ['T'], description: 'Shuffle typography' },
+        { keys: ['U'], description: 'Shuffle UI' },
+        { keys: ['Space'], description: 'Shuffle section scheme' },
     ]
 }

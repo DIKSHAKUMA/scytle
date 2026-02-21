@@ -182,9 +182,9 @@ export function computeTokenCSS(concept: Concept): CSSTokenMap {
         '--sg-border': colors.border,
         '--sg-border-muted': colors.borderMuted,
 
-        // Buttons — primary uses dark bg in light mode, accent in dark mode
-        '--sg-button-primary-bg': isLight ? colors.textPrimary : accent,
-        '--sg-button-primary-text': isLight ? '#ffffff' : '#ffffff',
+        // Buttons — primary uses accent in both light and dark modes
+        '--sg-button-primary-bg': accent,
+        '--sg-button-primary-text': '#ffffff',
         '--sg-button-secondary-bg': 'transparent',
         '--sg-button-secondary-text': isLight ? '#374151' : '#d1d5db',
         '--sg-button-secondary-border': colors.border,
@@ -292,7 +292,7 @@ export function computeSchemeOverrideCSS(
                 '--sg-border-muted': '#f3f4f6',
                 '--sg-card-bg': '#ffffff',
                 '--sg-card-border': '#e5e7eb',
-                '--sg-button-primary-bg': '#111827',
+                '--sg-button-primary-bg': accent,
                 '--sg-button-primary-text': '#ffffff',
                 '--sg-button-secondary-text': '#374151',
                 '--sg-button-secondary-border': '#d1d5db',

@@ -905,7 +905,7 @@ interface UnifiedState {
     deviceVisibility: DeviceVisibility
     /** Active viewports shown per page (Figma Sites style) */
     activeViewports: ViewportDevice[]
-    activePanelView: 'page' | 'section' | 'library' | null
+    activePanelView: 'page' | 'section' | 'library' | 'style-guide' | null
 
     // Add section sidebar state (wireframe view)
     isAddSidebarOpen: boolean
@@ -1034,7 +1034,7 @@ interface UnifiedState {
     toggleDeviceVisibility: (device: 'desktop' | 'mobile' | 'tablet') => void
     addViewport: (device: ViewportDevice) => void
     removeViewport: (device: ViewportDevice) => void
-    setActivePanelView: (view: 'page' | 'section' | 'library' | null) => void
+    setActivePanelView: (view: 'page' | 'section' | 'library' | 'style-guide' | null) => void
     openAddSidebar: (pageId: string, insertIndex: number) => void
     closeAddSidebar: () => void
     setGhostPreviewLayout: (layout: { type: string; variant?: string; name: string; presetId?: string } | null) => void
