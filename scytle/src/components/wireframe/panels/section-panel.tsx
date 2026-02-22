@@ -11,8 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
 import { useStyleGuideStore } from '@/store/style-guide-store'
-import { getTemplateById } from '@/lib/designs/v2/layouts'
-import { HERO_PRESETS_MAP } from '@/lib/designs/v2/layouts/hero/presets'
+import { getTemplateById, getPresetConfig } from '@/lib/designs/v2/layouts'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
 import type { ColorScheme } from '@/lib/designs/v2/tokens'
@@ -285,7 +284,7 @@ function ImageRow({ sectionId, pageId, componentId }: { sectionId: string; pageI
         return (sec?.designProps as import('@/lib/designs/v2/tokens').SectionDesignProps | undefined)?.assetType
     })
 
-    const presetConfig = componentId ? HERO_PRESETS_MAP[componentId] : undefined
+    const presetConfig = componentId ? getPresetConfig(componentId) : undefined
     const staticImageRole = presetConfig?.imageRole ?? 'none'
     const supportsVideo = presetConfig?.supportsVideo ?? false
 
@@ -337,7 +336,7 @@ function VideoRow({ sectionId, pageId, componentId }: { sectionId: string; pageI
         return (sec?.designProps as import('@/lib/designs/v2/tokens').SectionDesignProps | undefined)?.assetType
     })
 
-    const presetConfig = componentId ? HERO_PRESETS_MAP[componentId] : undefined
+    const presetConfig = componentId ? getPresetConfig(componentId) : undefined
     const staticImageRole = presetConfig?.imageRole ?? 'none'
     const supportsVideo = presetConfig?.supportsVideo ?? false
 

@@ -31,4 +31,5 @@ export type {
 export {
     getControlDef,
     getControlDefForLayout,
+    getControlDefsForCategory,
 } from './v2/layouts'

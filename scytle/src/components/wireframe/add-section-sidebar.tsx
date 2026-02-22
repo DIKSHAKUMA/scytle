@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useUnifiedStore } from '@/store'
 import { WireframeThumbnail } from './wireframe-thumbnail'
-import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
+import { getTemplatesByCategory, getControlDefsForCategory } from '@/lib/designs/v2/layouts'
 import type { LayoutCategory, LayoutControlDef, LayoutTemplate as V2LayoutTemplate } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
 
@@ -148,9 +148,9 @@ function buildCategoriesForContext(context: PageContext): SectionCategory[] {
         const v2Templates = getTemplatesByCategory(catId as LayoutCategory)
         if (v2Templates.length === 0) continue
 
-        const controlDef = getControlDef(catId as LayoutCategory)
-        const layouts: SectionLayout[] = controlDef
-            ? getRepresentativeLayouts(v2Templates, controlDef)
+        const controlDefs = getControlDefsForCategory(catId as LayoutCategory)
+        const layouts: SectionLayout[] = controlDefs.length > 0
+            ? controlDefs.flatMap(def => getRepresentativeLayouts(v2Templates, def))
             : v2Templates.map(t => templateToLayout(t))
 
         if (layouts.length > 0) {

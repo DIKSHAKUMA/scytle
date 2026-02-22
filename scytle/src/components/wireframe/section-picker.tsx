@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
-import { getTemplatesByCategory, getControlDef } from '@/lib/designs/v2/layouts'
+import { getTemplatesByCategory, getControlDefsForCategory } from '@/lib/designs/v2/layouts'
 import type { LayoutCategory } from '@/lib/designs/v2/layouts'
 import type { PageContext, WireframeSection } from '@/types'
 
@@ -93,21 +93,24 @@ export function SectionPicker({
         for (const cat of contextCategories) {
             const v2Templates = getTemplatesByCategory(cat.id as LayoutCategory)
             if (v2Templates.length > 0) {
-                const controlDef = getControlDef(cat.id as LayoutCategory)
-                if (controlDef && controlDef.axes[0]) {
-                    const primaryAxis = controlDef.axes[0]
-                    for (const opt of primaryAxis.options) {
-                        const resolvedId = controlDef.resolve({ [primaryAxis.key]: opt.value })
-                        const tmpl = resolvedId ? v2Templates.find(t => t.id === resolvedId) : undefined
-                        if (tmpl) {
-                            items.push({
-                                id: tmpl.id,
-                                name: tmpl.name,
-                                description: tmpl.description,
-                                categoryId: cat.id,
-                                categoryName: cat.name,
-                                isV2: true,
-                            })
+                const controlDefs = getControlDefsForCategory(cat.id as LayoutCategory)
+                if (controlDefs.length > 0) {
+                    for (const controlDef of controlDefs) {
+                        const primaryAxis = controlDef.axes[0]
+                        if (!primaryAxis) continue
+                        for (const opt of primaryAxis.options) {
+                            const resolvedId = controlDef.resolve({ [primaryAxis.key]: opt.value })
+                            const tmpl = resolvedId ? v2Templates.find(t => t.id === resolvedId) : undefined
+                            if (tmpl) {
+                                items.push({
+                                    id: tmpl.id,
+                                    name: tmpl.name,
+                                    description: tmpl.description,
+                                    categoryId: cat.id,
+                                    categoryName: cat.name,
+                                    isV2: true,
+                                })
+                            }
                         }
                     }
                 } else {

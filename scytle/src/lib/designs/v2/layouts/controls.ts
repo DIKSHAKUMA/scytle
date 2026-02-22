@@ -7,6 +7,8 @@
 
 import type { LayoutCategory } from './types'
 import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero/presets'
+import { CTA_PRESETS_MAP } from './cta/presets'
+import { CTA_B_PRESETS_MAP } from './cta/presets-b'
 
 // ============================================
 // Generic Control Types
@@ -37,6 +39,8 @@ export interface LayoutControlAxis {
 export interface LayoutControlDef {
     /** Which category this control definition is for */
     category: LayoutCategory
+    /** Unique family identifier (e.g. 'hero', 'cta-a', 'cta-b') */
+    familyId: string
     /** The control axes (order = display order) */
     axes: LayoutControlAxis[]
     /** Given axis values, resolve to a layout ID. Returns undefined if no match. */
@@ -51,6 +55,7 @@ export interface LayoutControlDef {
 
 const HERO_CONTROL_DEF: LayoutControlDef = {
     category: 'hero',
+    familyId: 'hero',
     axes: [
         {
             key: 'layout',
@@ -106,26 +111,200 @@ const HERO_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// CTA Controls — Family A (Split layouts)
+// ============================================
+// Side-by-side text + inline image. Styles: normal, card, expand.
+
+const CTA_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'cta',
+    familyId: 'cta-a',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+            condition: (values) => values.assetStyle !== 'expand',
+        },
+        {
+            key: 'assetStyle',
+            label: 'Asset Style',
+            options: [
+                { value: 'default', label: 'Default' },
+                { value: 'expand', label: 'Expand', icon: 'Maximize2' },
+            ],
+            condition: (values) => values.style !== 'card',
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+        {
+            key: 'assetPlacement',
+            label: 'Placement',
+            options: [
+                { value: 'right', label: 'Right', icon: 'ArrowRight' },
+                { value: 'left', label: 'Left', icon: 'ArrowLeft' },
+            ],
+            modeVisibility: 'design',
+        },
+    ],
+    resolve(values) {
+        const element = values.element ?? 'button'
+        const assetStyle = values.assetStyle ?? 'default'
+        const style = values.style ?? 'normal'
+
+        if (assetStyle === 'expand') {
+            return element === 'form' ? 'cta-60' : 'cta-59'
+        }
+        if (style === 'card') {
+            return element === 'form' ? 'cta-40' : 'cta-39'
+        }
+        return element === 'form' ? 'cta-2' : 'cta-1'
+    },
+    extract(layoutId) {
+        const preset = CTA_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        const result: Record<string, string> = {
+            element: preset.element,
+        }
+        if (preset.style === 'expand') {
+            result.assetStyle = 'expand'
+            result.style = 'normal'
+        } else if (preset.style === 'card') {
+            result.style = 'card'
+            result.assetStyle = 'default'
+        } else {
+            result.style = 'normal'
+            result.assetStyle = 'default'
+        }
+        result.assetPlacement = 'right'
+        return result
+    },
+}
+
+// ============================================
+// CTA Controls — Family B (Text-Only / Stacked)
+// ============================================
+// Two text columns, optional background or stacked image below.
+
+const CTA_B_CONTROL_DEF: LayoutControlDef = {
+    category: 'cta',
+    familyId: 'cta-b',
+    axes: [
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+            ],
+        },
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+            condition: (values) => values.asset === 'none',
+        },
+        {
+            key: 'assetStyle',
+            label: 'Asset Style',
+            options: [
+                { value: 'default', label: 'Default' },
+                { value: 'expand', label: 'Expand', icon: 'Maximize2' },
+            ],
+            condition: (values) => values.asset === 'image',
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const asset = values.asset ?? 'none'
+        const element = values.element ?? 'button'
+
+        if (asset === 'none') {
+            const bg = values.background ?? 'none'
+            if (bg === 'video') return element === 'form' ? 'cta-18' : 'cta-17'
+            if (bg === 'image') return element === 'form' ? 'cta-16' : 'cta-15'
+            return element === 'form' ? 'cta-14' : 'cta-13'
+        }
+
+        // asset === 'image'
+        const assetStyle = values.assetStyle ?? 'default'
+        if (assetStyle === 'expand') return element === 'form' ? 'cta-62' : 'cta-61'
+        return element === 'form' ? 'cta-22' : 'cta-21'
+    },
+    extract(layoutId) {
+        const preset = CTA_B_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        const result: Record<string, string> = {
+            element: preset.element,
+        }
+        if (preset.sectionStyle === 'text-only') {
+            result.asset = 'none'
+            result.background = preset.background
+        } else if (preset.sectionStyle === 'stacked') {
+            result.asset = 'image'
+            result.assetStyle = 'default'
+        } else if (preset.sectionStyle === 'expand') {
+            result.asset = 'image'
+            result.assetStyle = 'expand'
+        }
+        return result
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
-/** All registered control definitions, keyed by category */
-const CONTROL_REGISTRY: Partial<Record<LayoutCategory, LayoutControlDef>> = {
-    hero: HERO_CONTROL_DEF,
+/** All registered control definitions, keyed by family ID */
+const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
+    'hero': HERO_CONTROL_DEF,
+    'cta-a': CTA_A_CONTROL_DEF,
+    'cta-b': CTA_B_CONTROL_DEF,
 }
 
-/** Get the control definition for a category (if V2 controls exist) */
+/** Maps each layout category to its family IDs */
+const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
+    hero: ['hero'],
+    cta: ['cta-a', 'cta-b'],
+}
+
+/** Get all control definitions for a category (one per family) */
+export function getControlDefsForCategory(category: LayoutCategory): LayoutControlDef[] {
+    const familyIds = CATEGORY_FAMILIES[category]
+    if (!familyIds) return []
+    return familyIds.map(id => CONTROL_REGISTRY[id]).filter(Boolean)
+}
+
+/** Get the control definition for a category (first family — backward compat) */
 export function getControlDef(category: LayoutCategory): LayoutControlDef | undefined {
-    return CONTROL_REGISTRY[category]
+    const defs = getControlDefsForCategory(category)
+    return defs[0]
 }
 
-/** Check if a layout ID belongs to a V2 category with controls */
+/** Find the control def that owns a specific layout ID */
 export function getControlDefForLayout(layoutId: string): LayoutControlDef | undefined {
     for (const def of Object.values(CONTROL_REGISTRY)) {
-        if (def) {
-            const extracted = def.extract(layoutId)
-            if (Object.keys(extracted).length > 0) return def
-        }
+        const extracted = def.extract(layoutId)
+        if (Object.keys(extracted).length > 0) return def
     }
     return undefined
 }

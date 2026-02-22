@@ -10,13 +10,14 @@ import type { LayoutTemplate, LayoutCategory, LayoutRegistry } from './types'
 
 // ── Category imports ────────────────────────────────────────────
 import { LAYOUT_TEMPLATES as HERO_TEMPLATES } from './hero'
+import { LAYOUT_TEMPLATES as CTA_TEMPLATES } from './cta'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
 
 // Re-export controls
 export type { LayoutControlAxis, LayoutControlOption, LayoutControlDef } from './controls'
-export { getControlDef, getControlDefForLayout } from './controls'
+export { getControlDef, getControlDefForLayout, getControlDefsForCategory } from './controls'
 
 // ============================================
 // Global Layout Registry
@@ -25,6 +26,7 @@ export { getControlDef, getControlDefForLayout } from './controls'
 /** All registered layout templates, grouped by category */
 export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     hero: HERO_TEMPLATES,
+    cta: CTA_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
@@ -43,4 +45,36 @@ export function getTemplatesByCategory(category: LayoutCategory): LayoutTemplate
 /** Get a specific template by ID */
 export function getTemplateById(id: string): LayoutTemplate | undefined {
     return LAYOUT_TEMPLATES_MAP[id]
+}
+
+// ============================================
+// Preset Config Lookup (cross-category)
+// ============================================
+
+import type { ImageRole } from '../tokens'
+import { HERO_PRESETS_MAP } from './hero/presets'
+import { CTA_PRESETS_MAP } from './cta/presets'
+import { CTA_B_PRESETS_MAP } from './cta/presets-b'
+
+export interface PresetImageConfig {
+    imageRole: ImageRole
+    supportsVideo: boolean
+}
+
+/**
+ * Look up image/video config for any V2 preset across all categories.
+ * Used by image-controls-panel and section-panel to determine which
+ * media controls to show.
+ */
+export function getPresetConfig(componentId: string): PresetImageConfig | undefined {
+    const heroConfig = HERO_PRESETS_MAP[componentId]
+    if (heroConfig) return { imageRole: heroConfig.imageRole, supportsVideo: heroConfig.supportsVideo }
+
+    const ctaConfig = CTA_PRESETS_MAP[componentId]
+    if (ctaConfig) return { imageRole: ctaConfig.imageRole, supportsVideo: ctaConfig.supportsVideo }
+
+    const ctaBConfig = CTA_B_PRESETS_MAP[componentId]
+    if (ctaBConfig) return { imageRole: ctaBConfig.imageRole, supportsVideo: ctaBConfig.supportsVideo }
+
+    return undefined
 }

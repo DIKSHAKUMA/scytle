@@ -72,7 +72,7 @@ export function ImageBlock({ block, className }: Props) {
 
     return (
         <div
-            className={cn('relative overflow-hidden w-full', className)}
+            className={cn('relative overflow-hidden w-full', isAutoRatio && 'h-full', className)}
             style={{
                 borderRadius: isCircle ? '50%' : 'var(--sg-image-radius)',
                 ...(isCircle && { aspectRatio: '1 / 1' }),
@@ -87,6 +87,7 @@ export function ImageBlock({ block, className }: Props) {
                 style={{
                     paddingBottom: isAutoRatio ? undefined : paddingBottom,
                     minHeight: isAutoRatio ? '200px' : undefined,
+                    height: isAutoRatio ? '100%' : undefined,
                 }}
             >
                 {showRealImage ? (

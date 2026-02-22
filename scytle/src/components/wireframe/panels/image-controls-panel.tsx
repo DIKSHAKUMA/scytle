@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { useUnifiedStore } from '@/store'
-import { HERO_PRESETS_MAP } from '@/lib/designs/v2/layouts/hero/presets'
+import { getPresetConfig } from '@/lib/designs/v2/layouts'
 import { storage, BUCKETS } from '@/lib/appwrite'
 import { ID } from 'appwrite'
 import type { ImagePosition, SectionDesignProps } from '@/lib/designs/v2/tokens'
@@ -139,7 +139,7 @@ export function ImageControlsPanel({
 
     // Determine image role from preset config (with runtime asset-swap awareness)
     const componentId = section?.componentId ?? ''
-    const presetConfig = HERO_PRESETS_MAP[componentId]
+    const presetConfig = getPresetConfig(componentId)
     const staticImageRole = presetConfig?.imageRole ?? 'none'
     const supportsVideo = presetConfig?.supportsVideo ?? false
     const designProps = section?.designProps as SectionDesignProps | undefined

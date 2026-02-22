@@ -33,7 +33,7 @@ export interface ComponentVariant {
  * V2 layout categories that are ready to use.
  * When a category has V2 layouts, we show ONLY V2 (hiding V1).
  */
-const V2_READY_CATEGORIES: LayoutCategory[] = ['hero']
+const V2_READY_CATEGORIES: LayoutCategory[] = ['hero', 'cta']
 
 /**
  * Get component variants for a section type.

@@ -88,9 +88,17 @@ export function SectionControls({
 
     const v2AxisValues = useMemo(() => {
         const values = { ...v2StaticValues }
-        if (runtimeAssetType) values.asset = runtimeAssetType
+        // Only apply runtime asset override for design-mode asset axes
+        // (e.g. Hero image↔video swap). Structural axes like CTA-B's
+        // asset=none/image must NOT be overridden.
+        if (runtimeAssetType && v2ControlDef) {
+            const assetAxis = v2ControlDef.axes.find(a => a.key === 'asset')
+            if (assetAxis?.modeVisibility === 'design') {
+                values.asset = runtimeAssetType
+            }
+        }
         return values
-    }, [v2StaticValues, runtimeAssetType])
+    }, [v2StaticValues, runtimeAssetType, v2ControlDef])
 
     // Store actions for design-mode axes
     const swapMediaBlock = useUnifiedStore(s => s.swapMediaBlock)
@@ -99,12 +107,18 @@ export function SectionControls({
     const handleV2AxisChange = useCallback((axisKey: string, newValue: string) => {
         if (!v2ControlDef || !onComponentChangeAction) return
 
-        // Special handling for design-mode-only axes
-        if (axisKey === 'asset' && pageId && sectionId) {
+        // Special handling for design-mode-only axes (e.g. Hero image↔video swap,
+        // placement flip). Only intercept if the axis has modeVisibility: 'design'.
+        // Structural axes with the same key (e.g. CTA-B asset=none/image) must
+        // fall through to normal resolve logic.
+        const axisDef = v2ControlDef.axes.find(a => a.key === axisKey)
+        const isDesignMode = axisDef?.modeVisibility === 'design'
+
+        if (isDesignMode && axisKey === 'asset' && pageId && sectionId) {
             swapMediaBlock(pageId, sectionId, newValue as 'image' | 'video')
             return
         }
-        if (axisKey === 'assetPlacement' && pageId && sectionId) {
+        if (isDesignMode && axisKey === 'assetPlacement' && pageId && sectionId) {
             flipSectionAssetPlacement(pageId, sectionId)
             return
         }
