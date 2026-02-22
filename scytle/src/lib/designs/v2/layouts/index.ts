@@ -55,6 +55,7 @@ import type { ImageRole } from '../tokens'
 import { HERO_PRESETS_MAP } from './hero/presets'
 import { CTA_PRESETS_MAP } from './cta/presets'
 import { CTA_B_PRESETS_MAP } from './cta/presets-b'
+import { CTA_C_PRESETS_MAP } from './cta/presets-c'
 
 export interface PresetImageConfig {
     imageRole: ImageRole
@@ -75,6 +76,9 @@ export function getPresetConfig(componentId: string): PresetImageConfig | undefi
 
     const ctaBConfig = CTA_B_PRESETS_MAP[componentId]
     if (ctaBConfig) return { imageRole: ctaBConfig.imageRole, supportsVideo: ctaBConfig.supportsVideo }
+
+    const ctaCConfig = CTA_C_PRESETS_MAP[componentId]
+    if (ctaCConfig) return { imageRole: ctaCConfig.imageRole, supportsVideo: ctaCConfig.supportsVideo }
 
     return undefined
 }

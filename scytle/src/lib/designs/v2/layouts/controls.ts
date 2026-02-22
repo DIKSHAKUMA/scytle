@@ -9,6 +9,7 @@ import type { LayoutCategory } from './types'
 import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero/presets'
 import { CTA_PRESETS_MAP } from './cta/presets'
 import { CTA_B_PRESETS_MAP } from './cta/presets-b'
+import { CTA_C_PRESETS_MAP } from './cta/presets-c'
 
 // ============================================
 // Generic Control Types
@@ -271,6 +272,145 @@ const CTA_B_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// CTA Controls — Family C (Single-column text)
+// ============================================
+// Single-column text with optional background, card wrap, or image below.
+// 6 axes: text, style, background, element, asset, assetStyle
+// Complex dynamic visibility based on axis combinations.
+
+const CTA_C_CONTROL_DEF: LayoutControlDef = {
+    category: 'cta',
+    familyId: 'cta-c',
+    axes: [
+        {
+            key: 'text',
+            label: 'Text',
+            options: [
+                { value: 'left', label: 'Left', icon: 'AlignLeft' },
+                { value: 'center', label: 'Center', icon: 'AlignCenter' },
+            ],
+            // Hidden when center+card, center+asset=image, or expand
+            condition: (values) =>
+                values.text === 'left' ||
+                (values.style !== 'card' && values.asset !== 'image' && values.assetStyle !== 'expand'),
+        },
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+            // Left path: visible when bg != none. Center path: visible unless asset=image or expand.
+            condition: (values) => {
+                if (values.text === 'left') return values.background !== 'none'
+                return values.asset !== 'image' && values.assetStyle !== 'expand'
+            },
+        },
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+            // Hidden when asset=image or expand
+            condition: (values) => values.asset !== 'image' && values.assetStyle !== 'expand',
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+            // Hidden only in expand mode (CTA 65 is button-only)
+            condition: (values) => values.assetStyle !== 'expand',
+        },
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+            ],
+            // Only visible in center + normal + bg=none (not in expand)
+            condition: (values) =>
+                values.text === 'center' &&
+                values.style !== 'card' &&
+                values.background === 'none' &&
+                values.assetStyle !== 'expand',
+        },
+        {
+            key: 'assetStyle',
+            label: 'Asset Style',
+            options: [
+                { value: 'default', label: 'Default' },
+                { value: 'expand', label: 'Expand', icon: 'Maximize2' },
+            ],
+            // Only visible when asset=image
+            condition: (values) => values.asset === 'image',
+        },
+    ],
+    resolve(values) {
+        const text = values.text ?? 'left'
+        const style = values.style ?? 'normal'
+        const bg = values.background ?? 'none'
+        const element = values.element ?? 'button'
+        const asset = values.asset ?? 'none'
+        const assetStyle = values.assetStyle ?? 'default'
+
+        // Expand path (center only)
+        if (asset === 'image' && assetStyle === 'expand') {
+            return 'cta-65'
+        }
+
+        // Asset=Image stacked path (center only)
+        if (asset === 'image') {
+            return element === 'form' ? 'cta-32' : 'cta-31'
+        }
+
+        // Left path
+        if (text === 'left') {
+            if (style === 'card') {
+                // Card mode — bg=none defaults to bg=image (no Left+Card+NoBg variant)
+                if (bg === 'video') return element === 'form' ? 'cta-44' : 'cta-43'
+                return element === 'form' ? 'cta-42' : 'cta-41'
+            }
+            // Normal
+            if (bg === 'video') return element === 'form' ? 'cta-6' : 'cta-5'
+            if (bg === 'image') return element === 'form' ? 'cta-4' : 'cta-3'
+            return element === 'form' ? 'cta-20' : 'cta-19'
+        }
+
+        // Center path
+        if (style === 'card') {
+            if (bg === 'video') return element === 'form' ? 'cta-56' : 'cta-55'
+            if (bg === 'image') return element === 'form' ? 'cta-54' : 'cta-53'
+            return element === 'form' ? 'cta-52' : 'cta-51'
+        }
+        // Center normal
+        if (bg === 'video') return element === 'form' ? 'cta-30' : 'cta-29'
+        if (bg === 'image') return element === 'form' ? 'cta-28' : 'cta-27'
+        return element === 'form' ? 'cta-26' : 'cta-25'
+    },
+    extract(layoutId) {
+        const preset = CTA_C_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        const result: Record<string, string> = {
+            text: preset.textAlignment,
+            element: preset.element,
+            style: preset.style,
+            background: preset.background,
+            asset: preset.asset,
+            assetStyle: preset.assetStyle,
+        }
+        return result
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
@@ -279,12 +419,13 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'hero': HERO_CONTROL_DEF,
     'cta-a': CTA_A_CONTROL_DEF,
     'cta-b': CTA_B_CONTROL_DEF,
+    'cta-c': CTA_C_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
 const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     hero: ['hero'],
-    cta: ['cta-a', 'cta-b'],
+    cta: ['cta-a', 'cta-b', 'cta-c'],
 }
 
 /** Get all control definitions for a category (one per family) */
