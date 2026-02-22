@@ -1,19 +1,23 @@
 /**
- * VideoBlock — Token-driven video placeholder
+ * VideoBlock — Token-driven video / placeholder
  *
  * Reads from CSS custom properties:
  *   --sg-bg-secondary
  *   --sg-image-radius
  *   --sg-text-muted
  *
- * Renders a 16:9 placeholder with a play button overlay.
- * In wireframe mode, no actual video is loaded.
+ * Mode-aware:
+ *   Design mode + content.src → renders real <video> or YouTube/Vimeo <iframe>
+ *   Wireframe mode (or no src) → renders styled placeholder with play button
  */
 
 'use client'
 
 import { cn } from '@/lib/utils'
 import { Play } from 'lucide-react'
+import { useUnifiedStore } from '@/store'
+import { getEmbedUrl } from '../utils/video-helpers'
+import { ratioToCSS } from '../utils/image-helpers'
 import type { Block, VideoBlockProps, VideoBlockContent, ImageRatio } from './types'
 
 // ============================================
@@ -44,12 +48,54 @@ const ASPECT_PADDING: Record<ImageRatio, string> = {
 // ============================================
 
 export function VideoBlock({ block, className }: Props) {
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
     const props = block.props as unknown as VideoBlockProps
     const content = block.content as unknown as VideoBlockContent
 
     const ratio = props.ratio ?? '16:9'
     const paddingBottom = ASPECT_PADDING[ratio] ?? ASPECT_PADDING['16:9']
+    const src = content.src
+    const showRealVideo = canvasMode === 'design' && !!src
 
+    // Design mode: render real video or embed
+    if (showRealVideo) {
+        const embedUrl = getEmbedUrl(src!)
+        const aspectRatio = ratioToCSS(ratio) ?? '16/9'
+
+        return (
+            <div
+                className={cn('relative w-full overflow-hidden', className)}
+                style={{
+                    aspectRatio,
+                    borderRadius: 'var(--sg-image-radius)',
+                }}
+                data-layer-id={block.id}
+                data-layer-type={block.type}
+                data-layer-label="Video"
+            >
+                {embedUrl ? (
+                    <iframe
+                        src={embedUrl}
+                        className="absolute inset-0 w-full h-full"
+                        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        style={{ border: 'none' }}
+                        title={content.alt ?? 'Embedded video'}
+                    />
+                ) : (
+                    <video
+                        src={src}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        controls
+                        playsInline
+                        poster={content.alt}
+                    />
+                )}
+            </div>
+        )
+    }
+
+    // Wireframe placeholder
     return (
         <div
             className={cn('relative w-full overflow-hidden', className)}

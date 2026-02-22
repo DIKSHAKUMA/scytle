@@ -253,3 +253,83 @@ export type TokenCSSVar =
     | '--sg-card-style'
     // Scheme
     | '--sg-scheme'
+
+// ============================================
+// Section Design Props (Design Mode)
+// ============================================
+
+/** How images are used in this section template */
+export type ImageRole = 'inline' | 'background' | 'none'
+
+/** Background type for sections that support it */
+export type BackgroundType = 'none' | 'image' | 'video'
+
+/** Asset type for sections with media slots */
+export type AssetType = 'image' | 'video'
+
+/** 9-point position grid */
+export type ImagePosition =
+    | 'top-left' | 'top-center' | 'top-right'
+    | 'center-left' | 'center' | 'center-right'
+    | 'bottom-left' | 'bottom-center' | 'bottom-right'
+
+/** Image shape */
+export type ImageShape = 'rectangle' | 'rounded'
+
+/**
+ * Per-section design configuration.
+ * Only populated when user uploads images or tweaks design controls.
+ * null/undefined = use section template defaults.
+ */
+export interface SectionDesignProps {
+    /** Background type (for CTA-type sections that support bg images) */
+    backgroundType?: BackgroundType
+    /** Asset type (for split-layout sections: image vs video) */
+    assetType?: AssetType
+
+    /** Section background image */
+    backgroundImage?: {
+        /** Image URL (Appwrite storage or external) */
+        url: string
+        /** Object position */
+        position: ImagePosition
+        /** Dark overlay toggle */
+        overlay: boolean
+        /** Overlay opacity (0–1) */
+        overlayOpacity?: number
+    }
+
+    /** Inline image configuration (for split-image layouts) */
+    inlineImage?: {
+        /** Image URL */
+        url: string
+        /** Aspect ratio */
+        ratio: 'auto' | '16:9' | '3:2' | '4:3' | '1:1' | '3:4'
+        /** Object position */
+        position: ImagePosition
+        /** Object fit */
+        fillMode: 'cover' | 'contain'
+        /** Width constraint */
+        width?: 'full' | '3/4' | '2/3' | '1/2' | '1/3'
+        /** Shape */
+        shape: ImageShape
+        /** Overlay */
+        overlay: boolean
+        /** Foreground tint */
+        foreground: 'color' | 'none'
+    }
+
+    /** Video configuration */
+    video?: {
+        /** Video URL (YouTube, Vimeo, or direct mp4) */
+        url: string
+        /** Poster/thumbnail image URL */
+        posterUrl?: string
+        /** Autoplay */
+        autoplay?: boolean
+        /** Loop */
+        loop?: boolean
+        /** Muted (required for autoplay) */
+        muted?: boolean
+    }
+}

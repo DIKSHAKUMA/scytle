@@ -88,9 +88,21 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
 
     const isPageSelected = selectedPageId === page.id && !selectedSectionId
 
-    // Reset frame width when viewport changes
+    // Reset frame width when viewport changes (with smooth transition)
     useEffect(() => {
         setFrameWidth(VIEWPORT_CONFIGS[viewport].width)
+    }, [viewport])
+
+    // Smooth width transitions
+    const [isTransitioning, setIsTransitioning] = useState(false)
+    const prevViewportRef = useRef(viewport)
+    useEffect(() => {
+        if (prevViewportRef.current !== viewport) {
+            setIsTransitioning(true)
+            const timer = setTimeout(() => setIsTransitioning(false), 350)
+            prevViewportRef.current = viewport
+            return () => clearTimeout(timer)
+        }
     }, [viewport])
 
     // Show ghost preview for Add Sidebar OR for Replace Component library panel
@@ -312,7 +324,10 @@ export function PageFrame({ page, viewport, scale = 1, className }: PageFramePro
                                     : 'ring-1 ring-black/[0.06] hover:ring-violet-400',
                             className
                         )}
-                        style={{ width: scaledWidth }}
+                        style={{
+                            width: scaledWidth,
+                            ...(isTransitioning && { transition: 'width 300ms ease-out' }),
+                        }}
                         onClick={handleFrameClick}
                     >
                         {/* Layout-aware rendering */}

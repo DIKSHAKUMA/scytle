@@ -7,14 +7,17 @@
  *   --sg-text-muted (for placeholder icon)
  *   --sg-bg-secondary (placeholder bg)
  *
- * When `content.src` is provided, renders an <img>.
- * Otherwise renders a styled placeholder with an Image icon.
+ * Mode-aware:
+ *   Design mode + content.src → renders real <img>
+ *   Wireframe mode (or no src) → renders styled placeholder
  */
 
 'use client'
 
 import { ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useUnifiedStore } from '@/store'
+import { positionToCSS } from '../utils/image-helpers'
 import type { Block, ImageBlockProps, ImageBlockContent, ImageRatio } from './types'
 
 // ============================================
@@ -45,6 +48,7 @@ const RATIO_PADDING: Record<ImageRatio, string> = {
 // ============================================
 
 export function ImageBlock({ block, className }: Props) {
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
     const props = block.props as unknown as ImageBlockProps
     const content = block.content as unknown as ImageBlockContent
 
@@ -58,6 +62,9 @@ export function ImageBlock({ block, className }: Props) {
     const isCircle = shape === 'circle'
     const isAutoRatio = ratio === 'auto'
     const paddingBottom = RATIO_PADDING[ratio] ?? RATIO_PADDING['16:9']
+
+    // Only show real image in design mode when src is available
+    const showRealImage = canvasMode === 'design' && !!src
 
     // Overlay
     const overlay = props.overlay
@@ -82,8 +89,9 @@ export function ImageBlock({ block, className }: Props) {
                     minHeight: isAutoRatio ? '200px' : undefined,
                 }}
             >
-                {src ? (
-                    /* Real image */
+                {showRealImage ? (
+                    /* Real image (design mode only) */
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                         src={src}
                         alt={alt}
@@ -92,11 +100,12 @@ export function ImageBlock({ block, className }: Props) {
                         )}
                         style={{
                             objectFit: fillMode,
-                            objectPosition: position,
+                            objectPosition: positionToCSS(position),
                         }}
+                        loading="lazy"
                     />
                 ) : (
-                    /* Placeholder */
+                    /* Placeholder (wireframe mode or no src) */
                     <div
                         className="absolute inset-0 flex items-center justify-center"
                         style={{

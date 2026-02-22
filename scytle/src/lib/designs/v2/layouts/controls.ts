@@ -28,6 +28,10 @@ export interface LayoutControlAxis {
     label: string
     /** Available options for this axis */
     options: LayoutControlOption[]
+    /** Only show this axis when condition is met (receives current axis values) */
+    condition?: (values: Record<string, string>) => boolean
+    /** 'wireframe' = wireframe mode only, 'design' = design mode only, 'both' = always (default) */
+    modeVisibility?: 'wireframe' | 'design' | 'both'
 }
 
 export interface LayoutControlDef {
@@ -49,23 +53,55 @@ const HERO_CONTROL_DEF: LayoutControlDef = {
     category: 'hero',
     axes: [
         {
-            key: 'alignment',
-            label: 'Alignment',
+            key: 'layout',
+            label: 'Layout',
             options: [
-                { value: 'left', label: 'Left', icon: 'AlignLeft' },
-                { value: 'split', label: 'Split', icon: 'Columns2' },
+                { value: 'minimal', label: 'Minimal', icon: 'AlignLeft' },
+                { value: 'split-text', label: 'Split Text', icon: 'Columns2' },
+                { value: 'split-image', label: 'Split + Image', icon: 'Image' },
+                { value: 'split-video', label: 'Split + Video', icon: 'PlayCircle' },
+                { value: 'bg-image', label: 'BG Image', icon: 'Layers' },
             ],
+        },
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+            condition: (values) => ['split-image', 'split-video'].includes(values.layout),
+            modeVisibility: 'design',
+        },
+        {
+            key: 'assetPlacement',
+            label: 'Placement',
+            options: [
+                { value: 'right', label: 'Right', icon: 'ArrowRight' },
+                { value: 'left', label: 'Left', icon: 'ArrowLeft' },
+            ],
+            condition: (values) => ['split-image', 'split-video'].includes(values.layout),
+            modeVisibility: 'design',
         },
     ],
     resolve(values) {
-        const alignment = values.alignment ?? 'left'
-        const match = ALL_HERO_PRESETS.find(p => p.alignment === alignment)
+        const layout = values.layout ?? 'minimal'
+        const match = ALL_HERO_PRESETS.find(p => p.layout === layout)
         return match?.id
     },
     extract(layoutId: string): Record<string, string> {
         const preset = HERO_PRESETS_MAP[layoutId]
         if (!preset) return {}
-        return { alignment: preset.alignment }
+        // Base layout value + sensible defaults for conditional axes
+        const result: Record<string, string> = { layout: preset.layout }
+        // Default asset based on preset imageRole
+        if (preset.imageRole === 'inline') result.asset = 'image'
+        else if (preset.supportsVideo) result.asset = 'video'
+        // Default placement
+        if (['split-image', 'split-video'].includes(preset.layout)) {
+            result.assetPlacement = 'right'
+        }
+        return result
     },
 }
 

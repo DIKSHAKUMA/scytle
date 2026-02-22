@@ -20,7 +20,8 @@
 
 import { useMemo } from 'react'
 import { useStyleGuideStore } from '@/store/style-guide-store'
-import { computeSchemeOverrideCSS } from './defaults'
+import { useUnifiedStore } from '@/store'
+import { computeSchemeOverrideCSS, WIREFRAME_NEUTRAL_CSS } from './defaults'
 import type { CSSTokenMap } from './index'
 
 // ============================================
@@ -36,20 +37,28 @@ interface TokenProviderProps {
  * Wraps children in a div carrying all global design token CSS variables.
  * Place this around the wireframe canvas so all descendant blocks
  * can read tokens via `var(--sg-*)`.
+ *
+ * Mode-aware: In wireframe mode, forces neutral grayscale tokens.
+ * In design mode, uses the active concept's computed CSS from the style guide.
  */
 export function TokenProvider({ children, className }: TokenProviderProps) {
     const computedCSS = useStyleGuideStore((s) => s.computedCSS)
+    const canvasMode = useUnifiedStore((s) => s.canvasMode)
+
+    // In wireframe mode, force neutral grayscale; in design mode, use styled tokens
+    const effectiveCSS = canvasMode === 'wireframe' ? WIREFRAME_NEUTRAL_CSS : computedCSS
 
     // Convert CSSTokenMap → React.CSSProperties
     const style = useMemo(() => {
-        return computedCSS as React.CSSProperties
-    }, [computedCSS])
+        return effectiveCSS as React.CSSProperties
+    }, [effectiveCSS])
 
     return (
         <div
             className={className}
             style={style}
             data-sg-root=""
+            data-canvas-mode={canvasMode}
         >
             {children}
         </div>
@@ -70,14 +79,20 @@ interface SectionTokenProviderProps {
  * Wraps a single section and applies scheme override CSS variables
  * if the section has a color scheme override (dark/accent/light).
  *
- * If no override exists, renders children without a wrapper div
- * (zero overhead for the common case).
+ * Mode-aware: In wireframe mode, scheme overrides are never applied
+ * (all sections stay neutral grayscale). In design mode, scheme
+ * overrides work as expected.
+ *
+ * If no override exists (or in wireframe mode), renders children
+ * without a wrapper div (zero overhead for the common case).
  */
 export function SectionTokenProvider({
     sectionId,
     children,
     className,
 }: SectionTokenProviderProps) {
+    const canvasMode = useUnifiedStore((s) => s.canvasMode)
+
     // Select raw state directly — never call store getters inside selectors
     // (calling get() inside a selector causes "getSnapshot should be cached" infinite loop)
     const scheme = useStyleGuideStore(
@@ -89,11 +104,12 @@ export function SectionTokenProvider({
     })
 
     const schemeCSS = useMemo(() => {
-        if (!scheme) return null
+        // In wireframe mode, never compute scheme overrides
+        if (canvasMode === 'wireframe' || !scheme) return null
         return computeSchemeOverrideCSS(scheme, concept)
-    }, [scheme, concept])
+    }, [canvasMode, scheme, concept])
 
-    // No override → render children directly (no extra div)
+    // No override (or wireframe mode) → render children directly (no extra div)
     if (!schemeCSS) {
         return className ? (
             <div className={className}>{children}</div>

@@ -7,6 +7,9 @@ import { PagePanel } from './panels/page-panel'
 import { SectionPanel } from './panels/section-panel'
 import { ComponentLibraryPanel } from './panels/component-library-panel'
 import { StyleGuidePanel } from './panels/style-guide-panel'
+import { SchemePickerPanel } from './panels/scheme-picker-panel'
+import { ImageControlsPanel } from './panels/image-controls-panel'
+import { VideoControlsPanel } from './panels/video-controls-panel'
 
 interface WireframeSidebarProps {
     className?: string
@@ -49,7 +52,7 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
     }, [selectedPage, selectedSectionId])
 
     // Determine if sidebar should be visible
-    const isVisible = activePanelView === 'page' || activePanelView === 'section' || activePanelView === 'library' || activePanelView === 'style-guide'
+    const isVisible = activePanelView === 'page' || activePanelView === 'section' || activePanelView === 'library' || activePanelView === 'style-guide' || activePanelView === 'scheme-picker' || activePanelView === 'image-controls' || activePanelView === 'video-controls'
 
     // Handle close
     const handleClose = () => {
@@ -114,6 +117,38 @@ export function WireframeSidebar({ className }: WireframeSidebarProps) {
             {/* Style Guide Panel */}
             {activePanelView === 'style-guide' && (
                 <StyleGuidePanel
+                    onCloseAction={handleClose}
+                    className="flex-1"
+                />
+            )}
+
+            {/* Scheme Picker Panel */}
+            {activePanelView === 'scheme-picker' && selectedSection && (
+                <SchemePickerPanel
+                    sectionId={selectedSection.id}
+                    onBackAction={handleBackFromLibrary}
+                    onCloseAction={handleClose}
+                    className="flex-1"
+                />
+            )}
+
+            {/* Image Controls Panel */}
+            {activePanelView === 'image-controls' && selectedSection && selectedPage && (
+                <ImageControlsPanel
+                    pageId={selectedPage.id}
+                    sectionId={selectedSection.id}
+                    onBackAction={handleBackFromLibrary}
+                    onCloseAction={handleClose}
+                    className="flex-1"
+                />
+            )}
+
+            {/* Video Controls Panel */}
+            {activePanelView === 'video-controls' && selectedSection && selectedPage && (
+                <VideoControlsPanel
+                    pageId={selectedPage.id}
+                    sectionId={selectedSection.id}
+                    onBackAction={handleBackFromLibrary}
                     onCloseAction={handleClose}
                     className="flex-1"
                 />

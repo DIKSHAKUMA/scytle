@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { X, Globe, ChevronRight, Wand2, Layers } from 'lucide-react'
+import { X, Globe, ChevronRight, Wand2, Layers, Sun, Moon, Palette, ImageIcon, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,9 +10,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUnifiedStore } from '@/store'
+import { useStyleGuideStore } from '@/store/style-guide-store'
 import { getTemplateById } from '@/lib/designs/v2/layouts'
+import { HERO_PRESETS_MAP } from '@/lib/designs/v2/layouts/hero/presets'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
+import type { ColorScheme } from '@/lib/designs/v2/tokens'
 
 interface SectionPanelProps {
     section: WireframeSection
@@ -236,7 +239,20 @@ export function SectionPanel({
                         controls={section.controls}
                         onControlChangeAction={handleControlChange}
                         onComponentChangeAction={handleComponentChange}
+                        pageId={page.id}
+                        sectionId={section.id}
                     />
+
+                    <Separator />
+
+                    {/* Image Controls — design mode only */}
+                    <ImageRow sectionId={section.id} pageId={page.id} componentId={section.componentId} />
+
+                    {/* Video Controls — design mode only */}
+                    <VideoRow sectionId={section.id} pageId={page.id} componentId={section.componentId} />
+
+                    {/* Scheme Override — design mode only */}
+                    <SchemeRow sectionId={section.id} />
 
                     <Separator />
 
@@ -252,5 +268,159 @@ export function SectionPanel({
                 </div>
             </ScrollArea>
         </div>
+    )
+}
+
+// ============================================
+// ImageRow — opens image controls sub-panel
+// Only visible in design mode when section has imageRole
+// ============================================
+
+function ImageRow({ sectionId, pageId, componentId }: { sectionId: string; pageId: string; componentId?: string }) {
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
+    const setActivePanelView = useUnifiedStore(s => s.setActivePanelView)
+    const assetType = useUnifiedStore(s => {
+        const page = s.pages.find(p => p.id === pageId)
+        const sec = page?.sections.find(sec => sec.id === sectionId)
+        return (sec?.designProps as import('@/lib/designs/v2/tokens').SectionDesignProps | undefined)?.assetType
+    })
+
+    const presetConfig = componentId ? HERO_PRESETS_MAP[componentId] : undefined
+    const staticImageRole = presetConfig?.imageRole ?? 'none'
+    const supportsVideo = presetConfig?.supportsVideo ?? false
+
+    // Determine effective imageRole considering runtime asset swaps:
+    // - If user swapped to image on a video layout → treat as inline
+    // - If user swapped to video on an image layout → hide image controls
+    let imageRole = staticImageRole
+    if (supportsVideo && assetType === 'image') imageRole = 'inline'
+    else if (staticImageRole === 'inline' && assetType === 'video') imageRole = 'none'
+
+    // Only show in design mode and when section has image role
+    if (canvasMode !== 'design' || imageRole === 'none') return null
+
+    const roleLabel = imageRole === 'background' ? 'Background' : 'Inline'
+
+    return (
+        <button
+            onClick={() => setActivePanelView('image-controls')}
+            className={cn(
+                'w-full flex items-center justify-between p-3',
+                'bg-muted/50 rounded-lg',
+                'hover:bg-muted transition-colors',
+                'cursor-pointer text-left',
+            )}
+        >
+            <div className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Image</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{roleLabel}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+        </button>
+    )
+}
+
+// ============================================
+// VideoRow — opens video controls sub-panel
+// Only visible in design mode when section has an active video block
+// ============================================
+
+function VideoRow({ sectionId, pageId, componentId }: { sectionId: string; pageId: string; componentId?: string }) {
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
+    const setActivePanelView = useUnifiedStore(s => s.setActivePanelView)
+    const assetType = useUnifiedStore(s => {
+        const page = s.pages.find(p => p.id === pageId)
+        const sec = page?.sections.find(sec => sec.id === sectionId)
+        return (sec?.designProps as import('@/lib/designs/v2/tokens').SectionDesignProps | undefined)?.assetType
+    })
+
+    const presetConfig = componentId ? HERO_PRESETS_MAP[componentId] : undefined
+    const staticImageRole = presetConfig?.imageRole ?? 'none'
+    const supportsVideo = presetConfig?.supportsVideo ?? false
+
+    // Show video controls when:
+    // - Native video layout (hero-3: supportsVideo && imageRole === 'none') and NOT swapped to image
+    // - Image layout swapped to video (imageRole === 'inline' && assetType === 'video')
+    const isNativeVideo = supportsVideo && staticImageRole === 'none' && assetType !== 'image'
+    const isSwappedToVideo = staticImageRole === 'inline' && assetType === 'video'
+
+    if (canvasMode !== 'design' || (!isNativeVideo && !isSwappedToVideo)) return null
+
+    return (
+        <button
+            onClick={() => setActivePanelView('video-controls')}
+            className={cn(
+                'w-full flex items-center justify-between p-3',
+                'bg-muted/50 rounded-lg',
+                'hover:bg-muted transition-colors',
+                'cursor-pointer text-left',
+            )}
+        >
+            <div className="flex items-center gap-2">
+                <Video className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Video</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Configure</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+        </button>
+    )
+}
+
+// ============================================
+// ============================================
+// SchemeRow — shows current scheme + opens picker
+// Only visible in design mode
+// ============================================
+
+const SCHEME_ICONS: Record<string, typeof Sun> = {
+    light: Sun,
+    dark: Moon,
+    accent: Palette,
+}
+
+function SchemeRow({ sectionId }: { sectionId: string }) {
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
+    const setActivePanelView = useUnifiedStore(s => s.setActivePanelView)
+    const currentScheme = useStyleGuideStore(
+        s => s.data.sectionSchemeOverrides[sectionId] ?? null
+    ) as ColorScheme | null
+
+    // Only show in design mode
+    if (canvasMode !== 'design') return null
+
+    const SchemeIcon = currentScheme ? (SCHEME_ICONS[currentScheme] ?? Palette) : Palette
+    const schemeLabel = currentScheme
+        ? currentScheme.charAt(0).toUpperCase() + currentScheme.slice(1)
+        : 'Inherit'
+
+    return (
+        <button
+            onClick={() => setActivePanelView('scheme-picker')}
+            className={cn(
+                'w-full flex items-center justify-between p-3',
+                'bg-muted/50 rounded-lg',
+                'hover:bg-muted transition-colors',
+                'cursor-pointer text-left',
+            )}
+        >
+            <div className="flex items-center gap-2">
+                <SchemeIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Scheme</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className={cn(
+                    'text-xs',
+                    currentScheme ? 'text-foreground font-medium' : 'text-muted-foreground',
+                )}>
+                    {schemeLabel}
+                </span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+        </button>
     )
 }

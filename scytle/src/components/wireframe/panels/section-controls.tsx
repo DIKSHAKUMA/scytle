@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { getControlDefForLayout } from '@/lib/designs/v2/layouts'
 import type { LayoutControlDef } from '@/lib/designs/v2/layouts'
+import { useUnifiedStore } from '@/store'
 import type { WireframeSectionControls } from '@/types'
 
 interface SectionControlsProps {
@@ -27,6 +28,10 @@ interface SectionControlsProps {
     onControlChangeAction: (key: string, value: string | number | boolean) => void
     /** V2: Called when axis controls resolve a new layout (changes componentId) */
     onComponentChangeAction?: (newComponentId: string) => void
+    /** Required for design-mode axes (asset swap, placement flip) */
+    pageId?: string
+    /** Required for design-mode axes (asset swap, placement flip) */
+    sectionId?: string
     className?: string
 }
 
@@ -57,6 +62,8 @@ export function SectionControls({
     controls,
     onControlChangeAction,
     onComponentChangeAction,
+    pageId,
+    sectionId,
     className,
 }: SectionControlsProps) {
     // ── V2 Detection ──────────────────────────────────────
@@ -66,19 +73,65 @@ export function SectionControls({
         return getControlDefForLayout(componentId)
     }, [componentId])
 
-    const v2AxisValues = useMemo(() => {
+    const v2StaticValues = useMemo(() => {
         if (!v2ControlDef || !componentId) return {}
         return v2ControlDef.extract(componentId)
     }, [v2ControlDef, componentId])
 
+    // Override static values with runtime state (e.g. designProps.assetType after swap)
+    const runtimeAssetType = useUnifiedStore(s => {
+        if (!pageId || !sectionId) return undefined
+        const page = s.pages.find(p => p.id === pageId)
+        const sec = page?.sections.find(sec => sec.id === sectionId)
+        return (sec?.designProps as import('@/lib/designs/v2/tokens').SectionDesignProps | undefined)?.assetType
+    })
+
+    const v2AxisValues = useMemo(() => {
+        const values = { ...v2StaticValues }
+        if (runtimeAssetType) values.asset = runtimeAssetType
+        return values
+    }, [v2StaticValues, runtimeAssetType])
+
+    // Store actions for design-mode axes
+    const swapMediaBlock = useUnifiedStore(s => s.swapMediaBlock)
+    const flipSectionAssetPlacement = useUnifiedStore(s => s.flipSectionAssetPlacement)
+
     const handleV2AxisChange = useCallback((axisKey: string, newValue: string) => {
         if (!v2ControlDef || !onComponentChangeAction) return
+
+        // Special handling for design-mode-only axes
+        if (axisKey === 'asset' && pageId && sectionId) {
+            swapMediaBlock(pageId, sectionId, newValue as 'image' | 'video')
+            return
+        }
+        if (axisKey === 'assetPlacement' && pageId && sectionId) {
+            flipSectionAssetPlacement(pageId, sectionId)
+            return
+        }
+
         const currentValues = { ...v2AxisValues, [axisKey]: newValue }
         const newLayoutId = v2ControlDef.resolve(currentValues)
         if (newLayoutId && newLayoutId !== componentId) {
             onComponentChangeAction(newLayoutId)
         }
-    }, [v2ControlDef, v2AxisValues, componentId, onComponentChangeAction])
+    }, [v2ControlDef, v2AxisValues, componentId, onComponentChangeAction, pageId, sectionId, swapMediaBlock, flipSectionAssetPlacement])
+
+    // Current canvas mode for filtering design-only axes
+    const canvasMode = useUnifiedStore(s => s.canvasMode)
+
+    // Filter axes based on condition and modeVisibility
+    const visibleAxes = useMemo(() => {
+        if (!v2ControlDef) return []
+        return v2ControlDef.axes.filter(axis => {
+            // Check mode visibility
+            const vis = axis.modeVisibility ?? 'both'
+            if (vis === 'design' && canvasMode !== 'design') return false
+            if (vis === 'wireframe' && canvasMode !== 'wireframe') return false
+            // Check condition
+            if (axis.condition && !axis.condition(v2AxisValues)) return false
+            return true
+        })
+    }, [v2ControlDef, v2AxisValues, canvasMode])
 
     // ── V2 Render: Axis Controls ──────────────────────────
     if (v2ControlDef) {
@@ -87,7 +140,7 @@ export function SectionControls({
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     Controls
                 </Label>
-                {v2ControlDef.axes.map((axis) => {
+                {visibleAxes.map((axis) => {
                     const currentValue = v2AxisValues[axis.key] ?? axis.options[0]?.value
                     return (
                         <div key={axis.key} className="space-y-1.5">

@@ -231,6 +231,74 @@ export function computeTokenCSS(concept: Concept): CSSTokenMap {
     }
 }
 
+// ============================================
+// Wireframe-Mode Neutral Token Map
+// ============================================
+
+/**
+ * Hardcoded grayscale CSS token map for wireframe mode.
+ * Overrides the active concept tokens so the canvas looks like
+ * a neutral wireframe — white bg, dark text, gray borders, no accent.
+ */
+export const WIREFRAME_NEUTRAL_CSS: CSSTokenMap = {
+    // Backgrounds
+    '--sg-bg-primary': '#ffffff',
+    '--sg-bg-secondary': '#f9fafb',
+    '--sg-bg-accent': '#e5e7eb',
+    '--sg-bg-dark': '#111827',
+
+    // Text
+    '--sg-text-primary': '#111827',
+    '--sg-text-secondary': '#6b7280',
+    '--sg-text-muted': '#9ca3af',
+    '--sg-text-on-accent': '#ffffff',
+    '--sg-text-on-dark': '#ffffff',
+
+    // Borders
+    '--sg-border': '#e5e7eb',
+    '--sg-border-muted': '#f3f4f6',
+
+    // Buttons — all neutral gray, no accent
+    '--sg-button-primary-bg': '#111827',
+    '--sg-button-primary-text': '#ffffff',
+    '--sg-button-secondary-bg': 'transparent',
+    '--sg-button-secondary-text': '#374151',
+    '--sg-button-secondary-border': '#d1d5db',
+
+    // Cards
+    '--sg-card-bg': '#ffffff',
+    '--sg-card-border': '#e5e7eb',
+
+    // Typography — system defaults
+    '--sg-font-heading': 'var(--font-sans)',
+    '--sg-font-body': 'var(--font-sans)',
+    '--sg-heading-weight': '700',
+    '--sg-body-weight': '400',
+    '--sg-heading-letter-spacing': '-0.02em',
+
+    '--sg-size-scale': '1',
+    '--sg-h1-size': '3.75rem',
+    '--sg-h2-size': '3rem',
+    '--sg-h3-size': '2.25rem',
+    '--sg-h4-size': '1.875rem',
+    '--sg-h5-size': '1.5rem',
+    '--sg-h6-size': '1.25rem',
+    '--sg-body-size': '1rem',
+    '--sg-body-large-size': '1.125rem',
+    '--sg-caption-size': '0.875rem',
+
+    // UI Styling — neutral defaults
+    '--sg-radius': '8px',
+    '--sg-button-radius': '8px',
+    '--sg-card-radius': '12px',
+    '--sg-image-radius': '8px',
+    '--sg-button-style': 'filled',
+    '--sg-card-style': 'outlined',
+
+    // Scheme
+    '--sg-scheme': 'light',
+}
+
 /**
  * Compute CSS custom property overrides for a specific color scheme.
  *

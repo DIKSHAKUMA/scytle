@@ -29,7 +29,13 @@ export const DEFAULT_CONTENT: HeroContent = {
 // Hero Preset Config
 // ============================================
 
-export type HeroAlignment = 'left' | 'split'
+/** Layout style discriminator across all hero presets */
+export type HeroLayout =
+    | 'minimal'       // hero-44: Left-aligned single column, no media
+    | 'split-text'    // hero-57: Split two-column, text both sides
+    | 'split-image'   // hero-1:  Split, text left + image right
+    | 'split-video'   // hero-3:  Split, text left + video right
+    | 'bg-image'      // hero-5:  Full background image with overlay
 
 export interface HeroPresetConfig {
     /** Unique layout ID, e.g. 'hero-44' */
@@ -38,8 +44,12 @@ export interface HeroPresetConfig {
     name: string
     /** Description for the component library */
     description: string
-    /** Layout alignment */
-    alignment: HeroAlignment
+    /** Layout style variant */
+    layout: HeroLayout
     /** Tags for search */
     tags: string[]
+    /** What kind of image this layout uses */
+    imageRole: import('@/lib/designs/v2/tokens').ImageRole
+    /** Whether this layout supports video variant */
+    supportsVideo: boolean
 }

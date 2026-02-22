@@ -31,6 +31,9 @@ import {
     Redo,
     Loader2,
     Maximize,
+    Monitor,
+    Tablet,
+    Smartphone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -71,6 +74,9 @@ export default function ProjectEditorPage() {
     const wireframeZoomOut = useUnifiedStore(state => state.zoomOut)
     const wireframeResetZoom = useUnifiedStore(state => state.resetZoom)
     const wireframeFitView = useUnifiedStore(state => state.fitView)
+    const setCanvasMode = useUnifiedStore(state => state.setCanvasMode)
+    const activeViewports = useUnifiedStore(state => state.activeViewports)
+    const setSingleViewport = useUnifiedStore(state => state.setSingleViewport)
 
     const validViews: CanvasView[] = ['sitemap', 'wireframe', 'design', 'code']
     const viewParam = searchParams.get('view') as CanvasView | null
@@ -85,16 +91,27 @@ export default function ProjectEditorPage() {
         url.searchParams.set('view', view)
         window.history.replaceState({}, '', url.toString())
     }
+
+    // Sync canvasMode when switching between wireframe and design tabs
+    useEffect(() => {
+        if (activeView === 'design') {
+            setCanvasMode('design')
+        } else {
+            setCanvasMode('wireframe')
+        }
+    }, [activeView, setCanvasMode])
+
     const [isDevMode, setIsDevMode] = useState(false)
     const [authChecked, setAuthChecked] = useState(false)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
-    // View-aware zoom: pick the right store based on which tab is active
-    const activeZoomLevel = activeView === 'wireframe' ? wireframeZoomLevel : zoomLevel
-    const activeZoomIn = activeView === 'wireframe' ? wireframeZoomIn : zoomIn
-    const activeZoomOut = activeView === 'wireframe' ? wireframeZoomOut : zoomOut
-    const activeResetZoom = activeView === 'wireframe' ? wireframeResetZoom : resetZoom
-    const activeFitView = activeView === 'wireframe' ? wireframeFitView : fitView
+    // View-aware zoom: wireframe + design share unified store, sitemap uses its own
+    const isWireframeCanvas = activeView === 'wireframe' || activeView === 'design'
+    const activeZoomLevel = isWireframeCanvas ? wireframeZoomLevel : zoomLevel
+    const activeZoomIn = isWireframeCanvas ? wireframeZoomIn : zoomIn
+    const activeZoomOut = isWireframeCanvas ? wireframeZoomOut : zoomOut
+    const activeResetZoom = isWireframeCanvas ? wireframeResetZoom : resetZoom
+    const activeFitView = isWireframeCanvas ? wireframeFitView : fitView
 
     // Reset project store loading state on mount (prevents stuck spinner after HMR)
     useEffect(() => {
@@ -464,20 +481,26 @@ export default function ProjectEditorPage() {
                                 <WireframeView projectId={projectId as string} />
                             </div>
 
-                            {/* Placeholder for design/code views and dev mode */}
-                            {((activeView === 'design') || isDevMode) && (
+                            {/* Design View - shares wireframe canvas, different token rendering via canvasMode */}
+                            <div
+                                className="absolute inset-0"
+                                style={{ display: activeView === 'design' && !isDevMode ? 'block' : 'none' }}
+                            >
+                                <WireframeView projectId={projectId as string} />
+                            </div>
+
+                            {/* Placeholder for code view and dev mode */}
+                            {isDevMode && (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="text-center text-muted-foreground">
                                         <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                                            {activeView === 'design' && <Palette className="w-8 h-8" />}
-                                            {isDevMode && <Code className="w-8 h-8" />}
+                                            <Code className="w-8 h-8" />
                                         </div>
                                         <h3 className="font-semibold text-lg mb-1">
-                                            {isDevMode ? 'Dev Mode' : activeView.charAt(0).toUpperCase() + activeView.slice(1)}
+                                            Dev Mode
                                         </h3>
                                         <p className="text-sm max-w-xs">
-                                            {activeView === 'design' && 'Design variations will be displayed here'}
-                                            {isDevMode && 'Code editor and preview will be available here'}
+                                            Code editor and preview will be available here
                                         </p>
                                     </div>
                                 </div>
@@ -545,6 +568,71 @@ export default function ProjectEditorPage() {
                                     </TooltipContent>
                                 </Tooltip>
                             </div>
+
+                            {/* Breakpoint Toggle — wireframe/design only */}
+                            {isWireframeCanvas && (
+                                <>
+                                    <div className="w-px h-6 bg-border mx-2" />
+                                    <div className="flex items-center gap-0.5 bg-muted rounded-lg p-1">
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className={cn(
+                                                        "rounded-md transition-colors",
+                                                        activeViewports.includes('desktop') && "bg-accent text-accent-foreground"
+                                                    )}
+                                                    onClick={() => setSingleViewport('desktop')}
+                                                >
+                                                    <Monitor className="w-4 h-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>Desktop <span className="text-muted-foreground ml-1">1280px</span></p>
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className={cn(
+                                                        "rounded-md transition-colors",
+                                                        activeViewports.includes('tablet') && "bg-accent text-accent-foreground"
+                                                    )}
+                                                    onClick={() => setSingleViewport('tablet')}
+                                                >
+                                                    <Tablet className="w-4 h-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>Tablet <span className="text-muted-foreground ml-1">800px</span></p>
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    className={cn(
+                                                        "rounded-md transition-colors",
+                                                        activeViewports.includes('mobile') && "bg-accent text-accent-foreground"
+                                                    )}
+                                                    onClick={() => setSingleViewport('mobile')}
+                                                >
+                                                    <Smartphone className="w-4 h-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>Mobile <span className="text-muted-foreground ml-1">375px</span></p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                </>
+                            )}
 
                             <div className="w-px h-6 bg-border mx-2" />
 

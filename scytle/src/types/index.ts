@@ -70,6 +70,8 @@ export const WireframeSectionSchema = z.object({
     controls: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
     // V2 Block system — optional per-section block data for block-level operations
     blocks: z.array(z.any()).optional(),
+    // Design-mode visual properties (images, overlays, bg)
+    designProps: z.record(z.string(), z.unknown()).optional(),
 })
 
 // Wireframe Page Schema (for persistence)
@@ -332,6 +334,8 @@ export interface WireframeSection {
     controls: WireframeSectionControls
     /** V2 Block data — stored per section for block-level CRUD operations */
     blocks?: import('@/lib/designs/v2/blocks/types').Block[]
+    /** Design-mode visual properties (images, overlays, bg) */
+    designProps?: import('@/lib/designs/v2/tokens').SectionDesignProps
 }
 
 // Wireframe page - extends sitemap page

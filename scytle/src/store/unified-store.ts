@@ -327,7 +327,11 @@ function resolveComponentIdForSection(
 
         // ── Marketing — Hero ──
         case 'hero': {
-            if (lower.includes('split') || lower.includes('two col') || lower.includes('2 col')) return 'hero-57'
+            if (lower.includes('video')) return 'hero-3'
+            if ((lower.includes('background') && lower.includes('image')) || lower.includes('overlay') || lower.includes('bg image') || lower.includes('image bg')) return 'hero-5'
+            if (lower.includes('split') && lower.includes('text')) return 'hero-57'
+            if (lower.includes('split') || lower.includes('two col') || lower.includes('2 col')) return 'hero-1'
+            if (lower.includes('image') || lower.includes('photo') || lower.includes('hero image')) return 'hero-1'
             return 'hero-44'
         }
 
@@ -905,7 +909,9 @@ interface UnifiedState {
     deviceVisibility: DeviceVisibility
     /** Active viewports shown per page (Figma Sites style) */
     activeViewports: ViewportDevice[]
-    activePanelView: 'page' | 'section' | 'library' | 'style-guide' | null
+    activePanelView: 'page' | 'section' | 'library' | 'style-guide' | 'scheme-picker' | 'image-controls' | 'video-controls' | null
+    /** Canvas rendering mode: wireframe (grayscale) or design (styled with tokens) */
+    canvasMode: 'wireframe' | 'design'
 
     // Add section sidebar state (wireframe view)
     isAddSidebarOpen: boolean
@@ -987,6 +993,22 @@ interface UnifiedState {
     syncGlobalSection: (sectionId: string) => void
 
     // ============================================
+    // Actions - Section Design Props (Design Mode)
+    // ============================================
+    /** Shallow-merge partial design props into a section */
+    updateSectionDesignProps: (pageId: string, sectionId: string, props: Partial<import('@/lib/designs/v2/tokens').SectionDesignProps>) => void
+    /** Set background image with sensible defaults */
+    setSectionBackgroundImage: (pageId: string, sectionId: string, url: string) => void
+    /** Set inline image with sensible defaults */
+    setSectionInlineImage: (pageId: string, sectionId: string, url: string) => void
+    /** Clear an image (background or inline) from design props */
+    clearSectionImage: (pageId: string, sectionId: string, imageType: 'background' | 'inline') => void
+    /** Swap the first media block between image↔video and update designProps.assetType */
+    swapMediaBlock: (pageId: string, sectionId: string, toType: 'image' | 'video') => void
+    /** Flip the order of children in the top-level frame (asset left↔right) */
+    flipSectionAssetPlacement: (pageId: string, sectionId: string) => void
+
+    // ============================================
     // Actions - Blocks (V2 block-level operations)
     // ============================================
     /** Replace the entire blocks array for a section */
@@ -1034,7 +1056,10 @@ interface UnifiedState {
     toggleDeviceVisibility: (device: 'desktop' | 'mobile' | 'tablet') => void
     addViewport: (device: ViewportDevice) => void
     removeViewport: (device: ViewportDevice) => void
-    setActivePanelView: (view: 'page' | 'section' | 'library' | 'style-guide' | null) => void
+    /** Set a single viewport (for breakpoint toggle — replaces all active viewports) */
+    setSingleViewport: (device: ViewportDevice) => void
+    setActivePanelView: (view: 'page' | 'section' | 'library' | 'style-guide' | 'scheme-picker' | 'image-controls' | 'video-controls' | null) => void
+    setCanvasMode: (mode: 'wireframe' | 'design') => void
     openAddSidebar: (pageId: string, insertIndex: number) => void
     closeAddSidebar: () => void
     setGhostPreviewLayout: (layout: { type: string; variant?: string; name: string; presetId?: string } | null) => void
@@ -1148,6 +1173,7 @@ export const useUnifiedStore = create<UnifiedState>()(
             deviceVisibility: { desktop: true, tablet: false, mobile: true },
             activeViewports: ['desktop', 'mobile'] as ViewportDevice[],
             activePanelView: null,
+            canvasMode: 'wireframe',
             isAddSidebarOpen: false,
             addSidebarPageId: '',
             addSidebarInsertIndex: 0,
@@ -1797,6 +1823,226 @@ export const useUnifiedStore = create<UnifiedState>()(
                 triggerSave()
             },
 
+            // ============================================
+            // Section Design Props (Design Mode)
+            // ============================================
+
+            updateSectionDesignProps: (pageId, sectionId, props) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section) {
+                        section.designProps = { ...section.designProps, ...props }
+
+                        // Bridge: sync inline image design props → image block props/content
+                        if (props.inlineImage && section.blocks) {
+                            const inl = props.inlineImage as Record<string, unknown>
+                            const findImageBlock = (blocks: import('@/lib/designs/v2/blocks/types').Block[]): import('@/lib/designs/v2/blocks/types').Block | undefined => {
+                                for (const b of blocks) {
+                                    if (b.type === 'image') return b
+                                    if (b.children) {
+                                        const found = findImageBlock(b.children)
+                                        if (found) return found
+                                    }
+                                }
+                                return undefined
+                            }
+                            const imgBlock = findImageBlock(section.blocks)
+                            if (imgBlock) {
+                                const bp = imgBlock.props as Record<string, unknown>
+                                if (inl.position !== undefined) bp.position = inl.position
+                                if (inl.ratio !== undefined) bp.ratio = inl.ratio
+                                if (inl.fillMode !== undefined) bp.fillMode = inl.fillMode
+                                if (inl.shape !== undefined) bp.shape = inl.shape
+                                if (inl.url !== undefined) (imgBlock.content as Record<string, unknown>).src = inl.url
+                                if (inl.overlay !== undefined) {
+                                    bp.overlay = inl.overlay
+                                        ? { enabled: true, color: 'rgba(0,0,0,0.3)', opacity: 0.3 }
+                                        : { enabled: false }
+                                }
+                            }
+                        }
+
+                        // Bridge: sync video design props → video block content
+                        if (props.video && section.blocks) {
+                            const vid = props.video as Record<string, unknown>
+                            const findVideoBlock = (blocks: import('@/lib/designs/v2/blocks/types').Block[]): import('@/lib/designs/v2/blocks/types').Block | undefined => {
+                                for (const b of blocks) {
+                                    if (b.type === 'video') return b
+                                    if (b.children) {
+                                        const found = findVideoBlock(b.children)
+                                        if (found) return found
+                                    }
+                                }
+                                return undefined
+                            }
+                            const vidBlock = findVideoBlock(section.blocks)
+                            if (vidBlock) {
+                                const vc = vidBlock.content as Record<string, unknown>
+                                if (vid.url !== undefined) vc.src = vid.url
+                            }
+                        }
+
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            setSectionBackgroundImage: (pageId, sectionId, url) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section) {
+                        section.designProps = {
+                            ...section.designProps,
+                            backgroundType: 'image',
+                            backgroundImage: {
+                                url,
+                                position: 'center',
+                                overlay: true,
+                                overlayOpacity: 0.5,
+                            },
+                        }
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            setSectionInlineImage: (pageId, sectionId, url) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section) {
+                        section.designProps = {
+                            ...section.designProps,
+                            inlineImage: {
+                                url,
+                                ratio: 'auto',
+                                position: 'center',
+                                fillMode: 'cover',
+                                shape: 'rounded',
+                                overlay: false,
+                                foreground: 'none',
+                            },
+                        }
+
+                        // Bridge: also push URL into the first image block's content
+                        const findImageBlock = (blocks?: { type: string; content: Record<string, unknown>; children?: { type: string; content: Record<string, unknown>; children?: unknown[] }[] }[]): { type: string; content: Record<string, unknown> } | undefined => {
+                            if (!blocks) return undefined
+                            for (const b of blocks) {
+                                if (b.type === 'image') return b
+                                const found = findImageBlock(b.children as typeof blocks)
+                                if (found) return found
+                            }
+                            return undefined
+                        }
+                        const imageBlock = findImageBlock(section.blocks as { type: string; content: Record<string, unknown>; children?: { type: string; content: Record<string, unknown>; children?: unknown[] }[] }[])
+                        if (imageBlock) {
+                            imageBlock.content.src = url
+                        }
+
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            clearSectionImage: (pageId, sectionId, imageType) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (section?.designProps) {
+                        if (imageType === 'background') {
+                            delete section.designProps.backgroundImage
+                            section.designProps.backgroundType = 'none'
+                        } else {
+                            delete section.designProps.inlineImage
+                        }
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
+            swapMediaBlock: (pageId, sectionId, toType) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    const fromType = toType === 'video' ? 'image' : 'video'
+
+                    // Recursive tree walk to find and swap first media block
+                    function swapInTree(blocks: import('@/lib/designs/v2/blocks/types').Block[]): boolean {
+                        if (!blocks) return false
+                        for (let i = 0; i < blocks.length; i++) {
+                            const block = blocks[i]
+                            if (block.type === fromType) {
+                                // Preserve layout-critical props from original block
+                                const oldProps = block.props as Record<string, unknown>
+                                const layoutClassName = oldProps.layoutClassName
+                                const origRatio = oldProps.ratio ?? '1:1'
+
+                                const newProps = toType === 'video'
+                                    ? { ratio: origRatio, showPlayButton: true }
+                                    : { ratio: origRatio, shape: 'rectangle', position: 'center', fillMode: 'cover' }
+
+                                blocks[i] = {
+                                    ...block,
+                                    type: toType,
+                                    props: layoutClassName
+                                        ? { ...newProps, layoutClassName }
+                                        : newProps,
+                                    content: toType === 'video'
+                                        ? { src: undefined, alt: undefined, caption: undefined }
+                                        : { src: undefined, alt: undefined },
+                                }
+                                return true
+                            }
+                            if (block.children && swapInTree(block.children)) return true
+                        }
+                        return false
+                    }
+
+                    // Always update assetType — even when no block swap occurred
+                    // (e.g. already the correct block type after layout switch)
+                    swapInTree(section.blocks)
+                    if (!section.designProps) {
+                        section.designProps = {} as import('@/lib/designs/v2/tokens').SectionDesignProps
+                    }
+                    section.designProps.assetType = toType
+                    state.isDirty = true
+                })
+                triggerSave()
+            },
+
+            flipSectionAssetPlacement: (pageId, sectionId) => {
+                set(state => {
+                    const page = state.pages.find(p => p.id === pageId)
+                    const section = page?.sections.find(s => s.id === sectionId)
+                    if (!section?.blocks) return
+
+                    // Find the top-level frame block (columns container) and reverse its children
+                    function flipInTree(blocks: import('@/lib/designs/v2/blocks/types').Block[]): boolean {
+                        for (const block of blocks) {
+                            if (block.type === 'frame' && block.children && block.children.length >= 2) {
+                                block.children.reverse()
+                                return true
+                            }
+                            if (block.children && flipInTree(block.children)) return true
+                        }
+                        return false
+                    }
+
+                    if (flipInTree(section.blocks)) {
+                        state.isDirty = true
+                    }
+                })
+                triggerSave()
+            },
+
             deleteSection: (pageId, sectionId) => {
                 set(state => {
                     const page = state.pages.find(p => p.id === pageId)
@@ -1846,6 +2092,10 @@ export const useUnifiedStore = create<UnifiedState>()(
                             section.layoutVariant = undefined
                             // V2 layouts don't use V1 controls — clear them
                             section.controls = {}
+                            // Reset stale assetType so new layout uses its native default
+                            if (section.designProps) {
+                                delete (section.designProps as Record<string, unknown>).assetType
+                            }
                             // Populate blocks from template factory,
                             // but preserve user-edited content from existing blocks
                             const oldBlocks = section.blocks
@@ -2210,7 +2460,17 @@ export const useUnifiedStore = create<UnifiedState>()(
                 })
             },
 
+            setSingleViewport: (device) => {
+                set(state => {
+                    state.activeViewports = [device]
+                    state.deviceVisibility = { desktop: false, tablet: false, mobile: false }
+                    state.deviceVisibility[device] = true
+                })
+            },
+
             setActivePanelView: (view) => set({ activePanelView: view }),
+
+            setCanvasMode: (mode) => set({ canvasMode: mode }),
 
             openAddSidebar: (pageId, insertIndex) => set({
                 isAddSidebarOpen: true,

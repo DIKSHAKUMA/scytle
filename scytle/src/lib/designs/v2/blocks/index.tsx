@@ -128,7 +128,18 @@ export function RenderBlock({ block, className }: RenderBlockProps) {
 
     // Use layoutClassName from props if no explicit className was provided
     const propsLayoutClass = (block.props as { layoutClassName?: string }).layoutClassName
-    const resolvedClass = className ?? propsLayoutClass
+    let resolvedClass = className ?? propsLayoutClass
+
+    // Prevent image/video blocks from collapsing in mobile column layouts.
+    // When a parent frame switches to flex-col on mobile, flex-1 (flex-basis: 0%)
+    // causes 0×0 collapse. Inject flex-auto + full width for the mobile breakpoint.
+    if (
+        (block.type === 'image' || block.type === 'video') &&
+        resolvedClass?.includes('flex-1') &&
+        !resolvedClass.includes('@max-sm:!flex-auto')
+    ) {
+        resolvedClass = resolvedClass + ' @max-sm:!flex-auto @max-sm:!w-full'
+    }
 
     return (
         <LayerWrapper block={block} className={resolvedClass}>
