@@ -82,9 +82,9 @@ export const DEFAULT_COLORS_DARK: ColorTokens = {
 // ============================================
 
 export const DEFAULT_TYPOGRAPHY: TypographyTokens = {
-    headingFont: "'Inter', sans-serif",
+    headingFont: "'Raleway', sans-serif",
     bodyFont: "'Inter', sans-serif",
-    headingWeight: 700,
+    headingWeight: 500,
     bodyWeight: 400,
     sizeScale: 1,
     letterSpacingStyle: 'default',
@@ -269,20 +269,20 @@ export const WIREFRAME_NEUTRAL_CSS: CSSTokenMap = {
     '--sg-card-bg': '#ffffff',
     '--sg-card-border': '#e5e7eb',
 
-    // Typography — system defaults
-    '--sg-font-heading': 'var(--font-sans)',
-    '--sg-font-body': 'var(--font-sans)',
-    '--sg-heading-weight': '700',
+    // Typography — Raleway headings + Inter body (from Figma Relume kit)
+    '--sg-font-heading': "'Raleway', sans-serif",
+    '--sg-font-body': "'Inter', sans-serif",
+    '--sg-heading-weight': '500',
     '--sg-body-weight': '400',
-    '--sg-heading-letter-spacing': '-0.02em',
+    '--sg-heading-letter-spacing': '-0.01em',
 
     '--sg-size-scale': '1',
-    '--sg-h1-size': '3.75rem',
-    '--sg-h2-size': '3rem',
-    '--sg-h3-size': '2.25rem',
-    '--sg-h4-size': '1.875rem',
-    '--sg-h5-size': '1.5rem',
-    '--sg-h6-size': '1.25rem',
+    '--sg-h1-size': '4.5rem',
+    '--sg-h2-size': '3.25rem',
+    '--sg-h3-size': '2.75rem',
+    '--sg-h4-size': '2.25rem',
+    '--sg-h5-size': '1.75rem',
+    '--sg-h6-size': '1.375rem',
     '--sg-body-size': '1rem',
     '--sg-body-large-size': '1.125rem',
     '--sg-caption-size': '0.875rem',

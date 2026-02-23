@@ -87,6 +87,8 @@ export interface TextBlockProps {
     variant: TextVariant
     /** Text alignment */
     align: TextAlign
+    /** Whether the text should render bold (overrides style-guide body weight) */
+    bold?: boolean
 }
 
 export interface TextBlockContent {

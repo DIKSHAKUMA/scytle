@@ -393,6 +393,13 @@ export const FONT_PAIRS: FontPair[] = [
         body: googleFont('Inter'),
     },
     {
+        id: 'raleway-inter',
+        name: 'Raleway + Inter',
+        category: 'modern',
+        heading: googleFont('Raleway'),
+        body: googleFont('Inter'),
+    },
+    {
         id: 'raleway-open-sans',
         name: 'Raleway + Open Sans',
         category: 'creative',

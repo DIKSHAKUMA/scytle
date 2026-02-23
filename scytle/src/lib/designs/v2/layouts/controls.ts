@@ -19,6 +19,14 @@ import {
     FAMILY_C_PRESETS_MAP as HEADER_C_PRESETS_MAP,
     FAMILY_D_PRESETS_MAP as HEADER_D_PRESETS_MAP,
 } from './header/presets'
+import {
+    FAMILY_A_PRESETS_MAP as FAQ_A_PRESETS_MAP,
+    FAMILY_B_PRESETS_MAP as FAQ_B_PRESETS_MAP,
+    FAMILY_C_PRESETS_MAP as FAQ_C_PRESETS_MAP,
+    FAMILY_D_PRESETS_MAP as FAQ_D_PRESETS_MAP,
+    FAMILY_E_PRESETS_MAP as FAQ_E_PRESETS_MAP,
+    FAMILY_F_PRESETS_MAP as FAQ_F_PRESETS_MAP,
+} from './faq/presets'
 
 // ============================================
 // Generic Control Types
@@ -589,6 +597,184 @@ const HEADER_D_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// FAQ Controls — Family A (Accordion + bottom CTA)
+// ============================================
+// Accordion list with optional bottom CTA.
+// 3 axes: text (center/left), style (normal/card), columns (1/2).
+// Dynamic visibility: text=center shows columns; text=left hides columns;
+// columns=2 hides text axis.
+
+const FAQ_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-a',
+    axes: [
+        {
+            key: 'text',
+            label: 'Text',
+            options: [
+                { value: 'center', label: 'Center', icon: 'AlignCenter' },
+                { value: 'left', label: 'Left', icon: 'AlignLeft' },
+            ],
+            // Hidden when columns=2
+            condition: (values) => values.columns !== '2',
+        },
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+        {
+            key: 'columns',
+            label: 'Columns',
+            options: [
+                { value: '1', label: '1 Column' },
+                { value: '2', label: '2 Columns', icon: 'Columns2' },
+            ],
+            // Hidden when text=left
+            condition: (values) => values.text !== 'left',
+        },
+    ],
+    resolve(values) {
+        const columns = values.columns ?? '1'
+        const text = values.text ?? 'center'
+        const style = values.style ?? 'normal'
+
+        // 2-column path (always center)
+        if (columns === '2') {
+            return style === 'card' ? 'faq-11' : 'faq-10'
+        }
+        // Left path
+        if (text === 'left') {
+            return style === 'card' ? 'faq-5' : 'faq-2'
+        }
+        // Center 1-col path
+        return style === 'card' ? 'faq-4' : 'faq-1'
+    },
+    extract(layoutId) {
+        const preset = FAQ_A_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// FAQ Controls — Family B (Split + Accordion)
+// ============================================
+// Split layout: left col (title + CTA button), right col (accordion list).
+// 1 axis: style (normal/card).
+
+const FAQ_B_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-b',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        return style === 'card' ? 'faq-6' : 'faq-3'
+    },
+    extract(layoutId) {
+        const preset = FAQ_B_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// FAQ Controls — Family C (Grid + bottom CTA)
+// ============================================
+// Non-accordion grid of Q/A pairs with bottom CTA.
+// 1 axis: columns (1/2/3).
+
+const FAQ_C_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-c',
+    axes: [
+        {
+            key: 'columns',
+            label: 'Columns',
+            options: [
+                { value: '1', label: '1 Column' },
+                { value: '2', label: '2 Columns', icon: 'Columns2' },
+                { value: '3', label: '3 Columns', icon: 'Columns3' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const cols = values.columns ?? '1'
+        if (cols === '3') return 'faq-13'
+        if (cols === '2') return 'faq-12'
+        return 'faq-7'
+    },
+    extract(layoutId) {
+        const preset = FAQ_C_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// FAQ Controls — Family D (Split + horizontal Q/A)
+// ============================================
+// Split layout with horizontal Q/A rows (dividers). Standalone.
+
+const FAQ_D_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-d',
+    axes: [],
+    resolve() { return 'faq-8' },
+    extract(layoutId) {
+        const preset = FAQ_D_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// FAQ Controls — Family E (Horizontal Q/A + CTA)
+// ============================================
+// Full-width horizontal Q/A rows with bottom CTA. Standalone.
+
+const FAQ_E_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-e',
+    axes: [],
+    resolve() { return 'faq-9' },
+    extract(layoutId) {
+        const preset = FAQ_E_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// FAQ Controls — Family F (Icon grid + CTA)
+// ============================================
+// 3×2 icon grid with centered bottom CTA. Standalone.
+
+const FAQ_F_CONTROL_DEF: LayoutControlDef = {
+    category: 'faq',
+    familyId: 'faq-f',
+    axes: [],
+    resolve() { return 'faq-14' },
+    extract(layoutId) {
+        const preset = FAQ_F_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
@@ -602,6 +788,12 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'header-b': HEADER_B_CONTROL_DEF,
     'header-c': HEADER_C_CONTROL_DEF,
     'header-d': HEADER_D_CONTROL_DEF,
+    'faq-a': FAQ_A_CONTROL_DEF,
+    'faq-b': FAQ_B_CONTROL_DEF,
+    'faq-c': FAQ_C_CONTROL_DEF,
+    'faq-d': FAQ_D_CONTROL_DEF,
+    'faq-e': FAQ_E_CONTROL_DEF,
+    'faq-f': FAQ_F_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
@@ -609,6 +801,7 @@ const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     hero: ['hero'],
     cta: ['cta-a', 'cta-b', 'cta-c'],
     header: ['header-a', 'header-b', 'header-c', 'header-d'],
+    faq: ['faq-a', 'faq-b', 'faq-c', 'faq-d', 'faq-e', 'faq-f'],
 }
 
 /** Get all control definitions for a category (one per family) */

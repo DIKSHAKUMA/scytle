@@ -76,6 +76,7 @@ export function TextBlock({ block, className }: Props) {
 
     const variant = props.variant ?? 'body'
     const align = props.align ?? 'left'
+    const bold = props.bold ?? false
     const text = content.text ?? ''
 
     const variantStyle = VARIANT_STYLES[variant] ?? VARIANT_STYLES.body
@@ -168,7 +169,7 @@ export function TextBlock({ block, className }: Props) {
                 fontSize: variantStyle.sizeVar,
                 lineHeight: variantStyle.lineHeight,
                 fontFamily: 'var(--sg-font-body)',
-                fontWeight: 'var(--sg-body-weight)',
+                fontWeight: bold ? 700 : 'var(--sg-body-weight)',
                 color: variantStyle.colorVar,
                 ...(isEditing ? { userSelect: 'text', WebkitUserSelect: 'text' } : {}),
             } as React.CSSProperties}

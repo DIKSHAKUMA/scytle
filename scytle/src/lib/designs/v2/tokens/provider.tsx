@@ -18,11 +18,34 @@
 
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useStyleGuideStore } from '@/store/style-guide-store'
 import { useUnifiedStore } from '@/store'
 import { computeSchemeOverrideCSS, WIREFRAME_NEUTRAL_CSS } from './defaults'
 import type { CSSTokenMap } from './index'
+
+// ============================================
+// Google Fonts loader for default fonts
+// ============================================
+
+const DEFAULT_FONTS_URL =
+    'https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap'
+
+let defaultFontsLoaded = false
+
+function ensureDefaultFonts() {
+    if (typeof document === 'undefined' || defaultFontsLoaded) return
+    defaultFontsLoaded = true
+
+    // Check if already present
+    const existing = document.querySelector(`link[href="${DEFAULT_FONTS_URL}"]`)
+    if (existing) return
+
+    const link = document.createElement('link')
+    link.rel = 'stylesheet'
+    link.href = DEFAULT_FONTS_URL
+    document.head.appendChild(link)
+}
 
 // ============================================
 // TokenProvider — Global (wraps entire canvas)
@@ -44,6 +67,11 @@ interface TokenProviderProps {
 export function TokenProvider({ children, className }: TokenProviderProps) {
     const computedCSS = useStyleGuideStore((s) => s.computedCSS)
     const canvasMode = useUnifiedStore((s) => s.canvasMode)
+
+    // Load Raleway + Inter from Google Fonts on first mount
+    useEffect(() => {
+        ensureDefaultFonts()
+    }, [])
 
     // In wireframe mode, force neutral grayscale; in design mode, use styled tokens
     const effectiveCSS = canvasMode === 'wireframe' ? WIREFRAME_NEUTRAL_CSS : computedCSS

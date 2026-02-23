@@ -12,6 +12,7 @@ import type { LayoutTemplate, LayoutCategory, LayoutRegistry } from './types'
 import { LAYOUT_TEMPLATES as HERO_TEMPLATES } from './hero'
 import { LAYOUT_TEMPLATES as CTA_TEMPLATES } from './cta'
 import { LAYOUT_TEMPLATES as HEADER_TEMPLATES } from './header'
+import { LAYOUT_TEMPLATES as FAQ_TEMPLATES } from './faq'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -29,6 +30,7 @@ export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     hero: HERO_TEMPLATES,
     cta: CTA_TEMPLATES,
     header: HEADER_TEMPLATES,
+    faq: FAQ_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
