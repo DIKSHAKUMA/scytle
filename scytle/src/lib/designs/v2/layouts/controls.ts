@@ -7,9 +7,18 @@
 
 import type { LayoutCategory } from './types'
 import { ALL_HERO_PRESETS, HERO_PRESETS_MAP } from './hero/presets'
-import { CTA_PRESETS_MAP } from './cta/presets'
-import { CTA_B_PRESETS_MAP } from './cta/presets-b'
-import { CTA_C_PRESETS_MAP } from './cta/presets-c'
+import {
+    FAMILY_A_PRESETS_MAP,
+    FAMILY_B_PRESETS_MAP,
+    FAMILY_C_PRESETS_MAP,
+    CTA_PRESETS_MAP,
+} from './cta/presets'
+import {
+    FAMILY_A_PRESETS_MAP as HEADER_A_PRESETS_MAP,
+    FAMILY_B_PRESETS_MAP as HEADER_B_PRESETS_MAP,
+    FAMILY_C_PRESETS_MAP as HEADER_C_PRESETS_MAP,
+    FAMILY_D_PRESETS_MAP as HEADER_D_PRESETS_MAP,
+} from './header/presets'
 
 // ============================================
 // Generic Control Types
@@ -170,23 +179,9 @@ const CTA_A_CONTROL_DEF: LayoutControlDef = {
         return element === 'form' ? 'cta-2' : 'cta-1'
     },
     extract(layoutId) {
-        const preset = CTA_PRESETS_MAP[layoutId]
+        const preset = FAMILY_A_PRESETS_MAP[layoutId]
         if (!preset) return {}
-        const result: Record<string, string> = {
-            element: preset.element,
-        }
-        if (preset.style === 'expand') {
-            result.assetStyle = 'expand'
-            result.style = 'normal'
-        } else if (preset.style === 'card') {
-            result.style = 'card'
-            result.assetStyle = 'default'
-        } else {
-            result.style = 'normal'
-            result.assetStyle = 'default'
-        }
-        result.assetPlacement = 'right'
-        return result
+        return { ...preset.axes }
     },
 }
 
@@ -252,22 +247,9 @@ const CTA_B_CONTROL_DEF: LayoutControlDef = {
         return element === 'form' ? 'cta-22' : 'cta-21'
     },
     extract(layoutId) {
-        const preset = CTA_B_PRESETS_MAP[layoutId]
+        const preset = FAMILY_B_PRESETS_MAP[layoutId]
         if (!preset) return {}
-        const result: Record<string, string> = {
-            element: preset.element,
-        }
-        if (preset.sectionStyle === 'text-only') {
-            result.asset = 'none'
-            result.background = preset.background
-        } else if (preset.sectionStyle === 'stacked') {
-            result.asset = 'image'
-            result.assetStyle = 'default'
-        } else if (preset.sectionStyle === 'expand') {
-            result.asset = 'image'
-            result.assetStyle = 'expand'
-        }
-        return result
+        return { ...preset.axes }
     },
 }
 
@@ -396,17 +378,213 @@ const CTA_C_CONTROL_DEF: LayoutControlDef = {
         return element === 'form' ? 'cta-26' : 'cta-25'
     },
     extract(layoutId) {
-        const preset = CTA_C_PRESETS_MAP[layoutId]
+        const preset = FAMILY_C_PRESETS_MAP[layoutId]
         if (!preset) return {}
-        const result: Record<string, string> = {
-            text: preset.textAlignment,
-            element: preset.element,
-            style: preset.style,
-            background: preset.background,
-            asset: preset.asset,
-            assetStyle: preset.assetStyle,
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Header Controls — Family A (Full-width banner)
+// ============================================
+// Full-width banner with optional background media.
+// 3 axes: text (left/center), background (none/image/video), element (button/form/none).
+
+const HEADER_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'header',
+    familyId: 'header-a',
+    axes: [
+        {
+            key: 'text',
+            label: 'Text',
+            options: [
+                { value: 'left', label: 'Left', icon: 'AlignLeft' },
+                { value: 'center', label: 'Center', icon: 'AlignCenter' },
+            ],
+        },
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+                { value: 'none', label: 'None' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const text = values.text ?? 'left'
+        const bg = values.background ?? 'none'
+        const element = values.element ?? 'button'
+
+        // Left path
+        if (text === 'left') {
+            if (bg === 'none') {
+                if (element === 'form') return 'header-45'
+                if (element === 'none') return 'header-46'
+                return 'header-44'
+            }
+            if (bg === 'image') {
+                if (element === 'form') return 'header-52'
+                if (element === 'none') return 'header-54'
+                return 'header-50'
+            }
+            // bg === 'video'
+            if (element === 'form') return 'header-53'
+            if (element === 'none') return 'header-55'
+            return 'header-51'
         }
-        return result
+
+        // Center path
+        if (bg === 'none') {
+            if (element === 'form') return 'header-63'
+            if (element === 'none') return 'header-64'
+            return 'header-62'
+        }
+        if (bg === 'image') {
+            if (element === 'form') return 'header-67'
+            if (element === 'none') return 'header-69'
+            return 'header-65'
+        }
+        // bg === 'video'
+        if (element === 'form') return 'header-68'
+        if (element === 'none') return 'header-70'
+        return 'header-66'
+    },
+    extract(layoutId) {
+        const preset = HEADER_A_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Header Controls — Family B (Split layout)
+// ============================================
+// Two-column split. Left col: tagline + heading. Right col: body + actions.
+// 2 axes: background (none/image/video), element toggle (button/form).
+
+const HEADER_B_CONTROL_DEF: LayoutControlDef = {
+    category: 'header',
+    familyId: 'header-b',
+    axes: [
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const bg = values.background ?? 'none'
+        const element = values.element ?? 'button'
+
+        if (bg === 'none') return element === 'form' ? 'header-48' : 'header-47'
+        if (bg === 'image') return element === 'form' ? 'header-58' : 'header-56'
+        // bg === 'video'
+        return element === 'form' ? 'header-59' : 'header-57'
+    },
+    extract(layoutId) {
+        const preset = HEADER_B_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Header Controls — Family C (Minimal split)
+// ============================================
+// Two-column split. Left col: heading only. Right col: body only.
+// 1 axis: background (none/image/video). No element toggle.
+
+const HEADER_C_CONTROL_DEF: LayoutControlDef = {
+    category: 'header',
+    familyId: 'header-c',
+    axes: [
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const bg = values.background ?? 'none'
+        if (bg === 'image') return 'header-60'
+        if (bg === 'video') return 'header-61'
+        return 'header-49'
+    },
+    extract(layoutId) {
+        const preset = HEADER_C_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Header Controls — Family D (Card layout)
+// ============================================
+// Card overlay with centered content. Section → container → bordered/bg card → blocks.
+// 2 axes: background (none/image/video), element toggle (button/form).
+
+const HEADER_D_CONTROL_DEF: LayoutControlDef = {
+    category: 'header',
+    familyId: 'header-d',
+    axes: [
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const bg = values.background ?? 'none'
+        const element = values.element ?? 'button'
+
+        if (bg === 'none') return element === 'form' ? 'header-97' : 'header-96'
+        if (bg === 'image') return element === 'form' ? 'header-99' : 'header-98'
+        // bg === 'video'
+        return element === 'form' ? 'header-101' : 'header-100'
+    },
+    extract(layoutId) {
+        const preset = HEADER_D_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
     },
 }
 
@@ -420,12 +598,17 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'cta-a': CTA_A_CONTROL_DEF,
     'cta-b': CTA_B_CONTROL_DEF,
     'cta-c': CTA_C_CONTROL_DEF,
+    'header-a': HEADER_A_CONTROL_DEF,
+    'header-b': HEADER_B_CONTROL_DEF,
+    'header-c': HEADER_C_CONTROL_DEF,
+    'header-d': HEADER_D_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
 const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     hero: ['hero'],
     cta: ['cta-a', 'cta-b', 'cta-c'],
+    header: ['header-a', 'header-b', 'header-c', 'header-d'],
 }
 
 /** Get all control definitions for a category (one per family) */

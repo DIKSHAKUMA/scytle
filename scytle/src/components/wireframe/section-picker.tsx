@@ -51,6 +51,7 @@ export function SectionPicker({
     // V2 category metadata for context filtering
     const V2_CATEGORY_META: Record<string, { name: string; contexts: PageContext[] }> = {
         hero: { name: 'Hero', contexts: ['marketing'] },
+        header: { name: 'Header', contexts: ['marketing'] },
         navbar: { name: 'Navbar', contexts: ['marketing', 'application', 'auth'] },
         footer: { name: 'Footer', contexts: ['marketing', 'application', 'auth'] },
         features: { name: 'Features', contexts: ['marketing'] },

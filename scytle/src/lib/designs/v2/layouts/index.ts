@@ -11,6 +11,7 @@ import type { LayoutTemplate, LayoutCategory, LayoutRegistry } from './types'
 // ── Category imports ────────────────────────────────────────────
 import { LAYOUT_TEMPLATES as HERO_TEMPLATES } from './hero'
 import { LAYOUT_TEMPLATES as CTA_TEMPLATES } from './cta'
+import { LAYOUT_TEMPLATES as HEADER_TEMPLATES } from './header'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -27,6 +28,7 @@ export { getControlDef, getControlDefForLayout, getControlDefsForCategory } from
 export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     hero: HERO_TEMPLATES,
     cta: CTA_TEMPLATES,
+    header: HEADER_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
@@ -54,8 +56,7 @@ export function getTemplateById(id: string): LayoutTemplate | undefined {
 import type { ImageRole } from '../tokens'
 import { HERO_PRESETS_MAP } from './hero/presets'
 import { CTA_PRESETS_MAP } from './cta/presets'
-import { CTA_B_PRESETS_MAP } from './cta/presets-b'
-import { CTA_C_PRESETS_MAP } from './cta/presets-c'
+import { HEADER_PRESETS_MAP } from './header/presets'
 
 export interface PresetImageConfig {
     imageRole: ImageRole
@@ -74,11 +75,8 @@ export function getPresetConfig(componentId: string): PresetImageConfig | undefi
     const ctaConfig = CTA_PRESETS_MAP[componentId]
     if (ctaConfig) return { imageRole: ctaConfig.imageRole, supportsVideo: ctaConfig.supportsVideo }
 
-    const ctaBConfig = CTA_B_PRESETS_MAP[componentId]
-    if (ctaBConfig) return { imageRole: ctaBConfig.imageRole, supportsVideo: ctaBConfig.supportsVideo }
-
-    const ctaCConfig = CTA_C_PRESETS_MAP[componentId]
-    if (ctaCConfig) return { imageRole: ctaCConfig.imageRole, supportsVideo: ctaCConfig.supportsVideo }
+    const headerConfig = HEADER_PRESETS_MAP[componentId]
+    if (headerConfig) return { imageRole: headerConfig.imageRole, supportsVideo: headerConfig.supportsVideo }
 
     return undefined
 }
