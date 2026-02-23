@@ -18,6 +18,7 @@ import type { Block } from '../blocks/types'
 
 export type LayoutCategory =
     | 'hero'
+    | 'hero-header'
     | 'header'
     | 'navbar'
     | 'footer'

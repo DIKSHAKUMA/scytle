@@ -13,6 +13,7 @@ import { LAYOUT_TEMPLATES as HERO_TEMPLATES } from './hero'
 import { LAYOUT_TEMPLATES as CTA_TEMPLATES } from './cta'
 import { LAYOUT_TEMPLATES as HEADER_TEMPLATES } from './header'
 import { LAYOUT_TEMPLATES as FAQ_TEMPLATES } from './faq'
+import { LAYOUT_TEMPLATES as HERO_HEADER_TEMPLATES } from './hero-header'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -31,6 +32,7 @@ export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     cta: CTA_TEMPLATES,
     header: HEADER_TEMPLATES,
     faq: FAQ_TEMPLATES,
+    'hero-header': HERO_HEADER_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
@@ -58,6 +60,7 @@ export function getTemplateById(id: string): LayoutTemplate | undefined {
 import type { ImageRole } from '../tokens'
 import { HERO_PRESETS_MAP } from './hero/presets'
 import { CTA_PRESETS_MAP } from './cta/presets'
+import { HERO_HEADER_PRESETS_MAP } from './hero-header/presets'
 import { HEADER_PRESETS_MAP } from './header/presets'
 
 export interface PresetImageConfig {
@@ -79,6 +82,9 @@ export function getPresetConfig(componentId: string): PresetImageConfig | undefi
 
     const headerConfig = HEADER_PRESETS_MAP[componentId]
     if (headerConfig) return { imageRole: headerConfig.imageRole, supportsVideo: headerConfig.supportsVideo }
+
+    const hhConfig = HERO_HEADER_PRESETS_MAP[componentId]
+    if (hhConfig) return { imageRole: hhConfig.imageRole, supportsVideo: hhConfig.supportsVideo }
 
     return undefined
 }

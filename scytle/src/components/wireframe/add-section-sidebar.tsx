@@ -125,6 +125,7 @@ function getRepresentativeLayouts(
 // V2 category metadata — used to populate the sidebar
 const V2_CATEGORY_META: Record<string, { name: string; description?: string; contexts: PageContext[] }> = {
     hero: { name: 'Hero', description: 'Hero headers & banners', contexts: ['marketing'] },
+    'hero-header': { name: 'Hero Header', description: 'Hero headers with media & forms', contexts: ['marketing'] },
     header: { name: 'Header', description: 'Header sections & banners', contexts: ['marketing'] },
     navbar: { name: 'Navbar', description: 'Navigation bars', contexts: ['marketing', 'application', 'auth'] },
     footer: { name: 'Footer', description: 'Page footers', contexts: ['marketing', 'application', 'auth'] },

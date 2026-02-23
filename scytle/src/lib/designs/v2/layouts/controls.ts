@@ -27,6 +27,14 @@ import {
     FAMILY_E_PRESETS_MAP as FAQ_E_PRESETS_MAP,
     FAMILY_F_PRESETS_MAP as FAQ_F_PRESETS_MAP,
 } from './faq/presets'
+import {
+    FAMILY_A_PRESETS_MAP as HH_A_PRESETS_MAP,
+    FAMILY_B_PRESETS_MAP as HH_B_PRESETS_MAP,
+    FAMILY_C_PRESETS_MAP as HH_C_PRESETS_MAP,
+    FAMILY_D_PRESETS_MAP as HH_D_PRESETS_MAP,
+    FAMILY_E_PRESETS_MAP as HH_E_PRESETS_MAP,
+    FAMILY_F_PRESETS_MAP as HH_F_PRESETS_MAP,
+} from './hero-header/presets'
 
 // ============================================
 // Generic Control Types
@@ -775,6 +783,317 @@ const FAQ_F_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// Hero Header Controls — Family A (Split layouts)
+// ============================================
+// Side-by-side text + inline media. 4 axes: style×asset×placement×element.
+// 16 variants: Hero Header 1–4, 19–22, 84–87, 92–95.
+
+const HERO_HEADER_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-a',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'assetPlacement',
+            label: 'Placement',
+            options: [
+                { value: 'right', label: 'Right', icon: 'ArrowRight' },
+                { value: 'left', label: 'Left', icon: 'ArrowLeft' },
+            ],
+            modeVisibility: 'design',
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        const asset = values.asset ?? 'image'
+        const placement = values.assetPlacement ?? 'right'
+        const element = values.element ?? 'button'
+
+        if (style === 'normal') {
+            if (placement === 'right') {
+                if (asset === 'image') return element === 'form' ? 'hero-header-2' : 'hero-header-1'
+                return element === 'form' ? 'hero-header-4' : 'hero-header-3'
+            }
+            // left
+            if (asset === 'image') return element === 'form' ? 'hero-header-20' : 'hero-header-19'
+            return element === 'form' ? 'hero-header-22' : 'hero-header-21'
+        }
+        // card
+        if (placement === 'right') {
+            if (asset === 'image') return element === 'form' ? 'hero-header-85' : 'hero-header-84'
+            return element === 'form' ? 'hero-header-87' : 'hero-header-86'
+        }
+        // card + left
+        if (asset === 'image') return element === 'form' ? 'hero-header-93' : 'hero-header-92'
+        return element === 'form' ? 'hero-header-95' : 'hero-header-94'
+    },
+    extract(layoutId) {
+        const preset = HH_A_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Hero Header Controls — Family B (Full background)
+// ============================================
+// Centered text over background image/video, normal/card.
+// 8 variants: Hero Header 5–8, 88–91.
+
+const HERO_HEADER_B_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-b',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        const bg = values.background ?? 'image'
+        const element = values.element ?? 'button'
+
+        if (style === 'normal') {
+            if (bg === 'image') return element === 'form' ? 'hero-header-6' : 'hero-header-5'
+            return element === 'form' ? 'hero-header-8' : 'hero-header-7'
+        }
+        // card
+        if (bg === 'image') return element === 'form' ? 'hero-header-89' : 'hero-header-88'
+        return element === 'form' ? 'hero-header-91' : 'hero-header-90'
+    },
+    extract(layoutId) {
+        const preset = HH_B_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Hero Header Controls — Family C (Stacked)
+// ============================================
+// Image/video on top, two-column text below.
+// 4 variants: Hero Header 9, 10, 13, 14.
+
+const HERO_HEADER_C_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-c',
+    axes: [
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const asset = values.asset ?? 'image'
+        const element = values.element ?? 'button'
+
+        if (asset === 'image') return element === 'form' ? 'hero-header-10' : 'hero-header-9'
+        return element === 'form' ? 'hero-header-14' : 'hero-header-13'
+    },
+    extract(layoutId) {
+        const preset = HH_C_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Hero Header Controls — Family D (Split + extended)
+// ============================================
+// Text + description left, media right. No card/placement axes.
+// 4 variants: Hero Header 15–18.
+
+const HERO_HEADER_D_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-d',
+    axes: [
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const asset = values.asset ?? 'image'
+        const element = values.element ?? 'button'
+
+        if (asset === 'image') return element === 'form' ? 'hero-header-16' : 'hero-header-15'
+        return element === 'form' ? 'hero-header-18' : 'hero-header-17'
+    },
+    extract(layoutId) {
+        const preset = HH_D_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Hero Header Controls — Family E (Side-by-side)
+// ============================================
+// Text + media side-by-side, vertically centered content.
+// 4 variants: Hero Header 26–29.
+
+const HERO_HEADER_E_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-e',
+    axes: [
+        {
+            key: 'asset',
+            label: 'Asset',
+            options: [
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const asset = values.asset ?? 'image'
+        const element = values.element ?? 'button'
+
+        if (asset === 'image') return element === 'form' ? 'hero-header-27' : 'hero-header-26'
+        return element === 'form' ? 'hero-header-29' : 'hero-header-28'
+    },
+    extract(layoutId) {
+        const preset = HH_E_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Hero Header Controls — Family F (Centered + optional bg)
+// ============================================
+// Centered hero with optional background (none/image/video), normal/card.
+// 12 variants: Hero Header 23, 24, 30, 31, 33, 34, 96–101.
+
+const HERO_HEADER_F_CONTROL_DEF: LayoutControlDef = {
+    category: 'hero-header',
+    familyId: 'hero-header-f',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+        {
+            key: 'background',
+            label: 'Background',
+            options: [
+                { value: 'none', label: 'None' },
+                { value: 'image', label: 'Image', icon: 'Image' },
+                { value: 'video', label: 'Video', icon: 'Video' },
+            ],
+        },
+        {
+            key: 'element',
+            label: 'Element',
+            options: [
+                { value: 'button', label: 'Button', icon: 'MousePointerClick' },
+                { value: 'form', label: 'Form', icon: 'Mail' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        const bg = values.background ?? 'none'
+        const element = values.element ?? 'button'
+
+        if (style === 'normal') {
+            if (bg === 'none') return element === 'form' ? 'hero-header-24' : 'hero-header-23'
+            if (bg === 'image') return element === 'form' ? 'hero-header-31' : 'hero-header-30'
+            return element === 'form' ? 'hero-header-34' : 'hero-header-33'
+        }
+        // card
+        if (bg === 'none') return element === 'form' ? 'hero-header-97' : 'hero-header-96'
+        if (bg === 'image') return element === 'form' ? 'hero-header-99' : 'hero-header-98'
+        return element === 'form' ? 'hero-header-101' : 'hero-header-100'
+    },
+    extract(layoutId) {
+        const preset = HH_F_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
@@ -794,6 +1113,12 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'faq-d': FAQ_D_CONTROL_DEF,
     'faq-e': FAQ_E_CONTROL_DEF,
     'faq-f': FAQ_F_CONTROL_DEF,
+    'hero-header-a': HERO_HEADER_A_CONTROL_DEF,
+    'hero-header-b': HERO_HEADER_B_CONTROL_DEF,
+    'hero-header-c': HERO_HEADER_C_CONTROL_DEF,
+    'hero-header-d': HERO_HEADER_D_CONTROL_DEF,
+    'hero-header-e': HERO_HEADER_E_CONTROL_DEF,
+    'hero-header-f': HERO_HEADER_F_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
@@ -802,6 +1127,7 @@ const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     cta: ['cta-a', 'cta-b', 'cta-c'],
     header: ['header-a', 'header-b', 'header-c', 'header-d'],
     faq: ['faq-a', 'faq-b', 'faq-c', 'faq-d', 'faq-e', 'faq-f'],
+    'hero-header': ['hero-header-a', 'hero-header-b', 'hero-header-c', 'hero-header-d', 'hero-header-e', 'hero-header-f'],
 }
 
 /** Get all control definitions for a category (one per family) */
