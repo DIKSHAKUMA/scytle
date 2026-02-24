@@ -38,6 +38,13 @@ import {
 import {
     FAMILY_A_PRESETS_MAP as NAVBAR_A_PRESETS_MAP,
 } from './navbar/presets'
+import {
+    FAMILY_A_PRESETS_MAP as FOOTER_A_PRESETS_MAP,
+    FAMILY_B_PRESETS_MAP as FOOTER_B_PRESETS_MAP,
+    FAMILY_C_PRESETS_MAP as FOOTER_C_PRESETS_MAP,
+    FAMILY_D_PRESETS_MAP as FOOTER_D_PRESETS_MAP,
+    FAMILY_E_PRESETS_MAP as FOOTER_E_PRESETS_MAP,
+} from './footer/presets'
 
 // ============================================
 // Generic Control Types
@@ -1113,6 +1120,138 @@ const NAVBAR_A_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// Footer Controls — Family A (Newsletter left + 3 columns)
+// ============================================
+// Style axis: normal/card. Footer 1 ↔ Footer 11.
+
+const FOOTER_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'footer',
+    familyId: 'footer-a',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        return style === 'card' ? 'footer-11' : 'footer-1'
+    },
+    extract(layoutId) {
+        const preset = FOOTER_A_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Footer Controls — Family B (Logo + 3 columns + Subscribe)
+// ============================================
+// Style axis: normal/card. Footer 3 ↔ Footer 10.
+
+const FOOTER_B_CONTROL_DEF: LayoutControlDef = {
+    category: 'footer',
+    familyId: 'footer-b',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        return style === 'card' ? 'footer-10' : 'footer-3'
+    },
+    extract(layoutId) {
+        const preset = FOOTER_B_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Footer Controls — Family C (Contact left + 2 link lists)
+// ============================================
+// Style axis: normal/card. Footer 6 ↔ Footer 12.
+
+const FOOTER_C_CONTROL_DEF: LayoutControlDef = {
+    category: 'footer',
+    familyId: 'footer-c',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        return style === 'card' ? 'footer-12' : 'footer-6'
+    },
+    extract(layoutId) {
+        const preset = FOOTER_C_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Footer Controls — Family D (CTA + headingless links)
+// ============================================
+// Style axis: normal/card. Footer 9 ↔ Footer 15.
+
+const FOOTER_D_CONTROL_DEF: LayoutControlDef = {
+    category: 'footer',
+    familyId: 'footer-d',
+    axes: [
+        {
+            key: 'style',
+            label: 'Style',
+            options: [
+                { value: 'normal', label: 'Normal' },
+                { value: 'card', label: 'Card', icon: 'CreditCard' },
+            ],
+        },
+    ],
+    resolve(values) {
+        const style = values.style ?? 'normal'
+        return style === 'card' ? 'footer-15' : 'footer-9'
+    },
+    extract(layoutId) {
+        const preset = FOOTER_D_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return { ...preset.axes }
+    },
+}
+
+// ============================================
+// Footer Controls — Family E (9 standalone, no axes)
+// ============================================
+
+const FOOTER_E_CONTROL_DEF: LayoutControlDef = {
+    category: 'footer',
+    familyId: 'footer-e',
+    axes: [],
+    resolve: () => undefined,
+    extract(layoutId) {
+        const preset = FOOTER_E_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return {}
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
@@ -1139,6 +1278,11 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'hero-header-e': HERO_HEADER_E_CONTROL_DEF,
     'hero-header-f': HERO_HEADER_F_CONTROL_DEF,
     'navbar-a': NAVBAR_A_CONTROL_DEF,
+    'footer-a': FOOTER_A_CONTROL_DEF,
+    'footer-b': FOOTER_B_CONTROL_DEF,
+    'footer-c': FOOTER_C_CONTROL_DEF,
+    'footer-d': FOOTER_D_CONTROL_DEF,
+    'footer-e': FOOTER_E_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
@@ -1149,6 +1293,7 @@ const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     faq: ['faq-a', 'faq-b', 'faq-c', 'faq-d', 'faq-e', 'faq-f'],
     'hero-header': ['hero-header-a', 'hero-header-b', 'hero-header-c', 'hero-header-d', 'hero-header-e', 'hero-header-f'],
     navbar: ['navbar-a'],
+    footer: ['footer-a', 'footer-b', 'footer-c', 'footer-d', 'footer-e'],
 }
 
 /** Get all control definitions for a category (one per family) */

@@ -15,6 +15,7 @@ import { LAYOUT_TEMPLATES as HEADER_TEMPLATES } from './header'
 import { LAYOUT_TEMPLATES as FAQ_TEMPLATES } from './faq'
 import { LAYOUT_TEMPLATES as HERO_HEADER_TEMPLATES } from './hero-header'
 import { LAYOUT_TEMPLATES as NAVBAR_TEMPLATES } from './navbar'
+import { LAYOUT_TEMPLATES as FOOTER_TEMPLATES } from './footer'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -35,6 +36,7 @@ export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     faq: FAQ_TEMPLATES,
     'hero-header': HERO_HEADER_TEMPLATES,
     navbar: NAVBAR_TEMPLATES,
+    footer: FOOTER_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
