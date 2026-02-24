@@ -14,6 +14,7 @@ import { LAYOUT_TEMPLATES as CTA_TEMPLATES } from './cta'
 import { LAYOUT_TEMPLATES as HEADER_TEMPLATES } from './header'
 import { LAYOUT_TEMPLATES as FAQ_TEMPLATES } from './faq'
 import { LAYOUT_TEMPLATES as HERO_HEADER_TEMPLATES } from './hero-header'
+import { LAYOUT_TEMPLATES as NAVBAR_TEMPLATES } from './navbar'
 
 // Re-export types
 export type { LayoutTemplate, LayoutCategory, LayoutRegistry, LayoutProps } from './types'
@@ -33,6 +34,7 @@ export const LAYOUT_REGISTRY: Partial<LayoutRegistry> = {
     header: HEADER_TEMPLATES,
     faq: FAQ_TEMPLATES,
     'hero-header': HERO_HEADER_TEMPLATES,
+    navbar: NAVBAR_TEMPLATES,
 }
 
 /** Flat array of all layout templates */
@@ -62,6 +64,7 @@ import { HERO_PRESETS_MAP } from './hero/presets'
 import { CTA_PRESETS_MAP } from './cta/presets'
 import { HERO_HEADER_PRESETS_MAP } from './hero-header/presets'
 import { HEADER_PRESETS_MAP } from './header/presets'
+import { NAVBAR_PRESETS_MAP } from './navbar/presets'
 
 export interface PresetImageConfig {
     imageRole: ImageRole
@@ -85,6 +88,9 @@ export function getPresetConfig(componentId: string): PresetImageConfig | undefi
 
     const hhConfig = HERO_HEADER_PRESETS_MAP[componentId]
     if (hhConfig) return { imageRole: hhConfig.imageRole, supportsVideo: hhConfig.supportsVideo }
+
+    const navConfig = NAVBAR_PRESETS_MAP[componentId]
+    if (navConfig) return { imageRole: navConfig.imageRole, supportsVideo: navConfig.supportsVideo }
 
     return undefined
 }

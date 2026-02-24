@@ -35,6 +35,9 @@ import {
     FAMILY_E_PRESETS_MAP as HH_E_PRESETS_MAP,
     FAMILY_F_PRESETS_MAP as HH_F_PRESETS_MAP,
 } from './hero-header/presets'
+import {
+    FAMILY_A_PRESETS_MAP as NAVBAR_A_PRESETS_MAP,
+} from './navbar/presets'
 
 // ============================================
 // Generic Control Types
@@ -1094,6 +1097,22 @@ const HERO_HEADER_F_CONTROL_DEF: LayoutControlDef = {
 }
 
 // ============================================
+// Navbar Controls (no axes — all standalone)
+// ============================================
+
+const NAVBAR_A_CONTROL_DEF: LayoutControlDef = {
+    category: 'navbar',
+    familyId: 'navbar-a',
+    axes: [],
+    resolve: () => undefined,
+    extract: (layoutId: string) => {
+        const preset = NAVBAR_A_PRESETS_MAP[layoutId]
+        if (!preset) return {}
+        return {}
+    },
+}
+
+// ============================================
 // Control Registry
 // ============================================
 
@@ -1119,6 +1138,7 @@ const CONTROL_REGISTRY: Record<string, LayoutControlDef> = {
     'hero-header-d': HERO_HEADER_D_CONTROL_DEF,
     'hero-header-e': HERO_HEADER_E_CONTROL_DEF,
     'hero-header-f': HERO_HEADER_F_CONTROL_DEF,
+    'navbar-a': NAVBAR_A_CONTROL_DEF,
 }
 
 /** Maps each layout category to its family IDs */
@@ -1128,6 +1148,7 @@ const CATEGORY_FAMILIES: Partial<Record<LayoutCategory, string[]>> = {
     header: ['header-a', 'header-b', 'header-c', 'header-d'],
     faq: ['faq-a', 'faq-b', 'faq-c', 'faq-d', 'faq-e', 'faq-f'],
     'hero-header': ['hero-header-a', 'hero-header-b', 'hero-header-c', 'hero-header-d', 'hero-header-e', 'hero-header-f'],
+    navbar: ['navbar-a'],
 }
 
 /** Get all control definitions for a category (one per family) */
