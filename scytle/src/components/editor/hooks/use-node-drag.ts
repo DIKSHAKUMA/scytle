@@ -61,6 +61,8 @@ interface InternalDragState {
     pointerId: number
     /** Other selected nodes' starting positions (for multi-select drag) */
     additionalNodes: { id: string; startX: number; startY: number }[]
+    /** Whether shift was held during pointer down (skip reduce-to-single on up) */
+    shiftHeld: boolean
 }
 
 const INITIAL_STATE: InternalDragState = {
@@ -77,6 +79,7 @@ const INITIAL_STATE: InternalDragState = {
     currentGapIndex: -1,
     pointerId: -1,
     additionalNodes: [],
+    shiftHeld: false,
 }
 
 // ============================================================
@@ -223,7 +226,7 @@ export function useNodeDrag(
     // ── Start tracking a potential drag ─────────────────────────
 
     const startPotentialDrag = useCallback(
-        (nodeId: string, pointerX: number, pointerY: number, pointerId: number) => {
+        (nodeId: string, pointerX: number, pointerY: number, pointerId: number, shiftHeld: boolean = false) => {
             const store = useEditorStore.getState()
             const node = findNodeById(store.nodes, nodeId)
             if (!node || node.locked) return
@@ -269,6 +272,7 @@ export function useNodeDrag(
                 currentGapIndex: parentResult?.index ?? -1,
                 pointerId,
                 additionalNodes,
+                shiftHeld,
             }
         },
         []
@@ -468,7 +472,8 @@ export function useNodeDrag(
         }
 
         // Click without drag — reduce multi-selection to the clicked node
-        if (s.phase === 'pending') {
+        // (but NOT if shift was held — shift-click adds/removes from selection)
+        if (s.phase === 'pending' && !s.shiftHeld) {
             const store = useEditorStore.getState()
             if (store.selectedIds.length > 1 && store.selectedIds.includes(s.nodeId)) {
                 store.selectNode(s.nodeId, false)

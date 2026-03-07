@@ -11,6 +11,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
 import type { ScytleNode, FrameNode, TextNode, ImageNode } from '@/types/canvas'
 import { PositionSection } from './position-section'
+import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
 import { LayoutSection } from './layout-section'
 import { FillSection } from './fill-section'
@@ -105,7 +106,8 @@ export function PropertiesPanel() {
         return (
             <div className="h-full">
                 <SectionHeader title="Design" />
-                <div className="flex items-center justify-center pt-12">
+                <MultiSelectAlignSection />
+                <div className="flex items-center justify-center pt-4">
                     <p className="text-[11px] text-muted-foreground/50 select-none">
                         {selectedIds.length} elements selected
                     </p>

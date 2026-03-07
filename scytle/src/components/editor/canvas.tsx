@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
+import type { ScytleNode } from '@/types/canvas'
 import { NodeRenderer } from './node-renderer'
 import { SelectionOverlay, HoverOverlay, DragInsertIndicator } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
@@ -53,6 +54,7 @@ export function EditorCanvas() {
     const panY = useEditorStore((s) => s.panY)
     const nodes = useEditorStore((s) => s.nodes)
     const activeTool = useEditorStore((s) => s.activeTool)
+    const canvasColor = useEditorStore((s) => s.canvasColor)
 
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
@@ -69,6 +71,23 @@ export function EditorCanvas() {
         currentCanvasY: number
     } | null>(null)
 
+    // ── Marquee (rubber-band) selection state ────────────────
+    const [marquee, setMarquee] = useState<{
+        /** Canvas-space start X */
+        startX: number
+        /** Canvas-space start Y */
+        startY: number
+        /** Canvas-space current X */
+        currentX: number
+        /** Canvas-space current Y */
+        currentY: number
+        /** Whether the marquee has exceeded threshold and is active */
+        active: boolean
+        /** Whether shift was held at marquee start (merge with existing selection) */
+        shiftHeld: boolean
+    } | null>(null)
+    const MARQUEE_THRESHOLD = 3 // px before marquee activates
+
     /** Convert screen coordinates (clientX/Y) to canvas coordinates */
     const screenToCanvas = useCallback((clientX: number, clientY: number) => {
         const rect = viewportRef.current?.getBoundingClientRect()
@@ -78,6 +97,45 @@ export function EditorCanvas() {
             x: (clientX - rect.left - panX) / zoom,
             y: (clientY - rect.top - panY) / zoom,
         }
+    }, [])
+
+    /** Find all top-level node IDs whose bounding boxes overlap a canvas-space rect */
+    const getNodesInRect = useCallback((
+        x1: number, y1: number, x2: number, y2: number
+    ): string[] => {
+        const left = Math.min(x1, x2)
+        const top = Math.min(y1, y2)
+        const right = Math.max(x1, x2)
+        const bottom = Math.max(y1, y2)
+
+        const state = useEditorStore.getState()
+        const enteredId = state.enteredFrameId
+        const targetNodes: ScytleNode[] = enteredId
+            ? (findNodeById(state.nodes, enteredId) as import('@/types/canvas').FrameNode | null)?.children ?? []
+            : state.nodes
+
+        const ids: string[] = []
+        for (const node of targetNodes) {
+            // Canvas-space position (for children of entered frame, position is relative to parent)
+            let nodeX = node.x
+            let nodeY = node.y
+            if (enteredId) {
+                const parentPos = getNodeCanvasPosition(state.nodes, enteredId)
+                if (parentPos) {
+                    nodeX += parentPos.x
+                    nodeY += parentPos.y
+                }
+            }
+
+            const nodeRight = nodeX + node.width
+            const nodeBottom = nodeY + node.height
+
+            // Check overlap (rectangle intersection)
+            if (nodeRight > left && nodeX < right && nodeBottom > top && nodeY < bottom) {
+                ids.push(node.id)
+            }
+        }
+        return ids
     }, [])
 
     // Node drag hook
@@ -378,17 +436,38 @@ export function EditorCanvas() {
                     if (e.shiftKey) {
                         // Shift-click: toggle in selection
                         currentState.selectNode(nodeId, true)
-                    } else if (!currentState.selectedIds.includes(nodeId)) {
-                        // Click on unselected node: replace selection
-                        currentState.selectNode(nodeId, false)
+                        // Only start drag if the node is still selected after toggle
+                        const updatedState = useEditorStore.getState()
+                        if (updatedState.selectedIds.includes(nodeId)) {
+                            startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId, true)
+                            viewportRef.current?.setPointerCapture(e.pointerId)
+                        }
+                    } else {
+                        if (!currentState.selectedIds.includes(nodeId)) {
+                            // Click on unselected node: replace selection
+                            currentState.selectNode(nodeId, false)
+                        }
+                        // If nodeId already in selection without shift: keep multi-selection for drag
+                        startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId, false)
+                        // Set pointer capture for smooth out-of-bounds tracking
+                        viewportRef.current?.setPointerCapture(e.pointerId)
                     }
-                    // If nodeId already in selection without shift: keep multi-selection for drag
-                    startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId)
-                    // Set pointer capture for smooth out-of-bounds tracking
-                    viewportRef.current?.setPointerCapture(e.pointerId)
                 } else {
-                    // Clicked on empty canvas → deselect
-                    useEditorStore.getState().deselectAll()
+                    // Clicked on empty canvas → start marquee selection
+                    if (!e.shiftKey) {
+                        useEditorStore.getState().deselectAll()
+                    }
+                    const pos = screenToCanvas(e.clientX, e.clientY)
+                    setMarquee({
+                        startX: pos.x,
+                        startY: pos.y,
+                        currentX: pos.x,
+                        currentY: pos.y,
+                        active: false,
+                        shiftHeld: e.shiftKey,
+                    })
+                    viewportRef.current?.setPointerCapture(e.pointerId)
+                    e.preventDefault()
                 }
             }
         },
@@ -455,6 +534,21 @@ export function EditorCanvas() {
                 return
             }
 
+            // Marquee selection tracking
+            if (marquee) {
+                const pos = screenToCanvas(e.clientX, e.clientY)
+                const dx = pos.x - marquee.startX
+                const dy = pos.y - marquee.startY
+                const isActive = marquee.active || (Math.abs(dx) + Math.abs(dy)) > MARQUEE_THRESHOLD
+                setMarquee(prev => prev ? {
+                    ...prev,
+                    currentX: pos.x,
+                    currentY: pos.y,
+                    active: isActive,
+                } : null)
+                return
+            }
+
             // Resize takes highest priority
             if (onResizePointerMove(e.clientX, e.clientY, e.shiftKey)) return
 
@@ -482,10 +576,32 @@ export function EditorCanvas() {
                 }
             }
         },
-        [isDragging, activeTool, drawState, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas]
+        [isDragging, activeTool, drawState, marquee, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas]
     )
 
     const handlePointerUp = useCallback(() => {
+        // Marquee selection complete → select all nodes within the rect
+        if (marquee) {
+            if (marquee.active) {
+                const ids = getNodesInRect(
+                    marquee.startX, marquee.startY,
+                    marquee.currentX, marquee.currentY
+                )
+                if (ids.length > 0) {
+                    // Shift-marquee: merge with existing selection (union)
+                    if (marquee.shiftHeld) {
+                        const existing = useEditorStore.getState().selectedIds
+                        const merged = [...new Set([...existing, ...ids])]
+                        useEditorStore.getState().setSelectedIds(merged)
+                    } else {
+                        useEditorStore.getState().setSelectedIds(ids)
+                    }
+                }
+            }
+            setMarquee(null)
+            return
+        }
+
         // Frame drawing complete → create the frame
         if (drawState) {
             const x = Math.min(drawState.startCanvasX, drawState.currentCanvasX)
@@ -558,7 +674,7 @@ export function EditorCanvas() {
         if (isDragging) {
             setIsDragging(false)
         }
-    }, [isDragging, drawState, onDragPointerUp, onResizePointerUp])
+    }, [isDragging, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp])
 
     const handlePointerLeave = useCallback(() => {
         useEditorStore.getState().setHoveredId(null)
@@ -589,7 +705,7 @@ export function EditorCanvas() {
             className="relative w-full h-full overflow-hidden select-none"
             style={{
                 cursor,
-                backgroundColor: 'oklch(0.95 0 0)',
+                backgroundColor: canvasColor,
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -605,8 +721,11 @@ export function EditorCanvas() {
                 ref={transformRef}
                 className="absolute top-0 left-0 origin-top-left"
                 style={{
-                    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                    transform: `translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`,
                     willChange: 'transform',
+                    backfaceVisibility: 'hidden',
+                    WebkitFontSmoothing: 'antialiased',
+                    textRendering: 'geometricPrecision',
                 }}
             >
                 {nodes.map((node) => (
@@ -636,6 +755,20 @@ export function EditorCanvas() {
 
             {/* Drag insertion indicator (reorder mode) */}
             <DragInsertIndicator indicator={dragInfo.indicator} />
+
+            {/* Marquee selection rectangle (screen coordinates) */}
+            {marquee && marquee.active && (() => {
+                const left = Math.min(marquee.startX, marquee.currentX) * zoom + panX
+                const top = Math.min(marquee.startY, marquee.currentY) * zoom + panY
+                const width = Math.abs(marquee.currentX - marquee.startX) * zoom
+                const height = Math.abs(marquee.currentY - marquee.startY) * zoom
+                return (
+                    <div
+                        className="absolute pointer-events-none border border-blue-500/80 bg-blue-500/10 rounded-[1px]"
+                        style={{ left, top, width, height }}
+                    />
+                )
+            })()}
 
             {/* Floating toolbar — centered at top of canvas */}
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">

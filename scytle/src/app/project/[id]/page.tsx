@@ -25,8 +25,40 @@ export default function ProjectEditorPage() {
 
     const zoom = useEditorStore((s) => s.zoom)
     const hasNodes = useEditorStore((s) => s.nodes.length > 0)
+    const projectReady = useEditorStore((s) => s._projectId === projectId)
 
     const [authChecked, setAuthChecked] = useState(false)
+
+    // Initialize editor state for this project (per-project persistence)
+    useEffect(() => {
+        useEditorStore.getState().initForProject(projectId)
+    }, [projectId])
+
+    // Auto-save project state on changes (debounced)
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout>
+        const unsub = useEditorStore.subscribe((state, prev) => {
+            // Only save when document-level state changes
+            if (
+                state.nodes !== prev.nodes ||
+                state.canvasColor !== prev.canvasColor ||
+                state.zoom !== prev.zoom ||
+                state.panX !== prev.panX ||
+                state.panY !== prev.panY
+            ) {
+                clearTimeout(timer)
+                timer = setTimeout(() => {
+                    useEditorStore.getState().saveProjectState()
+                }, 500)
+            }
+        })
+        return () => {
+            clearTimeout(timer)
+            unsub()
+            // Save immediately on unmount
+            useEditorStore.getState().saveProjectState()
+        }
+    }, [projectId])
 
     // Reset project store loading state on mount (prevents stuck spinner after HMR)
     useEffect(() => {
@@ -109,8 +141,8 @@ export default function ProjectEditorPage() {
         return () => { cancelled = true }
     }, [projectId, setUser, fetchProject, router])
 
-    // Loading state — skip if store rehydrated data (prevents blank canvas on HMR)
-    if ((!authChecked || projectLoading) && !hasNodes) {
+    // Loading state — wait for auth, project fetch, and editor initialization
+    if ((!authChecked || projectLoading || !projectReady) && !hasNodes) {
         return (
             <div className="flex items-center justify-center h-screen bg-background">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />

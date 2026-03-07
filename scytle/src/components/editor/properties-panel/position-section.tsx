@@ -24,51 +24,138 @@ interface PositionSectionProps {
     isAutoLayout: boolean
 }
 
+/**
+ * Returns alignment bounds: either the parent frame (with padding), or
+ * the viewport rectangle for top-level nodes (align to canvas origin).
+ */
+function getAlignmentBounds(nodeId: string): { x: number; y: number; width: number; height: number } | null {
+    const state = useEditorStore.getState()
+    const result = findParentOfNode(state.nodes, nodeId)
+    if (result?.parent) {
+        // Alignment relative to parent (accounting for padding)
+        return {
+            x: result.parent.padding.left,
+            y: result.parent.padding.top,
+            width: result.parent.width - result.parent.padding.left - result.parent.padding.right,
+            height: result.parent.height - result.parent.padding.top - result.parent.padding.bottom,
+        }
+    }
+    // Top-level: align relative to the viewport (canvas origin 0,0 + visible area)
+    const vp = state.viewportRect
+    if (!vp) return null
+    return {
+        x: -state.panX / state.zoom,
+        y: -state.panY / state.zoom,
+        width: vp.width / state.zoom,
+        height: vp.height / state.zoom,
+    }
+}
+
+/**
+ * Checks if a node is a parent frame with children.
+ * In Figma, alignment buttons on a selected parent frame affect the
+ * frame's children (align them within the frame), not the frame itself.
+ */
+function isParentFrame(node: ScytleNode): node is FrameNode {
+    return node.type === 'frame' && (node as FrameNode).children.length > 0
+}
+
+/**
+ * Returns the content bounds of a frame (inner area after padding).
+ */
+function getFrameContentBounds(frame: FrameNode) {
+    return {
+        x: frame.padding.left,
+        y: frame.padding.top,
+        width: frame.width - frame.padding.left - frame.padding.right,
+        height: frame.height - frame.padding.top - frame.padding.bottom,
+    }
+}
+
 export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectionProps) {
-    /** Get parent frame info for alignment calculations */
-    const getParentFrame = useCallback((): FrameNode | null => {
-        const state = useEditorStore.getState()
-        const result = findParentOfNode(state.nodes, node.id)
-        return result?.parent ?? null
-    }, [node.id])
+    const updateNode = useEditorStore((s) => s.updateNode)
+
+    // ── Alignment handlers ───────────────────────────────────
+    // When a parent frame is selected, alignment affects CHILDREN.
+    // Otherwise, alignment affects the node itself (like before).
 
     const handleAlignLeft = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        onUpdate({ x: parent.padding.left })
-    }, [getParentFrame, onUpdate])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { x: bounds.x })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ x: bounds.x })
+        }
+    }, [node, onUpdate, updateNode])
 
     const handleAlignCenterH = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        const contentWidth = parent.width - parent.padding.left - parent.padding.right
-        onUpdate({ x: parent.padding.left + (contentWidth - node.width) / 2 })
-    }, [getParentFrame, onUpdate, node.width])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { x: bounds.x + (bounds.width - child.width) / 2 })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ x: bounds.x + (bounds.width - node.width) / 2 })
+        }
+    }, [node, onUpdate, updateNode])
 
     const handleAlignRight = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        onUpdate({ x: parent.width - parent.padding.right - node.width })
-    }, [getParentFrame, onUpdate, node.width])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { x: bounds.x + bounds.width - child.width })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ x: bounds.x + bounds.width - node.width })
+        }
+    }, [node, onUpdate, updateNode])
 
     const handleAlignTop = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        onUpdate({ y: parent.padding.top })
-    }, [getParentFrame, onUpdate])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { y: bounds.y })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ y: bounds.y })
+        }
+    }, [node, onUpdate, updateNode])
 
     const handleAlignCenterV = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        const contentHeight = parent.height - parent.padding.top - parent.padding.bottom
-        onUpdate({ y: parent.padding.top + (contentHeight - node.height) / 2 })
-    }, [getParentFrame, onUpdate, node.height])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { y: bounds.y + (bounds.height - child.height) / 2 })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ y: bounds.y + (bounds.height - node.height) / 2 })
+        }
+    }, [node, onUpdate, updateNode])
 
     const handleAlignBottom = useCallback(() => {
-        const parent = getParentFrame()
-        if (!parent) return
-        onUpdate({ y: parent.height - parent.padding.bottom - node.height })
-    }, [getParentFrame, onUpdate, node.height])
+        if (isParentFrame(node)) {
+            const bounds = getFrameContentBounds(node)
+            for (const child of node.children) {
+                updateNode(child.id, { y: bounds.y + bounds.height - child.height })
+            }
+        } else {
+            const bounds = getAlignmentBounds(node.id)
+            if (!bounds) return
+            onUpdate({ y: bounds.y + bounds.height - node.height })
+        }
+    }, [node, onUpdate, updateNode])
 
     return (
         <Section title="Position">
