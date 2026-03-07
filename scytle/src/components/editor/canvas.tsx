@@ -1,0 +1,648 @@
+'use client'
+
+import { useRef, useCallback, useEffect, useState } from 'react'
+import { useEditorStore } from '@/store/editor-store'
+import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
+import { NodeRenderer } from './node-renderer'
+import { SelectionOverlay, HoverOverlay, DragInsertIndicator } from './selection-overlay'
+import { MeasurementOverlay } from './measurement-overlay'
+import { Toolbar } from './toolbar'
+import { useNodeDrag } from './hooks/use-node-drag'
+import { useNodeResize, handleToCursor } from './hooks/use-node-resize'
+import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts'
+import type { HandleDirection } from './hooks/use-node-resize'
+
+// ============================================================
+// Dot grid background (CSS radial-gradient, scales with zoom)
+// ============================================================
+
+function DotGrid({ zoom, panX, panY }: { zoom: number; panX: number; panY: number }) {
+    // Grid spacing in canvas units — doubles or halves at zoom thresholds
+    const baseSpacing = 20
+    let spacing = baseSpacing
+    if (zoom < 0.5) spacing = baseSpacing * 4
+    else if (zoom < 1) spacing = baseSpacing * 2
+    else if (zoom > 3) spacing = baseSpacing / 2
+
+    const screenSpacing = spacing * zoom
+    const dotSize = Math.max(0.5, zoom * 0.8)
+
+    return (
+        <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+                backgroundImage: `radial-gradient(circle, oklch(0.7 0 0 / 0.35) ${dotSize}px, transparent ${dotSize}px)`,
+                backgroundSize: `${screenSpacing}px ${screenSpacing}px`,
+                backgroundPosition: `${panX % screenSpacing}px ${panY % screenSpacing}px`,
+            }}
+        />
+    )
+}
+
+// ============================================================
+// Canvas Component
+// ============================================================
+
+export function EditorCanvas() {
+    const viewportRef = useRef<HTMLDivElement>(null)
+    const transformRef = useRef<HTMLDivElement>(null)
+
+    // Store subscriptions (granular selectors for performance)
+    const zoom = useEditorStore((s) => s.zoom)
+    const panX = useEditorStore((s) => s.panX)
+    const panY = useEditorStore((s) => s.panY)
+    const nodes = useEditorStore((s) => s.nodes)
+    const activeTool = useEditorStore((s) => s.activeTool)
+
+    // Local state for interactions
+    const [spaceHeld, setSpaceHeld] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    const lastPointerRef = useRef({ x: 0, y: 0 })
+
+    const isHandMode = activeTool === 'hand' || spaceHeld
+
+    // ── Draw state for frame creation tool ─────────────────────
+    const [drawState, setDrawState] = useState<{
+        startCanvasX: number
+        startCanvasY: number
+        currentCanvasX: number
+        currentCanvasY: number
+    } | null>(null)
+
+    /** Convert screen coordinates (clientX/Y) to canvas coordinates */
+    const screenToCanvas = useCallback((clientX: number, clientY: number) => {
+        const rect = viewportRef.current?.getBoundingClientRect()
+        if (!rect) return { x: 0, y: 0 }
+        const { panX, panY, zoom } = useEditorStore.getState()
+        return {
+            x: (clientX - rect.left - panX) / zoom,
+            y: (clientY - rect.top - panY) / zoom,
+        }
+    }, [])
+
+    // Node drag hook
+    const {
+        dragInfo,
+        startPotentialDrag,
+        onDragPointerMove,
+        onDragPointerUp,
+    } = useNodeDrag(viewportRef)
+
+    // Node resize hook
+    const {
+        resizeInfo,
+        startResize,
+        onResizePointerMove,
+        onResizePointerUp,
+    } = useNodeResize(viewportRef)
+
+    // Global keyboard shortcuts (Delete, Undo/Redo, Copy/Paste, etc.)
+    useKeyboardShortcuts()
+
+    // ----------------------------------------------------------
+    // Wheel handler: scroll = pan, Cmd/Ctrl+scroll = zoom
+    // Attached via addEventListener for { passive: false }
+    // ----------------------------------------------------------
+    const handleWheel = useCallback((e: WheelEvent) => {
+        e.preventDefault()
+
+        const state = useEditorStore.getState()
+        const rect = viewportRef.current?.getBoundingClientRect()
+        if (!rect) return
+
+        if (e.ctrlKey || e.metaKey) {
+            // Zoom to cursor position
+            const focalX = e.clientX - rect.left
+            const focalY = e.clientY - rect.top
+            const delta = -e.deltaY * 0.01
+            const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, state.zoom * (1 + delta)))
+            state.zoomTo(newZoom, focalX, focalY)
+        } else {
+            // Pan
+            state.setPan(state.panX - e.deltaX, state.panY - e.deltaY)
+        }
+    }, [])
+
+    useEffect(() => {
+        const viewport = viewportRef.current
+        if (!viewport) return
+        viewport.addEventListener('wheel', handleWheel, { passive: false })
+        return () => viewport.removeEventListener('wheel', handleWheel)
+    }, [handleWheel])
+
+    // ----------------------------------------------------------
+    // Viewport size tracking (for zoomIn/zoomOut centering)
+    // ----------------------------------------------------------
+    useEffect(() => {
+        const viewport = viewportRef.current
+        if (!viewport) return
+
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0]
+            if (entry) {
+                useEditorStore.getState().setViewportRect({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height,
+                })
+            }
+        })
+
+        observer.observe(viewport)
+        return () => observer.disconnect()
+    }, [])
+
+    // ----------------------------------------------------------
+    // Space key: temporary hand tool
+    // ----------------------------------------------------------
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (
+                e.code === 'Space' &&
+                !e.repeat &&
+                document.activeElement?.tagName !== 'INPUT' &&
+                document.activeElement?.tagName !== 'TEXTAREA' &&
+                !(document.activeElement as HTMLElement)?.isContentEditable
+            ) {
+                e.preventDefault()
+                setSpaceHeld(true)
+            }
+        }
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.code === 'Space') {
+                setSpaceHeld(false)
+                setIsDragging(false)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        window.addEventListener('keyup', handleKeyUp)
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, [])
+
+    // ----------------------------------------------------------
+    // Helper: walk up from a DOM target to find data-node-id
+    // ----------------------------------------------------------
+    const findNodeIdFromTarget = useCallback((target: HTMLElement): string | null => {
+        let el: HTMLElement | null = target
+        while (el && el !== viewportRef.current) {
+            const nodeId = el.getAttribute('data-node-id')
+            if (nodeId) return nodeId
+            el = el.parentElement
+        }
+        return null
+    }, [])
+
+    /** Resolve which node ID to select given entry context.
+     *  Implements Figma-like click-through:
+     *  - First click selects top-level parent
+     *  - Second click on same spot selects the direct child
+     *  - Once at a child level, clicking siblings selects them directly
+     */
+    const resolveClickTarget = useCallback(
+        (targetEl: HTMLElement): string | null => {
+            const state = useEditorStore.getState()
+
+            // Collect all node IDs from target up to viewport (deepest first)
+            const nodeIds: string[] = []
+            let el: HTMLElement | null = targetEl
+            while (el && el !== viewportRef.current) {
+                const nodeId = el.getAttribute('data-node-id')
+                if (nodeId) nodeIds.push(nodeId)
+                el = el.parentElement
+            }
+
+            if (nodeIds.length === 0) return null
+
+            // If drilled into a frame, select nearest child of that frame
+            if (state.enteredFrameId) {
+                const enteredFrame = findNodeById(state.nodes, state.enteredFrameId)
+                if (enteredFrame && enteredFrame.type === 'frame') {
+                    const directChildIds = new Set(
+                        enteredFrame.children.map((c) => c.id)
+                    )
+                    for (const id of nodeIds) {
+                        if (directChildIds.has(id)) return id
+                    }
+                    return nodeIds[0]
+                }
+            }
+
+            // Find the top-level node in the click path
+            const topLevelIds = new Set(state.nodes.map((n) => n.id))
+            let topLevelId: string | null = null
+            for (let i = nodeIds.length - 1; i >= 0; i--) {
+                if (topLevelIds.has(nodeIds[i])) {
+                    topLevelId = nodeIds[i]
+                    break
+                }
+            }
+
+            if (!topLevelId) return nodeIds[0]
+
+            if (state.selectedIds.length === 1) {
+                const selectedId = state.selectedIds[0]
+
+                // ── Sibling selection ─────────────────────────────────
+                // If a child node is currently selected, clicking another
+                // child of the SAME parent selects it directly (no need
+                // to first go back to parent).
+                if (selectedId !== topLevelId || !topLevelIds.has(selectedId)) {
+                    const selectedParent = findParentOfNode(state.nodes, selectedId)
+                    if (selectedParent?.parent) {
+                        const siblingIds = new Set(
+                            selectedParent.parent.children.map((c) => c.id)
+                        )
+                        for (const id of nodeIds) {
+                            if (siblingIds.has(id)) return id
+                        }
+                    }
+                }
+
+                // ── Click-through ────────────────────────────────────
+                // Top-level node already selected → drill into direct child
+                if (selectedId === topLevelId && nodeIds.length > 1) {
+                    const selectedNode = findNodeById(state.nodes, topLevelId)
+                    if (selectedNode && selectedNode.type === 'frame') {
+                        const childIds = new Set(
+                            selectedNode.children.map((c) => c.id)
+                        )
+                        for (const id of nodeIds) {
+                            if (childIds.has(id)) return id
+                        }
+                    }
+                }
+            }
+
+            return topLevelId
+        },
+        []
+    )
+
+    // ----------------------------------------------------------
+    // Pointer handlers: hand-drag to pan + node selection + drag
+    // ----------------------------------------------------------
+    const handlePointerDown = useCallback(
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            // ── Commit any active text editing ────────────────────
+            const editorState = useEditorStore.getState()
+            if (editorState.editingNodeId) {
+                const editingEl = viewportRef.current?.querySelector(
+                    `[data-node-id="${editorState.editingNodeId}"]`
+                ) as HTMLElement
+                if (editingEl) editingEl.blur()
+            }
+
+            // ── Middle mouse / hand tool → pan ────────────────────
+            if (e.button === 1 || isHandMode) {
+                setIsDragging(true)
+                lastPointerRef.current = { x: e.clientX, y: e.clientY }
+                    ; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+                e.preventDefault()
+                return
+            }
+
+            // Only handle left click from here
+            if (e.button !== 0) return
+
+            // ── Frame tool → start drawing ────────────────────────
+            if (activeTool === 'frame') {
+                const pos = screenToCanvas(e.clientX, e.clientY)
+                setDrawState({
+                    startCanvasX: pos.x,
+                    startCanvasY: pos.y,
+                    currentCanvasX: pos.x,
+                    currentCanvasY: pos.y,
+                })
+                viewportRef.current?.setPointerCapture(e.pointerId)
+                e.preventDefault()
+                return
+            }
+
+            // ── Text tool → click to create + edit ────────────────
+            if (activeTool === 'text') {
+                const pos = screenToCanvas(e.clientX, e.clientY)
+                const store = useEditorStore.getState()
+
+                // Auto-detect parent frame
+                let parentId: string | undefined
+                let adjustedX = pos.x
+                let adjustedY = pos.y
+
+                const container = findContainingFrame(store.nodes, pos.x, pos.y)
+                if (container) {
+                    parentId = container.frameId
+                    adjustedX = pos.x - container.frameAbsX
+                    adjustedY = pos.y - container.frameAbsY
+                } else if (store.enteredFrameId) {
+                    parentId = store.enteredFrameId
+                    const parentPos = getNodeCanvasPosition(store.nodes, parentId)
+                    if (parentPos) {
+                        adjustedX = pos.x - parentPos.x
+                        adjustedY = pos.y - parentPos.y
+                    }
+                }
+
+                const textNode = createText({
+                    x: adjustedX,
+                    y: adjustedY,
+                    characters: 'Type something',
+                })
+                store.addNode(textNode, parentId)
+                store.selectNode(textNode.id)
+                store.setEditingNodeId(textNode.id)
+                store.setActiveTool('select')
+                e.preventDefault()
+                return
+            }
+
+            // ── Select tool ───────────────────────────────────────
+            if (activeTool === 'select') {
+                const target = e.target as HTMLElement
+
+                // Check if clicking a resize handle
+                const handleDir = target.dataset.handle as HandleDirection | undefined
+                const handleNodeId = target.dataset.nodeHandle
+                if (handleDir && handleNodeId) {
+                    startResize(handleDir, handleNodeId, e.clientX, e.clientY, e.pointerId)
+                    viewportRef.current?.setPointerCapture(e.pointerId)
+                    e.preventDefault()
+                    return
+                }
+
+                const nodeId = resolveClickTarget(target)
+
+                if (nodeId) {
+                    const currentState = useEditorStore.getState()
+                    if (e.shiftKey) {
+                        // Shift-click: toggle in selection
+                        currentState.selectNode(nodeId, true)
+                    } else if (!currentState.selectedIds.includes(nodeId)) {
+                        // Click on unselected node: replace selection
+                        currentState.selectNode(nodeId, false)
+                    }
+                    // If nodeId already in selection without shift: keep multi-selection for drag
+                    startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId)
+                    // Set pointer capture for smooth out-of-bounds tracking
+                    viewportRef.current?.setPointerCapture(e.pointerId)
+                } else {
+                    // Clicked on empty canvas → deselect
+                    useEditorStore.getState().deselectAll()
+                }
+            }
+        },
+        [isHandMode, activeTool, resolveClickTarget, startPotentialDrag, startResize, screenToCanvas]
+    )
+
+    // ----------------------------------------------------------
+    // Double-click: drill into frames
+    // ----------------------------------------------------------
+    const handleDoubleClick = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+            if (activeTool !== 'select') return
+
+            const state = useEditorStore.getState()
+
+            // Drill into the currently selected node (Figma behaviour:
+            // double-click enters the selected frame/group).
+            if (state.selectedIds.length === 1) {
+                const selectedId = state.selectedIds[0]
+                const node = findNodeById(state.nodes, selectedId)
+
+                // Double-click text → start inline editing
+                if (node && node.type === 'text') {
+                    state.setEditingNodeId(selectedId)
+                    return
+                }
+
+                // Double-click frame → drill in
+                if (node && node.type === 'frame' && node.children.length > 0) {
+                    state.enterFrame(selectedId)
+                    return
+                }
+            }
+
+            // Fallback: try resolving from DOM target
+            const target = e.target as HTMLElement
+            const nodeId = resolveClickTarget(target)
+            if (!nodeId) return
+
+            const node = findNodeById(state.nodes, nodeId)
+            if (node && node.type === 'text') {
+                state.selectNode(nodeId)
+                state.setEditingNodeId(nodeId)
+            } else if (node && node.type === 'frame' && node.children.length > 0) {
+                state.enterFrame(nodeId)
+            }
+        },
+        [activeTool, resolveClickTarget]
+    )
+
+    // ----------------------------------------------------------
+    // Hover tracking: pointermove event delegation
+    // ----------------------------------------------------------
+    const handlePointerMove = useCallback(
+        (e: React.PointerEvent<HTMLDivElement>) => {
+            // Frame drawing takes priority
+            if (drawState) {
+                const pos = screenToCanvas(e.clientX, e.clientY)
+                setDrawState(prev => prev ? {
+                    ...prev,
+                    currentCanvasX: pos.x,
+                    currentCanvasY: pos.y,
+                } : null)
+                return
+            }
+
+            // Resize takes highest priority
+            if (onResizePointerMove(e.clientX, e.clientY, e.shiftKey)) return
+
+            // Node drag takes priority
+            if (onDragPointerMove(e.clientX, e.clientY, e.altKey)) return
+
+            // Pan dragging (hand tool / middle mouse)
+            if (isDragging) {
+                const dx = e.clientX - lastPointerRef.current.x
+                const dy = e.clientY - lastPointerRef.current.y
+                const state = useEditorStore.getState()
+                state.setPan(state.panX + dx, state.panY + dy)
+                lastPointerRef.current = { x: e.clientX, y: e.clientY }
+                return
+            }
+
+            // Hover tracking — context-aware so hover matches what
+            // would be selected on click (Figma behaviour)
+            if (activeTool === 'select') {
+                const target = e.target as HTMLElement
+                const nodeId = resolveClickTarget(target)
+                const state = useEditorStore.getState()
+                if (nodeId !== state.hoveredId) {
+                    state.setHoveredId(nodeId)
+                }
+            }
+        },
+        [isDragging, activeTool, drawState, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas]
+    )
+
+    const handlePointerUp = useCallback(() => {
+        // Frame drawing complete → create the frame
+        if (drawState) {
+            const x = Math.min(drawState.startCanvasX, drawState.currentCanvasX)
+            const y = Math.min(drawState.startCanvasY, drawState.currentCanvasY)
+            const w = Math.abs(drawState.currentCanvasX - drawState.startCanvasX)
+            const h = Math.abs(drawState.currentCanvasY - drawState.startCanvasY)
+
+            const MIN_DRAW = 3
+            const frameX = w > MIN_DRAW ? x : drawState.startCanvasX - 50
+            const frameY = h > MIN_DRAW ? y : drawState.startCanvasY - 50
+            const frameW = w > MIN_DRAW ? w : 100
+            const frameH = h > MIN_DRAW ? h : 100
+
+            const store = useEditorStore.getState()
+
+            // Auto-detect parent frame: if drawing starts inside an existing frame, nest into it
+            // Only auto-nest if the ENTIRE drawn rectangle fits inside the target frame.
+            let parentId: string | undefined
+            let adjustedX = frameX
+            let adjustedY = frameY
+
+            const container = findContainingFrame(store.nodes, drawState.startCanvasX, drawState.startCanvasY)
+            if (container) {
+                const potentialParent = findNodeById(store.nodes, container.frameId)
+                // Check entire drawn rect fits inside the parent frame
+                const fitsInside = potentialParent &&
+                    frameX >= container.frameAbsX &&
+                    frameY >= container.frameAbsY &&
+                    frameX + frameW <= container.frameAbsX + potentialParent.width &&
+                    frameY + frameH <= container.frameAbsY + potentialParent.height
+
+                if (fitsInside) {
+                    parentId = container.frameId
+                    adjustedX = frameX - container.frameAbsX
+                    adjustedY = frameY - container.frameAbsY
+                }
+            } else if (store.enteredFrameId) {
+                // Fallback: if drilled into a frame, nest under it
+                parentId = store.enteredFrameId
+                const parentPos = getNodeCanvasPosition(store.nodes, parentId)
+                if (parentPos) {
+                    adjustedX = frameX - parentPos.x
+                    adjustedY = frameY - parentPos.y
+                }
+            }
+
+            const frame = createFrame({
+                x: adjustedX,
+                y: adjustedY,
+                width: frameW,
+                height: frameH,
+                fills: [{ type: 'solid', color: '#FFFFFF' }],
+                layout: { mode: 'none' },
+            })
+
+            store.addNode(frame, parentId)
+            store.selectNode(frame.id)
+            store.setActiveTool('select')
+
+            setDrawState(null)
+            return
+        }
+
+        // Resize takes priority
+        if (onResizePointerUp()) return
+
+        // Node drag takes priority
+        if (onDragPointerUp()) return
+
+        if (isDragging) {
+            setIsDragging(false)
+        }
+    }, [isDragging, drawState, onDragPointerUp, onResizePointerUp])
+
+    const handlePointerLeave = useCallback(() => {
+        useEditorStore.getState().setHoveredId(null)
+    }, [])
+
+    // ----------------------------------------------------------
+    // Cursor
+    // ----------------------------------------------------------
+    const cursor = resizeInfo.isResizing
+        ? handleToCursor(resizeInfo.handle!)
+        : isHandMode
+            ? isDragging
+                ? 'grabbing'
+                : 'grab'
+            : drawState
+                ? 'crosshair'
+                : dragInfo.isDragging
+                    ? 'grabbing'
+                    : (activeTool === 'frame' || activeTool === 'text')
+                        ? 'crosshair'
+                        : 'default'
+    // ----------------------------------------------------------
+    // Render
+    // ----------------------------------------------------------
+    return (
+        <div
+            ref={viewportRef}
+            className="relative w-full h-full overflow-hidden select-none"
+            style={{
+                cursor,
+                backgroundColor: 'oklch(0.95 0 0)',
+            }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onDoubleClick={handleDoubleClick}
+        >
+            {/* Dot grid background */}
+            <DotGrid zoom={zoom} panX={panX} panY={panY} />
+
+            {/* Transform container — all canvas content lives here */}
+            <div
+                ref={transformRef}
+                className="absolute top-0 left-0 origin-top-left"
+                style={{
+                    transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+                    willChange: 'transform',
+                }}
+            >
+                {nodes.map((node) => (
+                    <NodeRenderer key={node.id} node={node} isTopLevel />
+                ))}
+
+                {/* Frame draw preview (canvas coordinates) */}
+                {drawState && (
+                    <div
+                        className="absolute border-2 border-primary/70 bg-primary/5 rounded-[1px] pointer-events-none"
+                        style={{
+                            left: Math.min(drawState.startCanvasX, drawState.currentCanvasX),
+                            top: Math.min(drawState.startCanvasY, drawState.currentCanvasY),
+                            width: Math.abs(drawState.currentCanvasX - drawState.startCanvasX),
+                            height: Math.abs(drawState.currentCanvasY - drawState.startCanvasY),
+                        }}
+                    />
+                )}
+            </div>
+
+            {/* Selection & hover overlays (screen coordinates, above content) */}
+            <HoverOverlay viewportRef={viewportRef} />
+            <SelectionOverlay viewportRef={viewportRef} />
+
+            {/* Measurement lines (show distances when dragging inside a frame) */}
+            <MeasurementOverlay viewportRef={viewportRef} isDragging={dragInfo.isDragging} />
+
+            {/* Drag insertion indicator (reorder mode) */}
+            <DragInsertIndicator indicator={dragInfo.indicator} />
+
+            {/* Floating toolbar — centered at top of canvas */}
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
+                <Toolbar />
+            </div>
+
+
+        </div>
+    )
+}

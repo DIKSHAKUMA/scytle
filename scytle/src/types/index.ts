@@ -404,3 +404,8 @@ export interface UIState {
     isLoading: boolean
     error: string | null
 }
+
+// ============================================
+// Canvas Engine Types (Phase A)
+// ============================================
+export * from './canvas'
