@@ -52,44 +52,46 @@ function computeBackground(fills: Fill[]): CSSProperties {
     }
 }
 
-/** Build CSS box-shadow from shadows array */
+/** Build CSS box-shadow from shadows array, scaled via CSS custom property */
 function computeBoxShadow(shadows: Shadow[]): string | undefined {
     if (shadows.length === 0) return undefined
     return shadows
         .map((s) => {
             const inset = s.type === 'inner' ? 'inset ' : ''
-            return `${inset}${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${s.color}`
+            return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${s.color}`
         })
         .join(', ')
 }
 
-/** Build border CSS */
+/** Build border CSS, with width scaled via CSS custom property */
 function computeBorder(border?: Border): CSSProperties {
     if (!border) return {}
     return {
-        borderWidth: border.width,
+        borderWidth: `calc(${border.width}px * var(--z, 1))`,
         borderStyle: border.style,
         borderColor: border.color,
     }
 }
 
-/** Build border-radius CSS */
+/** Build border-radius CSS, scaled via CSS custom property */
 function computeBorderRadius(br: BorderRadius): CSSProperties {
     if (typeof br === 'number') {
-        return br > 0 ? { borderRadius: br } : {}
+        return br > 0 ? { borderRadius: `calc(${br}px * var(--z, 1))` } : {}
     }
     return {
-        borderTopLeftRadius: br.topLeft,
-        borderTopRightRadius: br.topRight,
-        borderBottomRightRadius: br.bottomRight,
-        borderBottomLeftRadius: br.bottomLeft,
+        borderTopLeftRadius: `calc(${br.topLeft}px * var(--z, 1))`,
+        borderTopRightRadius: `calc(${br.topRight}px * var(--z, 1))`,
+        borderBottomRightRadius: `calc(${br.bottomRight}px * var(--z, 1))`,
+        borderBottomLeftRadius: `calc(${br.bottomLeft}px * var(--z, 1))`,
     }
 }
 
-/** Build padding CSS from Padding object */
+/** Build padding CSS from Padding object, scaled via CSS custom property */
 function computePadding(p: Padding): CSSProperties {
     if (p.top === 0 && p.right === 0 && p.bottom === 0 && p.left === 0) return {}
-    return { padding: `${p.top}px ${p.right}px ${p.bottom}px ${p.left}px` }
+    return {
+        padding: `calc(${p.top}px * var(--z, 1)) calc(${p.right}px * var(--z, 1)) calc(${p.bottom}px * var(--z, 1)) calc(${p.left}px * var(--z, 1))`,
+    }
 }
 
 // ============================================================
@@ -114,18 +116,25 @@ export function computeBaseStyles(
     const s: CSSProperties = { boxSizing: 'border-box' }
 
     // ── Position ──────────────────────────────────────────────
-    // Absolute positioning when: top-level, explicit absolute, or child of freeform frame
+    // Absolute positioning when: top-level, explicit absolute, or child of freeform frame.
+    // Top-level nodes include pan offset (--px/--py); nested absolute children position
+    // relative to their parent’s content box so only zoom scaling is applied.
     const isFreeformChild = parentLayoutMode === 'none'
     if (isTopLevel || node.positioning === 'absolute' || isFreeformChild) {
         s.position = 'absolute'
-        s.left = node.x
-        s.top = node.y
+        if (isTopLevel) {
+            s.left = `calc(${node.x}px * var(--z, 1) + var(--px, 0) * 1px)`
+            s.top = `calc(${node.y}px * var(--z, 1) + var(--py, 0) * 1px)`
+        } else {
+            s.left = `calc(${node.x}px * var(--z, 1))`
+            s.top = `calc(${node.y}px * var(--z, 1))`
+        }
     }
 
     // ── Sizing ────────────────────────────────────────────────
     // Horizontal
     if (node.sizing.horizontal === 'fixed') {
-        s.width = node.width
+        s.width = `calc(${node.width}px * var(--z, 1))`
     } else if (node.sizing.horizontal === 'fill') {
         if (parentDir === 'row') {
             // Main axis in row → flex grow
@@ -142,7 +151,7 @@ export function computeBaseStyles(
 
     // Vertical
     if (node.sizing.vertical === 'fixed') {
-        s.height = node.height
+        s.height = `calc(${node.height}px * var(--z, 1))`
     } else if (node.sizing.vertical === 'fill') {
         if (parentDir === 'column') {
             // Main axis in column → flex grow
@@ -188,7 +197,7 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
     if (node.layout.mode === 'flex') {
         s.display = 'flex'
         s.flexDirection = node.layout.direction ?? 'column'
-        if (node.layout.gap != null) s.gap = node.layout.gap
+        if (node.layout.gap != null) s.gap = `calc(${node.layout.gap}px * var(--z, 1))`
         if (node.layout.justify)
             s.justifyContent = JUSTIFY_MAP[node.layout.justify] ?? node.layout.justify
         if (node.layout.align)
@@ -208,8 +217,8 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
                     ? `repeat(${node.layout.rows}, 1fr)`
                     : node.layout.rows
         }
-        if (node.layout.columnGap != null) s.columnGap = node.layout.columnGap
-        if (node.layout.rowGap != null) s.rowGap = node.layout.rowGap
+        if (node.layout.columnGap != null) s.columnGap = `calc(${node.layout.columnGap}px * var(--z, 1))`
+        if (node.layout.rowGap != null) s.rowGap = `calc(${node.layout.rowGap}px * var(--z, 1))`
     }
     // mode: 'none' → no display override; position context handled by renderer
 

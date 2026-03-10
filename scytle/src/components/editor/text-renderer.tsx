@@ -73,10 +73,10 @@ export const TextRenderer = memo(function TextRenderer({
         // Typography
         fontFamily: node.fontFamily,
         fontWeight: node.fontWeight,
-        fontSize: node.fontSize,
+        fontSize: `calc(${node.fontSize}px * var(--z, 1))`,
         lineHeight:
-            node.lineHeight === 'auto' ? 'normal' : `${node.lineHeight}px`,
-        letterSpacing: node.letterSpacing !== 0 ? node.letterSpacing : undefined,
+            node.lineHeight === 'auto' ? 'normal' : `calc(${node.lineHeight}px * var(--z, 1))`,
+        letterSpacing: node.letterSpacing !== 0 ? `calc(${node.letterSpacing}px * var(--z, 1))` : undefined,
         textAlign: node.textAlign,
         textTransform:
             node.textTransform !== 'none' ? node.textTransform : undefined,

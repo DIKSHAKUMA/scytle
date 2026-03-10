@@ -2,18 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
-import { EditorCanvas, LayersPanel, PropertiesPanel } from '@/components/editor'
-import { isDragActive } from '@/components/editor/hooks/use-node-drag'
-import { isResizeActive } from '@/components/editor/hooks/use-node-resize'
-import {
-    ArrowLeft,
-    Loader2,
-    ZoomIn,
-    ZoomOut,
-} from 'lucide-react'
+import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
+import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
+import { Loader2 } from 'lucide-react'
 
 export default function ProjectEditorPage() {
     const params = useParams()
@@ -23,11 +16,13 @@ export default function ProjectEditorPage() {
     const { setUser } = useAuthStore()
     const { currentProject, fetchProject, isLoading: projectLoading } = useProjectStore()
 
-    const zoom = useEditorStore((s) => s.zoom)
     const hasNodes = useEditorStore((s) => s.nodes.length > 0)
     const projectReady = useEditorStore((s) => s._projectId === projectId)
 
     const [authChecked, setAuthChecked] = useState(false)
+
+    // Centralized keyboard shortcuts (tools, zoom, clipboard, undo/redo, z-order, etc.)
+    useKeyboardShortcuts()
 
     // Initialize editor state for this project (per-project persistence)
     useEffect(() => {
@@ -38,13 +33,14 @@ export default function ProjectEditorPage() {
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>
         const unsub = useEditorStore.subscribe((state, prev) => {
-            // Only save when document-level state changes
             if (
                 state.nodes !== prev.nodes ||
                 state.canvasColor !== prev.canvasColor ||
                 state.zoom !== prev.zoom ||
                 state.panX !== prev.panX ||
-                state.panY !== prev.panY
+                state.panY !== prev.panY ||
+                state.pages !== prev.pages ||
+                state.activePageId !== prev.activePageId
             ) {
                 clearTimeout(timer)
                 timer = setTimeout(() => {
@@ -55,7 +51,6 @@ export default function ProjectEditorPage() {
         return () => {
             clearTimeout(timer)
             unsub()
-            // Save immediately on unmount
             useEditorStore.getState().saveProjectState()
         }
     }, [projectId])
@@ -63,52 +58,6 @@ export default function ProjectEditorPage() {
     // Reset project store loading state on mount (prevents stuck spinner after HMR)
     useEffect(() => {
         useProjectStore.setState({ isLoading: false })
-    }, [])
-
-    // Keyboard shortcuts for zoom
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (
-                document.activeElement?.tagName === 'INPUT' ||
-                document.activeElement?.tagName === 'TEXTAREA' ||
-                (document.activeElement as HTMLElement)?.isContentEditable
-            ) return
-
-            const state = useEditorStore.getState()
-
-            // Tool shortcuts
-            if (e.key === 'v' || e.key === 'V') state.setActiveTool('select')
-            else if (e.key === 'h' || e.key === 'H') state.setActiveTool('hand')
-            else if (e.key === 'f' || e.key === 'F') state.setActiveTool('frame')
-            else if (e.key === 't' || e.key === 'T') state.setActiveTool('text')
-
-            // Zoom shortcuts
-            if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
-                e.preventDefault()
-                state.zoomIn()
-            }
-            if ((e.metaKey || e.ctrlKey) && e.key === '-') {
-                e.preventDefault()
-                state.zoomOut()
-            }
-            if ((e.metaKey || e.ctrlKey) && e.key === '0') {
-                e.preventDefault()
-                state.resetZoom()
-            }
-
-            // Escape → deselect (skip if drag or resize hook is handling it)
-            if (e.key === 'Escape') {
-                if (isDragActive() || isResizeActive()) return
-                if (state.enteredFrameId) {
-                    state.exitFrame()
-                } else {
-                    state.deselectAll()
-                }
-            }
-        }
-
-        window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
     }, [])
 
     // Check authentication and load project
@@ -167,64 +116,22 @@ export default function ProjectEditorPage() {
 
     return (
         <div className="h-screen flex flex-col overflow-hidden bg-background">
-            {/* Top bar */}
-            <header className="h-12 border-b border-border bg-background flex items-center px-4 gap-3 shrink-0 z-10">
-                <Link
-                    href="/dashboard"
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span className="hidden sm:inline">Back</span>
-                </Link>
+            {/* ── Top bar: back, project name, tools, undo/redo, actions ── */}
+            <TopBar projectName={currentProject?.name ?? 'Project'} />
 
-                <div className="w-px h-5 bg-border" />
+            {/* ── Main workspace area ── */}
+            <div className="flex-1 flex min-h-0 overflow-hidden">
+                {/* Left panel: Files (pages + layers) / Chat tabs */}
+                <LeftPanel />
 
-                <span className="text-sm font-medium truncate max-w-[200px]">
-                    {currentProject?.name ?? 'Project'}
-                </span>
-
-                {/* Zoom controls — right side */}
-                <div className="ml-auto flex items-center gap-1">
-                    <button
-                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                        onClick={() => useEditorStore.getState().zoomOut()}
-                    >
-                        <ZoomOut className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                        className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors min-w-[48px] text-center tabular-nums"
-                        onClick={() => useEditorStore.getState().resetZoom()}
-                        title="Reset zoom to 100%"
-                    >
-                        {Math.round(zoom * 100)}%
-                    </button>
-
-                    <button
-                        className="p-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                        onClick={() => useEditorStore.getState().zoomIn()}
-                    >
-                        <ZoomIn className="w-3.5 h-3.5" />
-                    </button>
-                </div>
-            </header>
-
-            {/* Main area: layers panel + canvas */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Left sidebar — Layers panel */}
-                <div className="w-60 shrink-0 overflow-hidden">
-                    <LayersPanel />
+                {/* Canvas + floating zoom controls */}
+                <div className="flex-1 relative overflow-hidden">
+                    <EditorCanvas showToolbar={false} />
+                    <ZoomControls />
                 </div>
 
-                {/* Canvas fills remaining space */}
-                <div className="flex-1 overflow-hidden">
-                    <EditorCanvas />
-                </div>
-
-                {/* Right sidebar — Properties panel */}
-                <div className="w-64 shrink-0 border-l border-border bg-background overflow-hidden">
-                    <PropertiesPanel />
-                </div>
+                {/* Right panel: Design (properties) / Theme tabs */}
+                <RightPanel />
             </div>
         </div>
     )

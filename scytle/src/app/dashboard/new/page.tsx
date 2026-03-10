@@ -1,23 +1,55 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowUp, Loader2, Sparkles, ArrowLeft, Zap } from 'lucide-react'
-
+import {
+    ArrowUp, Sparkles, ArrowLeft, Zap, Globe, Smartphone,
+    Paperclip, Check, ChevronDown, X, Image as ImageIcon,
+    FileText, Loader2
+} from 'lucide-react'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useProjectStore } from '@/store'
+import type { AiModel } from '@/types'
 
-const suggestions = [
-    { label: 'SaaS landing page', desc: 'Marketing site with pricing & features' },
-    { label: 'Portfolio website', desc: 'Showcase creative work & projects' },
-    { label: 'E-commerce store', desc: 'Product catalog with cart & checkout' },
-    { label: 'Dashboard app', desc: 'Analytics & data visualization' },
-    { label: 'Blog platform', desc: 'Content-first publishing site' },
-    { label: 'Restaurant website', desc: 'Menu, reservations & delivery' },
-]
+// ─────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────
+
+const AI_MODELS = [
+    { id: 'gemini-2.0-flash' as AiModel, label: '2.0 Flash', desc: 'Fastest responses' },
+    { id: 'gemini-2.5-flash' as AiModel, label: '2.5 Flash', desc: 'Balanced speed & quality', recommended: true },
+    { id: 'gemini-2.5-pro' as AiModel, label: '2.5 Pro', desc: 'Best reasoning & quality' },
+] as const
+
+const SUGGESTIONS = {
+    web: [
+        { label: 'SaaS Landing Page', desc: 'Marketing site with pricing & features' },
+        { label: 'Portfolio Website', desc: 'Showcase creative work & projects' },
+        { label: 'E-commerce Store', desc: 'Product catalog with cart & checkout' },
+    ],
+    app: [
+        { label: 'Dashboard App', desc: 'Analytics & data visualization' },
+        { label: 'Social Mobile App', desc: 'Feed, profiles, messaging' },
+        { label: 'CRM Platform', desc: 'Manage leads, deals & contacts' },
+    ],
+} as const
+
+const PLACEHOLDERS = {
+    web: 'A SaaS platform for managing freelance projects with time tracking, invoicing, and client portal...',
+    app: 'A project management app with Kanban boards, team chat, file sharing, and analytics dashboard...',
+} as const
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
 function deriveProjectName(description: string): string {
-    // Take first ~5 meaningful words as project name
     const cleaned = description
         .replace(/^(i want to |i need |build me |create |make |design )/i, '')
         .replace(/^(a |an |the )/i, '')
@@ -25,13 +57,25 @@ function deriveProjectName(description: string): string {
     return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
+// ─────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────
+
 export default function NewProjectPage() {
     const router = useRouter()
     const { createProject, isLoading } = useProjectStore()
-    const [input, setInput] = useState('')
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    // Auto-focus the input on mount
+    const [input, setInput] = useState('')
+    const [productType, setProductType] = useState<'web' | 'app'>('web')
+    const [selectedModel, setSelectedModel] = useState<AiModel>('gemini-2.5-flash')
+    const [attachments, setAttachments] = useState<string[]>([])
+    const [showAttachMenu, setShowAttachMenu] = useState(false)
+    const [isGenerating, setIsGenerating] = useState(false)
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const attachMenuRef = useRef<HTMLDivElement>(null)
+
+    // Auto-focus
     useEffect(() => {
         textareaRef.current?.focus()
     }, [])
@@ -44,10 +88,23 @@ export default function NewProjectPage() {
         el.style.height = `${Math.min(el.scrollHeight, 200)}px`
     }, [input])
 
-    const handleSubmit = async () => {
-        const trimmed = input.trim()
-        if (!trimmed || isLoading) return
+    // Close attach menu on outside click
+    useEffect(() => {
+        if (!showAttachMenu) return
+        const handler = (e: MouseEvent) => {
+            if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
+                setShowAttachMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [showAttachMenu])
 
+    const handleSubmit = useCallback(async () => {
+        const trimmed = input.trim()
+        if (!trimmed || isLoading || isGenerating) return
+
+        setIsGenerating(true)
         const name = deriveProjectName(trimmed)
         const project = await createProject({
             name: name || 'Untitled Project',
@@ -56,8 +113,10 @@ export default function NewProjectPage() {
 
         if (project) {
             router.push(`/project/${project.projectId}`)
+        } else {
+            setIsGenerating(false)
         }
-    }
+    }, [input, isLoading, isGenerating, createProject, router])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -66,14 +125,11 @@ export default function NewProjectPage() {
         }
     }
 
-    const handleSuggestionClick = (label: string) => {
-        setInput(label)
-        textareaRef.current?.focus()
-    }
+    const currentModel = AI_MODELS.find(m => m.id === selectedModel) ?? AI_MODELS[1]
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            {/* Minimal header */}
+            {/* Header */}
             <header className="flex items-center h-14 px-5 border-b border-border/40">
                 <Link
                     href="/dashboard"
@@ -91,11 +147,11 @@ export default function NewProjectPage() {
                 </div>
             </header>
 
-            {/* Centered content */}
+            {/* Content */}
             <div className="flex-1 flex flex-col items-center justify-center px-5 pb-24">
                 <div className="w-full max-w-2xl">
                     {/* Heading */}
-                    <div className="text-center mb-10">
+                    <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-accent to-accent/70 mb-5 shadow-lg shadow-accent/20">
                             <Sparkles className="w-6 h-6 text-white" />
                         </div>
@@ -107,48 +163,169 @@ export default function NewProjectPage() {
                         </p>
                     </div>
 
-                    {/* Chat-style input */}
-                    <div className="relative rounded-2xl border border-border bg-card shadow-sm focus-within:border-accent/40 focus-within:shadow-md focus-within:shadow-accent/5 transition-all">
+                    {/* Product Type Toggle */}
+                    <div className="flex justify-center mb-6">
+                        <div className="inline-flex items-center bg-muted/50 rounded-xl p-1 border border-border/30">
+                            <button
+                                onClick={() => setProductType('web')}
+                                className={`inline-flex items-center gap-2 px-5 py-2 rounded-[10px] text-sm font-medium transition-all duration-200 ${productType === 'web'
+                                    ? 'bg-card text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                <Globe className="w-4 h-4" />
+                                Website
+                            </button>
+                            <button
+                                onClick={() => setProductType('app')}
+                                className={`inline-flex items-center gap-2 px-5 py-2 rounded-[10px] text-sm font-medium transition-all duration-200 ${productType === 'app'
+                                    ? 'bg-card text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                <Smartphone className="w-4 h-4" />
+                                App
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Main Input — subtle focus: shadow lift only, no border change, no outline */}
+                    <div className="relative rounded-2xl border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus-within:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.08)] transition-shadow duration-200">
                         <textarea
                             ref={textareaRef}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="A SaaS platform for managing freelance projects with time tracking, invoicing, and client portal..."
+                            placeholder={PLACEHOLDERS[productType]}
                             rows={1}
-                            className="w-full resize-none bg-transparent px-5 pt-4 pb-14 text-base placeholder:text-muted-foreground/50 focus:outline-none min-h-[56px] max-h-[200px]"
+                            className="w-full resize-none bg-transparent px-5 pt-4 pb-16 text-base placeholder:text-muted-foreground/40 focus:outline-none focus-visible:outline-none focus:ring-0 min-h-14 max-h-[200px]"
                         />
-                        <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground/40 mr-1 select-none">
-                                {input.trim() ? 'Enter ↵' : 'Shift+Enter for new line'}
-                            </span>
+
+                        {/* Attachments preview */}
+                        {attachments.length > 0 && (
+                            <div className="px-5 pb-2 flex flex-wrap gap-2">
+                                {attachments.map((name, i) => (
+                                    <div key={`${name}-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-xs text-muted-foreground border border-border/30">
+                                        <ImageIcon className="w-3 h-3" />
+                                        {name}
+                                        <button
+                                            onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                                            className="hover:text-foreground transition-colors"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Bottom toolbar */}
+                        <div className="absolute bottom-3 left-3 right-3 flex items-center">
+                            {/* Left tools */}
+                            <div className="flex items-center gap-1">
+                                {/* Attach */}
+                                <div className="relative" ref={attachMenuRef}>
+                                    <button
+                                        onClick={() => setShowAttachMenu(!showAttachMenu)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                                    >
+                                        <Paperclip className="w-3.5 h-3.5" />
+                                        Attach
+                                    </button>
+                                    {showAttachMenu && (
+                                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-popover border border-border/50 rounded-xl shadow-lg p-1.5 z-10">
+                                            <button
+                                                onClick={() => { setAttachments(prev => [...prev, 'screenshot.png']); setShowAttachMenu(false) }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                                            >
+                                                <ImageIcon className="w-4 h-4" /> Reference Image
+                                            </button>
+                                            <button
+                                                onClick={() => { setAttachments(prev => [...prev, 'requirements.pdf']); setShowAttachMenu(false) }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                                            >
+                                                <FileText className="w-4 h-4" /> Document
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                            </div>
+
+                            <div className="flex-1" />
+
+                            {/* Model selector */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors mr-2">
+                                        <Zap className="w-3 h-3" />
+                                        {currentModel.label}
+                                        <ChevronDown className="w-3 h-3 opacity-50" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-xl p-1.5">
+                                    {AI_MODELS.map((model) => (
+                                        <DropdownMenuItem
+                                            key={model.id}
+                                            onClick={() => setSelectedModel(model.id)}
+                                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{model.label}</span>
+                                                    {'recommended' in model && model.recommended && (
+                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent leading-none">
+                                                            Default
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-0.5">{model.desc}</p>
+                                            </div>
+                                            {selectedModel === model.id && (
+                                                <Check className="w-3.5 h-3.5 text-accent shrink-0" />
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* Generate button */}
                             <button
                                 onClick={handleSubmit}
-                                disabled={!input.trim() || isLoading}
-                                className="w-9 h-9 rounded-xl bg-foreground text-background flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-all active:scale-95"
+                                disabled={!input.trim() || isGenerating}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-all duration-150 active:scale-[0.97]"
                             >
-                                {isLoading ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                {isGenerating ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Creating...
+                                    </>
                                 ) : (
-                                    <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+                                    <>
+                                        Generate
+                                        <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+                                    </>
                                 )}
                             </button>
                         </div>
                     </div>
 
                     {/* Suggestion chips */}
-                    <div className="mt-6">
+                    <div className="mt-8">
                         <div className="flex flex-wrap justify-center gap-2">
-                            {suggestions.map((s) => (
+                            {SUGGESTIONS[productType].map((s) => (
                                 <button
                                     key={s.label}
                                     type="button"
-                                    onClick={() => handleSuggestionClick(s.label)}
-                                    className="group inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/70 bg-card/50 text-sm text-muted-foreground hover:text-foreground hover:border-accent/40 hover:bg-accent/5 transition-all"
+                                    onClick={() => {
+                                        setInput(s.label.toLowerCase())
+                                        textareaRef.current?.focus()
+                                    }}
+                                    className="group inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-card/50 text-sm text-muted-foreground hover:text-foreground hover:border-border hover:shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-all duration-200"
                                 >
                                     <span className="font-medium">{s.label}</span>
-                                    <span className="text-muted-foreground/40 hidden sm:inline">·</span>
-                                    <span className="text-xs text-muted-foreground/50 hidden sm:inline">{s.desc}</span>
+                                    <span className="text-muted-foreground/30 hidden sm:inline">·</span>
+                                    <span className="text-xs text-muted-foreground/40 hidden sm:inline">{s.desc}</span>
                                 </button>
                             ))}
                         </div>

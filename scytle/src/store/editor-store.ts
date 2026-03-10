@@ -27,11 +27,41 @@ const _snap = (state: any) => {
 }
 
 // ============================================================
+// Page type (one canvas per page)
+// ============================================================
+
+export interface EditorPage {
+    id: string
+    name: string
+    nodes: ScytleNode[]
+    canvasColor: string
+    zoom: number
+    panX: number
+    panY: number
+}
+
+function createEditorPage(name: string): EditorPage {
+    return {
+        id: crypto.randomUUID(),
+        name,
+        nodes: [],
+        canvasColor: '#F5F5F5',
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+    }
+}
+
+// ============================================================
 // State Interface
 // ============================================================
 
 interface EditorState {
-    // Document -----------------------------------------------
+    // Pages --------------------------------------------------
+    pages: EditorPage[]
+    activePageId: string
+
+    // Document (active page) ---------------------------------
     nodes: ScytleNode[]
     /** Canvas/page background color */
     canvasColor: string
@@ -133,6 +163,13 @@ interface EditorState {
     saveProjectState: () => void
     /** Set multiple selected IDs at once (for marquee selection) */
     setSelectedIds: (ids: string[]) => void
+
+    // Page management -----------------------------------------
+    addPage: (name?: string) => string
+    deletePage: (pageId: string) => void
+    duplicatePage: (pageId: string) => string
+    renamePage: (pageId: string, name: string) => void
+    switchPage: (pageId: string) => void
 }
 
 // ============================================================
@@ -159,6 +196,8 @@ export const useEditorStore = create<EditorState>()(
             _batchDepth: 0,
             _clipboard: [],
             _projectId: null,
+            pages: [],
+            activePageId: '',
 
             // Viewport ---------------------------------------------
 
@@ -1001,38 +1040,50 @@ export const useEditorStore = create<EditorState>()(
                 // Already loaded for this project — no-op
                 if (state._projectId === projectId) return
 
-                // Save current state for old project (if any)
+                // Save current project before switching
                 if (state._projectId) {
-                    const data = {
-                        nodes: state.nodes,
-                        canvasColor: state.canvasColor,
-                        zoom: state.zoom,
-                        panX: state.panX,
-                        panY: state.panY,
-                    }
-                    try {
-                        localStorage.setItem(
-                            `scytle-editor-${state._projectId}`,
-                            JSON.stringify(data)
-                        )
-                    } catch { /* quota exceeded — ignore */ }
+                    get().saveProjectState()
                 }
 
                 // Load state for new project
-                let loaded: { nodes?: ScytleNode[]; canvasColor?: string; zoom?: number; panX?: number; panY?: number } | null = null
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let loaded: any = null
                 try {
                     const raw = localStorage.getItem(`scytle-editor-${projectId}`)
                     if (raw) loaded = JSON.parse(raw)
                 } catch { /* corrupt data — ignore */ }
 
+                // Migrate from old single-canvas format to pages format
+                let pages: EditorPage[]
+                let activePageId: string
+                if (loaded?.pages && Array.isArray(loaded.pages)) {
+                    // New format — pages array
+                    pages = loaded.pages
+                    activePageId = loaded.activePageId ?? pages[0]?.id ?? ''
+                } else {
+                    // Old format or empty — wrap in single page
+                    const page = createEditorPage('Page 1')
+                    page.nodes = loaded?.nodes ?? []
+                    page.canvasColor = loaded?.canvasColor ?? '#F5F5F5'
+                    page.zoom = loaded?.zoom ?? 1
+                    page.panX = loaded?.panX ?? 0
+                    page.panY = loaded?.panY ?? 0
+                    pages = [page]
+                    activePageId = page.id
+                }
+
+                const activePage = pages.find((p) => p.id === activePageId) ?? pages[0]
+
                 set(
                     (draft) => {
                         draft._projectId = projectId
-                        draft.nodes = loaded?.nodes ?? []
-                        draft.canvasColor = loaded?.canvasColor ?? '#F5F5F5'
-                        draft.zoom = loaded?.zoom ?? 1
-                        draft.panX = loaded?.panX ?? 0
-                        draft.panY = loaded?.panY ?? 0
+                        draft.pages = pages
+                        draft.activePageId = activePage.id
+                        draft.nodes = activePage.nodes
+                        draft.canvasColor = activePage.canvasColor
+                        draft.zoom = activePage.zoom
+                        draft.panX = activePage.panX
+                        draft.panY = activePage.panY
                         // Reset interaction state
                         draft.selectedIds = []
                         draft.hoveredId = null
@@ -1053,12 +1104,17 @@ export const useEditorStore = create<EditorState>()(
             saveProjectState: () => {
                 const state = get()
                 if (!state._projectId) return
+
+                // Sync active page with current canvas state
+                const pages = state.pages.map((p) =>
+                    p.id === state.activePageId
+                        ? { ...p, nodes: state.nodes, canvasColor: state.canvasColor, zoom: state.zoom, panX: state.panX, panY: state.panY }
+                        : p
+                )
+
                 const data = {
-                    nodes: state.nodes,
-                    canvasColor: state.canvasColor,
-                    zoom: state.zoom,
-                    panX: state.panX,
-                    panY: state.panY,
+                    pages,
+                    activePageId: state.activePageId,
                 }
                 try {
                     localStorage.setItem(
@@ -1076,6 +1132,176 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'setSelectedIds'
                 ),
+
+            // Page management ──────────────────────────────────
+
+            addPage: (name) => {
+                const page = createEditorPage(name ?? `Page ${get().pages.length + 1}`)
+                // Save current page state before switching
+                set(
+                    (draft) => {
+                        // Sync active page with current canvas
+                        const idx = draft.pages.findIndex((p: EditorPage) => p.id === draft.activePageId)
+                        if (idx !== -1) {
+                            draft.pages[idx].nodes = draft.nodes
+                            draft.pages[idx].canvasColor = draft.canvasColor
+                            draft.pages[idx].zoom = draft.zoom
+                            draft.pages[idx].panX = draft.panX
+                            draft.pages[idx].panY = draft.panY
+                        }
+                        // Add new page and switch to it
+                        draft.pages.push(page)
+                        draft.activePageId = page.id
+                        draft.nodes = []
+                        draft.canvasColor = '#F5F5F5'
+                        draft.zoom = 1
+                        draft.panX = 0
+                        draft.panY = 0
+                        // Reset interaction state
+                        draft.selectedIds = []
+                        draft.hoveredId = null
+                        draft.enteredFrameId = null
+                        draft.editingNodeId = null
+                        draft._past = []
+                        draft._future = []
+                    },
+                    false,
+                    'addPage'
+                )
+                return page.id
+            },
+
+            deletePage: (pageId) => {
+                const state = get()
+                if (state.pages.length <= 1) return // can't delete last page
+                const idx = state.pages.findIndex((p) => p.id === pageId)
+                if (idx === -1) return
+
+                const wasActive = pageId === state.activePageId
+                // Pick replacement page if deleting active
+                const nextPage = wasActive
+                    ? state.pages[idx === 0 ? 1 : idx - 1]
+                    : null
+
+                set(
+                    (draft) => {
+                        draft.pages.splice(idx, 1)
+                        if (wasActive && nextPage) {
+                            draft.activePageId = nextPage.id
+                            draft.nodes = nextPage.nodes
+                            draft.canvasColor = nextPage.canvasColor
+                            draft.zoom = nextPage.zoom
+                            draft.panX = nextPage.panX
+                            draft.panY = nextPage.panY
+                            draft.selectedIds = []
+                            draft.hoveredId = null
+                            draft.enteredFrameId = null
+                            draft.editingNodeId = null
+                            draft._past = []
+                            draft._future = []
+                        }
+                    },
+                    false,
+                    'deletePage'
+                )
+            },
+
+            duplicatePage: (pageId) => {
+                const state = get()
+                const source = state.pages.find((p) => p.id === pageId)
+                if (!source) return ''
+
+                const newPage: EditorPage = {
+                    id: crypto.randomUUID(),
+                    name: `${source.name} (copy)`,
+                    // Use current canvas state if duplicating the active page
+                    nodes: pageId === state.activePageId ? structuredClone(state.nodes) : structuredClone(source.nodes),
+                    canvasColor: pageId === state.activePageId ? state.canvasColor : source.canvasColor,
+                    zoom: pageId === state.activePageId ? state.zoom : source.zoom,
+                    panX: pageId === state.activePageId ? state.panX : source.panX,
+                    panY: pageId === state.activePageId ? state.panY : source.panY,
+                }
+
+                set(
+                    (draft) => {
+                        // Sync active page first
+                        const idx = draft.pages.findIndex((p: EditorPage) => p.id === draft.activePageId)
+                        if (idx !== -1) {
+                            draft.pages[idx].nodes = draft.nodes
+                            draft.pages[idx].canvasColor = draft.canvasColor
+                            draft.pages[idx].zoom = draft.zoom
+                            draft.pages[idx].panX = draft.panX
+                            draft.pages[idx].panY = draft.panY
+                        }
+                        // Insert copy after source
+                        const sourceIdx = draft.pages.findIndex((p: EditorPage) => p.id === pageId)
+                        draft.pages.splice(sourceIdx + 1, 0, newPage)
+                        // Switch to the new page
+                        draft.activePageId = newPage.id
+                        draft.nodes = newPage.nodes
+                        draft.canvasColor = newPage.canvasColor
+                        draft.zoom = newPage.zoom
+                        draft.panX = newPage.panX
+                        draft.panY = newPage.panY
+                        draft.selectedIds = []
+                        draft.hoveredId = null
+                        draft.enteredFrameId = null
+                        draft.editingNodeId = null
+                        draft._past = []
+                        draft._future = []
+                    },
+                    false,
+                    'duplicatePage'
+                )
+                return newPage.id
+            },
+
+            renamePage: (pageId, name) =>
+                set(
+                    (draft) => {
+                        const page = draft.pages.find((p: EditorPage) => p.id === pageId)
+                        if (page) page.name = name
+                    },
+                    false,
+                    'renamePage'
+                ),
+
+            switchPage: (pageId) => {
+                const state = get()
+                if (pageId === state.activePageId) return
+                const target = state.pages.find((p) => p.id === pageId)
+                if (!target) return
+
+                set(
+                    (draft) => {
+                        // Save current page state
+                        const idx = draft.pages.findIndex((p: EditorPage) => p.id === draft.activePageId)
+                        if (idx !== -1) {
+                            draft.pages[idx].nodes = draft.nodes
+                            draft.pages[idx].canvasColor = draft.canvasColor
+                            draft.pages[idx].zoom = draft.zoom
+                            draft.pages[idx].panX = draft.panX
+                            draft.pages[idx].panY = draft.panY
+                        }
+                        // Load target page
+                        draft.activePageId = target.id
+                        draft.nodes = target.nodes
+                        draft.canvasColor = target.canvasColor
+                        draft.zoom = target.zoom
+                        draft.panX = target.panX
+                        draft.panY = target.panY
+                        // Reset interaction state
+                        draft.selectedIds = []
+                        draft.hoveredId = null
+                        draft.enteredFrameId = null
+                        draft.editingNodeId = null
+                        draft._past = []
+                        draft._future = []
+                    },
+                    false,
+                    'switchPage'
+                )
+            },
         })),
         { name: 'editor-store' }
     )

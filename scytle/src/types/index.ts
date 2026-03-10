@@ -88,6 +88,10 @@ export const WireframePageSchema = z.object({
 // Wireframe Data Schema (for project storage)
 export const WireframeDataSchema = z.array(WireframePageSchema)
 
+// Product & AI Model
+export const ProductTypeSchema = z.enum(['web', 'app'])
+export const AiModelSchema = z.enum(['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'])
+
 // Project
 export const ProjectSchema = z.object({
     projectId: z.string(),
@@ -95,6 +99,8 @@ export const ProjectSchema = z.object({
     name: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.default('draft'),
+    productType: ProductTypeSchema.optional().default('web'),
+    aiModel: AiModelSchema.optional().default('gemini-2.5-flash'),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     sitemapData: z.array(SitemapPageSchema).nullable().optional(),
@@ -104,12 +110,16 @@ export const ProjectSchema = z.object({
 export const CreateProjectSchema = z.object({
     name: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
+    productType: ProductTypeSchema.optional(),
+    aiModel: AiModelSchema.optional(),
 })
 
 export const UpdateProjectSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.optional(),
+    productType: ProductTypeSchema.optional(),
+    aiModel: AiModelSchema.optional(),
     sitemapData: z.string().optional(), // JSON stringified sitemap pages
     wireframeData: z.string().optional(), // JSON stringified wireframe pages
 })
@@ -255,6 +265,8 @@ export type Project = z.infer<typeof ProjectSchema>
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
 export type UpdateProjectInput = z.infer<typeof UpdateProjectSchema>
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>
+export type ProductType = z.infer<typeof ProductTypeSchema>
+export type AiModel = z.infer<typeof AiModelSchema>
 
 export type Page = z.infer<typeof PageSchema>
 export type CreatePageInput = z.infer<typeof CreatePageSchema>

@@ -6,7 +6,7 @@ import { generateId } from '@/lib/utils'
 // ============================================================
 
 export const MIN_ZOOM = 0.1
-export const MAX_ZOOM = 5
+export const MAX_ZOOM = 256
 export const DEFAULT_ZOOM = 1
 export const ZOOM_STEP = 1.2
 

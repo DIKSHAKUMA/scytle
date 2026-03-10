@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useCallback, useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
@@ -14,37 +15,10 @@ import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts'
 import type { HandleDirection } from './hooks/use-node-resize'
 
 // ============================================================
-// Dot grid background (CSS radial-gradient, scales with zoom)
-// ============================================================
-
-function DotGrid({ zoom, panX, panY }: { zoom: number; panX: number; panY: number }) {
-    // Grid spacing in canvas units — doubles or halves at zoom thresholds
-    const baseSpacing = 20
-    let spacing = baseSpacing
-    if (zoom < 0.5) spacing = baseSpacing * 4
-    else if (zoom < 1) spacing = baseSpacing * 2
-    else if (zoom > 3) spacing = baseSpacing / 2
-
-    const screenSpacing = spacing * zoom
-    const dotSize = Math.max(0.5, zoom * 0.8)
-
-    return (
-        <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-                backgroundImage: `radial-gradient(circle, oklch(0.7 0 0 / 0.35) ${dotSize}px, transparent ${dotSize}px)`,
-                backgroundSize: `${screenSpacing}px ${screenSpacing}px`,
-                backgroundPosition: `${panX % screenSpacing}px ${panY % screenSpacing}px`,
-            }}
-        />
-    )
-}
-
-// ============================================================
 // Canvas Component
 // ============================================================
 
-export function EditorCanvas() {
+export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } = {}) {
     const viewportRef = useRef<HTMLDivElement>(null)
     const transformRef = useRef<HTMLDivElement>(null)
 
@@ -713,34 +687,27 @@ export function EditorCanvas() {
             onPointerLeave={handlePointerLeave}
             onDoubleClick={handleDoubleClick}
         >
-            {/* Dot grid background */}
-            <DotGrid zoom={zoom} panX={panX} panY={panY} />
-
-            {/* Transform container — all canvas content lives here */}
+            {/* Transform container — CSS custom properties drive coordinate-space rendering */}
             <div
                 ref={transformRef}
-                className="absolute top-0 left-0 origin-top-left"
-                style={{
-                    transform: `translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`,
-                    willChange: 'transform',
-                    backfaceVisibility: 'hidden',
-                    WebkitFontSmoothing: 'antialiased',
-                    textRendering: 'geometricPrecision',
-                }}
+                className="absolute top-0 left-0"
+                style={{ '--z': zoom, '--px': panX, '--py': panY } as unknown as CSSProperties}
             >
                 {nodes.map((node) => (
                     <NodeRenderer key={node.id} node={node} isTopLevel />
                 ))}
 
-                {/* Frame draw preview (canvas coordinates) */}
+                {/* Frame draw preview (canvas coordinates scaled via CSS vars) */}
                 {drawState && (
                     <div
-                        className="absolute border-2 border-primary/70 bg-primary/5 rounded-[1px] pointer-events-none"
+                        className="absolute border border-primary/70 bg-primary/5 pointer-events-none"
                         style={{
-                            left: Math.min(drawState.startCanvasX, drawState.currentCanvasX),
-                            top: Math.min(drawState.startCanvasY, drawState.currentCanvasY),
-                            width: Math.abs(drawState.currentCanvasX - drawState.startCanvasX),
-                            height: Math.abs(drawState.currentCanvasY - drawState.startCanvasY),
+                            left: `calc(${Math.min(drawState.startCanvasX, drawState.currentCanvasX)}px * var(--z, 1) + var(--px, 0) * 1px)`,
+                            top: `calc(${Math.min(drawState.startCanvasY, drawState.currentCanvasY)}px * var(--z, 1) + var(--py, 0) * 1px)`,
+                            width: `calc(${Math.abs(drawState.currentCanvasX - drawState.startCanvasX)}px * var(--z, 1))`,
+                            height: `calc(${Math.abs(drawState.currentCanvasY - drawState.startCanvasY)}px * var(--z, 1))`,
+                            borderWidth: `calc(2px * var(--z, 1))`,
+                            borderRadius: `calc(1px * var(--z, 1))`,
                         }}
                     />
                 )}
@@ -771,9 +738,11 @@ export function EditorCanvas() {
             })()}
 
             {/* Floating toolbar — centered at top of canvas */}
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
-                <Toolbar />
-            </div>
+            {showToolbar && (
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
+                    <Toolbar />
+                </div>
+            )}
 
 
         </div>

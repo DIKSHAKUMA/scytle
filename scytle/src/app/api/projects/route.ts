@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         const now = new Date().toISOString()
 
         // Create project document
+        // Note: productType & aiModel stored client-side for now; Appwrite migration pending
         const doc = await databases.createDocument(
             DATABASE_ID,
             COLLECTIONS.PROJECTS,
