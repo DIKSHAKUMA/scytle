@@ -217,8 +217,11 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
                     ? `repeat(${node.layout.rows}, 1fr)`
                     : node.layout.rows
         }
-        if (node.layout.columnGap != null) s.columnGap = `calc(${node.layout.columnGap}px * var(--z, 1))`
-        if (node.layout.rowGap != null) s.rowGap = `calc(${node.layout.rowGap}px * var(--z, 1))`
+        // Grid gap: use specific columnGap/rowGap if set, otherwise fall back to generic gap
+        const gridColGap = node.layout.columnGap ?? node.layout.gap
+        const gridRowGap = node.layout.rowGap ?? node.layout.gap
+        if (gridColGap != null) s.columnGap = `calc(${gridColGap}px * var(--z, 1))`
+        if (gridRowGap != null) s.rowGap = `calc(${gridRowGap}px * var(--z, 1))`
     }
     // mode: 'none' → no display override; position context handled by renderer
 

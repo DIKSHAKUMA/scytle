@@ -73,9 +73,17 @@ export const TextRenderer = memo(function TextRenderer({
         // Typography
         fontFamily: node.fontFamily,
         fontWeight: node.fontWeight,
+        fontStyle: node.fontStyle === 'italic' ? 'italic' : undefined,
         fontSize: `calc(${node.fontSize}px * var(--z, 1))`,
+        // lineHeight from parser is a unitless multiplier (e.g. 1.5);
+        // from design system may be absolute pixels (e.g. 24).
+        // Multipliers are always ≤ 4; pixel values are always > 4.
         lineHeight:
-            node.lineHeight === 'auto' ? 'normal' : `calc(${node.lineHeight}px * var(--z, 1))`,
+            node.lineHeight === 'auto'
+                ? 'normal'
+                : node.lineHeight <= 4
+                    ? node.lineHeight
+                    : `calc(${node.lineHeight}px * var(--z, 1))`,
         letterSpacing: node.letterSpacing !== 0 ? `calc(${node.letterSpacing}px * var(--z, 1))` : undefined,
         textAlign: node.textAlign,
         textTransform:

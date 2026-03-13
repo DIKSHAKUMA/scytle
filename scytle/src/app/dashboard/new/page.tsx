@@ -22,9 +22,10 @@ import type { AiModel } from '@/types'
 // ─────────────────────────────────────────────
 
 const AI_MODELS = [
-    { id: 'gemini-2.0-flash' as AiModel, label: '2.0 Flash', desc: 'Fastest responses' },
-    { id: 'gemini-2.5-flash' as AiModel, label: '2.5 Flash', desc: 'Balanced speed & quality', recommended: true },
-    { id: 'gemini-2.5-pro' as AiModel, label: '2.5 Pro', desc: 'Best reasoning & quality' },
+    { id: 'claude-sonnet' as AiModel, label: 'Claude Sonnet', desc: 'Best design quality', recommended: true },
+    { id: 'claude-opus' as AiModel, label: 'Claude Opus', desc: 'Premium quality' },
+    { id: 'gemini-2.5-flash' as AiModel, label: 'Gemini 2.5 Flash', desc: 'Fast & balanced' },
+    { id: 'gemini-2.5-pro' as AiModel, label: 'Gemini 2.5 Pro', desc: 'Best Gemini quality' },
 ] as const
 
 const SUGGESTIONS = {
@@ -67,7 +68,7 @@ export default function NewProjectPage() {
 
     const [input, setInput] = useState('')
     const [productType, setProductType] = useState<'web' | 'app'>('web')
-    const [selectedModel, setSelectedModel] = useState<AiModel>('gemini-2.5-flash')
+    const [selectedModel, setSelectedModel] = useState<AiModel>('claude-sonnet')
     const [attachments, setAttachments] = useState<string[]>([])
     const [showAttachMenu, setShowAttachMenu] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
@@ -109,10 +110,16 @@ export default function NewProjectPage() {
         const project = await createProject({
             name: name || 'Untitled Project',
             description: trimmed,
+            productType,
+            aiModel: selectedModel,
         })
 
         if (project) {
-            router.push(`/project/${project.projectId}`)
+            const params = new URLSearchParams()
+            if (productType !== 'web') params.set('type', productType)
+            if (selectedModel !== 'claude-sonnet') params.set('model', selectedModel)
+            const qs = params.toString()
+            router.push(`/project/${project.projectId}${qs ? `?${qs}` : ''}`)
         } else {
             setIsGenerating(false)
         }

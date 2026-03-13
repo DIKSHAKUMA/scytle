@@ -1,16 +1,27 @@
 // AI Configuration for Scytle
-// Using Google Gemini API
+// Supports Anthropic Claude (via Vertex AI) and Google Gemini
 
 export const AI_CONFIG = {
-    // Models in order of preference
+    // Available models — Claude (Anthropic via Vertex) + Gemini (Google Vertex)
     models: {
-        fast: 'gemini-2.0-flash',      // Fast responses, cheap
-        balanced: 'gemini-2.5-flash',   // Good balance of speed and quality
-        powerful: 'gemini-2.5-pro',     // Complex reasoning, thinking mode
-    },
+        'claude-sonnet': 'claude-sonnet-4',
+        'claude-opus': 'claude-opus-4',
+        fast: 'gemini-2.0-flash',                    // Fastest, cheapest
+        balanced: 'gemini-2.5-flash',                 // Good balance
+        powerful: 'gemini-2.5-pro',                   // Best Gemini reasoning
+    } as Record<string, string>,
 
-    // Default model for chat
-    defaultModel: 'gemini-2.0-flash',
+    // Per-model max output token limits
+    modelMaxTokens: {
+        'claude-sonnet': 16384,
+        'claude-opus': 16384,
+        fast: 8192,
+        balanced: 65536,
+        powerful: 65536,
+    } as Record<string, number>,
+
+    // Default model for generation
+    defaultModel: 'claude-sonnet',
 
     // Generation settings
     generation: {
@@ -37,6 +48,9 @@ export const AI_CONFIG = {
         maxHistoryMessages: 20,
         maxContextTokens: 32000,
     },
+
+    // Planner max tokens (for page planner calls)
+    plannerMaxTokens: 4096,
 } as const
 
 // System prompts for different phases

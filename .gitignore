@@ -31,3 +31,6 @@ npm-debug.log*
 
 # Playwright MCP screenshots
 .playwright-mcp/
+
+# Test/dev screenshots
+screenshots/

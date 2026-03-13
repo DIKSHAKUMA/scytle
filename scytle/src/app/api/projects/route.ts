@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { name, description } = validation.data
+        const { name, description, productType, aiModel } = validation.data
         const { databases } = createAdminClient()
         const now = new Date().toISOString()
 
@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
             name: doc.name,
             description: doc.description,
             status: doc.status,
+            productType: productType || 'web',
+            aiModel: aiModel || 'gemini-2.5-flash',
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
         }

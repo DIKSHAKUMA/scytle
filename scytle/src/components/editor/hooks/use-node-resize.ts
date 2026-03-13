@@ -181,10 +181,11 @@ export function useNodeResize(
                 useEditorStore.getState().beginBatch()
                 setResizeInfo({ isResizing: true, handle: s.handle })
 
-                // Switch sizing modes to 'fixed' when user starts resizing
+                // Capture original sizing before switching to 'fixed'
                 const store = useEditorStore.getState()
                 const node = findNodeById(store.nodes, s.nodeId)
                 if (node) {
+                    startSizingRef.current = { ...node.sizing }
                     const axes = handleAxes(s.handle)
                     const newSizing: Sizing = { ...node.sizing }
                     let changed = false
@@ -314,6 +315,9 @@ export function useNodeResize(
 
     // ── Cancel resize (Escape key) ──────────────────────────
 
+    // Store the original sizing so we can restore it on cancel
+    const startSizingRef = useRef<{ horizontal: string; vertical: string } | null>(null)
+
     const cancelResize = useCallback(() => {
         const s = stateRef.current
         if (s.phase === 'idle') return
@@ -323,14 +327,18 @@ export function useNodeResize(
             viewportRef.current?.releasePointerCapture(s.pointerId)
         }
 
-        // Restore original dimensions
+        // Restore original dimensions AND sizing mode
         if (s.phase === 'resizing') {
-            useEditorStore.getState().updateNode(s.nodeId, {
+            const restoreUpdates: Record<string, unknown> = {
                 x: s.startX,
                 y: s.startY,
                 width: s.startWidth,
                 height: s.startHeight,
-            })
+            }
+            if (startSizingRef.current) {
+                restoreUpdates.sizing = { ...startSizingRef.current }
+            }
+            useEditorStore.getState().updateNode(s.nodeId, restoreUpdates)
             useEditorStore.getState().endBatch()
         }
 

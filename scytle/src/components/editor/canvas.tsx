@@ -33,6 +33,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+    const panSourceRef = useRef<'space' | 'middle' | null>(null)
     const lastPointerRef = useRef({ x: 0, y: 0 })
 
     const isHandMode = activeTool === 'hand' || spaceHeld
@@ -202,7 +203,11 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
         const handleKeyUp = (e: KeyboardEvent) => {
             if (e.code === 'Space') {
                 setSpaceHeld(false)
-                setIsDragging(false)
+                // Only stop pan-dragging if space was the cause (not middle-click)
+                if (panSourceRef.current === 'space') {
+                    setIsDragging(false)
+                    panSourceRef.current = null
+                }
             }
         }
         window.addEventListener('keydown', handleKeyDown)
@@ -329,6 +334,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             // ── Middle mouse / hand tool → pan ────────────────────
             if (e.button === 1 || isHandMode) {
                 setIsDragging(true)
+                panSourceRef.current = e.button === 1 ? 'middle' : 'space'
                 lastPointerRef.current = { x: e.clientX, y: e.clientY }
                     ; (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
                 e.preventDefault()
@@ -647,6 +653,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
         if (isDragging) {
             setIsDragging(false)
+            panSourceRef.current = null
         }
     }, [isDragging, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp])
 

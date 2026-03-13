@@ -140,6 +140,7 @@ export interface TextNode extends BaseNodeProperties {
     characters: string
     fontFamily: string
     fontWeight: number
+    fontStyle?: 'normal' | 'italic'
     fontSize: number
     lineHeight: number | 'auto'
     letterSpacing: number
