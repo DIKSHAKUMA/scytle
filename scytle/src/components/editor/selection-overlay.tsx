@@ -552,9 +552,7 @@ export function CanvasPaddingZones({
         let running = true
         const loop = () => {
             if (!running) return
-            if (!dragRef.current) {
-                updateRect()
-            }
+            updateRect()
             rafRef.current = requestAnimationFrame(loop)
         }
         if (frameId) {
@@ -797,52 +795,48 @@ export function CanvasPaddingZones({
 
     return (
         <>
-            {/* Transparent hover zones — entire padding area triggers hatch display */}
+            {/* Interactive hover + drag zones — entire padding area is draggable */}
             {zones.map(({ side, style }) => (
                 <div
                     key={side}
                     style={{
                         position: 'absolute',
                         ...style,
-                        zIndex: 996,
-                        cursor: 'default',
+                        zIndex: 1002,
+                        cursor: (side === 'left' || side === 'right') ? 'ew-resize' : 'ns-resize',
                         pointerEvents: 'auto',
                     }}
                     onMouseEnter={() => handleMouseEnter(side)}
                     onMouseLeave={() => handleMouseLeave(side)}
+                    onPointerDown={(e) => handlePointerDown(side, e)}
                 />
             ))}
 
-            {/* Center handles — visible when hovered, draggable + clickable */}
+            {/* Center handles — visual indicator only, pointer-events-none */}
             {zones.map(({ side }) => {
                 const handle = getCenterHandle(side)
                 const isHovered = hoveredSide === side
                 const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
-                const showHandle = paddingPx[side] >= 4 // only show handle if padding is visible
+                const showHandle = paddingPx[side] >= 4
 
                 if (!showHandle) return null
 
                 return (
                     <div
                         key={`handle-${side}`}
+                        className="pointer-events-none"
                         style={{
                             position: 'absolute',
                             left: handle.x - CENTER_HANDLE_HIT_AREA / 2,
                             top: handle.y - CENTER_HANDLE_HIT_AREA / 2,
                             width: CENTER_HANDLE_HIT_AREA,
                             height: CENTER_HANDLE_HIT_AREA,
-                            zIndex: 1002,
-                            cursor: (side === 'left' || side === 'right') ? 'ew-resize' : 'ns-resize',
-                            pointerEvents: 'auto',
+                            zIndex: 1003,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                         }}
-                        onMouseEnter={() => handleMouseEnter(side)}
-                        onMouseLeave={() => handleMouseLeave(side)}
-                        onPointerDown={(e) => handlePointerDown(side, e)}
                     >
-                        {/* Visible center handle line */}
                         <div
                             style={{
                                 width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
@@ -996,6 +990,7 @@ interface GapZoneRect {
     width: number
     height: number
     index: number
+    actualGapPx: number // real gap in screen pixels (can be 0)
 }
 
 export function CanvasGapZones({
@@ -1084,6 +1079,8 @@ export function CanvasGapZones({
             maxBottom = Math.max(maxBottom, cr.bottom)
         }
 
+        const MIN_GAP_HIT = 6
+
         for (let i = 0; i < children.length - 1; i++) {
             const childRect = childRects[i]
             const nextChildRect = childRects[i + 1]
@@ -1094,14 +1091,16 @@ export function CanvasGapZones({
                 const gapBottom = nextChildRect.top - viewportRect.top
                 const gapHeight = gapBottom - gapTop
 
-                if (gapHeight > 0) {
-                    // Bounded by children's left/right extent
+                if (gapHeight >= 0) {
+                    const zoneHeight = Math.max(gapHeight, MIN_GAP_HIT)
+                    const yOffset = gapHeight < MIN_GAP_HIT ? (MIN_GAP_HIT - gapHeight) / 2 : 0
                     zones.push({
                         x: minLeft - viewportRect.left,
-                        y: gapTop,
+                        y: gapTop - yOffset,
                         width: maxRight - minLeft,
-                        height: gapHeight,
+                        height: zoneHeight,
                         index: i,
+                        actualGapPx: Math.max(0, gapHeight),
                     })
                 }
             } else {
@@ -1110,14 +1109,16 @@ export function CanvasGapZones({
                 const gapRight = nextChildRect.left - viewportRect.left
                 const gapWidth = gapRight - gapLeft
 
-                if (gapWidth > 0) {
-                    // Bounded by children's top/bottom extent
+                if (gapWidth >= 0) {
+                    const zoneWidth = Math.max(gapWidth, MIN_GAP_HIT)
+                    const xOffset = gapWidth < MIN_GAP_HIT ? (MIN_GAP_HIT - gapWidth) / 2 : 0
                     zones.push({
-                        x: gapLeft,
+                        x: gapLeft - xOffset,
                         y: minTop - viewportRect.top,
-                        width: gapWidth,
+                        width: zoneWidth,
                         height: maxBottom - minTop,
                         index: i,
+                        actualGapPx: Math.max(0, gapWidth),
                     })
                 }
             }
@@ -1278,7 +1279,7 @@ export function CanvasGapZones({
                                 width: zone.width,
                                 height: zone.height,
                                 zIndex: 1003,
-                                cursor: isAnyHovered ? (isColumn ? 'ns-resize' : 'ew-resize') : 'default',
+                                cursor: isColumn ? 'ns-resize' : 'ew-resize',
                                 pointerEvents: 'auto',
                             }}
                             onMouseEnter={() => {
@@ -1302,8 +1303,8 @@ export function CanvasGapZones({
                             onPointerDown={(e) => handlePointerDown(zone, e)}
                         />
 
-                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered */}
-                        {isAnyHovered && !inlineInput && (
+                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered, only if actual gap > 0 */}
+                        {isAnyHovered && !inlineInput && zone.actualGapPx > 0 && (
                             <div
                                 className="pointer-events-none"
                                 style={{

@@ -16,20 +16,52 @@ export type CanvasTool = 'select' | 'hand' | 'frame' | 'text'
 // Zod Sub-Schemas (non-recursive leaf types)
 // ============================================================
 
+export const BlendModeSchema = z.enum([
+    'NORMAL', 'DARKEN', 'MULTIPLY', 'PLUS_DARKER', 'COLOR_BURN',
+    'LIGHTEN', 'SCREEN', 'PLUS_LIGHTER', 'COLOR_DODGE',
+    'OVERLAY', 'SOFT_LIGHT', 'HARD_LIGHT',
+    'DIFFERENCE', 'EXCLUSION',
+    'HUE', 'SATURATION', 'COLOR', 'LUMINOSITY',
+])
+
 export const SolidFillSchema = z.object({
     type: z.literal('solid'),
-    color: z.string(), // oklch, hex, or rgba
+    id: z.string().optional(),
+    color: z.string(),       // '#rrggbb' hex (with or without '#')
+    opacity: z.number().min(0).max(1).optional(),    // defaults to 1
+    visible: z.boolean().optional(),                  // defaults to true
+    blendMode: BlendModeSchema.optional(),            // defaults to 'NORMAL'
+})
+
+export const GradientStopSchema = z.object({
+    id: z.string().optional(),
+    position: z.number().min(0).max(1),   // 0–1
+    color: z.string(),                     // '#rrggbb'
+    opacity: z.number().min(0).max(1).optional(),
 })
 
 export const GradientFillSchema = z.object({
     type: z.literal('gradient'),
-    gradient: z.string(), // CSS gradient string
+    id: z.string().optional(),
+    gradientType: z.enum(['linear', 'radial', 'angular', 'diamond']).optional(),
+    stops: z.array(GradientStopSchema).optional(),
+    angle: z.number().optional(),           // degrees, default 90
+    // Legacy: raw CSS gradient string (backward compat)
+    gradient: z.string().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    visible: z.boolean().optional(),
+    blendMode: BlendModeSchema.optional(),
 })
 
 export const ImageFillSchema = z.object({
     type: z.literal('image'),
+    id: z.string().optional(),
     src: z.string(),
-    fit: z.enum(['cover', 'contain', 'fill']),
+    fit: z.enum(['cover', 'contain', 'fill', 'tile']),
+    opacity: z.number().min(0).max(1).optional(),
+    visible: z.boolean().optional(),
+    blendMode: BlendModeSchema.optional(),
+    rotation: z.number().optional(),
 })
 
 export const FillSchema = z.discriminatedUnion('type', [
@@ -93,7 +125,12 @@ export const BorderRadiusSchema = z.union([
 // TypeScript Types from Zod Schemas
 // ============================================================
 
+export type BlendMode = z.infer<typeof BlendModeSchema>
 export type Fill = z.infer<typeof FillSchema>
+export type SolidFill = z.infer<typeof SolidFillSchema>
+export type GradientFill = z.infer<typeof GradientFillSchema>
+export type GradientStop = z.infer<typeof GradientStopSchema>
+export type ImageFill = z.infer<typeof ImageFillSchema>
 export type Shadow = z.infer<typeof ShadowSchema>
 export type Border = z.infer<typeof BorderSchema>
 export type Sizing = z.infer<typeof SizingSchema>

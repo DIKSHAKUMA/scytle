@@ -45,6 +45,8 @@ interface NumberInputProps {
     suffix?: string
     /** Label width class (default: 'w-4') */
     labelWidth?: string
+    /** Callback for comma-separated shorthand input (e.g., "10,20,30,40") */
+    onShorthand?: (values: number[]) => void
 }
 
 /** Round to step precision to avoid floating point artifacts */
@@ -65,6 +67,7 @@ export function NumberInput({
     className,
     suffix,
     labelWidth = 'w-4',
+    onShorthand,
 }: NumberInputProps) {
     const [localValue, setLocalValue] = useState(String(roundToStep(value, step)))
     const inputRef = useRef<HTMLInputElement>(null)
@@ -77,6 +80,15 @@ export function NumberInput({
     }, [value, step])
 
     const commit = useCallback(() => {
+        // Handle comma-separated shorthand (e.g., "10,20,30,40")
+        if (onShorthand && localValue.includes(',')) {
+            const parts = localValue.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n))
+            if (parts.length > 0) {
+                onShorthand(parts)
+                return
+            }
+        }
+
         let num = parseFloat(localValue)
         if (isNaN(num)) {
             setLocalValue(String(roundToStep(value, step)))
@@ -87,7 +99,7 @@ export function NumberInput({
         if (max !== undefined) num = Math.min(max, num)
         setLocalValue(String(num))
         if (num !== value) onChange(num)
-    }, [localValue, value, onChange, min, max, step])
+    }, [localValue, value, onChange, min, max, step, onShorthand])
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {

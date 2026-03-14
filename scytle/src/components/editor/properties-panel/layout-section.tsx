@@ -334,6 +334,20 @@ function PaddingControls({
     const [individualMode, setIndividualMode] = useState(false)
     const setPaddingOverlay = useEditorStore((s) => s.setPaddingOverlay)
 
+    // Comma-separated shorthand handler: "10" = all, "10,20" = V,H, "10,20,30,40" = T,R,B,L
+    const handleShorthand = useCallback((values: number[]) => {
+        const clamped = values.map((v) => Math.max(0, v))
+        if (clamped.length === 1) {
+            onChange({ top: clamped[0], right: clamped[0], bottom: clamped[0], left: clamped[0] })
+        } else if (clamped.length === 2) {
+            onChange({ top: clamped[0], bottom: clamped[0], left: clamped[1], right: clamped[1] })
+        } else if (clamped.length === 3) {
+            onChange({ top: clamped[0], right: clamped[1], bottom: clamped[2], left: clamped[1] })
+        } else if (clamped.length >= 4) {
+            onChange({ top: clamped[0], right: clamped[1], bottom: clamped[2], left: clamped[3] })
+        }
+    }, [onChange])
+
     const hScrub = useScrub(padding.left, (v) => onChange({ left: v, right: v }))
     const vScrub = useScrub(padding.top, (v) => onChange({ top: v, bottom: v }))
     const lScrub = useScrub(padding.left, (v) => onChange({ left: v }))
@@ -368,6 +382,7 @@ function PaddingControls({
                                     <NumberInput
                                         value={padding.left}
                                         onChange={(v) => onChange({ left: v })}
+                                        onShorthand={handleShorthand}
                                         min={0} step={1} className="flex-1"
                                     />
                                 </div>
@@ -381,6 +396,7 @@ function PaddingControls({
                                     <NumberInput
                                         value={padding.top}
                                         onChange={(v) => onChange({ top: v })}
+                                        onShorthand={handleShorthand}
                                         min={0} step={1} className="flex-1"
                                     />
                                 </div>
@@ -396,6 +412,7 @@ function PaddingControls({
                                     <NumberInput
                                         value={padding.right}
                                         onChange={(v) => onChange({ right: v })}
+                                        onShorthand={handleShorthand}
                                         min={0} step={1} className="flex-1"
                                     />
                                 </div>
@@ -409,6 +426,7 @@ function PaddingControls({
                                     <NumberInput
                                         value={padding.bottom}
                                         onChange={(v) => onChange({ bottom: v })}
+                                        onShorthand={handleShorthand}
                                         min={0} step={1} className="flex-1"
                                     />
                                 </div>
@@ -427,6 +445,7 @@ function PaddingControls({
                                 <NumberInput
                                     value={padding.left}
                                     onChange={(v) => onChange({ left: v, right: v })}
+                                    onShorthand={handleShorthand}
                                     min={0} step={1} className="flex-1"
                                 />
                             </div>
@@ -440,6 +459,7 @@ function PaddingControls({
                                 <NumberInput
                                     value={padding.top}
                                     onChange={(v) => onChange({ top: v, bottom: v })}
+                                    onShorthand={handleShorthand}
                                     min={0} step={1} className="flex-1"
                                 />
                             </div>
@@ -455,7 +475,22 @@ function PaddingControls({
                             ? 'bg-muted text-foreground'
                             : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/40'
                     )}
-                    onClick={() => setIndividualMode(!individualMode)}
+                    onClick={() => {
+                        if (showExpanded) {
+                            // Switching to uniform: equalize padding (left→right, top→bottom)
+                            if (hMixed || vMixed) {
+                                onChange({
+                                    left: padding.left,
+                                    right: padding.left,
+                                    top: padding.top,
+                                    bottom: padding.top,
+                                })
+                            }
+                            setIndividualMode(false)
+                        } else {
+                            setIndividualMode(true)
+                        }
+                    }}
                     title={showExpanded ? 'Uniform padding' : 'Individual padding'}
                 >
                     <IndividualPaddingIcon expanded={showExpanded} />

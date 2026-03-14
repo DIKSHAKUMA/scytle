@@ -32,23 +32,90 @@ const ALIGN_MAP: Record<string, string> = {
 // Individual Property Computations
 // ============================================================
 
-/** Build background CSS from a fills array (last fill is visually on top) */
-function computeBackground(fills: Fill[]): CSSProperties {
-    if (fills.length === 0) return {}
+/** Convert a hex color + opacity to rgba() string */
+function hexToRgba(hex: string, opacity: number): string {
+    const h = hex.replace('#', '').slice(0, 6).padEnd(6, '0')
+    const r = parseInt(h.slice(0, 2), 16) || 0
+    const g = parseInt(h.slice(2, 4), 16) || 0
+    const b = parseInt(h.slice(4, 6), 16) || 0
+    return `rgba(${r},${g},${b},${opacity})`
+}
 
-    const fill = fills[fills.length - 1]
-    switch (fill.type) {
-        case 'solid':
-            return { backgroundColor: fill.color }
-        case 'gradient':
-            return { backgroundImage: fill.gradient }
-        case 'image':
-            return {
-                backgroundImage: `url(${fill.src})`,
-                backgroundSize: fill.fit,
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
+/** Build background CSS from a fills array.
+ *  Supports multiple fills, per-fill opacity, and visibility.
+ *  First fill in array = topmost visual layer (CSS background shorthand
+ *  renders first background on top). */
+function computeBackground(fills: Fill[]): CSSProperties {
+    const visible = fills.filter((f) => f.visible !== false)
+    if (visible.length === 0) return {}
+
+    const backgrounds: string[] = []
+    const sizes: string[] = []
+    const positions: string[] = []
+    const repeats: string[] = []
+
+    for (const fill of visible) {
+        const opacity = fill.opacity ?? 1
+        switch (fill.type) {
+            case 'solid': {
+                backgrounds.push(hexToRgba(fill.color, opacity))
+                sizes.push('auto')
+                positions.push('0 0')
+                repeats.push('no-repeat')
+                break
             }
+            case 'gradient': {
+                if (fill.gradient) {
+                    // Legacy CSS gradient string
+                    backgrounds.push(fill.gradient)
+                } else if (fill.stops && fill.stops.length >= 2) {
+                    const type = fill.gradientType ?? 'linear'
+                    const angle = fill.angle ?? 90
+                    const stops = fill.stops
+                        .map((s) => `${hexToRgba(s.color, s.opacity ?? 1)} ${s.position * 100}%`)
+                        .join(', ')
+                    if (type === 'linear') backgrounds.push(`linear-gradient(${angle}deg, ${stops})`)
+                    else if (type === 'radial') backgrounds.push(`radial-gradient(circle, ${stops})`)
+                    else if (type === 'angular') backgrounds.push(`conic-gradient(${stops})`)
+                    else backgrounds.push(`radial-gradient(circle, ${stops})`) // diamond fallback
+                } else {
+                    backgrounds.push('transparent')
+                }
+                sizes.push('100% 100%')
+                positions.push('0 0')
+                repeats.push('no-repeat')
+                break
+            }
+            case 'image': {
+                if (fill.src) {
+                    backgrounds.push(`url(${fill.src})`)
+                    const fit = fill.fit ?? 'cover'
+                    sizes.push(fit === 'tile' ? 'auto' : fit === 'fill' ? '100% 100%' : fit)
+                    positions.push('center')
+                    repeats.push(fit === 'tile' ? 'repeat' : 'no-repeat')
+                } else {
+                    backgrounds.push('transparent')
+                    sizes.push('auto')
+                    positions.push('0 0')
+                    repeats.push('no-repeat')
+                }
+                break
+            }
+        }
+    }
+
+    if (backgrounds.length === 0) return {}
+
+    // Single fill optimization — use backgroundColor for solid
+    if (visible.length === 1 && visible[0].type === 'solid') {
+        return { backgroundColor: hexToRgba(visible[0].color, visible[0].opacity ?? 1) }
+    }
+
+    return {
+        background: backgrounds.join(', '),
+        backgroundSize: sizes.join(', '),
+        backgroundPosition: positions.join(', '),
+        backgroundRepeat: repeats.join(', '),
     }
 }
 
