@@ -8,6 +8,7 @@ import type { ScytleNode } from '@/types/canvas'
 import { NodeRenderer } from './node-renderer'
 import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
+import { GradientHandleOverlay } from './gradient-handle-overlay'
 import { Toolbar } from './toolbar'
 import { useNodeDrag } from './hooks/use-node-drag'
 import { useNodeResize, handleToCursor } from './hooks/use-node-resize'
@@ -726,6 +727,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             <CanvasPaddingZones viewportRef={viewportRef} />
             <CanvasGapZones viewportRef={viewportRef} />
             <SelectionOverlay viewportRef={viewportRef} />
+
+            {/* Gradient handles (shown when gradient fill picker is open) */}
+            <GradientHandleOverlay viewportRef={viewportRef} />
 
             {/* Measurement lines (show distances when dragging inside a frame) */}
             <MeasurementOverlay viewportRef={viewportRef} isDragging={dragInfo.isDragging} />

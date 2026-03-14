@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import type { CanvasTool } from '@/types/canvas'
+import { findNodeById } from '@/types/canvas'
 import { isDragActive } from './use-node-drag'
 import { isResizeActive } from './use-node-resize'
 
@@ -18,6 +19,8 @@ import { isResizeActive } from './use-node-resize'
 // │ F                     │ Frame tool                     │
 // │ T                     │ Text tool                      │
 // │ H                     │ Hand tool                      │
+// │ Shift+H               │ Flip horizontal                │
+// │ Shift+V               │ Flip vertical                  │
 // │ Delete / Backspace    │ Delete selected                │
 // │ Escape                │ Deselect / exit frame          │
 // │ ]                     │ Bring forward                  │
@@ -188,6 +191,23 @@ export function useKeyboardShortcuts() {
             }
 
             // Tool shortcuts (bare keys, no modifiers)
+            // Shift+H / Shift+V → flip selected node (Figma shortcut)
+            if (shift && store.selectedIds.length === 1) {
+                const nodeId = store.selectedIds[0]
+                if (key === 'h') {
+                    e.preventDefault()
+                    const node = findNodeById(store.nodes, nodeId)
+                    if (node) store.updateNode(nodeId, { flipX: !node.flipX })
+                    return
+                }
+                if (key === 'v') {
+                    e.preventDefault()
+                    const node = findNodeById(store.nodes, nodeId)
+                    if (node) store.updateNode(nodeId, { flipY: !node.flipY })
+                    return
+                }
+            }
+
             if (shift || e.altKey) return // Don't fire tool switch on Shift+V etc.
 
             const toolMap: Record<string, CanvasTool> = {

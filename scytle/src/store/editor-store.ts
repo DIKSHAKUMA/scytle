@@ -98,6 +98,10 @@ interface EditorState {
     /** Index of the gap being hovered (between child i and i+1) */
     gapOverlayIndex: number | null
 
+    // Gradient editing ------------------------------------------
+    /** Index of the fill being gradient-edited (within the selected node) */
+    gradientEditingFillIdx: number | null
+
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
     setPan: (x: number, y: number) => void
@@ -119,6 +123,9 @@ interface EditorState {
 
     // Gap overlay actions --------------------------------------
     setGapOverlay: (id: string | null, index?: number | null) => void
+
+    // Gradient editing actions ----------------------------------
+    setGradientEditingFillIdx: (idx: number | null) => void
 
     // Selection actions ---------------------------------------
     selectNode: (id: string, addToSelection?: boolean) => void
@@ -213,6 +220,7 @@ export const useEditorStore = create<EditorState>()(
             paddingOverlayDirection: null,
             gapOverlayNodeId: null,
             gapOverlayIndex: null,
+            gradientEditingFillIdx: null,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -364,6 +372,15 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setGapOverlay'
+                ),
+
+            setGradientEditingFillIdx: (idx) =>
+                set(
+                    (state) => {
+                        state.gradientEditingFillIdx = idx
+                    },
+                    false,
+                    'setGradientEditingFillIdx'
                 ),
 
             // Canvas settings --------------------------------------

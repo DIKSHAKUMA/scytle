@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { RotateCcw, FlipHorizontal } from 'lucide-react'
+import { useState, useCallback, useRef } from 'react'
+import { RotateCcw, FlipHorizontal, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { normaliseHex } from '@/lib/color-utils'
+import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { hexToHsb, hsbToHex } from '@/lib/color-utils'
 import type { ColorFormat } from '@/lib/color-utils'
 import type { GradientFill, GradientStop } from '@/types/canvas'
@@ -28,7 +28,7 @@ interface GradientPickerProps {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Gradient type options
+// Helpers
 // ─────────────────────────────────────────────────────────────
 
 const GRADIENT_TYPE_OPTIONS: { id: GradientType; label: string }[] = [
@@ -38,15 +38,168 @@ const GRADIENT_TYPE_OPTIONS: { id: GradientType; label: string }[] = [
     { id: 'diamond', label: 'Diamond' },
 ]
 
+/** Returns a lighter shade of the given hex for the second gradient stop */
+function lightenHex(hex: string): string {
+    const h = normaliseHex(hex)
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    // Blend 40% toward white
+    const lr = Math.round(r + (255 - r) * 0.4)
+    const lg = Math.round(g + (255 - g) * 0.4)
+    const lb = Math.round(b + (255 - b) * 0.4)
+    return [lr, lg, lb].map((v) => v.toString(16).padStart(2, '0')).join('')
+}
+
+export function defaultGradientStops(fromHex = '000000'): GradientStop[] {
+    return [
+        { id: generateId(), position: 0, color: normaliseHex(fromHex), opacity: 1 },
+        { id: generateId(), position: 1, color: lightenHex(fromHex), opacity: 1 },
+    ]
+}
+
 // ─────────────────────────────────────────────────────────────
-// Default stops helper
+// StopRow — a single gradient stop row (Figma-style)
 // ─────────────────────────────────────────────────────────────
 
-export function defaultGradientStops(): GradientStop[] {
-    return [
-        { id: generateId(), position: 0, color: 'ffffff', opacity: 1 },
-        { id: generateId(), position: 1, color: '000000', opacity: 1 },
-    ]
+interface StopRowProps {
+    stop: GradientStop
+    isSelected: boolean
+    canDelete: boolean
+    onSelect: () => void
+    onHexChange: (hex: string) => void
+    onOpacityChange: (opacity: number) => void
+    onPositionChange: (pos: number) => void
+    onDelete: () => void
+}
+
+function StopRow({
+    stop,
+    isSelected,
+    canDelete,
+    onSelect,
+    onHexChange,
+    onOpacityChange,
+    onPositionChange,
+    onDelete,
+}: StopRowProps) {
+    const hex = normaliseHex(stop.color)
+    const opacity = stop.opacity ?? 1
+
+    return (
+        <div
+            className={cn(
+                'group flex items-center gap-1.5 h-6 rounded-sm px-1 -mx-1 cursor-pointer',
+                'transition-colors',
+                isSelected ? 'bg-muted/60' : 'hover:bg-muted/30',
+            )}
+            onClick={onSelect}
+        >
+            {/* Position % */}
+            <input
+                type="text"
+                inputMode="numeric"
+                value={Math.round(stop.position * 100)}
+                className={cn(
+                    'w-8 h-5 text-[10px] text-center font-mono rounded-sm shrink-0',
+                    'bg-transparent border border-transparent',
+                    'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
+                    'transition-colors tabular-nums',
+                )}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                    const n = parseInt(e.target.value, 10)
+                    if (!isNaN(n)) onPositionChange(Math.max(0, Math.min(100, n)) / 100)
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    if (e.key === 'ArrowUp') { e.preventDefault(); onPositionChange(Math.min(1, stop.position + (e.shiftKey ? 0.1 : 0.01))) }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); onPositionChange(Math.max(0, stop.position - (e.shiftKey ? 0.1 : 0.01))) }
+                }}
+                onFocus={(e) => e.target.select()}
+            />
+            <span className="text-[9px] text-muted-foreground/40 shrink-0">%</span>
+
+            {/* Color swatch */}
+            <button
+                className={cn(
+                    'w-4 h-4 rounded-sm border shrink-0 transition-all',
+                    'border-border/40 hover:border-border/80',
+                    isSelected && 'ring-1 ring-primary/50',
+                )}
+                style={{
+                    background: `repeating-conic-gradient(#bbb 0% 25%, #fff 0% 50%) 0 0 / 6px 6px`,
+                }}
+            >
+                <div
+                    className="w-full h-full rounded-sm"
+                    style={{ backgroundColor: hexOpacityToRgba(hex, opacity) }}
+                />
+            </button>
+
+            {/* Hex input */}
+            <input
+                type="text"
+                value={hex.toUpperCase()}
+                className={cn(
+                    'flex-1 h-5 px-1 text-[10px] font-mono rounded-sm uppercase',
+                    'bg-transparent border border-transparent',
+                    'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
+                    'transition-colors',
+                )}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                    const raw = e.target.value.replace('#', '').toUpperCase()
+                    if (/^[0-9A-F]{6}$/.test(raw)) onHexChange(raw.toLowerCase())
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
+                onFocus={(e) => e.target.select()}
+            />
+
+            {/* Opacity % */}
+            <input
+                type="text"
+                inputMode="numeric"
+                value={Math.round(opacity * 100)}
+                className={cn(
+                    'w-7 h-5 text-[10px] text-center font-mono rounded-sm shrink-0',
+                    'bg-transparent border border-transparent',
+                    'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
+                    'transition-colors tabular-nums',
+                )}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                    const n = parseInt(e.target.value, 10)
+                    if (!isNaN(n)) onOpacityChange(Math.max(0, Math.min(100, n)) / 100)
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
+                onFocus={(e) => e.target.select()}
+            />
+            <span className="text-[9px] text-muted-foreground/40 shrink-0">%</span>
+
+            {/* Delete button */}
+            <button
+                className={cn(
+                    'w-4 h-4 flex items-center justify-center rounded-sm shrink-0',
+                    'text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10',
+                    'transition-all',
+                    canDelete
+                        ? 'opacity-0 group-hover:opacity-100'
+                        : 'opacity-0 pointer-events-none',
+                )}
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                title="Remove stop"
+            >
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                    <path d="M1 4H7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+            </button>
+        </div>
+    )
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -67,7 +220,7 @@ export function GradientPicker({
         stops[0]?.id ?? null
     )
 
-    // ── Gradient type / controls ────────────────────────────
+    // ── Controls ────────────────────────────────────────────
 
     const handleTypeChange = useCallback((type: GradientType) => {
         onChange({ ...fill, gradientType: type, stops })
@@ -79,7 +232,6 @@ export function GradientPicker({
     }, [fill, onChange, stops])
 
     const handleFlip = useCallback(() => {
-        // Mirror stop positions around the center
         const flipped = stops.map((s) => ({ ...s, position: 1 - s.position }))
         onChange({ ...fill, stops: flipped })
     }, [fill, onChange, stops])
@@ -90,110 +242,74 @@ export function GradientPicker({
 
     // ── Stop CRUD ──────────────────────────────────────────
 
-    const handleAddStop = useCallback((position: number) => {
-        // Interpolate color at the new stop position from existing stops
+    const handleAddStop = useCallback((position?: number) => {
+        const pos = position ?? 0.5
         const sorted = [...stops].sort((a, b) => a.position - b.position)
-        let color = 'ffffff'
+        let color = lightenHex(stops[0]?.color ?? '000000')
         let stopOpacity = 1
+
         if (sorted.length >= 2) {
-            // Find surrounding stops
-            let left = sorted[0]
-            let right = sorted[sorted.length - 1]
+            let left = sorted[0], right = sorted[sorted.length - 1]
             for (let i = 0; i < sorted.length - 1; i++) {
-                if (sorted[i].position <= position && sorted[i + 1].position >= position) {
-                    left = sorted[i]
-                    right = sorted[i + 1]
-                    break
+                if (sorted[i].position <= pos && sorted[i + 1].position >= pos) {
+                    left = sorted[i]; right = sorted[i + 1]; break
                 }
             }
             const t = right.position === left.position
-                ? 0
-                : (position - left.position) / (right.position - left.position)
-            // Lerp RGB
-            const lHex = normaliseHex(left.color)
-            const rHex = normaliseHex(right.color)
-            const lr = parseInt(lHex.slice(0, 2), 16)
-            const lg = parseInt(lHex.slice(2, 4), 16)
-            const lb = parseInt(lHex.slice(4, 6), 16)
-            const rr = parseInt(rHex.slice(0, 2), 16)
-            const rg = parseInt(rHex.slice(2, 4), 16)
-            const rb = parseInt(rHex.slice(4, 6), 16)
-            const nr = Math.round(lr + (rr - lr) * t)
-            const ng = Math.round(lg + (rg - lg) * t)
-            const nb = Math.round(lb + (rb - lb) * t)
-            color = [nr, ng, nb]
-                .map((v) => v.toString(16).padStart(2, '0'))
-                .join('')
+                ? 0 : (pos - left.position) / (right.position - left.position)
+            const lHex = normaliseHex(left.color), rHex = normaliseHex(right.color)
+            const [lr, lg, lb] = [0, 2, 4].map((o) => parseInt(lHex.slice(o, o + 2), 16))
+            const [rr, rg, rb] = [0, 2, 4].map((o) => parseInt(rHex.slice(o, o + 2), 16))
+            color = [lr + (rr - lr) * t, lg + (rg - lg) * t, lb + (rb - lb) * t]
+                .map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
             stopOpacity = (left.opacity ?? 1) + ((right.opacity ?? 1) - (left.opacity ?? 1)) * t
         }
-        const newStop: GradientStop = { id: generateId(), position, color, opacity: stopOpacity }
+
+        const newStop: GradientStop = { id: generateId(), position: pos, color, opacity: stopOpacity }
         const newStops = [...stops, newStop].sort((a, b) => a.position - b.position)
         setSelectedStopId(newStop.id ?? null)
         onChange({ ...fill, stops: newStops })
     }, [fill, onChange, stops])
 
     const handleMoveStop = useCallback((id: string, position: number) => {
-        const newStops = stops.map((s) => s.id === id ? { ...s, position } : s)
-        onChange({ ...fill, stops: newStops })
+        onChange({ ...fill, stops: stops.map((s) => s.id === id ? { ...s, position } : s) })
     }, [fill, onChange, stops])
 
     const handleDeleteStop = useCallback((id: string) => {
-        if (stops.length <= 2) return // Minimum 2 stops
+        if (stops.length <= 2) return
         const newStops = stops.filter((s) => s.id !== id)
-        // Select adjacent stop
         const idx = stops.findIndex((s) => s.id === id)
-        const nextSelected = newStops[Math.min(idx, newStops.length - 1)]
-        setSelectedStopId(nextSelected?.id ?? null)
+        setSelectedStopId(newStops[Math.min(idx, newStops.length - 1)]?.id ?? null)
         onChange({ ...fill, stops: newStops })
     }, [fill, onChange, stops])
 
-    // ── Selected stop color editing ────────────────────────
+    // ── Stop list editing ──────────────────────────────────
+
+    const updateStop = useCallback((id: string, patch: Partial<GradientStop>) => {
+        onChange({ ...fill, stops: stops.map((s) => s.id === id ? { ...s, ...patch } : s) })
+    }, [fill, onChange, stops])
+
+    // ── Selected stop color editor (in picker) ─────────────
 
     const selectedStop = stops.find((s) => s.id === selectedStopId) ?? stops[0]
     const selectedHex = selectedStop ? normaliseHex(selectedStop.color) : 'ffffff'
     const selectedOpacity = selectedStop?.opacity ?? 1
-
     const { h: hue, s: sat, b: bri } = hexToHsb(selectedHex)
 
     const handleFieldChange = useCallback((s: number, b: number) => {
         if (!selectedStop) return
-        const newHex = hsbToHex(hue, s, b)
-        const newStops = stops.map((st) =>
-            st.id === selectedStop.id ? { ...st, color: newHex } : st
-        )
-        onChange({ ...fill, stops: newStops })
-    }, [selectedStop, hue, stops, fill, onChange])
+        updateStop(selectedStop.id!, { color: hsbToHex(hue, s, b) })
+    }, [selectedStop, hue, updateStop])
 
     const handleHueChange = useCallback((newHue: number) => {
         if (!selectedStop) return
-        const newHex = hsbToHex(newHue, sat, bri)
-        const newStops = stops.map((st) =>
-            st.id === selectedStop.id ? { ...st, color: newHex } : st
-        )
-        onChange({ ...fill, stops: newStops })
-    }, [selectedStop, sat, bri, stops, fill, onChange])
-
-    const handleStopOpacityChange = useCallback((newOpacity: number) => {
-        if (!selectedStop) return
-        const newStops = stops.map((st) =>
-            st.id === selectedStop.id ? { ...st, opacity: newOpacity } : st
-        )
-        onChange({ ...fill, stops: newStops })
-    }, [selectedStop, stops, fill, onChange])
-
-    const handleStopHexChange = useCallback((newHex: string) => {
-        if (!selectedStop) return
-        const newStops = stops.map((st) =>
-            st.id === selectedStop.id ? { ...st, color: normaliseHex(newHex) } : st
-        )
-        onChange({ ...fill, stops: newStops })
-    }, [selectedStop, stops, fill, onChange])
+        updateStop(selectedStop.id!, { color: hsbToHex(newHue, sat, bri) })
+    }, [selectedStop, sat, bri, updateStop])
 
     return (
         <div className="flex flex-col gap-2">
-            {/* ── Gradient type + angle controls ── */}
+            {/* ── Type + controls row ── */}
             <div className="flex items-center gap-1.5">
-                {/* Type dropdown */}
                 <select
                     value={gradientType}
                     onChange={(e) => handleTypeChange(e.target.value as GradientType)}
@@ -209,52 +325,37 @@ export function GradientPicker({
                     ))}
                 </select>
 
-                {/* Angle input (linear only) */}
                 {gradientType === 'linear' && (
-                    <div className="flex items-center gap-0.5">
-                        <input
-                            type="number"
-                            value={angle}
-                            onChange={(e) => handleAngleChange(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'ArrowUp') { e.preventDefault(); handleAngleChange(String(angle + (e.shiftKey ? 10 : 1))) }
-                                if (e.key === 'ArrowDown') { e.preventDefault(); handleAngleChange(String(angle - (e.shiftKey ? 10 : 1))) }
-                            }}
-                            className={cn(
-                                'w-11 h-6 rounded-sm px-1 text-[11px] text-center',
-                                'bg-muted border-0 text-foreground',
-                                'outline-none focus:ring-1 focus:ring-primary/50',
-                                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                            )}
-                        />
-                        <span className="text-[10px] text-muted-foreground">°</span>
-                    </div>
-                )}
-
-                {/* Flip button (linear only) */}
-                {gradientType === 'linear' && (
-                    <button
-                        title="Flip gradient"
-                        onClick={handleFlip}
-                        className="w-6 h-6 flex items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
-                    >
-                        <FlipHorizontal size={12} />
-                    </button>
-                )}
-
-                {/* Rotate +45° button */}
-                {gradientType === 'linear' && (
-                    <button
-                        title="Rotate 45°"
-                        onClick={handleRotate}
-                        className="w-6 h-6 flex items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors"
-                    >
-                        <RotateCcw size={12} />
-                    </button>
+                    <>
+                        <div className="flex items-center gap-0.5">
+                            <input
+                                type="number"
+                                value={angle}
+                                onChange={(e) => handleAngleChange(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowUp') { e.preventDefault(); handleAngleChange(String(angle + (e.shiftKey ? 10 : 1))) }
+                                    if (e.key === 'ArrowDown') { e.preventDefault(); handleAngleChange(String(angle - (e.shiftKey ? 10 : 1))) }
+                                }}
+                                className={cn(
+                                    'w-10 h-6 rounded-sm px-1 text-[11px] text-center',
+                                    'bg-muted border-0 text-foreground',
+                                    'outline-none focus:ring-1 focus:ring-primary/50',
+                                    '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+                                )}
+                            />
+                            <span className="text-[10px] text-muted-foreground">°</span>
+                        </div>
+                        <button title="Flip" onClick={handleFlip} className="w-6 h-6 flex items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors">
+                            <FlipHorizontal size={12} />
+                        </button>
+                        <button title="Rotate 45°" onClick={handleRotate} className="w-6 h-6 flex items-center justify-center rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 transition-colors">
+                            <RotateCcw size={12} />
+                        </button>
+                    </>
                 )}
             </div>
 
-            {/* ── Stop bar ── */}
+            {/* ── Gradient preview bar with draggable stop handles ── */}
             <GradientStopBar
                 stops={stops}
                 selectedStopId={selectedStopId}
@@ -265,33 +366,57 @@ export function GradientPicker({
                 angle={angle}
             />
 
-            {/* ── Selected stop color ── */}
+            {/* ── Stops list (Figma-style) ── */}
+            <div>
+                <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-muted-foreground/60 font-medium">Stops</span>
+                    <button
+                        className="w-5 h-5 flex items-center justify-center rounded-sm text-muted-foreground/40 hover:text-foreground hover:bg-muted/50 transition-colors"
+                        onClick={() => handleAddStop(0.5)}
+                        title="Add stop"
+                    >
+                        <Plus size={10} />
+                    </button>
+                </div>
+                <div className="flex flex-col">
+                    {[...stops].sort((a, b) => a.position - b.position).map((stop) => (
+                        <StopRow
+                            key={stop.id}
+                            stop={stop}
+                            isSelected={stop.id === selectedStopId}
+                            canDelete={stops.length > 2}
+                            onSelect={() => setSelectedStopId(stop.id ?? null)}
+                            onHexChange={(hex) => updateStop(stop.id!, { color: hex })}
+                            onOpacityChange={(opacity) => updateStop(stop.id!, { opacity })}
+                            onPositionChange={(position) => updateStop(stop.id!, { position })}
+                            onDelete={() => handleDeleteStop(stop.id!)}
+                        />
+                    ))}
+                </div>
+            </div>
+
+            {/* ── Selected stop color editor ── */}
             {selectedStop && (
                 <>
-                    {/* 2D gradient field */}
+                    <div className="h-px bg-border/30 -mx-2.5" />
+
                     <GradientField
                         hue={hue}
                         saturation={sat}
                         brightness={bri}
                         onChange={handleFieldChange}
                     />
-
-                    {/* Hue slider */}
                     <HueSlider value={hue} onChange={handleHueChange} />
-
-                    {/* Opacity slider for this stop */}
                     <OpacitySlider
                         value={selectedOpacity}
                         hex={selectedHex}
-                        onChange={handleStopOpacityChange}
+                        onChange={(opacity) => updateStop(selectedStop.id!, { opacity })}
                     />
-
-                    {/* Color input (hex/rgb/hsl/hsb) */}
                     <ColorInput
                         hex={selectedHex}
                         opacity={selectedOpacity}
-                        onHexChange={handleStopHexChange}
-                        onOpacityChange={handleStopOpacityChange}
+                        onHexChange={(hex) => updateStop(selectedStop.id!, { color: normaliseHex(hex) })}
+                        onOpacityChange={(opacity) => updateStop(selectedStop.id!, { opacity })}
                         format={colorFormat}
                         onFormatChange={onColorFormatChange}
                     />

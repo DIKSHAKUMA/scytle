@@ -220,10 +220,7 @@ export function ColorPicker({
             // Solid/image → gradient: use current color as first stop
             let stops = defaultGradientStops()
             if (fill.type === 'solid') {
-                stops = [
-                    { id: generateId(), position: 0, color: normaliseHex(fill.color), opacity: 1 },
-                    { id: generateId(), position: 1, color: '000000', opacity: 1 },
-                ]
+                stops = defaultGradientStops(normaliseHex(fill.color))
             }
             const gradientFill: GradientFill = {
                 type: 'gradient',

@@ -81,12 +81,14 @@ function fillSwatchStyle(fill: Fill): React.CSSProperties {
 interface FillRowProps {
     fill: Fill
     fillId: string
+    fillIndex: number
     onUpdate: (newFill: Fill) => void
     onRemove: () => void
     documentColors: string[]
+    onPickerOpenChange: (open: boolean) => void
 }
 
-function FillRow({ fill, fillId, onUpdate, onRemove, documentColors }: FillRowProps) {
+function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
     const [hovered, setHovered] = useState(false)
@@ -104,7 +106,8 @@ function FillRow({ fill, fillId, onUpdate, onRemove, documentColors }: FillRowPr
 
     const handleSwatchClick = useCallback(() => {
         setPickerOpen(true)
-    }, [])
+        onPickerOpenChange(true)
+    }, [onPickerOpenChange])
 
     return (
         <div
@@ -241,7 +244,7 @@ function FillRow({ fill, fillId, onUpdate, onRemove, documentColors }: FillRowPr
                 onChange={(updated) => onUpdate(updated)}
                 anchorEl={swatchRef.current}
                 open={pickerOpen}
-                onClose={() => setPickerOpen(false)}
+                onClose={() => { setPickerOpen(false); onPickerOpenChange(false) }}
                 documentColors={documentColors}
             />
         </div>
@@ -259,6 +262,7 @@ interface FillSectionProps {
 
 export function FillSection({ node, onUpdate }: FillSectionProps) {
     const allNodes = useEditorStore((s) => s.nodes)
+    const setGradientEditingFillIdx = useEditorStore((s) => s.setGradientEditingFillIdx)
     const fills = node.fills ?? []
     const documentColors = collectDocumentColors(allNodes)
 
@@ -291,8 +295,8 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
         const newFill: SolidFill = {
             type: 'solid',
             id: generateId(),
-            color: 'ffffff',
-            opacity: 1,
+            color: '000000',
+            opacity: 0.2,
             visible: true,
             blendMode: 'NORMAL',
         }
@@ -333,9 +337,14 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
                                     key={fillIds[i]}
                                     fill={fill}
                                     fillId={fillIds[i]}
+                                    fillIndex={i}
                                     onUpdate={(newFill) => updateFill(i, newFill)}
                                     onRemove={() => removeFill(i)}
                                     documentColors={documentColors}
+                                    onPickerOpenChange={(open) => {
+                                        if (open && fill.type === 'gradient') setGradientEditingFillIdx(i)
+                                        else if (!open) setGradientEditingFillIdx(null)
+                                    }}
                                 />
                             ))}
                         </SortableContext>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useRef } from 'react'
 import type { TextNode } from '@/types/canvas'
 import { Section, NumberInput, SelectInput, ColorInput, ToggleGroup } from './inputs'
 import {
@@ -11,6 +12,29 @@ import {
     Strikethrough,
     Minus,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+// ── Font options ──────────────────────────────────────────────
+
+/**
+ * Curated list of popular fonts covering sans-serif, serif, mono, and display.
+ * Users can also type any custom font name — this list drives the datalist suggestions.
+ */
+const SUGGESTED_FONTS = [
+    // Popular sans-serif
+    'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Nunito',
+    'Raleway', 'DM Sans', 'Manrope', 'Outfit', 'Plus Jakarta Sans', 'Figtree',
+    'Source Sans 3', 'Geist', 'Work Sans',
+    // Serif
+    'Georgia', 'Merriweather', 'Playfair Display', 'Lora', 'EB Garamond',
+    'Cormorant Garamond', 'DM Serif Display', 'Fraunces',
+    // Monospace
+    'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'IBM Plex Mono', 'Roboto Mono',
+    // Display / Creative
+    'Bricolage Grotesque', 'Space Grotesk', 'Cabinet Grotesk',
+    // System fallbacks
+    'system-ui', 'sans-serif', 'serif', 'monospace',
+]
 
 const FONT_WEIGHT_OPTIONS = [
     { value: '100', label: 'Thin' },
@@ -44,13 +68,6 @@ const DECORATION_OPTIONS: { value: TextNode['textDecoration']; icon: React.React
     { value: 'line-through', icon: <Strikethrough size={13} />, title: 'Strikethrough' },
 ]
 
-const AUTO_RESIZE_OPTIONS = [
-    { value: 'none', label: 'Fixed' },
-    { value: 'width-and-height', label: 'Auto W+H' },
-    { value: 'height', label: 'Auto H' },
-    { value: 'truncate', label: 'Truncate' },
-]
-
 const HTML_TAG_OPTIONS = [
     { value: '', label: 'Auto' },
     { value: 'h1', label: 'H1' },
@@ -63,6 +80,67 @@ const HTML_TAG_OPTIONS = [
     { value: 'span', label: 'Span' },
 ]
 
+// ── Font family input — searchable text field with datalist ──
+
+const DATALIST_ID = 'scytle-font-family-list'
+
+const INPUT_BASE = [
+    'w-full h-7 px-2 text-[11px] rounded-sm',
+    'bg-transparent border border-transparent',
+    'hover:bg-muted/50',
+    'focus:bg-muted/60 focus:border-border focus:outline-none',
+    'transition-colors',
+].join(' ')
+
+interface FontInputProps {
+    value: string
+    onChange: (v: string) => void
+}
+
+function FontInput({ value, onChange }: FontInputProps) {
+    const [local, setLocal] = useState(value)
+    const ref = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+        if (document.activeElement !== ref.current) {
+            setLocal(value)
+        }
+    }, [value])
+
+    const commit = () => {
+        const trimmed = local.trim()
+        if (trimmed && trimmed !== value) onChange(trimmed)
+        else setLocal(value)
+    }
+
+    return (
+        <>
+            <input
+                ref={ref}
+                type="text"
+                list={DATALIST_ID}
+                value={local}
+                className={cn(INPUT_BASE)}
+                placeholder="Font family..."
+                onChange={(e) => setLocal(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') { commit(); ref.current?.blur() }
+                    if (e.key === 'Escape') { setLocal(value); ref.current?.blur() }
+                }}
+                onFocus={(e) => e.target.select()}
+            />
+            <datalist id={DATALIST_ID}>
+                {SUGGESTED_FONTS.map((f) => (
+                    <option key={f} value={f} />
+                ))}
+            </datalist>
+        </>
+    )
+}
+
+// ── Main section ──────────────────────────────────────────────
+
 interface TypographySectionProps {
     node: TextNode
     onUpdate: (updates: Record<string, unknown>) => void
@@ -71,16 +149,9 @@ interface TypographySectionProps {
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     return (
         <Section title="Typography">
-            {/* Font family */}
-            <SelectInput
+            {/* Font family — free-text input with common font suggestions */}
+            <FontInput
                 value={node.fontFamily}
-                options={[
-                    { value: 'Inter', label: 'Inter' },
-                    { value: 'JetBrains Mono', label: 'JetBrains Mono' },
-                    { value: 'Bricolage Grotesque', label: 'Bricolage' },
-                    { value: 'serif', label: 'Serif' },
-                    { value: 'monospace', label: 'Mono' },
-                ]}
                 onChange={(v) => onUpdate({ fontFamily: v })}
             />
 
@@ -141,8 +212,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 />
             </div>
 
-            {/* Transform + Tag + Resize */}
-            <div className="grid grid-cols-3 gap-x-2">
+            {/* Transform + Tag — resize mode lives in SizeSection (no duplicate here) */}
+            <div className="grid grid-cols-2 gap-x-2">
                 <SelectInput
                     value={node.textTransform}
                     options={TEXT_TRANSFORM_OPTIONS}
@@ -152,11 +223,6 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     value={node.htmlTag || ''}
                     options={HTML_TAG_OPTIONS}
                     onChange={(v) => onUpdate({ htmlTag: v || undefined })}
-                />
-                <SelectInput
-                    value={node.autoResize}
-                    options={AUTO_RESIZE_OPTIONS}
-                    onChange={(v) => onUpdate({ autoResize: v })}
                 />
             </div>
         </Section>

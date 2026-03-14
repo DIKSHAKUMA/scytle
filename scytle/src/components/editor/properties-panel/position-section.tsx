@@ -238,13 +238,15 @@ export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectio
                 />
                 <IconButton
                     icon={<FlipHorizontal size={13} />}
-                    onClick={() => {/* flip horizontal — future */ }}
-                    title="Flip horizontal"
+                    onClick={() => onUpdate({ flipX: !node.flipX })}
+                    title="Flip horizontal (Shift+H)"
+                    active={!!node.flipX}
                 />
                 <IconButton
                     icon={<FlipVertical size={13} />}
-                    onClick={() => {/* flip vertical — future */ }}
-                    title="Flip vertical"
+                    onClick={() => onUpdate({ flipY: !node.flipY })}
+                    title="Flip vertical (Shift+V)"
+                    active={!!node.flipY}
                 />
             </div>
         </Section>

@@ -146,9 +146,29 @@ function computeBoxShadow(shadows: Shadow[]): string | undefined {
         .join(', ')
 }
 
-/** Build border CSS, with width scaled via CSS custom property */
+/** Build box-shadow string from a solid border with inside/center/outside position support.
+ *  Uses box-shadow exclusively so it never affects layout (unlike CSS border).
+ *  Only applicable for solid borders — dashed/dotted fall back to CSS border. */
+function computeBorderAsShadow(border: Border): string | undefined {
+    if (border.style !== 'solid' || border.width === 0) return undefined
+    const { color, width, position = 'inside' } = border
+    const w = `calc(${width}px * var(--z, 1))`
+    if (position === 'inside') {
+        return `inset 0 0 0 ${w} ${color}`
+    } else if (position === 'outside') {
+        return `0 0 0 ${w} ${color}`
+    } else {
+        // center: half inset + half outset
+        const half = width / 2
+        const hw = `calc(${half}px * var(--z, 1))`
+        return `inset 0 0 0 ${hw} ${color}, 0 0 0 ${hw} ${color}`
+    }
+}
+
+/** Build border CSS for non-solid styles (dashed/dotted) — these cannot be replicated
+ *  with box-shadow, so they fall back to CSS border without position control. */
 function computeBorder(border?: Border): CSSProperties {
-    if (!border) return {}
+    if (!border || border.style === 'solid') return {}
     return {
         borderWidth: `calc(${border.width}px * var(--z, 1))`,
         borderStyle: border.style,
@@ -253,16 +273,29 @@ export function computeBaseStyles(
     // ── Opacity ───────────────────────────────────────────────
     if (node.opacity < 1) s.opacity = node.opacity
 
-    // ── Rotation ──────────────────────────────────────────────
-    if (node.rotation !== 0) s.transform = `rotate(${node.rotation}deg)`
+    // ── Rotation + Flip ───────────────────────────────────────
+    // Scale is applied first so flip stays relative to original axes when combined with rotation.
+    // Both are encoded in one CSS transform string; separate assignments would overwrite each other.
+    const transforms: string[] = []
+    if (node.flipX) transforms.push('scaleX(-1)')
+    if (node.flipY) transforms.push('scaleY(-1)')
+    if (node.rotation !== 0) transforms.push(`rotate(${node.rotation}deg)`)
+    if (transforms.length > 0) s.transform = transforms.join(' ')
 
     // ── Visual properties ─────────────────────────────────────
     Object.assign(s, computeBackground(node.fills))
-    Object.assign(s, computeBorder(node.border))
+    Object.assign(s, computeBorder(node.border))      // handles dashed/dotted only
     Object.assign(s, computeBorderRadius(node.borderRadius))
 
-    const shadow = computeBoxShadow(node.shadows)
-    if (shadow) s.boxShadow = shadow
+    // ── Box shadow — merge stroke + drop/inner shadows ────────
+    // Must be ONE declaration: a second s.boxShadow assignment would silently overwrite.
+    // Solid border stroke uses box-shadow for layout-safe inside/center/outside positioning.
+    const shadowParts: string[] = []
+    const borderShadow = node.border ? computeBorderAsShadow(node.border) : undefined
+    if (borderShadow) shadowParts.push(borderShadow)
+    const nodeShadow = computeBoxShadow(node.shadows)
+    if (nodeShadow) shadowParts.push(nodeShadow)
+    if (shadowParts.length > 0) s.boxShadow = shadowParts.join(', ')
 
     // Apply CSS filter from image fill adjustments (single image fill only)
     const visibleFills = node.fills.filter((f) => f.visible !== false)

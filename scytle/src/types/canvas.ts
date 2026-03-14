@@ -46,6 +46,9 @@ export const GradientFillSchema = z.object({
     gradientType: z.enum(['linear', 'radial', 'angular', 'diamond']).optional(),
     stops: z.array(GradientStopSchema).optional(),
     angle: z.number().optional(),           // degrees, default 90
+    // Gradient control handles — normalized (0-1) in node bounding box
+    // [start, end] for linear; derived from angle if absent
+    handles: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
     // Legacy: raw CSS gradient string (backward compat)
     gradient: z.string().optional(),
     opacity: z.number().min(0).max(1).optional(),
@@ -92,6 +95,8 @@ export const BorderSchema = z.object({
     color: z.string(),
     width: z.number(),
     style: z.enum(['solid', 'dashed', 'dotted']),
+    /** Stroke position relative to the path edge. Defaults to 'inside'. */
+    position: z.enum(['inside', 'center', 'outside']).optional(),
 })
 
 export const SizingSchema = z.object({
@@ -164,6 +169,10 @@ export interface BaseNodeProperties {
     positioning: 'auto' | 'absolute'
     opacity: number
     rotation: number
+    /** Mirror horizontally (applied as scaleX(-1) in the CSS transform) */
+    flipX?: boolean
+    /** Mirror vertically (applied as scaleY(-1) in the CSS transform) */
+    flipY?: boolean
     overflow: 'visible' | 'hidden'
     borderRadius: BorderRadius
     fills: Fill[]
