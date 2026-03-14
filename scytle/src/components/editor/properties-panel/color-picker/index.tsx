@@ -5,8 +5,10 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, type ColorFormat } from '@/lib/color-utils'
+import { generateId } from '@/lib/utils'
 import { SolidPicker } from './solid-picker'
-import type { SolidFill } from '@/types/canvas'
+import { GradientPicker, defaultGradientStops } from './gradient-picker'
+import type { Fill, SolidFill, GradientFill } from '@/types/canvas'
 
 // ─────────────────────────────────────────────────────────────
 // Fill type tab icons (SVG inline)
@@ -29,19 +31,6 @@ function LinearIcon() {
                 </linearGradient>
             </defs>
             <rect x="2" y="2" width="10" height="10" rx="1.5" fill="url(#li)" />
-        </svg>
-    )
-}
-function RadialIcon() {
-    return (
-        <svg width="14" height="14" viewBox="0 0 14 14">
-            <defs>
-                <radialGradient id="ri">
-                    <stop offset="0%" stopColor="currentColor" />
-                    <stop offset="100%" stopColor="currentColor" stopOpacity="0.1" />
-                </radialGradient>
-            </defs>
-            <rect x="2" y="2" width="10" height="10" rx="1.5" fill="url(#ri)" />
         </svg>
     )
 }
@@ -88,9 +77,9 @@ function SwatchPalette({
 
 interface ColorPickerProps {
     /** The fill being edited */
-    fill: SolidFill
+    fill: Fill
     /** Called with the updated fill on every change */
-    onChange: (fill: SolidFill) => void
+    onChange: (fill: Fill) => void
     /** Anchor element — picker is positioned relative to this */
     anchorEl: HTMLElement | null
     /** Whether the picker is open */
@@ -112,6 +101,13 @@ const FILL_TYPE_TABS: { id: FillTypeTab; icon: React.ReactNode; label: string }[
     { id: 'image', icon: <ImageIcon />, label: 'Image' },
 ]
 
+/** Determine the initial tab from fill type */
+function tabFromFill(fill: Fill): FillTypeTab {
+    if (fill.type === 'gradient') return 'gradient'
+    if (fill.type === 'image') return 'image'
+    return 'solid'
+}
+
 export function ColorPicker({
     fill,
     onChange,
@@ -121,8 +117,13 @@ export function ColorPicker({
     documentColors = [],
 }: ColorPickerProps) {
     const pickerRef = useRef<HTMLDivElement>(null)
-    const [activeTab, setActiveTab] = useState<FillTypeTab>('solid')
+    const [activeTab, setActiveTab] = useState<FillTypeTab>(() => tabFromFill(fill))
     const [colorFormat, setColorFormat] = useState<ColorFormat>('HEX')
+
+    // Sync tab when fill type changes externally
+    useEffect(() => {
+        setActiveTab(tabFromFill(fill))
+    }, [fill.type])
 
     // Close on outside click
     useEffect(() => {
@@ -152,7 +153,7 @@ export function ColorPicker({
     // Position: below and slightly left of anchor, clamped to viewport
     const anchorRect = anchorEl.getBoundingClientRect()
     const PICKER_W = 240
-    const PICKER_H = 360  // approximate
+    const PICKER_H = 420  // approximate
     let left = anchorRect.left
     let top = anchorRect.bottom + 6
     // Clamp to viewport
@@ -160,8 +161,55 @@ export function ColorPicker({
     if (top + PICKER_H > window.innerHeight - 8) top = anchorRect.top - PICKER_H - 6
     if (left < 8) left = 8
 
-    const hex = normaliseHex(fill.color)
-    const opacity = fill.opacity ?? 1
+    // ── Tab switch logic ─────────────────────────────────────
+
+    const handleTabChange = (tab: FillTypeTab) => {
+        setActiveTab(tab)
+        if (tab === fill.type) return // No conversion needed
+
+        if (tab === 'solid') {
+            // Gradient/image → solid: extract a representative color
+            let color = 'ffffff'
+            if (fill.type === 'gradient' && fill.stops && fill.stops.length > 0) {
+                color = normaliseHex(fill.stops[0].color)
+            }
+            const solidFill: SolidFill = {
+                type: 'solid',
+                id: fill.id ?? generateId(),
+                color,
+                opacity: fill.opacity ?? 1,
+                visible: fill.visible ?? true,
+                blendMode: fill.blendMode ?? 'NORMAL',
+            }
+            onChange(solidFill)
+        } else if (tab === 'gradient') {
+            // Solid → gradient: use solid color as first stop
+            let stops = defaultGradientStops()
+            if (fill.type === 'solid') {
+                stops = [
+                    { id: generateId(), position: 0, color: normaliseHex(fill.color), opacity: 1 },
+                    { id: generateId(), position: 1, color: '000000', opacity: 1 },
+                ]
+            }
+            const gradientFill: GradientFill = {
+                type: 'gradient',
+                id: fill.id ?? generateId(),
+                gradientType: 'linear',
+                stops,
+                angle: 90,
+                opacity: fill.opacity ?? 1,
+                visible: fill.visible ?? true,
+                blendMode: fill.blendMode ?? 'NORMAL',
+            }
+            onChange(gradientFill)
+        }
+        // image tab: handled by placeholder for now
+    }
+
+    // ── Derived values for solid picker ─────────────────────
+
+    const solidFill = fill.type === 'solid' ? fill : null
+    const gradientFill = fill.type === 'gradient' ? fill : null
 
     const picker = (
         <div
@@ -189,7 +237,7 @@ export function ColorPicker({
                                     ? 'bg-muted text-foreground'
                                     : 'text-muted-foreground/50 hover:text-foreground hover:bg-muted/50'
                             )}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => handleTabChange(tab.id)}
                         >
                             {tab.icon}
                         </button>
@@ -206,20 +254,23 @@ export function ColorPicker({
 
             {/* Picker body */}
             <div className="px-2.5 pb-2.5">
-                {activeTab === 'solid' && (
+                {activeTab === 'solid' && solidFill && (
                     <SolidPicker
-                        hex={hex}
-                        opacity={opacity}
-                        onHexChange={(newHex) => onChange({ ...fill, color: newHex })}
-                        onOpacityChange={(newOpacity) => onChange({ ...fill, opacity: newOpacity })}
+                        hex={normaliseHex(solidFill.color)}
+                        opacity={solidFill.opacity ?? 1}
+                        onHexChange={(newHex) => onChange({ ...solidFill, color: newHex })}
+                        onOpacityChange={(newOpacity) => onChange({ ...solidFill, opacity: newOpacity })}
                         colorFormat={colorFormat}
                         onColorFormatChange={setColorFormat}
                     />
                 )}
-                {activeTab === 'gradient' && (
-                    <div className="py-4 text-[11px] text-muted-foreground text-center">
-                        Gradient fill — coming in Phase 2
-                    </div>
+                {activeTab === 'gradient' && gradientFill && (
+                    <GradientPicker
+                        fill={gradientFill}
+                        onChange={onChange}
+                        colorFormat={colorFormat}
+                        onColorFormatChange={setColorFormat}
+                    />
                 )}
                 {activeTab === 'image' && (
                     <div className="py-4 text-[11px] text-muted-foreground text-center">
@@ -228,15 +279,17 @@ export function ColorPicker({
                 )}
             </div>
 
-            {/* Document swatches */}
-            {documentColors.length > 0 && (
+            {/* Document swatches — only for solid fills */}
+            {activeTab === 'solid' && documentColors.length > 0 && (
                 <div className="px-2.5 pb-2.5 border-t border-border/40 pt-2">
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] text-muted-foreground/60">Document</span>
                     </div>
                     <SwatchPalette
                         colors={documentColors}
-                        onSelect={(newHex) => onChange({ ...fill, color: newHex })}
+                        onSelect={(newHex) => {
+                            if (solidFill) onChange({ ...solidFill, color: newHex })
+                        }}
                     />
                 </div>
             )}
