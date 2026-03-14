@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -144,7 +144,15 @@ export function ColorPicker({
 }: ColorPickerProps) {
     const pickerRef = useRef<HTMLDivElement>(null)
     const [activeTab, setActiveTab] = useState<FillTypeTab>(() => tabFromFill(fill))
-    const [colorFormat, setColorFormat] = useState<ColorFormat>('HEX')
+    const [colorFormat, setColorFormat] = useState<ColorFormat>(() => {
+        if (typeof window === 'undefined') return 'HEX'
+        return (localStorage.getItem('scytle:colorFormat') as ColorFormat) ?? 'HEX'
+    })
+
+    const handleFormatChange = useCallback((format: ColorFormat) => {
+        setColorFormat(format)
+        localStorage.setItem('scytle:colorFormat', format)
+    }, [])
 
     // Sync tab when fill type changes externally
     useEffect(() => {
@@ -299,7 +307,7 @@ export function ColorPicker({
                         onHexChange={(newHex) => onChange({ ...solidFill, color: newHex })}
                         onOpacityChange={(newOpacity) => onChange({ ...solidFill, opacity: newOpacity })}
                         colorFormat={colorFormat}
-                        onColorFormatChange={setColorFormat}
+                        onColorFormatChange={handleFormatChange}
                     />
                 )}
                 {activeTab === 'gradient' && gradientFill && (
@@ -307,7 +315,7 @@ export function ColorPicker({
                         fill={gradientFill}
                         onChange={onChange}
                         colorFormat={colorFormat}
-                        onColorFormatChange={setColorFormat}
+                        onColorFormatChange={handleFormatChange}
                     />
                 )}
                 {activeTab === 'image' && imageFill && (

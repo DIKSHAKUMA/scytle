@@ -1,13 +1,28 @@
 'use client'
 
 import { useRef, useState, useCallback } from 'react'
-import { Plus, Eye, EyeOff } from 'lucide-react'
+import { Plus, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generateId } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+    SortableContext,
+    verticalListSortingStrategy,
+    useSortable,
+    arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -65,15 +80,23 @@ function fillSwatchStyle(fill: Fill): React.CSSProperties {
 
 interface FillRowProps {
     fill: Fill
+    fillId: string
     onUpdate: (newFill: Fill) => void
     onRemove: () => void
     documentColors: string[]
 }
 
-function FillRow({ fill, onUpdate, onRemove, documentColors }: FillRowProps) {
+function FillRow({ fill, fillId, onUpdate, onRemove, documentColors }: FillRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
     const [hovered, setHovered] = useState(false)
+
+    const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: fillId })
+    const style: React.CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+    }
 
     const isVisible = fill.visible !== false
     const hex = fill.type === 'solid' ? normaliseHex(fill.color) : 'ffffff'
@@ -85,14 +108,29 @@ function FillRow({ fill, onUpdate, onRemove, documentColors }: FillRowProps) {
 
     return (
         <div
+            ref={setNodeRef}
+            style={style}
             className={cn(
-                'group flex items-center gap-1.5 h-7 rounded-sm px-1 -mx-1',
+                'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1',
                 'transition-colors',
                 pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
             )}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
+            {/* Drag handle */}
+            <button
+                className={cn(
+                    'w-3 h-5 flex items-center justify-center rounded-sm shrink-0',
+                    'text-muted-foreground/0 group-hover:text-muted-foreground/30',
+                    'hover:!text-muted-foreground/60 cursor-grab active:cursor-grabbing transition-colors',
+                )}
+                {...attributes}
+                {...listeners}
+                tabIndex={-1}
+            >
+                <GripVertical size={10} />
+            </button>
             {/* Color swatch */}
             <button
                 ref={swatchRef}
@@ -224,6 +262,22 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
     const fills = node.fills ?? []
     const documentColors = collectDocumentColors(allNodes)
 
+    // Ensure stable DnD IDs — use fill.id if set, fallback to index-based
+    const fillIds = fills.map((f, i) => f.id ?? String(i))
+
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+    const handleDragEnd = useCallback((event: DragEndEvent) => {
+        const { active, over } = event
+        if (over && active.id !== over.id) {
+            const oldIdx = fillIds.indexOf(active.id as string)
+            const newIdx = fillIds.indexOf(over.id as string)
+            if (oldIdx !== -1 && newIdx !== -1) {
+                onUpdate({ fills: arrayMove(fills, oldIdx, newIdx) })
+            }
+        }
+    }, [fills, fillIds, onUpdate])
+
     const updateFill = useCallback((index: number, newFill: Fill) => {
         const newFills = fills.map((f, i) => (i === index ? newFill : f))
         onUpdate({ fills: newFills })
@@ -268,15 +322,24 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
             {/* Fill rows */}
             {fills.length > 0 && (
                 <div className="px-3 pb-2 space-y-0.5">
-                    {fills.map((fill, i) => (
-                        <FillRow
-                            key={fill.id ?? i}
-                            fill={fill}
-                            onUpdate={(newFill) => updateFill(i, newFill)}
-                            onRemove={() => removeFill(i)}
-                            documentColors={documentColors}
-                        />
-                    ))}
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <SortableContext items={fillIds} strategy={verticalListSortingStrategy}>
+                            {fills.map((fill, i) => (
+                                <FillRow
+                                    key={fillIds[i]}
+                                    fill={fill}
+                                    fillId={fillIds[i]}
+                                    onUpdate={(newFill) => updateFill(i, newFill)}
+                                    onRemove={() => removeFill(i)}
+                                    documentColors={documentColors}
+                                />
+                            ))}
+                        </SortableContext>
+                    </DndContext>
                 </div>
             )}
 
