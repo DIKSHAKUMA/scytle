@@ -243,6 +243,1168 @@ export function HoverOverlay({
 }
 
 // ============================================================
+// PaddingOverlay — Figma-style blue hatch pattern showing padding
+// Supports directional display (horizontal, vertical, or individual sides)
+// Also shows frame hover guides (4 blue padding lines + pink gap lines)
+// ============================================================
+
+type PaddingDirection = 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom'
+
+const HATCH_BG = (color: string) =>
+    `repeating-linear-gradient(45deg, transparent, transparent 2px, ${color} 2px, ${color} 4px)`
+
+const BLUE_HATCH = HATCH_BG('rgba(59, 130, 246, 0.12)')
+const BLUE_LABEL = 'rgba(59, 130, 246, 0.9)'
+
+function shouldShowSide(direction: PaddingDirection, side: 'top' | 'right' | 'bottom' | 'left'): boolean {
+    if (direction === 'all') return true
+    if (direction === 'horizontal') return side === 'left' || side === 'right'
+    if (direction === 'vertical') return side === 'top' || side === 'bottom'
+    return direction === side
+}
+
+export function PaddingOverlay({
+    viewportRef,
+}: {
+    viewportRef: React.RefObject<HTMLDivElement | null>
+}) {
+    const paddingOverlayNodeId = useEditorStore((s) => s.paddingOverlayNodeId)
+    const paddingOverlayDirection = useEditorStore((s) => s.paddingOverlayDirection)
+    const nodes = useEditorStore((s) => s.nodes)
+    const zoom = useEditorStore((s) => s.zoom)
+    const panX = useEditorStore((s) => s.panX)
+    const panY = useEditorStore((s) => s.panY)
+
+    const [rect, setRect] = useState<ScreenRect | null>(null)
+    const rafRef = useRef<number>(0)
+
+    // Panel-triggered or canvas-triggered overlay node
+    const overlayNode = paddingOverlayNodeId ? findNodeById(nodes, paddingOverlayNodeId) : null
+    const overlayPadding = overlayNode && overlayNode.type === 'frame' ? overlayNode.padding : null
+
+    const updateRect = useCallback(() => {
+        const viewport = viewportRef.current
+        if (!viewport) {
+            setRect(null)
+            return
+        }
+        if (paddingOverlayNodeId) {
+            setRect(getNodeScreenRect(paddingOverlayNodeId, viewport))
+        } else {
+            setRect(null)
+        }
+    }, [paddingOverlayNodeId, viewportRef, zoom, panX, panY])
+
+    useEffect(() => {
+        let running = true
+        const loop = () => {
+            if (!running) return
+            updateRect()
+            rafRef.current = requestAnimationFrame(loop)
+        }
+        if (paddingOverlayNodeId) {
+            loop()
+        } else {
+            setRect(null)
+        }
+        return () => {
+            running = false
+            cancelAnimationFrame(rafRef.current)
+        }
+    }, [paddingOverlayNodeId, updateRect])
+
+    const direction = paddingOverlayDirection ?? 'all'
+
+    if (!rect || !overlayPadding) return null
+
+    return (
+        <div className="pointer-events-none" style={{ position: 'absolute', inset: 0, zIndex: 997 }}>
+            <PaddingHatchRects
+                rect={rect}
+                padding={overlayPadding}
+                zoom={zoom}
+                direction={direction}
+            />
+        </div>
+    )
+}
+
+/** Blue hatch rectangles for padding areas (panel hover) */
+function PaddingHatchRects({
+    rect,
+    padding,
+    zoom,
+    direction,
+}: {
+    rect: ScreenRect
+    padding: { top: number; right: number; bottom: number; left: number }
+    zoom: number
+    direction: PaddingDirection
+}) {
+    const pt = padding.top * zoom
+    const pr = padding.right * zoom
+    const pb = padding.bottom * zoom
+    const pl = padding.left * zoom
+
+    return (
+        <>
+            {/* Top padding */}
+            {pt > 0 && shouldShowSide(direction, 'top') && (
+                <>
+                    <div style={{
+                        position: 'absolute',
+                        left: rect.x,
+                        top: rect.y,
+                        width: rect.width,
+                        height: pt,
+                        background: BLUE_HATCH,
+                        borderBottom: '1px solid rgba(59, 130, 246, 0.3)',
+                    }} />
+                    {pt > 10 && (
+                        <div style={{
+                            position: 'absolute',
+                            left: rect.x + rect.width / 2,
+                            top: rect.y + pt / 2,
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: 9,
+                            color: BLUE_LABEL,
+                            fontWeight: 600,
+                            fontFamily: 'system-ui',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            padding: '1px 4px',
+                            borderRadius: 2,
+                        }}>
+                            {padding.top}
+                        </div>
+                    )}
+                </>
+            )}
+            {/* Bottom padding */}
+            {pb > 0 && shouldShowSide(direction, 'bottom') && (
+                <>
+                    <div style={{
+                        position: 'absolute',
+                        left: rect.x,
+                        top: rect.y + rect.height - pb,
+                        width: rect.width,
+                        height: pb,
+                        background: BLUE_HATCH,
+                        borderTop: '1px solid rgba(59, 130, 246, 0.3)',
+                    }} />
+                    {pb > 10 && (
+                        <div style={{
+                            position: 'absolute',
+                            left: rect.x + rect.width / 2,
+                            top: rect.y + rect.height - pb / 2,
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: 9,
+                            color: BLUE_LABEL,
+                            fontWeight: 600,
+                            fontFamily: 'system-ui',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            padding: '1px 4px',
+                            borderRadius: 2,
+                        }}>
+                            {padding.bottom}
+                        </div>
+                    )}
+                </>
+            )}
+            {/* Left padding */}
+            {pl > 0 && shouldShowSide(direction, 'left') && (
+                <>
+                    <div style={{
+                        position: 'absolute',
+                        left: rect.x,
+                        top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
+                        width: pl,
+                        height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
+                        background: BLUE_HATCH,
+                        borderRight: '1px solid rgba(59, 130, 246, 0.3)',
+                    }} />
+                    {pl > 10 && (
+                        <div style={{
+                            position: 'absolute',
+                            left: rect.x + pl / 2,
+                            top: rect.y + rect.height / 2,
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: 9,
+                            color: BLUE_LABEL,
+                            fontWeight: 600,
+                            fontFamily: 'system-ui',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            padding: '1px 4px',
+                            borderRadius: 2,
+                        }}>
+                            {padding.left}
+                        </div>
+                    )}
+                </>
+            )}
+            {/* Right padding */}
+            {pr > 0 && shouldShowSide(direction, 'right') && (
+                <>
+                    <div style={{
+                        position: 'absolute',
+                        left: rect.x + rect.width - pr,
+                        top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
+                        width: pr,
+                        height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
+                        background: BLUE_HATCH,
+                        borderLeft: '1px solid rgba(59, 130, 246, 0.3)',
+                    }} />
+                    {pr > 10 && (
+                        <div style={{
+                            position: 'absolute',
+                            left: rect.x + rect.width - pr / 2,
+                            top: rect.y + rect.height / 2,
+                            transform: 'translate(-50%, -50%)',
+                            fontSize: 9,
+                            color: BLUE_LABEL,
+                            fontWeight: 600,
+                            fontFamily: 'system-ui',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            padding: '1px 4px',
+                            borderRadius: 2,
+                        }}>
+                            {padding.right}
+                        </div>
+                    )}
+                </>
+            )}
+        </>
+    )
+}
+
+// ============================================================
+// CanvasPaddingZones — interactive transparent divs over each
+// padding area of selected auto-layout frames. Shows center
+// handles for drag-to-resize; hover highlights with blue hatch.
+// ============================================================
+
+type PaddingSide = 'top' | 'right' | 'bottom' | 'left'
+
+const OPPOSITE_SIDE: Record<PaddingSide, PaddingSide> = {
+    top: 'bottom',
+    bottom: 'top',
+    left: 'right',
+    right: 'left',
+}
+
+// Center handle: small perpendicular line in the middle of each padding zone
+const CENTER_HANDLE_LENGTH = 16
+const CENTER_HANDLE_THICKNESS = 2
+const CENTER_HANDLE_HIT_AREA = 12 // click/drag target area around handle
+
+export function CanvasPaddingZones({
+    viewportRef,
+}: {
+    viewportRef: React.RefObject<HTMLDivElement | null>
+}) {
+    const selectedIds = useEditorStore((s) => s.selectedIds)
+    const nodes = useEditorStore((s) => s.nodes)
+    const zoom = useEditorStore((s) => s.zoom)
+    const panX = useEditorStore((s) => s.panX)
+    const panY = useEditorStore((s) => s.panY)
+    const updateNode = useEditorStore((s) => s.updateNode)
+    const setPaddingOverlay = useEditorStore((s) => s.setPaddingOverlay)
+    const beginBatch = useEditorStore((s) => s.beginBatch)
+    const endBatch = useEditorStore((s) => s.endBatch)
+
+    const [rect, setRect] = useState<ScreenRect | null>(null)
+    const [hoveredSide, setHoveredSide] = useState<PaddingSide | null>(null)
+    const [inlineInput, setInlineInput] = useState<{
+        side: PaddingSide
+        x: number
+        y: number
+        value: number
+    } | null>(null)
+    const rafRef = useRef<number>(0)
+    const dragRef = useRef<{
+        side: PaddingSide
+        startValue: number
+        oppositeStartValue: number
+        startPos: number
+        nodeId: string
+    } | null>(null)
+
+    // Only show on single selected auto-layout frame
+    const frameNode = selectedIds.length === 1
+        ? (() => {
+            const n = findNodeById(nodes, selectedIds[0])
+            return n && n.type === 'frame' && n.layout.mode !== 'none' ? n : null
+        })()
+        : null
+
+    const frameId = frameNode?.id ?? null
+    const framePadding = frameNode?.padding ?? null
+
+    const updateRect = useCallback(() => {
+        const viewport = viewportRef.current
+        if (!viewport || !frameId) {
+            setRect(null)
+            return
+        }
+        setRect(getNodeScreenRect(frameId, viewport))
+    }, [frameId, viewportRef, zoom, panX, panY])
+
+    useEffect(() => {
+        let running = true
+        const loop = () => {
+            if (!running) return
+            if (!dragRef.current) {
+                updateRect()
+            }
+            rafRef.current = requestAnimationFrame(loop)
+        }
+        if (frameId) {
+            loop()
+        } else {
+            setRect(null)
+        }
+        return () => {
+            running = false
+            cancelAnimationFrame(rafRef.current)
+        }
+    }, [frameId, updateRect])
+
+    // Close inline input when selection changes
+    useEffect(() => {
+        setInlineInput(null)
+        setHoveredSide(null)
+    }, [frameId])
+
+    const handleMouseEnter = useCallback((side: PaddingSide) => {
+        if (frameId && !dragRef.current) {
+            setHoveredSide(side)
+            setPaddingOverlay(frameId, side)
+        }
+    }, [frameId, setPaddingOverlay])
+
+    const handleMouseLeave = useCallback((side: PaddingSide) => {
+        if (!dragRef.current) {
+            // Delay to allow center handle to capture enter
+            setTimeout(() => {
+                setHoveredSide((prev) => prev === side ? null : prev)
+            }, 50)
+            setPaddingOverlay(null)
+        }
+    }, [setPaddingOverlay])
+
+    // Stable refs for drag handler — avoids stale closures
+    const paddingZoomRef = useRef(zoom)
+    paddingZoomRef.current = zoom
+    const paddingRectRef = useRef(rect)
+    paddingRectRef.current = rect
+    const framePaddingRef = useRef(framePadding)
+    framePaddingRef.current = framePadding
+
+    // Unified pointer handler: drag if moved > dead zone, click if released without moving
+    const handlePointerDown = useCallback((side: PaddingSide, e: React.PointerEvent) => {
+        if (!frameId || !framePadding || !rect) return
+        e.preventDefault()
+        e.stopPropagation()
+
+        // Close any open inline input
+        setInlineInput(null)
+
+        // Capture pointer on the target element for reliable tracking during drag
+        const target = e.currentTarget as HTMLElement
+        target.setPointerCapture(e.pointerId)
+        const pointerId = e.pointerId
+
+        const isHorizontal = side === 'left' || side === 'right'
+        const startClientX = e.clientX
+        const startClientY = e.clientY
+        const startPos = isHorizontal ? e.clientX : e.clientY
+        const DEAD_ZONE = 3
+        let dragging = false
+
+        const startValue = framePadding[side]
+        const oppositeStartValue = framePadding[OPPOSITE_SIDE[side]]
+
+        const handleMove = (ev: PointerEvent) => {
+            const dx = ev.clientX - startClientX
+            const dy = ev.clientY - startClientY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+
+            if (!dragging && dist > DEAD_ZONE) {
+                dragging = true
+                dragRef.current = {
+                    side,
+                    startValue,
+                    oppositeStartValue,
+                    startPos,
+                    nodeId: frameId,
+                }
+                beginBatch()
+            }
+
+            if (!dragging) return
+
+            const isH = side === 'left' || side === 'right'
+            const currentPos = isH ? ev.clientX : ev.clientY
+            const invert = side === 'left' || side === 'top' ? -1 : 1
+            const delta = (currentPos - startPos) * invert / paddingZoomRef.current
+
+            const newValue = Math.max(0, Math.round(startValue + delta))
+
+            const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
+            if (!currentNode || currentNode.type !== 'frame') return
+            const currentPadding = { ...currentNode.padding }
+
+            currentPadding[side] = newValue
+
+            if (ev.altKey) {
+                const oppositeNewValue = Math.max(0, Math.round(oppositeStartValue + delta))
+                currentPadding[OPPOSITE_SIDE[side]] = oppositeNewValue
+                setPaddingOverlay(frameId, isH ? 'horizontal' : 'vertical')
+            } else {
+                setPaddingOverlay(frameId, side)
+            }
+
+            updateNode(frameId, { padding: currentPadding })
+        }
+
+        const handleUp = (ev: PointerEvent) => {
+            // Release pointer capture
+            try { target.releasePointerCapture(pointerId) } catch { /* already released */ }
+            target.removeEventListener('pointermove', handleMove)
+            target.removeEventListener('pointerup', handleUp)
+            target.removeEventListener('pointercancel', handleUp)
+
+            if (dragging) {
+                // Was a drag — end batch
+                dragRef.current = null
+                endBatch()
+                setPaddingOverlay(null)
+                setHoveredSide(null)
+            } else {
+                // Was a click — open inline input at center handle position
+                const currentPad = framePaddingRef.current
+                const currentRect = paddingRectRef.current
+                const currentZoom = paddingZoomRef.current
+                if (!currentPad || !currentRect) return
+
+                const pt = currentPad.top * currentZoom
+                const pr = currentPad.right * currentZoom
+                const pb = currentPad.bottom * currentZoom
+                const pl = currentPad.left * currentZoom
+
+                let x: number, y: number
+                switch (side) {
+                    case 'top':
+                        x = currentRect.x + currentRect.width / 2
+                        y = currentRect.y + pt / 2
+                        break
+                    case 'bottom':
+                        x = currentRect.x + currentRect.width / 2
+                        y = currentRect.y + currentRect.height - pb / 2
+                        break
+                    case 'left':
+                        x = currentRect.x + pl / 2
+                        y = currentRect.y + currentRect.height / 2
+                        break
+                    case 'right':
+                        x = currentRect.x + currentRect.width - pr / 2
+                        y = currentRect.y + currentRect.height / 2
+                        break
+                }
+
+                setInlineInput({ side, x, y, value: currentPad[side] })
+            }
+        }
+
+        // Use pointer events on the captured element, not window
+        target.addEventListener('pointermove', handleMove)
+        target.addEventListener('pointerup', handleUp)
+        target.addEventListener('pointercancel', handleUp)
+    }, [frameId, framePadding, rect, beginBatch, endBatch, updateNode, setPaddingOverlay])
+
+    const handleInlineInputChange = useCallback((value: number) => {
+        if (!frameId || !inlineInput) return
+        const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
+        if (!currentNode || currentNode.type !== 'frame') return
+        const currentPadding = { ...currentNode.padding }
+        currentPadding[inlineInput.side] = Math.max(0, value)
+        updateNode(frameId, { padding: currentPadding })
+        setInlineInput(null)
+    }, [frameId, inlineInput, updateNode])
+
+    if (!rect || !framePadding || !frameId) return null
+
+    const pt = framePadding.top * zoom
+    const pr = framePadding.right * zoom
+    const pb = framePadding.bottom * zoom
+    const pl = framePadding.left * zoom
+
+    const MIN_HIT = 6
+
+    const zones: { side: PaddingSide; style: React.CSSProperties }[] = [
+        {
+            side: 'top',
+            style: {
+                left: rect.x,
+                top: rect.y,
+                width: rect.width,
+                height: Math.max(pt, MIN_HIT),
+            },
+        },
+        {
+            side: 'bottom',
+            style: {
+                left: rect.x,
+                top: rect.y + rect.height - Math.max(pb, MIN_HIT),
+                width: rect.width,
+                height: Math.max(pb, MIN_HIT),
+            },
+        },
+        {
+            side: 'left',
+            style: {
+                left: rect.x,
+                top: rect.y + Math.max(pt, MIN_HIT),
+                width: Math.max(pl, MIN_HIT),
+                height: rect.height - Math.max(pt, MIN_HIT) - Math.max(pb, MIN_HIT),
+            },
+        },
+        {
+            side: 'right',
+            style: {
+                left: rect.x + rect.width - Math.max(pr, MIN_HIT),
+                top: rect.y + Math.max(pt, MIN_HIT),
+                width: Math.max(pr, MIN_HIT),
+                height: rect.height - Math.max(pt, MIN_HIT) - Math.max(pb, MIN_HIT),
+            },
+        },
+    ]
+
+    // Compute center handle positions for each side
+    const getCenterHandle = (side: PaddingSide): { x: number; y: number; isVertical: boolean } => {
+        const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
+        const p = Math.max(paddingPx[side], MIN_HIT)
+        switch (side) {
+            case 'top':
+                return { x: rect.x + rect.width / 2, y: rect.y + p / 2, isVertical: false }
+            case 'bottom':
+                return { x: rect.x + rect.width / 2, y: rect.y + rect.height - p / 2, isVertical: false }
+            case 'left':
+                return { x: rect.x + p / 2, y: rect.y + rect.height / 2, isVertical: true }
+            case 'right':
+                return { x: rect.x + rect.width - p / 2, y: rect.y + rect.height / 2, isVertical: true }
+        }
+    }
+
+    return (
+        <>
+            {/* Transparent hover zones — entire padding area triggers hatch display */}
+            {zones.map(({ side, style }) => (
+                <div
+                    key={side}
+                    style={{
+                        position: 'absolute',
+                        ...style,
+                        zIndex: 996,
+                        cursor: 'default',
+                        pointerEvents: 'auto',
+                    }}
+                    onMouseEnter={() => handleMouseEnter(side)}
+                    onMouseLeave={() => handleMouseLeave(side)}
+                />
+            ))}
+
+            {/* Center handles — visible when hovered, draggable + clickable */}
+            {zones.map(({ side }) => {
+                const handle = getCenterHandle(side)
+                const isHovered = hoveredSide === side
+                const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
+                const showHandle = paddingPx[side] >= 4 // only show handle if padding is visible
+
+                if (!showHandle) return null
+
+                return (
+                    <div
+                        key={`handle-${side}`}
+                        style={{
+                            position: 'absolute',
+                            left: handle.x - CENTER_HANDLE_HIT_AREA / 2,
+                            top: handle.y - CENTER_HANDLE_HIT_AREA / 2,
+                            width: CENTER_HANDLE_HIT_AREA,
+                            height: CENTER_HANDLE_HIT_AREA,
+                            zIndex: 1002,
+                            cursor: (side === 'left' || side === 'right') ? 'ew-resize' : 'ns-resize',
+                            pointerEvents: 'auto',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                        onMouseEnter={() => handleMouseEnter(side)}
+                        onMouseLeave={() => handleMouseLeave(side)}
+                        onPointerDown={(e) => handlePointerDown(side, e)}
+                    >
+                        {/* Visible center handle line */}
+                        <div
+                            style={{
+                                width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
+                                height: handle.isVertical ? CENTER_HANDLE_LENGTH : CENTER_HANDLE_THICKNESS,
+                                backgroundColor: isHovered ? '#3b82f6' : 'rgba(59, 130, 246, 0.5)',
+                                borderRadius: 1,
+                                transition: 'background-color 0.1s',
+                            }}
+                        />
+                    </div>
+                )
+            })}
+
+            {/* Inline value input */}
+            {inlineInput && (
+                <InlineValueInput
+                    x={inlineInput.x}
+                    y={inlineInput.y}
+                    value={inlineInput.value}
+                    color="blue"
+                    onSubmit={handleInlineInputChange}
+                    onClose={() => setInlineInput(null)}
+                />
+            )}
+        </>
+    )
+}
+
+// ============================================================
+// InlineValueInput — dark floating input for typing values
+// Opens when clicking a center handle on padding/gap zones.
+// ============================================================
+
+function InlineValueInput({
+    x, y, value, color, onSubmit, onClose,
+}: {
+    x: number
+    y: number
+    value: number
+    color: 'blue' | 'pink'
+    onSubmit: (v: number) => void
+    onClose: () => void
+}) {
+    const inputRef = useRef<HTMLInputElement>(null)
+    const [localValue, setLocalValue] = useState(String(value))
+
+    useEffect(() => {
+        // Focus and select all on mount
+        const input = inputRef.current
+        if (input) {
+            input.focus()
+            input.select()
+        }
+    }, [])
+
+    // Close on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (inputRef.current && !inputRef.current.parentElement?.contains(e.target as Node)) {
+                onClose()
+            }
+        }
+        // Delay to avoid the same click that opened it
+        const timer = setTimeout(() => {
+            document.addEventListener('mousedown', handler)
+        }, 50)
+        return () => {
+            clearTimeout(timer)
+            document.removeEventListener('mousedown', handler)
+        }
+    }, [onClose])
+
+    const submit = () => {
+        const parsed = parseInt(localValue, 10)
+        if (!isNaN(parsed)) {
+            onSubmit(parsed)
+        } else {
+            onClose()
+        }
+    }
+
+    const borderColor = color === 'blue' ? 'rgba(59, 130, 246, 0.6)' : 'rgba(236, 72, 153, 0.6)'
+    const iconColor = color === 'blue' ? '#3b82f6' : '#ec4899'
+
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                left: x,
+                top: y,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 2000,
+                pointerEvents: 'auto',
+            }}
+        >
+            <div
+                style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    background: '#1e1e2e',
+                    border: `1px solid ${borderColor}`,
+                    borderRadius: 4,
+                    padding: '2px 6px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                }}
+            >
+                <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                    <rect x="1" y="1" width="8" height="8" rx="1" stroke={iconColor} strokeWidth="1.5" fill="none" />
+                </svg>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={localValue}
+                    onChange={(e) => setLocalValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') submit()
+                        if (e.key === 'Escape') onClose()
+                        e.stopPropagation()
+                    }}
+                    onBlur={submit}
+                    style={{
+                        width: 48,
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: '#e0e0e0',
+                        fontSize: 11,
+                        fontFamily: 'system-ui',
+                        fontWeight: 500,
+                        textAlign: 'center',
+                        padding: 0,
+                    }}
+                />
+            </div>
+        </div>
+    )
+}
+
+// ============================================================
+// CanvasGapZones — interactive zones between children in
+// auto-layout frames. Hover highlights gap with pink hatch;
+// center handle for drag-to-resize + click-to-edit.
+// ============================================================
+
+const PINK_HATCH = HATCH_BG('rgba(236, 72, 153, 0.15)')
+
+interface GapZoneRect {
+    x: number
+    y: number
+    width: number
+    height: number
+    index: number
+}
+
+export function CanvasGapZones({
+    viewportRef,
+}: {
+    viewportRef: React.RefObject<HTMLDivElement | null>
+}) {
+    const selectedIds = useEditorStore((s) => s.selectedIds)
+    const nodes = useEditorStore((s) => s.nodes)
+    const zoom = useEditorStore((s) => s.zoom)
+    const panX = useEditorStore((s) => s.panX)
+    const panY = useEditorStore((s) => s.panY)
+    const updateNode = useEditorStore((s) => s.updateNode)
+    const beginBatch = useEditorStore((s) => s.beginBatch)
+    const endBatch = useEditorStore((s) => s.endBatch)
+
+    const [gapZones, setGapZones] = useState<GapZoneRect[]>([])
+    const [frameRect, setFrameRect] = useState<ScreenRect | null>(null)
+    const [isAnyHovered, setIsAnyHovered] = useState(false)
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+    const [isDragging, setIsDragging] = useState(false)
+    const [inlineInput, setInlineInput] = useState<{
+        x: number
+        y: number
+        value: number
+    } | null>(null)
+    const rafRef = useRef<number>(0)
+    const dragRef = useRef<{
+        startGap: number
+        startPos: number
+        nodeId: string
+        isColumn: boolean
+    } | null>(null)
+
+    // Only show on single selected flex frame with 2+ children
+    const frameNode = selectedIds.length === 1
+        ? (() => {
+            const n = findNodeById(nodes, selectedIds[0])
+            return n && n.type === 'frame' && n.layout.mode === 'flex' && n.children.length >= 2 ? n : null
+        })()
+        : null
+
+    const frameId = frameNode?.id ?? null
+    const frameGap = frameNode?.layout.gap ?? 0
+    const isColumn = frameNode?.layout.direction === 'column' || frameNode?.layout.direction === undefined
+
+    const updateGapZones = useCallback(() => {
+        const viewport = viewportRef.current
+        if (!viewport || !frameId || !frameNode) {
+            setGapZones([])
+            setFrameRect(null)
+            return
+        }
+
+        const viewportRect = viewport.getBoundingClientRect()
+        const children = frameNode.children
+        const zones: GapZoneRect[] = []
+
+        // Track frame rect for inline input positioning
+        const parentEl = viewport.querySelector(`[data-node-id="${frameId}"]`)
+        if (parentEl) {
+            const pr = parentEl.getBoundingClientRect()
+            setFrameRect({
+                x: pr.left - viewportRect.left,
+                y: pr.top - viewportRect.top,
+                width: pr.width,
+                height: pr.height,
+            })
+        }
+
+        // Collect all child rects first to compute bounding box
+        const childRects: DOMRect[] = []
+        for (let i = 0; i < children.length; i++) {
+            const el = viewport.querySelector(`[data-node-id="${children[i].id}"]`)
+            if (!el) return
+            childRects.push(el.getBoundingClientRect())
+        }
+
+        // Compute children's bounding box (gap zones bounded by children, not parent frame)
+        let minLeft = Infinity, maxRight = -Infinity
+        let minTop = Infinity, maxBottom = -Infinity
+        for (const cr of childRects) {
+            minLeft = Math.min(minLeft, cr.left)
+            maxRight = Math.max(maxRight, cr.right)
+            minTop = Math.min(minTop, cr.top)
+            maxBottom = Math.max(maxBottom, cr.bottom)
+        }
+
+        for (let i = 0; i < children.length - 1; i++) {
+            const childRect = childRects[i]
+            const nextChildRect = childRects[i + 1]
+
+            if (isColumn) {
+                // Gap between bottom of child i and top of child i+1
+                const gapTop = childRect.bottom - viewportRect.top
+                const gapBottom = nextChildRect.top - viewportRect.top
+                const gapHeight = gapBottom - gapTop
+
+                if (gapHeight > 0) {
+                    // Bounded by children's left/right extent
+                    zones.push({
+                        x: minLeft - viewportRect.left,
+                        y: gapTop,
+                        width: maxRight - minLeft,
+                        height: gapHeight,
+                        index: i,
+                    })
+                }
+            } else {
+                // Gap between right of child i and left of child i+1
+                const gapLeft = childRect.right - viewportRect.left
+                const gapRight = nextChildRect.left - viewportRect.left
+                const gapWidth = gapRight - gapLeft
+
+                if (gapWidth > 0) {
+                    // Bounded by children's top/bottom extent
+                    zones.push({
+                        x: gapLeft,
+                        y: minTop - viewportRect.top,
+                        width: gapWidth,
+                        height: maxBottom - minTop,
+                        index: i,
+                    })
+                }
+            }
+        }
+
+        setGapZones(zones)
+    }, [frameId, frameNode, viewportRef, zoom, panX, panY, isColumn])
+
+    useEffect(() => {
+        let running = true
+        const loop = () => {
+            if (!running) return
+            updateGapZones()
+            rafRef.current = requestAnimationFrame(loop)
+        }
+        if (frameId) {
+            loop()
+        } else {
+            setGapZones([])
+            setFrameRect(null)
+        }
+        return () => {
+            running = false
+            cancelAnimationFrame(rafRef.current)
+        }
+    }, [frameId, updateGapZones])
+
+    // Close inline input when selection changes
+    useEffect(() => {
+        setInlineInput(null)
+        setHoveredIndex(null)
+        setIsAnyHovered(false)
+    }, [frameId])
+
+    // Stable refs for drag handler — avoids stale closures and listener leaks
+    const frameGapRef = useRef(frameGap)
+    frameGapRef.current = frameGap
+    const frameRectRef = useRef(frameRect)
+    frameRectRef.current = frameRect
+    const zoomRef = useRef(zoom)
+    zoomRef.current = zoom
+
+    // Unified pointer handler: drag if moved > dead zone, click if released without moving
+    const handlePointerDown = useCallback((zone: GapZoneRect, e: React.PointerEvent) => {
+        if (!frameId) return
+        e.preventDefault()
+        e.stopPropagation()
+        setInlineInput(null)
+
+        // Capture pointer on the target element for reliable tracking during drag
+        const target = e.currentTarget as HTMLElement
+        target.setPointerCapture(e.pointerId)
+        const pointerId = e.pointerId
+
+        const startClientX = e.clientX
+        const startClientY = e.clientY
+        const startPos = isColumn ? e.clientY : e.clientX
+        const startGap = frameGapRef.current
+        const DEAD_ZONE = 3
+        let dragging = false
+
+        const handleMove = (ev: PointerEvent) => {
+            const dx = ev.clientX - startClientX
+            const dy = ev.clientY - startClientY
+            const dist = Math.sqrt(dx * dx + dy * dy)
+
+            if (!dragging && dist > DEAD_ZONE) {
+                dragging = true
+                dragRef.current = {
+                    startGap,
+                    startPos,
+                    nodeId: frameId,
+                    isColumn,
+                }
+                setIsDragging(true)
+                beginBatch()
+            }
+
+            if (!dragging) return
+
+            const currentPos = isColumn ? ev.clientY : ev.clientX
+            const delta = (currentPos - startPos) / zoomRef.current
+            const newGap = Math.max(0, Math.round(startGap + delta))
+
+            const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
+            if (!currentNode || currentNode.type !== 'frame') return
+            updateNode(frameId, { layout: { ...currentNode.layout, gap: newGap } })
+        }
+
+        const handleUp = (ev: PointerEvent) => {
+            // Release pointer capture
+            try { target.releasePointerCapture(pointerId) } catch { /* already released */ }
+            target.removeEventListener('pointermove', handleMove)
+            target.removeEventListener('pointerup', handleUp)
+            target.removeEventListener('pointercancel', handleUp)
+
+            if (dragging) {
+                dragRef.current = null
+                setIsDragging(false)
+                endBatch()
+                // Re-update zones after drag ends so overlays sync with new positions
+                updateGapZones()
+                setHoveredIndex(null)
+                setIsAnyHovered(false)
+            } else {
+                // Was a click — open inline input at bottom of frame (Figma-style)
+                const fr = frameRectRef.current
+                const currentGap = frameGapRef.current
+                if (fr) {
+                    setInlineInput({
+                        x: fr.x + fr.width / 2,
+                        y: fr.y + fr.height + 20,
+                        value: currentGap,
+                    })
+                } else {
+                    setInlineInput({
+                        x: zone.x + zone.width / 2,
+                        y: zone.y + zone.height + 20,
+                        value: currentGap,
+                    })
+                }
+            }
+        }
+
+        // Use pointer events on the captured element, not window
+        target.addEventListener('pointermove', handleMove)
+        target.addEventListener('pointerup', handleUp)
+        target.addEventListener('pointercancel', handleUp)
+    }, [frameId, isColumn, beginBatch, endBatch, updateNode, updateGapZones])
+
+    const handleInlineSubmit = useCallback((value: number) => {
+        if (!frameId) return
+        const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
+        if (!currentNode || currentNode.type !== 'frame') return
+        updateNode(frameId, { layout: { ...currentNode.layout, gap: Math.max(0, value) } })
+        setInlineInput(null)
+    }, [frameId, updateNode])
+
+    if (gapZones.length === 0) return null
+
+    const handleIsVertical = !isColumn // perpendicular to gap direction
+
+    return (
+        <>
+            {gapZones.map((zone) => {
+                const isThisHovered = hoveredIndex === zone.index
+                const centerX = zone.x + zone.width / 2
+                const centerY = zone.y + zone.height / 2
+
+                return (
+                    <div key={zone.index}>
+                        {/* Hover + drag zone — entire gap area is interactive */}
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: zone.x,
+                                top: zone.y,
+                                width: zone.width,
+                                height: zone.height,
+                                zIndex: 1003,
+                                cursor: isAnyHovered ? (isColumn ? 'ns-resize' : 'ew-resize') : 'default',
+                                pointerEvents: 'auto',
+                            }}
+                            onMouseEnter={() => {
+                                if (dragRef.current) return
+                                setHoveredIndex(zone.index)
+                                setIsAnyHovered(true)
+                            }}
+                            onMouseLeave={() => {
+                                if (!dragRef.current) {
+                                    setTimeout(() => {
+                                        setHoveredIndex((prev) => {
+                                            if (prev === zone.index) {
+                                                setIsAnyHovered(false)
+                                                return null
+                                            }
+                                            return prev
+                                        })
+                                    }, 50)
+                                }
+                            }}
+                            onPointerDown={(e) => handlePointerDown(zone, e)}
+                        />
+
+                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered */}
+                        {isAnyHovered && !inlineInput && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: zone.x,
+                                    top: zone.y,
+                                    width: zone.width,
+                                    height: zone.height,
+                                    background: PINK_HATCH,
+                                    border: '1px solid rgba(236, 72, 153, 0.25)',
+                                    zIndex: 997,
+                                }}
+                            />
+                        )}
+
+                        {/* Pink outline — ALL gaps show outline when inline input is open */}
+                        {inlineInput && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: zone.x,
+                                    top: zone.y,
+                                    width: zone.width,
+                                    height: zone.height,
+                                    border: '1px solid rgba(236, 72, 153, 0.5)',
+                                    zIndex: 997,
+                                }}
+                            />
+                        )}
+
+                        {/* Pink badge showing gap value — only on the HOVERED gap */}
+                        {isThisHovered && isAnyHovered && !inlineInput && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: isColumn ? zone.x + zone.width : zone.x + zone.width / 2,
+                                    top: isColumn ? zone.y : zone.y,
+                                    transform: isColumn ? 'translate(-100%, -100%)' : 'translate(-50%, -100%)',
+                                    fontSize: 10,
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    fontFamily: 'system-ui',
+                                    background: '#ec4899',
+                                    padding: '1px 5px',
+                                    borderRadius: 3,
+                                    zIndex: 1004,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {frameGap}
+                            </div>
+                        )}
+
+                        {/* Center handle — visual indicator, visible on all gaps when any hovered */}
+                        {(isAnyHovered || isDragging || inlineInput) && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: centerX - CENTER_HANDLE_HIT_AREA / 2,
+                                    top: centerY - CENTER_HANDLE_HIT_AREA / 2,
+                                    width: CENTER_HANDLE_HIT_AREA,
+                                    height: CENTER_HANDLE_HIT_AREA,
+                                    zIndex: 1004,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: handleIsVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
+                                        height: handleIsVertical ? CENTER_HANDLE_LENGTH : CENTER_HANDLE_THICKNESS,
+                                        backgroundColor: '#ec4899',
+                                        borderRadius: 1,
+                                    }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+
+            {/* Inline value input for gap — positioned at bottom of frame */}
+            {inlineInput && (
+                <InlineValueInput
+                    x={inlineInput.x}
+                    y={inlineInput.y}
+                    value={inlineInput.value}
+                    color="pink"
+                    onSubmit={handleInlineSubmit}
+                    onClose={() => setInlineInput(null)}
+                />
+            )}
+        </>
+    )
+}
+
+// ============================================================
 // DragInsertIndicator — blue line showing reorder insertion point
 // ============================================================
 

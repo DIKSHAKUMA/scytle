@@ -6,7 +6,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
 import { NodeRenderer } from './node-renderer'
-import { SelectionOverlay, HoverOverlay, DragInsertIndicator } from './selection-overlay'
+import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
 import { Toolbar } from './toolbar'
 import { useNodeDrag } from './hooks/use-node-drag'
@@ -722,6 +722,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             {/* Selection & hover overlays (screen coordinates, above content) */}
             <HoverOverlay viewportRef={viewportRef} />
+            <PaddingOverlay viewportRef={viewportRef} />
+            <CanvasPaddingZones viewportRef={viewportRef} />
+            <CanvasGapZones viewportRef={viewportRef} />
             <SelectionOverlay viewportRef={viewportRef} />
 
             {/* Measurement lines (show distances when dragging inside a frame) */}

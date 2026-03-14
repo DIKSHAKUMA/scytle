@@ -86,6 +86,18 @@ interface EditorState {
     /** ID of the text node currently being edited inline */
     editingNodeId: string | null
 
+    // Padding overlay -----------------------------------------
+    /** ID of the frame node whose padding is being visualized */
+    paddingOverlayNodeId: string | null
+    /** Which padding sides to visualize */
+    paddingOverlayDirection: 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom' | null
+
+    // Gap overlay ----------------------------------------------
+    /** ID of the frame node whose gap is being visualized */
+    gapOverlayNodeId: string | null
+    /** Index of the gap being hovered (between child i and i+1) */
+    gapOverlayIndex: number | null
+
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
     setPan: (x: number, y: number) => void
@@ -101,6 +113,12 @@ interface EditorState {
 
     // Inline editing actions -----------------------------------
     setEditingNodeId: (id: string | null) => void
+
+    // Padding overlay actions ----------------------------------
+    setPaddingOverlay: (id: string | null, direction?: 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom') => void
+
+    // Gap overlay actions --------------------------------------
+    setGapOverlay: (id: string | null, index?: number | null) => void
 
     // Selection actions ---------------------------------------
     selectNode: (id: string, addToSelection?: boolean) => void
@@ -191,6 +209,10 @@ export const useEditorStore = create<EditorState>()(
             enteredFrameId: null,
             activeTool: 'select' as CanvasTool,
             editingNodeId: null,
+            paddingOverlayNodeId: null,
+            paddingOverlayDirection: null,
+            gapOverlayNodeId: null,
+            gapOverlayIndex: null,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -322,6 +344,26 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setEditingNodeId'
+                ),
+
+            setPaddingOverlay: (id, direction) =>
+                set(
+                    (state) => {
+                        state.paddingOverlayNodeId = id
+                        state.paddingOverlayDirection = id ? (direction ?? 'all') : null
+                    },
+                    false,
+                    'setPaddingOverlay'
+                ),
+
+            setGapOverlay: (id, index) =>
+                set(
+                    (state) => {
+                        state.gapOverlayNodeId = id
+                        state.gapOverlayIndex = id ? (index ?? null) : null
+                    },
+                    false,
+                    'setGapOverlay'
                 ),
 
             // Canvas settings --------------------------------------
