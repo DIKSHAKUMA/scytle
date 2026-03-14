@@ -51,7 +51,12 @@ function computeBackground(fills: Fill[]): CSSProperties {
     const visible = fills.filter((f) => f.visible !== false)
     if (visible.length === 0) return {}
 
-    const backgrounds: string[] = []
+    // Single solid fill fast path — no layering needed
+    if (visible.length === 1 && visible[0].type === 'solid') {
+        return { backgroundColor: hexToRgba(visible[0].color, visible[0].opacity ?? 1) }
+    }
+
+    const images: string[] = []
     const sizes: string[] = []
     const positions: string[] = []
     const repeats: string[] = []
@@ -60,8 +65,11 @@ function computeBackground(fills: Fill[]): CSSProperties {
         const opacity = fill.opacity ?? 1
         switch (fill.type) {
             case 'solid': {
-                backgrounds.push(hexToRgba(fill.color, opacity))
-                sizes.push('auto')
+                // Express as degenerate gradient so it works in backgroundImage
+                // (plain colors are not valid backgroundImage values in multi-layer context)
+                const color = hexToRgba(fill.color, opacity)
+                images.push(`linear-gradient(${color}, ${color})`)
+                sizes.push('100% 100%')
                 positions.push('0 0')
                 repeats.push('no-repeat')
                 break
@@ -69,34 +77,34 @@ function computeBackground(fills: Fill[]): CSSProperties {
             case 'gradient': {
                 if (fill.gradient) {
                     // Legacy CSS gradient string
-                    backgrounds.push(fill.gradient)
+                    images.push(fill.gradient)
                 } else if (fill.stops && fill.stops.length >= 2) {
                     const type = fill.gradientType ?? 'linear'
                     const angle = fill.angle ?? 90
                     const stops = fill.stops
                         .map((s) => `${hexToRgba(s.color, s.opacity ?? 1)} ${s.position * 100}%`)
                         .join(', ')
-                    if (type === 'linear') backgrounds.push(`linear-gradient(${angle}deg, ${stops})`)
-                    else if (type === 'radial') backgrounds.push(`radial-gradient(circle, ${stops})`)
-                    else if (type === 'angular') backgrounds.push(`conic-gradient(${stops})`)
-                    else backgrounds.push(`radial-gradient(circle, ${stops})`) // diamond fallback
+                    if (type === 'linear') images.push(`linear-gradient(${angle}deg, ${stops})`)
+                    else if (type === 'radial') images.push(`radial-gradient(circle, ${stops})`)
+                    else if (type === 'angular') images.push(`conic-gradient(${stops})`)
+                    else images.push(`radial-gradient(circle, ${stops})`) // diamond fallback
                 } else {
-                    backgrounds.push('transparent')
+                    images.push('none')
                 }
                 sizes.push('100% 100%')
                 positions.push('0 0')
                 repeats.push('no-repeat')
                 break
             }
-        case 'image': {
+            case 'image': {
                 if (fill.src) {
-                    backgrounds.push(`url(${fill.src})`)
+                    images.push(`url(${fill.src})`)
                     const fit = fill.fit ?? 'cover'
                     sizes.push(fit === 'tile' ? 'auto' : fit === 'fill' ? '100% 100%' : fit)
                     positions.push('center')
                     repeats.push(fit === 'tile' ? 'repeat' : 'no-repeat')
                 } else {
-                    backgrounds.push('transparent')
+                    images.push('none')
                     sizes.push('auto')
                     positions.push('0 0')
                     repeats.push('no-repeat')
@@ -106,15 +114,12 @@ function computeBackground(fills: Fill[]): CSSProperties {
         }
     }
 
-    if (backgrounds.length === 0) return {}
+    if (images.length === 0) return {}
 
-    // Single fill optimization — use backgroundColor for solid
-    if (visible.length === 1 && visible[0].type === 'solid') {
-        return { backgroundColor: hexToRgba(visible[0].color, visible[0].opacity ?? 1) }
-    }
-
+    // Use only longhand properties — never mix `background` shorthand with longhands
+    // (React warns about conflicting shorthand/longhand background properties)
     return {
-        background: backgrounds.join(', '),
+        backgroundImage: images.join(', '),
         backgroundSize: sizes.join(', '),
         backgroundPosition: positions.join(', '),
         backgroundRepeat: repeats.join(', '),
