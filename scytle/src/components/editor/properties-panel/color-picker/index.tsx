@@ -8,7 +8,33 @@ import { normaliseHex, type ColorFormat } from '@/lib/color-utils'
 import { generateId } from '@/lib/utils'
 import { SolidPicker } from './solid-picker'
 import { GradientPicker, defaultGradientStops } from './gradient-picker'
-import type { Fill, SolidFill, GradientFill } from '@/types/canvas'
+import { ImagePicker } from './image-picker'
+import type { Fill, SolidFill, GradientFill, ImageFill, BlendMode } from '@/types/canvas'
+
+// ─────────────────────────────────────────────────────────────
+// Blend mode options
+// ─────────────────────────────────────────────────────────────
+
+const BLEND_MODES: { value: BlendMode; label: string }[] = [
+    { value: 'NORMAL', label: 'Normal' },
+    { value: 'DARKEN', label: 'Darken' },
+    { value: 'MULTIPLY', label: 'Multiply' },
+    { value: 'PLUS_DARKER', label: 'Plus Darker' },
+    { value: 'COLOR_BURN', label: 'Color Burn' },
+    { value: 'LIGHTEN', label: 'Lighten' },
+    { value: 'SCREEN', label: 'Screen' },
+    { value: 'PLUS_LIGHTER', label: 'Plus Lighter' },
+    { value: 'COLOR_DODGE', label: 'Color Dodge' },
+    { value: 'OVERLAY', label: 'Overlay' },
+    { value: 'SOFT_LIGHT', label: 'Soft Light' },
+    { value: 'HARD_LIGHT', label: 'Hard Light' },
+    { value: 'DIFFERENCE', label: 'Difference' },
+    { value: 'EXCLUSION', label: 'Exclusion' },
+    { value: 'HUE', label: 'Hue' },
+    { value: 'SATURATION', label: 'Saturation' },
+    { value: 'COLOR', label: 'Color' },
+    { value: 'LUMINOSITY', label: 'Luminosity' },
+]
 
 // ─────────────────────────────────────────────────────────────
 // Fill type tab icons (SVG inline)
@@ -183,7 +209,7 @@ export function ColorPicker({
             }
             onChange(solidFill)
         } else if (tab === 'gradient') {
-            // Solid → gradient: use solid color as first stop
+            // Solid/image → gradient: use current color as first stop
             let stops = defaultGradientStops()
             if (fill.type === 'solid') {
                 stops = [
@@ -202,14 +228,26 @@ export function ColorPicker({
                 blendMode: fill.blendMode ?? 'NORMAL',
             }
             onChange(gradientFill)
+        } else if (tab === 'image') {
+            // Solid/gradient → image: empty image fill
+            const imageFill: ImageFill = {
+                type: 'image',
+                id: fill.id ?? generateId(),
+                src: '',
+                fit: 'cover',
+                opacity: fill.opacity ?? 1,
+                visible: fill.visible ?? true,
+                blendMode: fill.blendMode ?? 'NORMAL',
+            }
+            onChange(imageFill)
         }
-        // image tab: handled by placeholder for now
     }
 
     // ── Derived values for solid picker ─────────────────────
 
     const solidFill = fill.type === 'solid' ? fill : null
     const gradientFill = fill.type === 'gradient' ? fill : null
+    const imageFill = fill.type === 'image' ? fill : null
 
     const picker = (
         <div
@@ -272,9 +310,15 @@ export function ColorPicker({
                         onColorFormatChange={setColorFormat}
                     />
                 )}
-                {activeTab === 'image' && (
+                {activeTab === 'image' && imageFill && (
+                    <ImagePicker
+                        fill={imageFill}
+                        onChange={onChange}
+                    />
+                )}
+                {activeTab === 'image' && !imageFill && (
                     <div className="py-4 text-[11px] text-muted-foreground text-center">
-                        Image fill — coming in Phase 3
+                        Switch to image fill to edit
                     </div>
                 )}
             </div>
@@ -282,6 +326,18 @@ export function ColorPicker({
             {/* Document swatches — only for solid fills */}
             {activeTab === 'solid' && documentColors.length > 0 && (
                 <div className="px-2.5 pb-2.5 border-t border-border/40 pt-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] text-muted-foreground/60">Blend</span>
+                        <select
+                            value={fill.blendMode ?? 'NORMAL'}
+                            onChange={(e) => onChange({ ...fill, blendMode: e.target.value as BlendMode })}
+                            className="h-5 text-[10px] bg-muted border-0 rounded-sm px-1 text-foreground outline-none cursor-pointer"
+                        >
+                            {BLEND_MODES.map((bm) => (
+                                <option key={bm.value} value={bm.value}>{bm.label}</option>
+                            ))}
+                        </select>
+                    </div>
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] text-muted-foreground/60">Document</span>
                     </div>
@@ -291,6 +347,23 @@ export function ColorPicker({
                             if (solidFill) onChange({ ...solidFill, color: newHex })
                         }}
                     />
+                </div>
+            )}
+            {/* Blend mode for non-solid fills or when no document colors */}
+            {!(activeTab === 'solid' && documentColors.length > 0) && (
+                <div className="px-2.5 pb-2.5 border-t border-border/40 pt-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground/60">Blend</span>
+                        <select
+                            value={fill.blendMode ?? 'NORMAL'}
+                            onChange={(e) => onChange({ ...fill, blendMode: e.target.value as BlendMode })}
+                            className="h-5 text-[10px] bg-muted border-0 rounded-sm px-1 text-foreground outline-none cursor-pointer"
+                        >
+                            {BLEND_MODES.map((bm) => (
+                                <option key={bm.value} value={bm.value}>{bm.label}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             )}
         </div>

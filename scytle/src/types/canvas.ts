@@ -62,6 +62,14 @@ export const ImageFillSchema = z.object({
     visible: z.boolean().optional(),
     blendMode: BlendModeSchema.optional(),
     rotation: z.number().optional(),
+    // Image adjustments (-100 to +100, 0 = no adjustment)
+    exposure: z.number().optional(),
+    contrast: z.number().optional(),
+    saturation: z.number().optional(),
+    temperature: z.number().optional(),
+    tint: z.number().optional(),
+    highlights: z.number().optional(),
+    shadows: z.number().optional(),
 })
 
 export const FillSchema = z.discriminatedUnion('type', [

@@ -3,11 +3,13 @@ import type {
     ScytleNode,
     FrameNode,
     Fill,
+    ImageFill,
     Shadow,
     Border,
     BorderRadius,
     Padding,
 } from '@/types/canvas'
+import { blendModeToCSS } from '@/lib/color-utils'
 
 // ============================================================
 // CSS Value Mappings
@@ -86,7 +88,7 @@ function computeBackground(fills: Fill[]): CSSProperties {
                 repeats.push('no-repeat')
                 break
             }
-            case 'image': {
+        case 'image': {
                 if (fill.src) {
                     backgrounds.push(`url(${fill.src})`)
                     const fit = fill.fit ?? 'cover'
@@ -117,6 +119,20 @@ function computeBackground(fills: Fill[]): CSSProperties {
         backgroundPosition: positions.join(', '),
         backgroundRepeat: repeats.join(', '),
     }
+}
+
+/** Build CSS filter from image fill adjustments.
+ *  Adjustments are -100 to +100 where 0 = no change.
+ *  Returns a filter string, or undefined if no adjustments. */
+function computeImageFillFilter(fill: ImageFill): string | undefined {
+    const parts: string[] = []
+    const { exposure = 0, contrast = 0, saturation = 0, temperature = 0 } = fill
+    if (exposure !== 0) parts.push(`brightness(${1 + exposure / 100})`)
+    if (contrast !== 0) parts.push(`contrast(${1 + contrast / 100})`)
+    if (saturation !== 0) parts.push(`saturate(${1 + saturation / 100})`)
+    // Temperature: warm (+) shifts hue toward orange/yellow (−30deg), cool (−) toward blue (+30deg)
+    if (temperature !== 0) parts.push(`hue-rotate(${-(temperature * 0.3)}deg)`)
+    return parts.length > 0 ? parts.join(' ') : undefined
 }
 
 /** Build CSS box-shadow from shadows array, scaled via CSS custom property */
@@ -247,6 +263,19 @@ export function computeBaseStyles(
 
     const shadow = computeBoxShadow(node.shadows)
     if (shadow) s.boxShadow = shadow
+
+    // Apply CSS filter from image fill adjustments (single image fill only)
+    const visibleFills = node.fills.filter((f) => f.visible !== false)
+    if (visibleFills.length === 1 && visibleFills[0].type === 'image') {
+        const imgFilter = computeImageFillFilter(visibleFills[0])
+        if (imgFilter) s.filter = imgFilter
+    }
+
+    // Apply blend mode from first visible fill (CSS mix-blend-mode on the element)
+    const firstFill = visibleFills[0]
+    if (firstFill?.blendMode && firstFill.blendMode !== 'NORMAL') {
+        s.mixBlendMode = blendModeToCSS(firstFill.blendMode)
+    }
 
     return s
 }

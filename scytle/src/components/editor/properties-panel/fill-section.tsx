@@ -80,8 +80,8 @@ function FillRow({ fill, onUpdate, onRemove, documentColors }: FillRowProps) {
     const opacity = fill.opacity ?? 1
 
     const handleSwatchClick = useCallback(() => {
-        if (fill.type !== 'image') setPickerOpen(true)
-    }, [fill.type])
+        setPickerOpen(true)
+    }, [])
 
     return (
         <div
@@ -197,17 +197,15 @@ function FillRow({ fill, onUpdate, onRemove, documentColors }: FillRowProps) {
                 </svg>
             </button>
 
-            {/* ColorPicker portal — solid and gradient fills */}
-            {fill.type !== 'image' && (
-                <ColorPicker
-                    fill={fill}
-                    onChange={(updated) => onUpdate(updated)}
-                    anchorEl={swatchRef.current}
-                    open={pickerOpen}
-                    onClose={() => setPickerOpen(false)}
-                    documentColors={documentColors}
-                />
-            )}
+            {/* ColorPicker portal */}
+            <ColorPicker
+                fill={fill}
+                onChange={(updated) => onUpdate(updated)}
+                anchorEl={swatchRef.current}
+                open={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                documentColors={documentColors}
+            />
         </div>
     )
 }
