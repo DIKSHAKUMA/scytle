@@ -9,6 +9,7 @@ import { NodeRenderer } from './node-renderer'
 import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
 import { GradientHandleOverlay } from './gradient-handle-overlay'
+import { SnapGuideOverlay } from './snap-guide-overlay'
 import { Toolbar } from './toolbar'
 import { useNodeDrag } from './hooks/use-node-drag'
 import { useNodeResize, handleToCursor } from './hooks/use-node-resize'
@@ -730,6 +731,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             {/* Gradient handles (shown when gradient fill picker is open) */}
             <GradientHandleOverlay viewportRef={viewportRef} />
+
+            {/* Snap alignment guides (shown while dragging freeform) */}
+            <SnapGuideOverlay dragInfo={dragInfo} />
 
             {/* Measurement lines (show distances when dragging inside a frame) */}
             <MeasurementOverlay viewportRef={viewportRef} isDragging={dragInfo.isDragging} />

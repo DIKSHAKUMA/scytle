@@ -39,6 +39,8 @@ export interface DragInfo {
     isDragging: boolean
     mode: 'freeform' | 'reorder' | null
     indicator: InsertIndicator | null
+    /** Canvas-space snap guide lines shown while dragging (x = vertical line, y = horizontal line) */
+    snapLines: { axis: 'x' | 'y'; canvasPos: number }[]
 }
 
 interface InternalDragState {
@@ -219,6 +221,7 @@ export function useNodeDrag(
         isDragging: false,
         mode: null,
         indicator: null,
+        snapLines: [],
     })
 
     const stateRef = useRef<InternalDragState>({ ...INITIAL_STATE })
@@ -321,6 +324,7 @@ export function useNodeDrag(
                     isDragging: true,
                     mode: s.mode,
                     indicator: null,
+                    snapLines: [],
                 })
             }
 
@@ -386,32 +390,43 @@ export function useNodeDrag(
 
                     // Snap X axis: check node-left, node-center, node-right against targets
                     let bestSnapX: number | null = null
+                    let snapXGuidePos: number | null = null
                     let bestSnapDist = SNAP_THRESHOLD + 1
                     for (const target of snapXTargets) {
                         // Node left → target
                         const dLeft = Math.abs(newX - target)
-                        if (dLeft < bestSnapDist) { bestSnapDist = dLeft; bestSnapX = target }
+                        if (dLeft < bestSnapDist) { bestSnapDist = dLeft; bestSnapX = target; snapXGuidePos = target }
                         // Node center → target
                         const dCenter = Math.abs(nodeCenterX - target)
-                        if (dCenter < bestSnapDist) { bestSnapDist = dCenter; bestSnapX = target - nodeW / 2 }
+                        if (dCenter < bestSnapDist) { bestSnapDist = dCenter; bestSnapX = target - nodeW / 2; snapXGuidePos = target }
                         // Node right → target
                         const dRight = Math.abs(nodeRight - target)
-                        if (dRight < bestSnapDist) { bestSnapDist = dRight; bestSnapX = target - nodeW }
+                        if (dRight < bestSnapDist) { bestSnapDist = dRight; bestSnapX = target - nodeW; snapXGuidePos = target }
                     }
                     if (bestSnapX !== null) newX = bestSnapX
 
                     // Snap Y axis
                     let bestSnapY: number | null = null
+                    let snapYGuidePos: number | null = null
                     bestSnapDist = SNAP_THRESHOLD + 1
                     for (const target of snapYTargets) {
                         const dTop = Math.abs(newY - target)
-                        if (dTop < bestSnapDist) { bestSnapDist = dTop; bestSnapY = target }
+                        if (dTop < bestSnapDist) { bestSnapDist = dTop; bestSnapY = target; snapYGuidePos = target }
                         const dCenter = Math.abs(nodeCenterY - target)
-                        if (dCenter < bestSnapDist) { bestSnapDist = dCenter; bestSnapY = target - nodeH / 2 }
+                        if (dCenter < bestSnapDist) { bestSnapDist = dCenter; bestSnapY = target - nodeH / 2; snapYGuidePos = target }
                         const dBottom = Math.abs(nodeBottom - target)
-                        if (dBottom < bestSnapDist) { bestSnapDist = dBottom; bestSnapY = target - nodeH }
+                        if (dBottom < bestSnapDist) { bestSnapDist = dBottom; bestSnapY = target - nodeH; snapYGuidePos = target }
                     }
                     if (bestSnapY !== null) newY = bestSnapY
+
+                    // Emit snap guide lines
+                    const snapLines: DragInfo['snapLines'] = []
+                    if (bestSnapX !== null && snapXGuidePos !== null) snapLines.push({ axis: 'x', canvasPos: snapXGuidePos })
+                    if (bestSnapY !== null && snapYGuidePos !== null) snapLines.push({ axis: 'y', canvasPos: snapYGuidePos })
+                    setDragInfo((prev) => ({ ...prev, snapLines }))
+                } else {
+                    // No node found — clear any stale snap lines
+                    setDragInfo((prev) => prev.snapLines.length > 0 ? { ...prev, snapLines: [] } : prev)
                 }
 
                 // Calculate the effective delta (may differ from raw due to snapping)
@@ -451,6 +466,7 @@ export function useNodeDrag(
                         isDragging: true,
                         mode: 'reorder',
                         indicator,
+                        snapLines: [],
                     })
                 }
             }
@@ -541,7 +557,7 @@ export function useNodeDrag(
         // Reset
         stateRef.current = { ...INITIAL_STATE }
         _isDragActive = false
-        setDragInfo({ isDragging: false, mode: null, indicator: null })
+        setDragInfo({ isDragging: false, mode: null, indicator: null, snapLines: [] })
 
         return true
     }, [viewportRef])
@@ -579,7 +595,7 @@ export function useNodeDrag(
 
         stateRef.current = { ...INITIAL_STATE }
         _isDragActive = false
-        setDragInfo({ isDragging: false, mode: null, indicator: null })
+        setDragInfo({ isDragging: false, mode: null, indicator: null, snapLines: [] })
     }, [viewportRef])
 
     // ── Escape key handler ──────────────────────────────────────

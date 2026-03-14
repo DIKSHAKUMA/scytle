@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -149,6 +149,16 @@ export function ColorPicker({
         return (localStorage.getItem('scytle:colorFormat') as ColorFormat) ?? 'HEX'
     })
 
+    // ── Drag-to-reposition state ──────────────────────────────
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+    const isDraggingHeader = useRef(false)
+    const dragStart = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 })
+
+    // Reset drag position when picker opens
+    useEffect(() => {
+        if (open) setDragOffset({ x: 0, y: 0 })
+    }, [open])
+
     const handleFormatChange = useCallback((format: ColorFormat) => {
         setColorFormat(format)
         localStorage.setItem('scytle:colorFormat', format)
@@ -184,16 +194,44 @@ export function ColorPicker({
 
     if (!open || !anchorEl) return null
 
-    // Position: below and slightly left of anchor, clamped to viewport
+    // Position: to the LEFT of the anchor (fills panel), at the same vertical level.
+    // This mirrors Figma's picker which appears to the left of the right panel.
     const anchorRect = anchorEl.getBoundingClientRect()
     const PICKER_W = 240
-    const PICKER_H = 420  // approximate
-    let left = anchorRect.left
-    let top = anchorRect.bottom + 6
+    let baseLeft = anchorRect.left - PICKER_W - 8
+    let baseTop = anchorRect.top
     // Clamp to viewport
-    if (left + PICKER_W > window.innerWidth - 8) left = window.innerWidth - PICKER_W - 8
-    if (top + PICKER_H > window.innerHeight - 8) top = anchorRect.top - PICKER_H - 6
-    if (left < 8) left = 8
+    if (baseLeft < 8) baseLeft = anchorRect.right + 8  // fallback: right of anchor
+    if (baseTop + 460 > window.innerHeight - 8) baseTop = window.innerHeight - 460 - 8
+    if (baseTop < 8) baseTop = 8
+
+    const left = baseLeft + dragOffset.x
+    const top = baseTop + dragOffset.y
+
+    const handleHeaderPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+        if ((e.target as HTMLElement).closest('button')) return // don't drag when clicking tab buttons
+        isDraggingHeader.current = true
+        dragStart.current = {
+            pointerX: e.clientX,
+            pointerY: e.clientY,
+            offsetX: dragOffset.x,
+            offsetY: dragOffset.y,
+        }
+        ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+    }
+
+    const handleHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+        if (!isDraggingHeader.current) return
+        setDragOffset({
+            x: dragStart.current.offsetX + (e.clientX - dragStart.current.pointerX),
+            y: dragStart.current.offsetY + (e.clientY - dragStart.current.pointerY),
+        })
+    }
+
+    const handleHeaderPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+        isDraggingHeader.current = false
+        ;(e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId)
+    }
 
     // ── Tab switch logic ─────────────────────────────────────
 
@@ -265,8 +303,13 @@ export function ColorPicker({
             style={{ left, top }}
             onMouseDown={(e) => e.stopPropagation()}
         >
-            {/* Header: title + fill type tabs + close */}
-            <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-2">
+            {/* Header: drag handle + fill type tabs + close */}
+            <div
+                className="flex items-center gap-1 px-2.5 pt-2.5 pb-2 cursor-move select-none"
+                onPointerDown={handleHeaderPointerDown}
+                onPointerMove={handleHeaderPointerMove}
+                onPointerUp={handleHeaderPointerUp}
+            >
                 <span className="text-[11px] font-medium text-muted-foreground mr-1">Fill</span>
                 {/* Fill type tab icons */}
                 <div className="flex items-center gap-0.5 flex-1">

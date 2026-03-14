@@ -3,18 +3,9 @@
 import { useEffect, useRef } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
-import type { GradientFill } from '@/types/canvas'
-
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
-
-interface ScreenRect {
-    x: number
-    y: number
-    width: number
-    height: number
-}
+import type { GradientFill, GradientStop } from '@/types/canvas'
+import { generateId } from '@/lib/utils'
+import { normaliseHex } from '@/lib/color-utils'
 
 // ─────────────────────────────────────────────────────────────
 // Math helpers
@@ -41,9 +32,40 @@ function handlesToAngle(
     return (((Math.atan2(dx, -dy) * 180) / Math.PI) + 360) % 360
 }
 
+/** Interpolate the gradient color at position t (0–1) from the stops array */
+function interpolateStopColor(
+    stops: GradientStop[],
+    t: number,
+): { color: string; opacity: number } {
+    const sorted = [...stops].sort((a, b) => a.position - b.position)
+    if (sorted.length === 0) return { color: 'ffffff', opacity: 1 }
+    if (t <= sorted[0].position) return { color: sorted[0].color, opacity: sorted[0].opacity ?? 1 }
+    const last = sorted[sorted.length - 1]
+    if (t >= last.position) return { color: last.color, opacity: last.opacity ?? 1 }
+    const before = sorted.filter((s) => s.position <= t).pop()!
+    const after = sorted.find((s) => s.position > t)!
+    const frac = (t - before.position) / (after.position - before.position)
+    const lHex = normaliseHex(before.color)
+    const rHex = normaliseHex(after.color)
+    const [lr, lg, lb] = [0, 2, 4].map((o) => parseInt(lHex.slice(o, o + 2), 16))
+    const [rr, rg, rb] = [0, 2, 4].map((o) => parseInt(rHex.slice(o, o + 2), 16))
+    const color = [lr + (rr - lr) * frac, lg + (rg - lg) * frac, lb + (rb - lb) * frac]
+        .map((v) => Math.round(v).toString(16).padStart(2, '0'))
+        .join('')
+    const opacity = (before.opacity ?? 1) + ((after.opacity ?? 1) - (before.opacity ?? 1)) * frac
+    return { color, opacity }
+}
+
 // ─────────────────────────────────────────────────────────────
-// DOM helper — same pattern as selection-overlay
+// DOM helper
 // ─────────────────────────────────────────────────────────────
+
+interface ScreenRect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
 
 function getNodeScreenRect(
     nodeId: string,
@@ -69,7 +91,6 @@ function getNodeScreenRect(
 interface DragHandleProps {
     cx: number
     cy: number
-    /** Normalized (0–1) position in node space — captured at pointer-down */
     normPos: { x: number; y: number }
     screenRect: ScreenRect
     isStart: boolean
@@ -138,6 +159,12 @@ interface GradientHandleOverlayProps {
 }
 
 export function GradientHandleOverlay({ viewportRef }: GradientHandleOverlayProps) {
+    // Subscribe to viewport transforms so handles re-render when canvas zooms/pans.
+    // getBoundingClientRect() reads the current DOM state, so re-rendering is all we need.
+    const zoom = useEditorStore((s) => s.zoom)
+    const panX = useEditorStore((s) => s.panX)
+    const panY = useEditorStore((s) => s.panY)
+
     const gradientEditingFillIdx = useEditorStore((s) => s.gradientEditingFillIdx)
     const selectedIds = useEditorStore((s) => s.selectedIds)
     const nodes = useEditorStore((s) => s.nodes)
@@ -155,7 +182,9 @@ export function GradientHandleOverlay({ viewportRef }: GradientHandleOverlayProp
     if (fill.gradientType && fill.gradientType !== 'linear') return null
 
     const screenRect = getNodeScreenRect(nodeId!, viewportRef.current)
-    if (!screenRect || screenRect.width < 4 || screenRect.height < 4) return null
+    // zoom is used to gate – also suppresses unused-variable lint while keeping subscription
+    if (!screenRect || screenRect.width < 4 || screenRect.height < 4 || zoom <= 0) return null
+    void panX; void panY // subscribed above; BoundingClientRect handles coordinates
 
     const angle = fill.angle ?? 90
     const [defaultStart, defaultEnd] = angleToHandles(angle)
@@ -187,12 +216,48 @@ export function GradientHandleOverlay({ viewportRef }: GradientHandleOverlayProp
             updateNode(nodeId, { fills: newFills })
         }
 
+    /** Click on the gradient line to insert a new stop at that position */
+    const handleLineClick = (e: React.MouseEvent<SVGLineElement>) => {
+        if (!nodeId || !node || gradientEditingFillIdx === null) return
+        e.stopPropagation()
+        const vRect = viewportRef.current?.getBoundingClientRect()
+        if (!vRect) return
+        const clickX = e.clientX - vRect.left
+        const clickY = e.clientY - vRect.top
+        // Project click onto the line vector to compute t ∈ [0, 1]
+        const dx = endPx.x - startPx.x
+        const dy = endPx.y - startPx.y
+        const len2 = dx * dx + dy * dy
+        if (len2 < 1) return
+        const t = Math.max(0, Math.min(1, ((clickX - startPx.x) * dx + (clickY - startPx.y) * dy) / len2))
+        // Interpolate color at t from existing stops
+        const stops = fill.stops ?? []
+        const { color, opacity } = interpolateStopColor(stops, t)
+        const newStop: GradientStop = { id: generateId(), position: t, color, opacity }
+        const newStops = [...stops, newStop].sort((a, b) => a.position - b.position)
+        const newFills = node.fills.map((f, i) =>
+            i === gradientEditingFillIdx ? { ...f, stops: newStops } : f,
+        )
+        updateNode(nodeId, { fills: newFills })
+    }
+
     return (
         <svg
             className="absolute inset-0 w-full h-full"
             style={{ pointerEvents: 'none', overflow: 'visible', zIndex: 45 }}
         >
-            {/* Connecting line */}
+            {/* Wide transparent hit area for click-to-add-stop (10px wide) */}
+            <line
+                x1={startPx.x}
+                y1={startPx.y}
+                x2={endPx.x}
+                y2={endPx.y}
+                stroke="transparent"
+                strokeWidth={10}
+                style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+                onClick={handleLineClick}
+            />
+            {/* Visible connecting line */}
             <line
                 x1={startPx.x}
                 y1={startPx.y}
@@ -201,7 +266,7 @@ export function GradientHandleOverlay({ viewportRef }: GradientHandleOverlayProp
                 stroke="rgba(255,255,255,0.65)"
                 strokeWidth={1}
             />
-            {/* Start handle (filled circle) */}
+            {/* Start handle */}
             <DragHandle
                 cx={startPx.x}
                 cy={startPx.y}
@@ -210,7 +275,7 @@ export function GradientHandleOverlay({ viewportRef }: GradientHandleOverlayProp
                 isStart
                 onPositionChange={handleMove('start')}
             />
-            {/* End handle (unfilled ring) */}
+            {/* End handle */}
             <DragHandle
                 cx={endPx.x}
                 cy={endPx.y}
