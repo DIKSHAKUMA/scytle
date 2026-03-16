@@ -137,6 +137,7 @@ export function PropertiesPanel() {
 
     return (
         <div
+            data-properties-panel
             className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin overscroll-contain"
             onWheel={(e) => e.stopPropagation()}
         >

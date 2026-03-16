@@ -1,7 +1,8 @@
-import { memo, type CSSProperties, createElement, useRef, useEffect, useCallback } from 'react'
+import { memo, type CSSProperties, createElement, useRef, useEffect, useCallback, useState } from 'react'
 import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
+import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
 
 // ============================================================
 // Props
@@ -28,6 +29,19 @@ export const TextRenderer = memo(function TextRenderer({
     const editingNodeId = useEditorStore((s) => s.editingNodeId)
     const isEditing = editingNodeId === node.id
     const editRef = useRef<HTMLElement>(null)
+
+    // ── Google Font loading ────────────────────────────────────
+    // Load the font on mount and whenever fontFamily changes.
+    // The tick counter forces a re-render once the font finishes loading,
+    // so the browser repaints the text in the correct typeface.
+    const [, setFontTick] = useState(0)
+    useEffect(() => {
+        if (!isFontLoaded(node.fontFamily)) {
+            loadFont(node.fontFamily).then(() => {
+                setFontTick((t) => t + 1)
+            })
+        }
+    }, [node.fontFamily])
 
     // Focus + select all when entering edit mode
     useEffect(() => {
@@ -68,43 +82,91 @@ export const TextRenderer = memo(function TextRenderer({
     // ── Styles ────────────────────────────────────────────────
     const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
 
+    // ── Line height (unit-aware) ───────────────────────────────────────────────
+    // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.
+    // New nodes use lineHeightUnit to disambiguate.
+    const lhUnit = node.lineHeightUnit ?? (node.lineHeight === 'auto' ? 'auto' : 'px')
+    const lineHeightCSS: string | number = (() => {
+        if (lhUnit === 'auto' || node.lineHeight === 'auto') return 'normal'
+        const val = node.lineHeight as number
+        if (lhUnit === '%') return `${val}%`
+        // 'px' mode — legacy unitless multiplier preservation: values ≤4 treated as ratio
+        return val <= 4 ? val : `calc(${val}px * var(--z, 1))`
+    })()
+
+    // ── Letter spacing (unit-aware) ───────────────────────────────────────────
+    const letterSpacingCSS: string | undefined = (() => {
+        if (node.letterSpacing === 0) return undefined
+        const lsUnit = node.letterSpacingUnit ?? 'px'
+        if (lsUnit === '%') return `${node.letterSpacing / 100}em`
+        return `calc(${node.letterSpacing}px * var(--z, 1))`
+    })()
+
+    // ── Text transform → CSS textTransform + fontVariantCaps (small-caps) ────
+    const isSmallCaps = node.textTransform === 'small-caps'
+    const textTransformCSS = (!isSmallCaps && node.textTransform !== 'none')
+        ? (node.textTransform as CSSProperties['textTransform'])
+        : undefined
+
+    // ── Vertical alignment (flex column on fixed-height box) ─────────────────
+    // 'display: flex; flexDirection: column' centers/aligns the anonymous text child.
+    const vAlign = node.textAlignVertical ?? 'top'
+    const isFixedHeight = node.autoResize === 'none' || node.autoResize === 'truncate'
+    const vAlignStyle: CSSProperties = (isFixedHeight && vAlign !== 'top')
+        ? {
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: vAlign === 'center' ? 'center' : 'flex-end',
+        } : {}
+
+    // ── List style ────────────────────────────────────────────────────────────
+    const listStyle = node.listStyle ?? 'none'
+    const listStyleCSS: CSSProperties = listStyle !== 'none' ? {
+        display: 'list-item',
+        listStyleType: listStyle === 'ordered' ? 'decimal' : 'disc',
+        listStylePosition: node.hangingList ? 'outside' : 'inside',
+        ...(node.hangingList ? { paddingLeft: `calc(1.2em * var(--z, 1))` } : {}),
+    } : {}
+
+    // ── OpenType feature settings ─────────────────────────────────────────────
+    const opentypeCSS = node.opentypeFlags && Object.keys(node.opentypeFlags).length > 0
+        ? Object.entries(node.opentypeFlags).map(([tag, val]) => `"${tag}" ${val}`).join(', ')
+        : undefined
+
     const style: CSSProperties = {
         ...baseStyle,
-        // Typography
-        fontFamily: node.fontFamily,
+        ...vAlignStyle,
+        ...listStyleCSS,
+        // Typography core
+        fontFamily: `"${node.fontFamily}", sans-serif`,
         fontWeight: node.fontWeight,
         fontStyle: node.fontStyle === 'italic' ? 'italic' : undefined,
         fontSize: `calc(${node.fontSize}px * var(--z, 1))`,
-        // lineHeight from parser is a unitless multiplier (e.g. 1.5);
-        // from design system may be absolute pixels (e.g. 24).
-        // Multipliers are always ≤ 4; pixel values are always > 4.
-        lineHeight:
-            node.lineHeight === 'auto'
-                ? 'normal'
-                : node.lineHeight <= 4
-                    ? node.lineHeight
-                    : `calc(${node.lineHeight}px * var(--z, 1))`,
-        letterSpacing: node.letterSpacing !== 0 ? `calc(${node.letterSpacing}px * var(--z, 1))` : undefined,
-        textAlign: node.textAlign,
-        textTransform:
-            node.textTransform !== 'none' ? node.textTransform : undefined,
-        textDecoration:
-            node.textDecoration !== 'none' ? node.textDecoration : undefined,
+        lineHeight: lineHeightCSS,
+        letterSpacing: letterSpacingCSS,
+        textAlign: node.textAlign as CSSProperties['textAlign'],
+        textTransform: textTransformCSS,
+        fontVariantCaps: isSmallCaps ? 'small-caps' : undefined,
+        textDecoration: node.textDecoration !== 'none' ? node.textDecoration : undefined,
         color: node.color,
-        // Auto-resize mode:
-        // 'width-and-height' = no wrapping, grows in both dimensions (Figma "Auto width")
-        // 'height' = fixed width, grows vertically (Figma "Auto height")
-        // 'none' / 'truncate' = fixed width & height
+        // Paragraph indent — CSS text-indent applies to first line of each paragraph
+        textIndent: node.paragraphIndent ? `calc(${node.paragraphIndent}px * var(--z, 1))` : undefined,
+        // Hanging punctuation (CSS, limited browser support but gracefully degrades)
+        hangingPunctuation: (node.hangingPunctuation ? 'first last' : undefined) as CSSProperties['hangingPunctuation'],
+        // OpenType features
+        fontFeatureSettings: opentypeCSS,
+        // Auto-resize modes:
+        // 'width-and-height' = no wrapping, grows in both axes (Figma "Auto width")
+        // 'height'           = fixed width, grows vertically (Figma "Auto height")
+        // 'none'|'truncate'  = fully fixed dimensions
         whiteSpace: node.autoResize === 'width-and-height' ? 'nowrap' : 'pre-wrap',
         wordBreak: node.autoResize === 'width-and-height' ? undefined : 'break-word',
-        // In auto-width mode, width should be auto (not fixed)
         ...(node.autoResize === 'width-and-height' ? { width: 'auto', minWidth: 1 } : {}),
-        // In auto-height mode, height should be auto
         ...(node.autoResize === 'height' ? { height: 'auto', minHeight: 1 } : {}),
         margin: 0,
         // Editing overrides
         ...(isEditing ? { outline: 'none', cursor: 'text', caretColor: 'currentColor' } : {}),
-        // Truncation mode (disabled during editing)
+        // Truncation mode (disabled during editing to allow text selection)
         ...(node.autoResize === 'truncate' && !isEditing
             ? {
                 overflow: 'hidden',

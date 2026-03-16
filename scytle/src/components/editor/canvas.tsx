@@ -9,6 +9,7 @@ import { NodeRenderer } from './node-renderer'
 import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
 import { GradientHandleOverlay } from './gradient-handle-overlay'
+import { ImageCropOverlay } from './image-crop-overlay'
 import { SnapGuideOverlay } from './snap-guide-overlay'
 import { Toolbar } from './toolbar'
 import { useNodeDrag } from './hooks/use-node-drag'
@@ -471,6 +472,24 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const selectedId = state.selectedIds[0]
                 const node = findNodeById(state.nodes, selectedId)
 
+                // Double-click node with image fill → enter crop mode
+                if (node) {
+                    const imgFillIdx = node.fills.findIndex(
+                        (f) => f.type === 'image' && f.src
+                    )
+                    if (imgFillIdx >= 0) {
+                        const fill = node.fills[imgFillIdx]
+                        if (fill.type === 'image' && fill.fit !== 'crop') {
+                            const newFills = node.fills.map((f, i) =>
+                                i === imgFillIdx ? { ...f, fit: 'crop' as const } : f
+                            )
+                            state.updateNode(selectedId, { fills: newFills })
+                        }
+                        state.setImageCropEditingFillIdx(imgFillIdx)
+                        return
+                    }
+                }
+
                 // Double-click text → start inline editing
                 if (node && node.type === 'text') {
                     state.setEditingNodeId(selectedId)
@@ -490,6 +509,26 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             if (!nodeId) return
 
             const node = findNodeById(state.nodes, nodeId)
+
+            // Fallback: image fill → crop mode
+            if (node) {
+                const imgFillIdx = node.fills.findIndex(
+                    (f) => f.type === 'image' && f.src
+                )
+                if (imgFillIdx >= 0) {
+                    state.selectNode(nodeId)
+                    const fill = node.fills[imgFillIdx]
+                    if (fill.type === 'image' && fill.fit !== 'crop') {
+                        const newFills = node.fills.map((f, i) =>
+                            i === imgFillIdx ? { ...f, fit: 'crop' as const } : f
+                        )
+                        state.updateNode(nodeId, { fills: newFills })
+                    }
+                    state.setImageCropEditingFillIdx(imgFillIdx)
+                    return
+                }
+            }
+
             if (node && node.type === 'text') {
                 state.selectNode(nodeId)
                 state.setEditingNodeId(nodeId)
@@ -731,6 +770,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             {/* Gradient handles (shown when gradient fill picker is open) */}
             <GradientHandleOverlay viewportRef={viewportRef} />
+
+            {/* Image crop handles (shown when an image fill has fit=crop) */}
+            <ImageCropOverlay viewportRef={viewportRef} />
 
             {/* Snap alignment guides (shown while dragging freeform) */}
             <SnapGuideOverlay dragInfo={dragInfo} />

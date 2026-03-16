@@ -102,6 +102,20 @@ interface EditorState {
     /** Index of the fill being gradient-edited (within the selected node) */
     gradientEditingFillIdx: number | null
 
+    // Image crop editing -----------------------------------------
+    /** Index of the fill being crop-edited (within the selected node) */
+    imageCropEditingFillIdx: number | null
+
+    // Font picker ------------------------------------------------
+    /** Whether the font family picker dialog is open */
+    fontPickerOpen: boolean
+    /** ID of the node the font picker is editing */
+    fontPickerNodeId: string | null
+
+    // Type Settings overlay ----------------------------------------
+    /** Whether the Type Settings floating overlay is open */
+    typeSettingsOpen: boolean
+
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
     setPan: (x: number, y: number) => void
@@ -126,6 +140,17 @@ interface EditorState {
 
     // Gradient editing actions ----------------------------------
     setGradientEditingFillIdx: (idx: number | null) => void
+
+    // Image crop editing actions --------------------------------
+    setImageCropEditingFillIdx: (idx: number | null) => void
+
+    // Font picker actions ----------------------------------------
+    openFontPicker: (nodeId: string) => void
+    closeFontPicker: () => void
+
+    // Type Settings overlay actions --------------------------------
+    openTypeSettings: () => void
+    closeTypeSettings: () => void
 
     // Selection actions ---------------------------------------
     selectNode: (id: string, addToSelection?: boolean) => void
@@ -221,6 +246,10 @@ export const useEditorStore = create<EditorState>()(
             gapOverlayNodeId: null,
             gapOverlayIndex: null,
             gradientEditingFillIdx: null,
+            imageCropEditingFillIdx: null,
+            fontPickerOpen: false,
+            fontPickerNodeId: null,
+            typeSettingsOpen: false,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -381,6 +410,57 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setGradientEditingFillIdx'
+                ),
+
+            setImageCropEditingFillIdx: (idx) =>
+                set(
+                    (state) => {
+                        state.imageCropEditingFillIdx = idx
+                    },
+                    false,
+                    'setImageCropEditingFillIdx'
+                ),
+
+            // Font picker ──────────────────────────────────────────────
+
+            openFontPicker: (nodeId) =>
+                set(
+                    (state) => {
+                        state.fontPickerOpen = true
+                        state.fontPickerNodeId = nodeId
+                    },
+                    false,
+                    'openFontPicker'
+                ),
+
+            closeFontPicker: () =>
+                set(
+                    (state) => {
+                        state.fontPickerOpen = false
+                        state.fontPickerNodeId = null
+                    },
+                    false,
+                    'closeFontPicker'
+                ),
+
+            // Type Settings overlay ─────────────────────────────────────
+
+            openTypeSettings: () =>
+                set(
+                    (state) => {
+                        state.typeSettingsOpen = true
+                    },
+                    false,
+                    'openTypeSettings'
+                ),
+
+            closeTypeSettings: () =>
+                set(
+                    (state) => {
+                        state.typeSettingsOpen = false
+                    },
+                    false,
+                    'closeTypeSettings'
                 ),
 
             // Canvas settings --------------------------------------

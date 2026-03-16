@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
+import { Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ImageFill } from '@/types/canvas'
 
@@ -20,8 +21,9 @@ interface ImagePickerProps {
 const FIT_OPTIONS: { id: ImageFill['fit']; label: string }[] = [
     { id: 'cover', label: 'Fill' },
     { id: 'contain', label: 'Fit' },
-    { id: 'fill', label: 'Stretch' },
+    { id: 'crop', label: 'Crop' },
     { id: 'tile', label: 'Tile' },
+    { id: 'fill', label: 'Stretch' },
 ]
 
 // ─────────────────────────────────────────────────────────────
@@ -109,6 +111,21 @@ function AdjustmentSlider({
 // ─────────────────────────────────────────────────────────────
 
 export function ImagePicker({ fill, onChange }: ImagePickerProps) {
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+            const src = ev.target?.result as string
+            if (src) onChange({ ...fill, src })
+        }
+        reader.readAsDataURL(file)
+        // Reset so same file can be re-picked
+        e.target.value = ''
+    }, [fill, onChange])
+
     const handleAdjust = useCallback((key: AdjustmentKey, value: number) => {
         onChange({ ...fill, [key]: value })
     }, [fill, onChange])
@@ -117,43 +134,56 @@ export function ImagePicker({ fill, onChange }: ImagePickerProps) {
 
     return (
         <div className="flex flex-col gap-2.5">
-            {/* ── Image source ── */}
-            <div className="flex items-center gap-1.5">
-                {/* Thumbnail preview */}
+            {/* ── Image thumbnail + upload ── */}
+            <div className="flex flex-col gap-1.5">
+                {/* Large thumbnail */}
                 <div
                     className={cn(
-                        'w-8 h-8 rounded-sm border border-border/40 shrink-0 overflow-hidden',
-                        !fill.src && 'bg-muted flex items-center justify-center',
+                        'w-full h-24 rounded-md border border-border/40 overflow-hidden relative',
+                        !fill.src && 'bg-muted/40 flex items-center justify-center',
                     )}
                 >
                     {fill.src ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={fill.src} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-muted-foreground/40">
-                            <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
-                            <path d="M1.5 9.5L5 6L7.5 8.5L9.5 6.5L12.5 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                            <circle cx="9" cy="5" r="1.2" fill="currentColor" />
-                        </svg>
+                        <div className="flex flex-col items-center gap-1.5">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-muted-foreground/25">
+                                <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.4" />
+                                <path d="M3 16L8.5 10.5L12.5 14.5L16 11L21 16" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                                <circle cx="15.5" cy="8.5" r="2" stroke="currentColor" strokeWidth="1.4" />
+                            </svg>
+                            <span className="text-[10px] text-muted-foreground/35">No image</span>
+                        </div>
                     )}
                 </div>
-                <input
-                    type="text"
-                    value={fill.src}
-                    placeholder="Image URL…"
-                    onChange={(e) => onChange({ ...fill, src: e.target.value })}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+
+                {/* Upload button */}
+                <button
                     className={cn(
-                        'flex-1 h-7 px-1.5 text-[11px] rounded-sm',
-                        'bg-muted/60 border border-transparent',
-                        'hover:border-border/50 focus:border-border focus:outline-none',
-                        'placeholder:text-muted-foreground/30 transition-colors',
+                        'w-full h-7 flex items-center justify-center gap-1.5 rounded-sm text-[11px]',
+                        'bg-muted/50 border border-border/30',
+                        'hover:bg-muted hover:border-border/60 transition-colors',
+                        'text-muted-foreground hover:text-foreground',
                     )}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    <Upload size={11} />
+                    {fill.src ? 'Replace image' : 'Upload from computer'}
+                </button>
+
+                {/* Hidden file input */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
                 />
             </div>
 
-            {/* ── Scale mode buttons ── */}
-            <div className="grid grid-cols-4 gap-1">
+            {/* ── Scale mode buttons — 5 modes ── */}
+            <div className="grid grid-cols-5 gap-1">
                 {FIT_OPTIONS.map((opt) => (
                     <button
                         key={opt.id}
@@ -169,6 +199,13 @@ export function ImagePicker({ fill, onChange }: ImagePickerProps) {
                     </button>
                 ))}
             </div>
+
+            {/* ── Crop hint ── */}
+            {fill.fit === 'crop' && (
+                <p className="text-[10px] text-muted-foreground/50 text-center leading-4">
+                    Drag the image on the canvas to reposition
+                </p>
+            )}
 
             {/* ── Adjustments ── */}
             <div className="flex flex-col gap-0.5">

@@ -9,7 +9,7 @@ import type {
     BorderRadius,
     Padding,
 } from '@/types/canvas'
-import { blendModeToCSS } from '@/lib/color-utils'
+import { blendModeToCSS, hexOpacityToRgba, normaliseHex } from '@/lib/color-utils'
 
 // ============================================================
 // CSS Value Mappings
@@ -98,11 +98,37 @@ function computeBackground(fills: Fill[]): CSSProperties {
             }
             case 'image': {
                 if (fill.src) {
+                    // Per-layer opacity: overlay a translucent white layer on top
+                    // (CSS background-image doesn't support native per-layer alpha)
+                    if (opacity < 1) {
+                        const fadeColor = `rgba(255,255,255,${1 - opacity})`
+                        images.push(`linear-gradient(${fadeColor}, ${fadeColor})`)
+                        sizes.push('100% 100%')
+                        positions.push('0 0')
+                        repeats.push('no-repeat')
+                    }
                     images.push(`url(${fill.src})`)
                     const fit = fill.fit ?? 'cover'
-                    sizes.push(fit === 'tile' ? 'auto' : fit === 'fill' ? '100% 100%' : fit)
-                    positions.push('center')
-                    repeats.push(fit === 'tile' ? 'repeat' : 'no-repeat')
+                    if (fit === 'tile') {
+                        sizes.push('auto')
+                        positions.push('0 0')
+                        repeats.push('repeat')
+                    } else if (fit === 'fill') {
+                        sizes.push('100% 100%')
+                        positions.push('center')
+                        repeats.push('no-repeat')
+                    } else if (fit === 'crop') {
+                        const cropZoom = fill.cropZoom ?? 1
+                        // cover × zoom: at zoom=1 it's just cover; zoom>1 scales up
+                        sizes.push(cropZoom <= 1 ? 'cover' : `${cropZoom * 100}%`)
+                        positions.push(`${fill.cropX ?? 50}% ${fill.cropY ?? 50}%`)
+                        repeats.push('no-repeat')
+                    } else {
+                        // 'cover' | 'contain'
+                        sizes.push(fit)
+                        positions.push('center')
+                        repeats.push('no-repeat')
+                    }
                 } else {
                     images.push('none')
                     sizes.push('auto')
@@ -142,8 +168,9 @@ function computeImageFillFilter(fill: ImageFill): string | undefined {
 
 /** Build CSS box-shadow from shadows array, scaled via CSS custom property */
 function computeBoxShadow(shadows: Shadow[]): string | undefined {
-    if (shadows.length === 0) return undefined
-    return shadows
+    const visible = shadows.filter((s) => s.visible !== false)
+    if (visible.length === 0) return undefined
+    return visible
         .map((s) => {
             const inset = s.type === 'inner' ? 'inset ' : ''
             return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${s.color}`
@@ -155,8 +182,11 @@ function computeBoxShadow(shadows: Shadow[]): string | undefined {
  *  Uses box-shadow exclusively so it never affects layout (unlike CSS border).
  *  Only applicable for solid borders — dashed/dotted fall back to CSS border. */
 function computeBorderAsShadow(border: Border): string | undefined {
+    if (border.visible === false) return undefined
     if (border.style !== 'solid' || border.width === 0) return undefined
-    const { color, width, position = 'inside' } = border
+    const { width, position = 'inside' } = border
+    // Always use rgba — avoids rendering quirks with raw hex in box-shadow at opacity=1
+    const color = hexOpacityToRgba(normaliseHex(border.color), border.opacity ?? 1)
     const w = `calc(${width}px * var(--z, 1))`
     if (position === 'inside') {
         return `inset 0 0 0 ${w} ${color}`
@@ -170,14 +200,36 @@ function computeBorderAsShadow(border: Border): string | undefined {
     }
 }
 
-/** Build border CSS for non-solid styles (dashed/dotted) — these cannot be replicated
- *  with box-shadow, so they fall back to CSS border without position control. */
+/** Build border/outline CSS for non-solid styles (dashed/dotted).
+ *  CSS `outline` is used for center/outside positions since `border` only supports inside
+ *  (box-sizing: border-box shrinks content area). Outline is drawn outside the layout box. */
 function computeBorder(border?: Border): CSSProperties {
-    if (!border || border.style === 'solid') return {}
+    if (!border || border.visible === false || border.style === 'solid') return {}
+    // Always use rgba for consistency
+    const color = hexOpacityToRgba(normaliseHex(border.color), border.opacity ?? 1)
+    const w = `calc(${border.width}px * var(--z, 1))`
+    const position = border.position ?? 'inside'
+
+    if (position === 'inside') {
+        return {
+            borderWidth: w,
+            borderStyle: border.style,
+            borderColor: color,
+        }
+    }
+
+    // center / outside → CSS outline (doesn't affect layout, follows border-radius in modern browsers)
+    // outline-offset=0: outer edge of outline starts at element boundary → "outside"
+    // outline-offset=-(width/2): outline straddles element boundary → "center"
+    const outlineOffset = position === 'outside'
+        ? '0px'
+        : `calc(${-(border.width / 2)}px * var(--z, 1))`
+
     return {
-        borderWidth: `calc(${border.width}px * var(--z, 1))`,
-        borderStyle: border.style,
-        borderColor: border.color,
+        outlineWidth: w,
+        outlineStyle: border.style as CSSProperties['outlineStyle'],
+        outlineColor: color,
+        outlineOffset,
     }
 }
 

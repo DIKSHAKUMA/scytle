@@ -103,8 +103,6 @@ export function hexToHsb(hex: string): HSB {
 }
 
 export function hsbToHex(h: number, s: number, b: number): string {
-    const { r, g, bv } = hsbToRgb(h, s, b) as unknown as { r: number; g: number; bv: number }
-    // TypeScript fix: rename return value
     const rgb = hsbToRgb(h, s, b)
     return rgbToHex(rgb.r, rgb.g, rgb.b)
 }

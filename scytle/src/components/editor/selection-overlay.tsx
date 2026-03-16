@@ -19,8 +19,10 @@ interface ScreenRect {
 
 type HandlePosition = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
-const HANDLE_SIZE = 8
-const HANDLE_POSITIONS: HandlePosition[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
+const CORNER_HANDLE_SIZE = 8
+const EDGE_HIT_ZONE = 8 // invisible hit area thickness for edge resize
+const CORNER_POSITIONS: HandlePosition[] = ['nw', 'ne', 'se', 'sw']
+const EDGE_POSITIONS: HandlePosition[] = ['n', 'e', 's', 'w']
 
 // ============================================================
 // Helpers
@@ -50,22 +52,54 @@ function getNodeScreenRect(
     }
 }
 
-function getHandleStyle(
+/** Corner handle positioning — small visible dots at each corner */
+function getCornerHandleStyle(
     pos: HandlePosition,
     rect: ScreenRect
 ): { left: number; top: number; cursor: string } {
-    const halfH = HANDLE_SIZE / 2
+    const halfH = CORNER_HANDLE_SIZE / 2
     const { x, y, width, height } = rect
 
     switch (pos) {
         case 'nw': return { left: x - halfH, top: y - halfH, cursor: 'nwse-resize' }
-        case 'n': return { left: x + width / 2 - halfH, top: y - halfH, cursor: 'ns-resize' }
         case 'ne': return { left: x + width - halfH, top: y - halfH, cursor: 'nesw-resize' }
-        case 'e': return { left: x + width - halfH, top: y + height / 2 - halfH, cursor: 'ew-resize' }
         case 'se': return { left: x + width - halfH, top: y + height - halfH, cursor: 'nwse-resize' }
-        case 's': return { left: x + width / 2 - halfH, top: y + height - halfH, cursor: 'ns-resize' }
         case 'sw': return { left: x - halfH, top: y + height - halfH, cursor: 'nesw-resize' }
-        case 'w': return { left: x - halfH, top: y + height / 2 - halfH, cursor: 'ew-resize' }
+        default: return { left: x, top: y, cursor: 'default' }
+    }
+}
+
+/** Edge hit zone positioning — invisible strips along each edge for resize dragging */
+function getEdgeHitZoneStyle(
+    pos: HandlePosition,
+    rect: ScreenRect
+): { left: number; top: number; width: number; height: number; cursor: string } {
+    const halfZ = EDGE_HIT_ZONE / 2
+    const inset = CORNER_HANDLE_SIZE // don't overlap corner handles
+    const { x, y, width, height } = rect
+
+    switch (pos) {
+        case 'n': return {
+            left: x + inset, top: y - halfZ,
+            width: Math.max(0, width - inset * 2), height: EDGE_HIT_ZONE,
+            cursor: 'ns-resize',
+        }
+        case 's': return {
+            left: x + inset, top: y + height - halfZ,
+            width: Math.max(0, width - inset * 2), height: EDGE_HIT_ZONE,
+            cursor: 'ns-resize',
+        }
+        case 'e': return {
+            left: x + width - halfZ, top: y + inset,
+            width: EDGE_HIT_ZONE, height: Math.max(0, height - inset * 2),
+            cursor: 'ew-resize',
+        }
+        case 'w': return {
+            left: x - halfZ, top: y + inset,
+            width: EDGE_HIT_ZONE, height: Math.max(0, height - inset * 2),
+            cursor: 'ew-resize',
+        }
+        default: return { left: x, top: y, width: 0, height: 0, cursor: 'default' }
     }
 }
 
@@ -79,50 +113,86 @@ export function SelectionOverlay({
     viewportRef: React.RefObject<HTMLDivElement | null>
 }) {
     const selectedIds = useEditorStore((s) => s.selectedIds)
-    const zoom = useEditorStore((s) => s.zoom)
-    const panX = useEditorStore((s) => s.panX)
-    const panY = useEditorStore((s) => s.panY)
+    const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
 
     const [rects, setRects] = useState<Map<string, ScreenRect>>(new Map())
     const rafRef = useRef<number>(0)
-
-    // Recalculate rects whenever selection, zoom, or pan changes
-    const updateRects = useCallback(() => {
-        const viewport = viewportRef.current
-        if (!viewport || selectedIds.length === 0) {
-            setRects(new Map())
-            return
-        }
-
-        const newRects = new Map<string, ScreenRect>()
-        for (const id of selectedIds) {
-            const rect = getNodeScreenRect(id, viewport)
-            if (rect) newRects.set(id, rect)
-        }
-        setRects(newRects)
-    }, [selectedIds, viewportRef, zoom, panX, panY])
+    const rectsRef = useRef<Map<string, ScreenRect>>(new Map())
+    const isMountedRef = useRef(true)
 
     // Update on every animation frame for smooth tracking during pan/zoom
     useEffect(() => {
-        let running = true
+        isMountedRef.current = true
+
         const loop = () => {
-            if (!running) return
-            updateRects()
-            rafRef.current = requestAnimationFrame(loop)
+            if (!isMountedRef.current) return
+
+            const viewport = viewportRef.current
+            if (!viewport || selectedIds.length === 0) {
+                if (rectsRef.current.size > 0) {
+                    rectsRef.current = new Map()
+                    setRects(new Map())
+                }
+                // Schedule next frame only if we have selections
+                if (selectedIds.length > 0) {
+                    rafRef.current = requestAnimationFrame(loop)
+                }
+                return
+            }
+
+            const newRects = new Map<string, ScreenRect>()
+            for (const id of selectedIds) {
+                const rect = getNodeScreenRect(id, viewport)
+                if (rect) newRects.set(id, rect)
+            }
+
+            // Compare with existing rects — use tolerance for floating point
+            const prevRects = rectsRef.current
+            let changed = prevRects.size !== newRects.size
+            if (!changed) {
+                for (const [id, newRect] of newRects) {
+                    const prevRect = prevRects.get(id)
+                    if (
+                        !prevRect ||
+                        Math.abs(prevRect.x - newRect.x) > 0.1 ||
+                        Math.abs(prevRect.y - newRect.y) > 0.1 ||
+                        Math.abs(prevRect.width - newRect.width) > 0.1 ||
+                        Math.abs(prevRect.height - newRect.height) > 0.1
+                    ) {
+                        changed = true
+                        break
+                    }
+                }
+            }
+
+            if (changed && isMountedRef.current) {
+                rectsRef.current = newRects
+                setRects(newRects)
+            }
+
+            if (isMountedRef.current) {
+                rafRef.current = requestAnimationFrame(loop)
+            }
         }
-        // Only run the loop if there are selections
+
+        // Always start RAF loop asynchronously to avoid synchronous setState cascades
         if (selectedIds.length > 0) {
-            loop()
-        } else {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (rectsRef.current.size > 0) {
+            rectsRef.current = new Map()
             setRects(new Map())
         }
+
         return () => {
-            running = false
+            isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [selectedIds, updateRects])
+    }, [selectedIds, viewportRef])
 
     if (rects.size === 0) return null
+
+    // Hide selection overlay when in crop mode — crop overlay handles its own borders
+    if (imageCropEditingFillIdx !== null) return null
 
     return (
         <>
@@ -143,9 +213,9 @@ export function SelectionOverlay({
                         }}
                     />
 
-                    {/* 8 resize handles */}
-                    {HANDLE_POSITIONS.map((pos) => {
-                        const hs = getHandleStyle(pos, rect)
+                    {/* 4 corner resize handles — visible dots */}
+                    {CORNER_POSITIONS.map((pos) => {
+                        const hs = getCornerHandleStyle(pos, rect)
                         return (
                             <div
                                 key={pos}
@@ -155,15 +225,37 @@ export function SelectionOverlay({
                                     position: 'absolute',
                                     left: hs.left,
                                     top: hs.top,
-                                    width: HANDLE_SIZE,
-                                    height: HANDLE_SIZE,
+                                    width: CORNER_HANDLE_SIZE,
+                                    height: CORNER_HANDLE_SIZE,
                                     backgroundColor: '#ffffff',
                                     border: '1.5px solid #3b82f6',
                                     borderRadius: 1,
                                     cursor: hs.cursor,
                                     zIndex: 1000,
-                                    // Handles are interactive (for A5 resize)
                                     pointerEvents: 'auto',
+                                }}
+                            />
+                        )
+                    })}
+
+                    {/* 4 edge resize hit zones — invisible but interactive */}
+                    {EDGE_POSITIONS.map((pos) => {
+                        const ez = getEdgeHitZoneStyle(pos, rect)
+                        return (
+                            <div
+                                key={pos}
+                                data-handle={pos}
+                                data-node-handle={id}
+                                style={{
+                                    position: 'absolute',
+                                    left: ez.left,
+                                    top: ez.top,
+                                    width: ez.width,
+                                    height: ez.height,
+                                    cursor: ez.cursor,
+                                    zIndex: 1000,
+                                    pointerEvents: 'auto',
+                                    // Invisible — no background, no border
                                 }}
                             />
                         )
@@ -185,43 +277,62 @@ export function HoverOverlay({
 }) {
     const hoveredId = useEditorStore((s) => s.hoveredId)
     const selectedIds = useEditorStore((s) => s.selectedIds)
-    const zoom = useEditorStore((s) => s.zoom)
-    const panX = useEditorStore((s) => s.panX)
-    const panY = useEditorStore((s) => s.panY)
 
     const [rect, setRect] = useState<ScreenRect | null>(null)
     const rafRef = useRef<number>(0)
+    const rectRef = useRef<ScreenRect | null>(null)
+    const isMountedRef = useRef(true)
 
     // Don't show hover on already-selected nodes
     const effectiveHoveredId =
         hoveredId && !selectedIds.includes(hoveredId) ? hoveredId : null
 
-    const updateRect = useCallback(() => {
-        const viewport = viewportRef.current
-        if (!viewport || !effectiveHoveredId) {
-            setRect(null)
-            return
-        }
-        setRect(getNodeScreenRect(effectiveHoveredId, viewport))
-    }, [effectiveHoveredId, viewportRef, zoom, panX, panY])
-
     useEffect(() => {
-        let running = true
+        isMountedRef.current = true
+
         const loop = () => {
-            if (!running) return
-            updateRect()
-            rafRef.current = requestAnimationFrame(loop)
+            if (!isMountedRef.current) return
+
+            const viewport = viewportRef.current
+            if (!viewport || !effectiveHoveredId) {
+                if (rectRef.current !== null) {
+                    rectRef.current = null
+                    setRect(null)
+                }
+                return
+            }
+
+            const newRect = getNodeScreenRect(effectiveHoveredId, viewport)
+            const prev = rectRef.current
+
+            const changed = !prev || !newRect ||
+                Math.abs(prev.x - newRect.x) > 0.1 ||
+                Math.abs(prev.y - newRect.y) > 0.1 ||
+                Math.abs(prev.width - newRect.width) > 0.1 ||
+                Math.abs(prev.height - newRect.height) > 0.1
+
+            if (changed && isMountedRef.current) {
+                rectRef.current = newRect
+                setRect(newRect)
+            }
+
+            if (isMountedRef.current) {
+                rafRef.current = requestAnimationFrame(loop)
+            }
         }
+
         if (effectiveHoveredId) {
-            loop()
-        } else {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (rectRef.current !== null) {
+            rectRef.current = null
             setRect(null)
         }
+
         return () => {
-            running = false
+            isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [effectiveHoveredId, updateRect])
+    }, [effectiveHoveredId, viewportRef])
 
     if (!rect) return null
 
@@ -272,46 +383,62 @@ export function PaddingOverlay({
     const paddingOverlayDirection = useEditorStore((s) => s.paddingOverlayDirection)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
-    const panX = useEditorStore((s) => s.panX)
-    const panY = useEditorStore((s) => s.panY)
 
     const [rect, setRect] = useState<ScreenRect | null>(null)
     const rafRef = useRef<number>(0)
+    const rectRef = useRef<ScreenRect | null>(null)
+    const isMountedRef = useRef(true)
 
     // Panel-triggered or canvas-triggered overlay node
     const overlayNode = paddingOverlayNodeId ? findNodeById(nodes, paddingOverlayNodeId) : null
     const overlayPadding = overlayNode && overlayNode.type === 'frame' ? overlayNode.padding : null
 
-    const updateRect = useCallback(() => {
-        const viewport = viewportRef.current
-        if (!viewport) {
-            setRect(null)
-            return
-        }
-        if (paddingOverlayNodeId) {
-            setRect(getNodeScreenRect(paddingOverlayNodeId, viewport))
-        } else {
-            setRect(null)
-        }
-    }, [paddingOverlayNodeId, viewportRef, zoom, panX, panY])
-
     useEffect(() => {
-        let running = true
+        isMountedRef.current = true
+
         const loop = () => {
-            if (!running) return
-            updateRect()
-            rafRef.current = requestAnimationFrame(loop)
+            if (!isMountedRef.current) return
+
+            const viewport = viewportRef.current
+            if (!viewport || !paddingOverlayNodeId) {
+                if (rectRef.current !== null) {
+                    rectRef.current = null
+                    setRect(null)
+                }
+                return
+            }
+
+            const newRect = getNodeScreenRect(paddingOverlayNodeId, viewport)
+            const prev = rectRef.current
+
+            const changed = !prev || !newRect ||
+                Math.abs(prev.x - newRect.x) > 0.1 ||
+                Math.abs(prev.y - newRect.y) > 0.1 ||
+                Math.abs(prev.width - newRect.width) > 0.1 ||
+                Math.abs(prev.height - newRect.height) > 0.1
+
+            if (changed && isMountedRef.current) {
+                rectRef.current = newRect
+                setRect(newRect)
+            }
+
+            if (isMountedRef.current) {
+                rafRef.current = requestAnimationFrame(loop)
+            }
         }
+
         if (paddingOverlayNodeId) {
-            loop()
-        } else {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (rectRef.current !== null) {
+            rectRef.current = null
             setRect(null)
         }
+
         return () => {
-            running = false
+            isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [paddingOverlayNodeId, updateRect])
+    }, [paddingOverlayNodeId, viewportRef])
 
     const direction = paddingOverlayDirection ?? 'all'
 
@@ -539,32 +666,56 @@ export function CanvasPaddingZones({
     const frameId = frameNode?.id ?? null
     const framePadding = frameNode?.padding ?? null
 
-    const updateRect = useCallback(() => {
-        const viewport = viewportRef.current
-        if (!viewport || !frameId) {
-            setRect(null)
-            return
-        }
-        setRect(getNodeScreenRect(frameId, viewport))
-    }, [frameId, viewportRef, zoom, panX, panY])
+    const rectRef = useRef<ScreenRect | null>(null)
+    const isMountedRef = useRef(true)
 
     useEffect(() => {
-        let running = true
+        isMountedRef.current = true
+
         const loop = () => {
-            if (!running) return
-            updateRect()
-            rafRef.current = requestAnimationFrame(loop)
+            if (!isMountedRef.current) return
+
+            const viewport = viewportRef.current
+            if (!viewport || !frameId) {
+                if (rectRef.current !== null) {
+                    rectRef.current = null
+                    setRect(null)
+                }
+                return
+            }
+
+            const newRect = getNodeScreenRect(frameId, viewport)
+            const prev = rectRef.current
+
+            // Compare with tolerance
+            const changed = !prev || !newRect ||
+                Math.abs(prev.x - newRect.x) > 0.1 ||
+                Math.abs(prev.y - newRect.y) > 0.1 ||
+                Math.abs(prev.width - newRect.width) > 0.1 ||
+                Math.abs(prev.height - newRect.height) > 0.1
+
+            if (changed && isMountedRef.current) {
+                rectRef.current = newRect
+                setRect(newRect)
+            }
+
+            if (isMountedRef.current) {
+                rafRef.current = requestAnimationFrame(loop)
+            }
         }
+
         if (frameId) {
-            loop()
-        } else {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (rectRef.current !== null) {
+            rectRef.current = null
             setRect(null)
         }
+
         return () => {
-            running = false
+            isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [frameId, updateRect])
+    }, [frameId, viewportRef])
 
     // Close inline input when selection changes
     useEffect(() => {
@@ -1037,114 +1188,178 @@ export function CanvasGapZones({
     const frameGap = frameNode?.layout.gap ?? 0
     const isColumn = frameNode?.layout.direction === 'column' || frameNode?.layout.direction === undefined
 
-    const updateGapZones = useCallback(() => {
-        const viewport = viewportRef.current
-        if (!viewport || !frameId || !frameNode) {
-            setGapZones([])
-            setFrameRect(null)
-            return
-        }
+    const gapZonesRef = useRef<GapZoneRect[]>([])
+    const prevFrameRectRef = useRef<ScreenRect | null>(null)
+    const isMountedRef = useRef(true)
 
-        const viewportRect = viewport.getBoundingClientRect()
-        const children = frameNode.children
-        const zones: GapZoneRect[] = []
+    // Store frameNode in a ref so the RAF loop can access the latest value
+    const frameNodeRef = useRef(frameNode)
+    frameNodeRef.current = frameNode
+    const isColumnRef = useRef(isColumn)
+    isColumnRef.current = isColumn
 
-        // Track frame rect for inline input positioning
-        const parentEl = viewport.querySelector(`[data-node-id="${frameId}"]`)
-        if (parentEl) {
-            const pr = parentEl.getBoundingClientRect()
-            setFrameRect({
-                x: pr.left - viewportRect.left,
-                y: pr.top - viewportRect.top,
-                width: pr.width,
-                height: pr.height,
-            })
-        }
+    useEffect(() => {
+        isMountedRef.current = true
 
-        // Collect all child rects first to compute bounding box
-        const childRects: DOMRect[] = []
-        for (let i = 0; i < children.length; i++) {
-            const el = viewport.querySelector(`[data-node-id="${children[i].id}"]`)
-            if (!el) return
-            childRects.push(el.getBoundingClientRect())
-        }
+        const loop = () => {
+            if (!isMountedRef.current) return
 
-        // Compute children's bounding box (gap zones bounded by children, not parent frame)
-        let minLeft = Infinity, maxRight = -Infinity
-        let minTop = Infinity, maxBottom = -Infinity
-        for (const cr of childRects) {
-            minLeft = Math.min(minLeft, cr.left)
-            maxRight = Math.max(maxRight, cr.right)
-            minTop = Math.min(minTop, cr.top)
-            maxBottom = Math.max(maxBottom, cr.bottom)
-        }
+            const viewport = viewportRef.current
+            const currentFrameNode = frameNodeRef.current
+            const currentIsColumn = isColumnRef.current
 
-        const MIN_GAP_HIT = 6
-
-        for (let i = 0; i < children.length - 1; i++) {
-            const childRect = childRects[i]
-            const nextChildRect = childRects[i + 1]
-
-            if (isColumn) {
-                // Gap between bottom of child i and top of child i+1
-                const gapTop = childRect.bottom - viewportRect.top
-                const gapBottom = nextChildRect.top - viewportRect.top
-                const gapHeight = gapBottom - gapTop
-
-                if (gapHeight >= 0) {
-                    const zoneHeight = Math.max(gapHeight, MIN_GAP_HIT)
-                    const yOffset = gapHeight < MIN_GAP_HIT ? (MIN_GAP_HIT - gapHeight) / 2 : 0
-                    zones.push({
-                        x: minLeft - viewportRect.left,
-                        y: gapTop - yOffset,
-                        width: maxRight - minLeft,
-                        height: zoneHeight,
-                        index: i,
-                        actualGapPx: Math.max(0, gapHeight),
-                    })
+            if (!viewport || !frameId || !currentFrameNode) {
+                if (gapZonesRef.current.length > 0 || prevFrameRectRef.current !== null) {
+                    gapZonesRef.current = []
+                    prevFrameRectRef.current = null
+                    setGapZones([])
+                    setFrameRect(null)
                 }
-            } else {
-                // Gap between right of child i and left of child i+1
-                const gapLeft = childRect.right - viewportRect.left
-                const gapRight = nextChildRect.left - viewportRect.left
-                const gapWidth = gapRight - gapLeft
+                return
+            }
 
-                if (gapWidth >= 0) {
-                    const zoneWidth = Math.max(gapWidth, MIN_GAP_HIT)
-                    const xOffset = gapWidth < MIN_GAP_HIT ? (MIN_GAP_HIT - gapWidth) / 2 : 0
-                    zones.push({
-                        x: gapLeft - xOffset,
-                        y: minTop - viewportRect.top,
-                        width: zoneWidth,
-                        height: maxBottom - minTop,
-                        index: i,
-                        actualGapPx: Math.max(0, gapWidth),
-                    })
+            const viewportRect = viewport.getBoundingClientRect()
+            const children = currentFrameNode.children
+            const zones: GapZoneRect[] = []
+
+            // Track frame rect for inline input positioning
+            const parentEl = viewport.querySelector(`[data-node-id="${frameId}"]`)
+            let newFrameRect: ScreenRect | null = null
+            if (parentEl) {
+                const pr = parentEl.getBoundingClientRect()
+                newFrameRect = {
+                    x: pr.left - viewportRect.left,
+                    y: pr.top - viewportRect.top,
+                    width: pr.width,
+                    height: pr.height,
                 }
+            }
+
+            // Collect all child rects first to compute bounding box
+            const childRects: DOMRect[] = []
+            for (let i = 0; i < children.length; i++) {
+                const el = viewport.querySelector(`[data-node-id="${children[i].id}"]`)
+                if (!el) {
+                    if (isMountedRef.current) {
+                        rafRef.current = requestAnimationFrame(loop)
+                    }
+                    return
+                }
+                childRects.push(el.getBoundingClientRect())
+            }
+
+            // Compute children's bounding box
+            let minLeft = Infinity, maxRight = -Infinity
+            let minTop = Infinity, maxBottom = -Infinity
+            for (const cr of childRects) {
+                minLeft = Math.min(minLeft, cr.left)
+                maxRight = Math.max(maxRight, cr.right)
+                minTop = Math.min(minTop, cr.top)
+                maxBottom = Math.max(maxBottom, cr.bottom)
+            }
+
+            const MIN_GAP_HIT = 6
+
+            for (let i = 0; i < children.length - 1; i++) {
+                const childRect = childRects[i]
+                const nextChildRect = childRects[i + 1]
+
+                if (currentIsColumn) {
+                    const gapTop = childRect.bottom - viewportRect.top
+                    const gapBottom = nextChildRect.top - viewportRect.top
+                    const gapHeight = gapBottom - gapTop
+
+                    if (gapHeight >= 0) {
+                        const zoneHeight = Math.max(gapHeight, MIN_GAP_HIT)
+                        const yOffset = gapHeight < MIN_GAP_HIT ? (MIN_GAP_HIT - gapHeight) / 2 : 0
+                        zones.push({
+                            x: minLeft - viewportRect.left,
+                            y: gapTop - yOffset,
+                            width: maxRight - minLeft,
+                            height: zoneHeight,
+                            index: i,
+                            actualGapPx: Math.max(0, gapHeight),
+                        })
+                    }
+                } else {
+                    const gapLeft = childRect.right - viewportRect.left
+                    const gapRight = nextChildRect.left - viewportRect.left
+                    const gapWidth = gapRight - gapLeft
+
+                    if (gapWidth >= 0) {
+                        const zoneWidth = Math.max(gapWidth, MIN_GAP_HIT)
+                        const xOffset = gapWidth < MIN_GAP_HIT ? (MIN_GAP_HIT - gapWidth) / 2 : 0
+                        zones.push({
+                            x: gapLeft - xOffset,
+                            y: minTop - viewportRect.top,
+                            width: zoneWidth,
+                            height: maxBottom - minTop,
+                            index: i,
+                            actualGapPx: Math.max(0, gapWidth),
+                        })
+                    }
+                }
+            }
+
+            // Compare and update zones (simplified - just check length and first item)
+            const prevZones = gapZonesRef.current
+            let zonesChanged = prevZones.length !== zones.length
+            if (!zonesChanged && zones.length > 0) {
+                for (let i = 0; i < zones.length; i++) {
+                    const prev = prevZones[i]
+                    const curr = zones[i]
+                    if (
+                        Math.abs(prev.x - curr.x) > 0.1 ||
+                        Math.abs(prev.y - curr.y) > 0.1 ||
+                        Math.abs(prev.width - curr.width) > 0.1 ||
+                        Math.abs(prev.height - curr.height) > 0.1
+                    ) {
+                        zonesChanged = true
+                        break
+                    }
+                }
+            }
+
+            // Compare frame rect
+            const prevFrameRect = prevFrameRectRef.current
+            const frameRectChanged = !prevFrameRect !== !newFrameRect ||
+                (prevFrameRect && newFrameRect && (
+                    Math.abs(prevFrameRect.x - newFrameRect.x) > 0.1 ||
+                    Math.abs(prevFrameRect.y - newFrameRect.y) > 0.1 ||
+                    Math.abs(prevFrameRect.width - newFrameRect.width) > 0.1 ||
+                    Math.abs(prevFrameRect.height - newFrameRect.height) > 0.1
+                ))
+
+            if (isMountedRef.current) {
+                if (zonesChanged) {
+                    gapZonesRef.current = zones
+                    setGapZones(zones)
+                }
+                if (frameRectChanged) {
+                    prevFrameRectRef.current = newFrameRect
+                    setFrameRect(newFrameRect)
+                }
+            }
+
+            if (isMountedRef.current) {
+                rafRef.current = requestAnimationFrame(loop)
             }
         }
 
-        setGapZones(zones)
-    }, [frameId, frameNode, viewportRef, zoom, panX, panY, isColumn])
-
-    useEffect(() => {
-        let running = true
-        const loop = () => {
-            if (!running) return
-            updateGapZones()
-            rafRef.current = requestAnimationFrame(loop)
-        }
         if (frameId) {
-            loop()
-        } else {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (gapZonesRef.current.length > 0 || prevFrameRectRef.current !== null) {
+            gapZonesRef.current = []
+            prevFrameRectRef.current = null
             setGapZones([])
             setFrameRect(null)
         }
+
         return () => {
-            running = false
+            isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [frameId, updateGapZones])
+    }, [frameId, viewportRef])
 
     // Close inline input when selection changes
     useEffect(() => {
@@ -1219,8 +1434,7 @@ export function CanvasGapZones({
                 dragRef.current = null
                 setIsDragging(false)
                 endBatch()
-                // Re-update zones after drag ends so overlays sync with new positions
-                updateGapZones()
+                // RAF loop will automatically sync zones on next frame
                 setHoveredIndex(null)
                 setIsAnyHovered(false)
             } else {
@@ -1247,7 +1461,7 @@ export function CanvasGapZones({
         target.addEventListener('pointermove', handleMove)
         target.addEventListener('pointerup', handleUp)
         target.addEventListener('pointercancel', handleUp)
-    }, [frameId, isColumn, beginBatch, endBatch, updateNode, updateGapZones])
+    }, [frameId, isColumn, beginBatch, endBatch, updateNode])
 
     const handleInlineSubmit = useCallback((value: number) => {
         if (!frameId) return

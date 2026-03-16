@@ -11,11 +11,7 @@ interface GradientFieldProps {
     className?: string
 }
 
-/**
- * 2D color picker field — x-axis = saturation, y-axis = brightness.
- * Background: white→hue gradient on X, transparent→black gradient on Y.
- * Matches Figma's color picker exactly.
- */
+
 export function GradientField({
     hue,
     saturation,
@@ -24,6 +20,8 @@ export function GradientField({
     className,
 }: GradientFieldProps) {
     const fieldRef = useRef<HTMLDivElement>(null)
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
 
     const getValuesFromEvent = useCallback((clientX: number, clientY: number) => {
         const el = fieldRef.current
@@ -31,20 +29,25 @@ export function GradientField({
         const rect = el.getBoundingClientRect()
         const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
         const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-        onChange(Math.round(x * 100), Math.round((1 - y) * 100))
-    }, [onChange])
+        onChangeRef.current(Math.round(x * 100), Math.round((1 - y) * 100))
+    }, [])
 
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         e.preventDefault()
-        const el = fieldRef.current
-        if (!el) return
-        el.setPointerCapture(e.pointerId)
         getValuesFromEvent(e.clientX, e.clientY)
-    }, [getValuesFromEvent])
 
-    const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (e.buttons === 0) return
-        getValuesFromEvent(e.clientX, e.clientY)
+        const onMove = (ev: PointerEvent) => {
+            ev.stopPropagation()
+            getValuesFromEvent(ev.clientX, ev.clientY)
+        }
+        const onUp = () => {
+            document.removeEventListener('pointermove', onMove, true)
+            document.removeEventListener('pointerup', onUp, true)
+            document.removeEventListener('pointercancel', onUp, true)
+        }
+        document.addEventListener('pointermove', onMove, true)
+        document.addEventListener('pointerup', onUp, true)
+        document.addEventListener('pointercancel', onUp, true)
     }, [getValuesFromEvent])
 
     // Reticle position in % of field size
@@ -62,7 +65,6 @@ export function GradientField({
                 ].join(', '),
             }}
             onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
         >
             {/* Reticle */}
             <div

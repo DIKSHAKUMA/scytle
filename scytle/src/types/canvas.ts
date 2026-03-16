@@ -60,7 +60,10 @@ export const ImageFillSchema = z.object({
     type: z.literal('image'),
     id: z.string().optional(),
     src: z.string(),
-    fit: z.enum(['cover', 'contain', 'fill', 'tile']),
+    fit: z.enum(['cover', 'contain', 'fill', 'tile', 'crop']),
+    cropX: z.number().min(0).max(100).optional(),
+    cropY: z.number().min(0).max(100).optional(),
+    cropZoom: z.number().min(1).max(10).optional(),
     opacity: z.number().min(0).max(1).optional(),
     visible: z.boolean().optional(),
     blendMode: BlendModeSchema.optional(),
@@ -97,6 +100,10 @@ export const BorderSchema = z.object({
     style: z.enum(['solid', 'dashed', 'dotted']),
     /** Stroke position relative to the path edge. Defaults to 'inside'. */
     position: z.enum(['inside', 'center', 'outside']).optional(),
+    /** Stroke opacity (0–1). Defaults to 1. */
+    opacity: z.number().min(0).max(1).optional(),
+    /** Stroke visibility toggle. Defaults to true. */
+    visible: z.boolean().optional(),
 })
 
 export const SizingSchema = z.object({
@@ -195,16 +202,41 @@ export interface TextNode extends BaseNodeProperties {
     fontFamily: string
     fontWeight: number
     fontStyle?: 'normal' | 'italic'
+    /** Unified style name as shown in Figma: "Regular", "Bold Italic", etc. Derives fontWeight + fontStyle. */
+    fontStyleName?: string
     fontSize: number
     lineHeight: number | 'auto'
+    /** Unit for lineHeight: 'auto' = normal/inherit; 'px' = absolute pixels (scaled); '%' = % of font-size. */
+    lineHeightUnit?: 'auto' | 'px' | '%'
     letterSpacing: number
+    /** Unit for letterSpacing: 'px' = absolute pixels (scaled); '%' = em-relative (value/100 em). */
+    letterSpacingUnit?: 'px' | '%'
     textAlign: 'left' | 'center' | 'right' | 'justify'
-    textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+    /** Vertical alignment of text within a fixed-height text box. Default: 'top'. */
+    textAlignVertical?: 'top' | 'center' | 'bottom'
+    /** Includes CSS text-transform values plus 'small-caps' (mapped to font-variant-caps). */
+    textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize' | 'small-caps'
     textDecoration: 'none' | 'underline' | 'line-through'
     autoResize: 'none' | 'width-and-height' | 'height' | 'truncate'
     maxLines?: number
+    /** Text truncation mode. 'ending' clips with ellipsis (use maxLines for line count). */
+    textTruncation?: 'disabled' | 'ending'
     color: string
     htmlTag?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'a' | 'li'
+    /** Vertical trim mode (Figma "leading trim"). 'cap-height' trims line-box to cap-height + baseline. */
+    leadingTrim?: 'none' | 'cap-height'
+    /** Extra space after each paragraph break (px). */
+    paragraphSpacing?: number
+    /** First-line indent per paragraph (px). */
+    paragraphIndent?: number
+    /** List marker style — renders as list-item with bullet or number. */
+    listStyle?: 'none' | 'ordered' | 'unordered'
+    /** Allow punctuation chars to optically hang outside the text box edge. */
+    hangingPunctuation?: boolean
+    /** Allow list markers to hang outside the text box edge (outdented markers). */
+    hangingList?: boolean
+    /** OpenType feature flag overrides. Key = 4-char OT tag (e.g. 'liga'); value = 0 (off) or 1 (on). */
+    opentypeFlags?: Record<string, 0 | 1>
 }
 
 /** Image node — renders as img tag or placeholder */
@@ -285,6 +317,7 @@ export function createText(
         characters: 'Text',
         fontFamily: 'Inter',
         fontWeight: 400,
+        fontStyleName: 'Regular',
         fontSize: 16,
         lineHeight: 'auto',
         letterSpacing: 0,

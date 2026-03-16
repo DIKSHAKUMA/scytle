@@ -49,7 +49,7 @@ function NumField({
                 inputMode="numeric"
                 value={local}
                 className={cn(
-                    'w-full h-6 px-1 text-[11px] text-center rounded-sm font-mono',
+                    'w-full h-6 px-1 text-[11px] text-center rounded-sm font-mono text-foreground',
                     'bg-transparent border border-transparent',
                     'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
                     'transition-colors tabular-nums'
@@ -151,10 +151,10 @@ export function ColorInput({
                         value={localHex}
                         maxLength={8}
                         className={cn(
-                            'flex-1 h-6 px-2 text-[11px] font-mono rounded-sm',
+                            'flex-1 h-6 px-2 text-[11px] font-mono rounded-sm text-foreground',
                             'bg-transparent border border-transparent',
                             'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                            'transition-colors tabular-nums uppercase'
+                            'transition-colors tabular-nums uppercase min-w-0'
                         )}
                         onChange={(e) => setLocalHex(e.target.value.replace('#', '').toUpperCase())}
                         onBlur={commitHex}
@@ -164,15 +164,15 @@ export function ColorInput({
                         }}
                         onFocus={(e) => e.target.select()}
                     />
-                    {/* Opacity % */}
-                    <div className="flex flex-col items-center gap-0.5 w-10">
+                    {/* Opacity % — inline, Figma-style */}
+                    <div className="flex items-center shrink-0">
                         <input
                             ref={opacityRef}
                             type="text"
                             inputMode="numeric"
                             value={opacityLocal}
                             className={cn(
-                                'w-full h-6 px-1 text-[11px] text-center font-mono rounded-sm',
+                                'w-9 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
                                 'bg-transparent border border-transparent',
                                 'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
                                 'transition-colors tabular-nums'
@@ -188,7 +188,7 @@ export function ColorInput({
                             }}
                             onFocus={(e) => e.target.select()}
                         />
-                        <span className="text-[9px] text-muted-foreground/50">%</span>
+                        <span className="text-[10px] text-muted-foreground/50 pl-0.5">%</span>
                     </div>
                 </>
             )}

@@ -14,24 +14,33 @@ interface OpacitySliderProps {
 /** Opacity slider with checkerboard background — matches Figma's opacity bar */
 export function OpacitySlider({ value, hex, onChange, className }: OpacitySliderProps) {
     const trackRef = useRef<HTMLDivElement>(null)
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
 
     const getOpacityFromEvent = useCallback((clientX: number) => {
         const el = trackRef.current
         if (!el) return
         const rect = el.getBoundingClientRect()
         const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-        onChange(Math.round(x * 100) / 100)
-    }, [onChange])
+        onChangeRef.current(Math.round(x * 100) / 100)
+    }, [])
 
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         e.preventDefault()
-        trackRef.current?.setPointerCapture(e.pointerId)
         getOpacityFromEvent(e.clientX)
-    }, [getOpacityFromEvent])
 
-    const handlePointerMove = useCallback((e: React.PointerEvent) => {
-        if (e.buttons === 0) return
-        getOpacityFromEvent(e.clientX)
+        const onMove = (ev: PointerEvent) => {
+            ev.stopPropagation()
+            getOpacityFromEvent(ev.clientX)
+        }
+        const onUp = () => {
+            document.removeEventListener('pointermove', onMove, true)
+            document.removeEventListener('pointerup', onUp, true)
+            document.removeEventListener('pointercancel', onUp, true)
+        }
+        document.addEventListener('pointermove', onMove, true)
+        document.addEventListener('pointerup', onUp, true)
+        document.addEventListener('pointercancel', onUp, true)
     }, [getOpacityFromEvent])
 
     const { r, g, b } = hexToRgb(hex)
@@ -50,7 +59,6 @@ export function OpacitySlider({ value, hex, onChange, className }: OpacitySlider
                 ].join(', '),
             }}
             onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
         >
             {/* Thumb */}
             <div

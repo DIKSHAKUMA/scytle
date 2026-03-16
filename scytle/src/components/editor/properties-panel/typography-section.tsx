@@ -1,88 +1,75 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import type { TextNode } from '@/types/canvas'
-import { Section, NumberInput, SelectInput, ColorInput, ToggleGroup } from './inputs'
+import { Section, ToggleGroup } from './inputs'
 import {
     AlignLeft,
     AlignCenter,
     AlignRight,
-    AlignJustify,
-    Underline,
-    Strikethrough,
-    Minus,
+    Settings2,
+    ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { normaliseHex } from '@/lib/color-utils'
+import { useEditorStore } from '@/store/editor-store'
+import { FontFamilyPicker } from './typography/font-family-picker'
+import { FontStylePicker } from './typography/font-style-picker'
+import { TypeSettingsOverlay } from './typography/type-settings-overlay'
+import { FontSizeCombobox } from './typography/font-size-combobox'
+import { LineHeightInput } from './typography/line-height-input'
+import { LetterSpacingInput } from './typography/letter-spacing-input'
+import { ColorPicker } from './color-picker'
+import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
 
-// ── Font options ──────────────────────────────────────────────
+// ── Custom inline SVG icons ────────────────────────────────────────────────────
 
-/**
- * Curated list of popular fonts covering sans-serif, serif, mono, and display.
- * Users can also type any custom font name — this list drives the datalist suggestions.
- */
-const SUGGESTED_FONTS = [
-    // Popular sans-serif
-    'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Nunito',
-    'Raleway', 'DM Sans', 'Manrope', 'Outfit', 'Plus Jakarta Sans', 'Figtree',
-    'Source Sans 3', 'Geist', 'Work Sans',
-    // Serif
-    'Georgia', 'Merriweather', 'Playfair Display', 'Lora', 'EB Garamond',
-    'Cormorant Garamond', 'DM Serif Display', 'Fraunces',
-    // Monospace
-    'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'IBM Plex Mono', 'Roboto Mono',
-    // Display / Creative
-    'Bricolage Grotesque', 'Space Grotesk', 'Cabinet Grotesk',
-    // System fallbacks
-    'system-ui', 'sans-serif', 'serif', 'monospace',
-]
+function VAlignTopIcon() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <rect x="1" y="1" width="10" height="1.5" rx="0.5" fill="currentColor" />
+            <rect x="1.5" y="4" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+            <rect x="1.5" y="6.7" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+        </svg>
+    )
+}
 
-const FONT_WEIGHT_OPTIONS = [
-    { value: '100', label: 'Thin' },
-    { value: '200', label: 'Extra Light' },
-    { value: '300', label: 'Light' },
-    { value: '400', label: 'Regular' },
-    { value: '500', label: 'Medium' },
-    { value: '600', label: 'Semibold' },
-    { value: '700', label: 'Bold' },
-    { value: '800', label: 'Extra Bold' },
-    { value: '900', label: 'Black' },
-]
+function VAlignMiddleIcon() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <rect x="1.5" y="2" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+            <rect x="1" y="5.25" width="10" height="1.5" rx="0.5" fill="currentColor" />
+            <rect x="1.5" y="8.5" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+        </svg>
+    )
+}
 
-const TEXT_TRANSFORM_OPTIONS = [
-    { value: 'none', label: 'None' },
-    { value: 'uppercase', label: 'UPPER' },
-    { value: 'lowercase', label: 'lower' },
-    { value: 'capitalize', label: 'Title' },
-]
+function VAlignBottomIcon() {
+    return (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <rect x="1.5" y="4" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+            <rect x="1.5" y="6.7" width="9" height="1.2" rx="0.4" fill="currentColor" opacity="0.5" />
+            <rect x="1" y="9.5" width="10" height="1.5" rx="0.5" fill="currentColor" />
+        </svg>
+    )
+}
 
+// ── Option arrays ────────────────────────────────────────────────────────────────
+
+/** Main panel: 3 H-align options (Justify moved to Type Settings Basics tab) */
 const TEXT_ALIGN_OPTIONS: { value: TextNode['textAlign']; icon: React.ReactNode; title: string }[] = [
-    { value: 'left', icon: <AlignLeft size={13} />, title: 'Left' },
-    { value: 'center', icon: <AlignCenter size={13} />, title: 'Center' },
-    { value: 'right', icon: <AlignRight size={13} />, title: 'Right' },
-    { value: 'justify', icon: <AlignJustify size={13} />, title: 'Justify' },
+    { value: 'left', icon: <AlignLeft size={12} />, title: 'Align left' },
+    { value: 'center', icon: <AlignCenter size={12} />, title: 'Align center' },
+    { value: 'right', icon: <AlignRight size={12} />, title: 'Align right' },
 ]
 
-const DECORATION_OPTIONS: { value: TextNode['textDecoration']; icon: React.ReactNode; title: string }[] = [
-    { value: 'none', icon: <Minus size={13} />, title: 'None' },
-    { value: 'underline', icon: <Underline size={13} />, title: 'Underline' },
-    { value: 'line-through', icon: <Strikethrough size={13} />, title: 'Strikethrough' },
+const VALIGN_OPTIONS: { value: 'top' | 'center' | 'bottom'; icon: React.ReactNode; title: string }[] = [
+    { value: 'top', icon: <VAlignTopIcon />, title: 'Align top' },
+    { value: 'center', icon: <VAlignMiddleIcon />, title: 'Align middle' },
+    { value: 'bottom', icon: <VAlignBottomIcon />, title: 'Align bottom' },
 ]
 
-const HTML_TAG_OPTIONS = [
-    { value: '', label: 'Auto' },
-    { value: 'h1', label: 'H1' },
-    { value: 'h2', label: 'H2' },
-    { value: 'h3', label: 'H3' },
-    { value: 'h4', label: 'H4' },
-    { value: 'h5', label: 'H5' },
-    { value: 'h6', label: 'H6' },
-    { value: 'p', label: 'P' },
-    { value: 'span', label: 'Span' },
-]
-
-// ── Font family input — searchable text field with datalist ──
-
-const DATALIST_ID = 'scytle-font-family-list'
+// ── Local class constants ──────────────────────────────────────────────────────
 
 const INPUT_BASE = [
     'w-full h-7 px-2 text-[11px] rounded-sm',
@@ -92,54 +79,45 @@ const INPUT_BASE = [
     'transition-colors',
 ].join(' ')
 
-interface FontInputProps {
-    value: string
-    onChange: (v: string) => void
-}
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-function FontInput({ value, onChange }: FontInputProps) {
-    const [local, setLocal] = useState(value)
-    const ref = useRef<HTMLInputElement>(null)
+/** Clickable font family trigger that opens the floating FontFamilyPicker */
+function FontFamilyTrigger({ value, nodeId }: { value: string; nodeId: string }) {
+    const triggerRef = useRef<HTMLButtonElement>(null)
+    const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
+    const fontPickerNodeId = useEditorStore((s) => s.fontPickerNodeId)
+    const openFontPicker = useEditorStore((s) => s.openFontPicker)
+
+    const isOpen = fontPickerOpen && fontPickerNodeId === nodeId
 
     useEffect(() => {
-        if (document.activeElement !== ref.current) {
-            setLocal(value)
-        }
+        loadFont(value)
     }, [value])
 
-    const commit = () => {
-        const trimmed = local.trim()
-        if (trimmed && trimmed !== value) onChange(trimmed)
-        else setLocal(value)
-    }
-
     return (
-        <>
-            <input
-                ref={ref}
-                type="text"
-                list={DATALIST_ID}
-                value={local}
-                className={cn(INPUT_BASE)}
-                placeholder="Font family..."
-                onChange={(e) => setLocal(e.target.value)}
-                onBlur={commit}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') { commit(); ref.current?.blur() }
-                    if (e.key === 'Escape') { setLocal(value); ref.current?.blur() }
-                }}
-                onFocus={(e) => e.target.select()}
-            />
-            <datalist id={DATALIST_ID}>
-                {SUGGESTED_FONTS.map((f) => (
-                    <option key={f} value={f} />
-                ))}
-            </datalist>
-        </>
+        <button
+            ref={triggerRef}
+            className={cn(
+                INPUT_BASE,
+                'flex items-center gap-1 text-left',
+                isOpen && 'bg-muted/60 border-border',
+            )}
+            onClick={() => {
+                if (!isOpen) openFontPicker(nodeId)
+            }}
+        >
+            <span
+                className="truncate flex-1"
+                style={{ fontFamily: `"${value}", sans-serif` }}
+            >
+                {value}
+            </span>
+            <ChevronDown size={10} className="shrink-0 text-muted-foreground/50" />
+        </button>
     )
 }
 
-// ── Main section ──────────────────────────────────────────────
+// ── Main section component ────────────────────────────────────────────────────
 
 interface TypographySectionProps {
     node: TextNode
@@ -147,58 +125,197 @@ interface TypographySectionProps {
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
+    const fontTriggerRef = useRef<HTMLDivElement>(null)
+    const settingsBtnRef = useRef<HTMLButtonElement>(null)
+    const styleTriggerRef = useRef<HTMLButtonElement>(null)
+    const colorSwatchRef = useRef<HTMLButtonElement>(null)
+    const [stylePickerOpen, setStylePickerOpen] = useState(false)
+    const [colorPickerOpen, setColorPickerOpen] = useState(false)
+
+    // Font picker state from store
+    const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
+    const fontPickerNodeId = useEditorStore((s) => s.fontPickerNodeId)
+    const closeFontPicker = useEditorStore((s) => s.closeFontPicker)
+    const showFontPicker = fontPickerOpen && fontPickerNodeId === node.id
+
+    // Type Settings overlay state from store
+    const typeSettingsOpen = useEditorStore((s) => s.typeSettingsOpen)
+    const openTypeSettings = useEditorStore((s) => s.openTypeSettings)
+    const closeTypeSettings = useEditorStore((s) => s.closeTypeSettings)
+
+    // ── Font preview save/restore (same pattern as ColorPicker blend preview) ──
+    const savedFontRef = useRef<string | null>(null)
+
+    const handleFontSelect = useCallback((family: string) => {
+        savedFontRef.current = null
+        onUpdate({ fontFamily: family })
+    }, [onUpdate])
+
+    const handleFontPreview = useCallback((family: string | null) => {
+        if (family !== null) {
+            if (savedFontRef.current === null) {
+                savedFontRef.current = node.fontFamily
+            }
+            onUpdate({ fontFamily: family })
+        } else {
+            if (savedFontRef.current !== null) {
+                onUpdate({ fontFamily: savedFontRef.current })
+                savedFontRef.current = null
+            }
+        }
+    }, [onUpdate, node.fontFamily])
+
+    const handleFontPickerClose = useCallback(() => {
+        if (savedFontRef.current !== null) {
+            onUpdate({ fontFamily: savedFontRef.current })
+            savedFontRef.current = null
+        }
+        closeFontPicker()
+    }, [onUpdate, closeFontPicker])
+
+    // ── Font style preview save/restore ──
+    const savedStyleRef = useRef<{ fontStyleName: string; fontWeight: number; fontStyle: string } | null>(null)
+
+    const handleStylePreview = useCallback((styleName: string | null) => {
+        if (styleName !== null) {
+            if (savedStyleRef.current === null) {
+                savedStyleRef.current = {
+                    fontStyleName: node.fontStyleName ?? 'Regular',
+                    fontWeight: node.fontWeight,
+                    fontStyle: node.fontStyle ?? 'normal',
+                }
+            }
+            const { fontWeight, fontStyle } = parseFontStyleName(styleName)
+            onUpdate({ fontStyleName: styleName, fontWeight, fontStyle })
+        } else {
+            if (savedStyleRef.current !== null) {
+                onUpdate(savedStyleRef.current)
+                savedStyleRef.current = null
+            }
+        }
+    }, [onUpdate, node.fontStyleName, node.fontWeight, node.fontStyle])
+
+    const handleStyleSelect = useCallback((styleName: string) => {
+        savedStyleRef.current = null
+        const { fontWeight, fontStyle } = parseFontStyleName(styleName)
+        onUpdate({ fontStyleName: styleName, fontWeight, fontStyle })
+    }, [onUpdate])
+
+    const handleStylePickerClose = useCallback(() => {
+        if (savedStyleRef.current !== null) {
+            onUpdate(savedStyleRef.current)
+            savedStyleRef.current = null
+        }
+        setStylePickerOpen(false)
+    }, [onUpdate])
+
+    // ── Font size preview save/restore ──
+    const savedFontSizeRef = useRef<number | null>(null)
+
+    const handleFontSizePreview = useCallback((size: number | null) => {
+        if (size !== null) {
+            if (savedFontSizeRef.current === null) savedFontSizeRef.current = node.fontSize
+            onUpdate({ fontSize: size })
+        } else {
+            if (savedFontSizeRef.current !== null) {
+                onUpdate({ fontSize: savedFontSizeRef.current })
+                savedFontSizeRef.current = null
+            }
+        }
+    }, [onUpdate, node.fontSize])
+
     return (
-        <Section title="Typography">
-            {/* Font family — free-text input with common font suggestions */}
-            <FontInput
-                value={node.fontFamily}
-                onChange={(v) => onUpdate({ fontFamily: v })}
-            />
-
-            {/* Weight + Size row */}
-            <div className="grid grid-cols-2 gap-x-2">
-                <SelectInput
-                    value={String(node.fontWeight)}
-                    options={FONT_WEIGHT_OPTIONS}
-                    onChange={(v) => onUpdate({ fontWeight: parseInt(v, 10) })}
+        <Section
+            title="Typography"
+            action={
+                <button
+                    ref={settingsBtnRef}
+                    data-section-action
+                    title="Type Settings"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        if (typeSettingsOpen) closeTypeSettings()
+                        else openTypeSettings()
+                    }}
+                    className={cn(
+                        'flex items-center justify-center w-5 h-5 rounded-sm transition-colors',
+                        typeSettingsOpen
+                            ? 'bg-muted text-foreground'
+                            : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/40'
+                    )}
+                >
+                    <Settings2 size={11} />
+                </button>
+            }
+        >
+            {/* ── Row 1: Font family ─────────────────────────────────── */}
+            <div ref={fontTriggerRef}>
+                <FontFamilyTrigger value={node.fontFamily} nodeId={node.id} />
+            </div>
+            {showFontPicker && (
+                <FontFamilyPicker
+                    currentFamily={node.fontFamily}
+                    anchorEl={fontTriggerRef.current}
+                    onSelect={handleFontSelect}
+                    onPreview={handleFontPreview}
+                    onClose={handleFontPickerClose}
                 />
-                <NumberInput
-                    label="Sz"
+            )}
+
+            {/* ── Row 2: Font style (dynamic) + Size ────────────────── */}
+            <div className="flex items-center gap-1.5">
+                <button
+                    ref={styleTriggerRef}
+                    className={cn(
+                        INPUT_BASE,
+                        'flex items-center gap-1 text-left flex-1',
+                        stylePickerOpen && 'bg-muted/60 border-border',
+                    )}
+                    onClick={() => setStylePickerOpen((v) => !v)}
+                >
+                    <span className="truncate flex-1">
+                        {node.fontStyleName ?? 'Regular'}
+                    </span>
+                    <ChevronDown size={10} className="shrink-0 text-muted-foreground/50" />
+                </button>
+                {stylePickerOpen && (
+                    <FontStylePicker
+                        fontFamily={node.fontFamily}
+                        currentStyle={node.fontStyleName ?? 'Regular'}
+                        anchorEl={styleTriggerRef.current}
+                        onSelect={handleStyleSelect}
+                        onPreview={handleStylePreview}
+                        onClose={handleStylePickerClose}
+                    />
+                )}
+                <FontSizeCombobox
                     value={node.fontSize}
-                    onChange={(v) => onUpdate({ fontSize: v })}
-                    min={1}
-                    step={1}
-                    labelWidth="w-5"
+                    onChange={(v) => {
+                        savedFontSizeRef.current = null
+                        onUpdate({ fontSize: v })
+                    }}
+                    onPreview={handleFontSizePreview}
+                    className="w-[4.5rem]"
                 />
             </div>
 
-            {/* Line height + Letter spacing */}
-            <div className="grid grid-cols-2 gap-x-2">
-                <NumberInput
-                    label="LH"
-                    value={node.lineHeight === 'auto' ? 0 : node.lineHeight}
-                    onChange={(v) => onUpdate({ lineHeight: v === 0 ? 'auto' : v })}
-                    min={0}
-                    step={0.1}
-                    labelWidth="w-5"
-                />
-                <NumberInput
-                    label="LS"
-                    value={node.letterSpacing}
-                    onChange={(v) => onUpdate({ letterSpacing: v })}
-                    step={0.1}
-                    labelWidth="w-5"
-                />
-            </div>
-
-            {/* Color */}
-            <ColorInput
-                value={node.color}
-                onChange={(c) => onUpdate({ color: c })}
-            />
-
-            {/* Text alignment + Decoration */}
+            {/* ── Row 3: Line height + Letter spacing ────────────────── */}
             <div className="flex items-center gap-2">
+                <LineHeightInput
+                    value={node.lineHeight}
+                    unit={node.lineHeightUnit ?? (node.lineHeight === 'auto' ? 'auto' : 'px')}
+                    fontSize={node.fontSize}
+                    onChange={(v, u) => onUpdate({ lineHeight: v, lineHeightUnit: u })}
+                />
+                <LetterSpacingInput
+                    value={node.letterSpacing}
+                    unit={node.letterSpacingUnit ?? '%'}
+                    onChange={(v, u) => onUpdate({ letterSpacing: v, letterSpacingUnit: u })}
+                />
+            </div>
+
+            {/* ── Row 4: H-align (3) + V-align (3) + Tag ─────────────── */}
+            <div className="flex items-center gap-1.5">
                 <ToggleGroup
                     value={node.textAlign}
                     options={TEXT_ALIGN_OPTIONS}
@@ -206,25 +323,45 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     className="flex-1"
                 />
                 <ToggleGroup
-                    value={node.textDecoration}
-                    options={DECORATION_OPTIONS}
-                    onChange={(v) => onUpdate({ textDecoration: v })}
+                    value={node.textAlignVertical ?? 'top'}
+                    options={VALIGN_OPTIONS}
+                    onChange={(v) => onUpdate({ textAlignVertical: v })}
                 />
             </div>
 
-            {/* Transform + Tag — resize mode lives in SizeSection (no duplicate here) */}
-            <div className="grid grid-cols-2 gap-x-2">
-                <SelectInput
-                    value={node.textTransform}
-                    options={TEXT_TRANSFORM_OPTIONS}
-                    onChange={(v) => onUpdate({ textTransform: v })}
+            {/* ── Color ──────────────────────────────────────────────── */}
+            <div className="flex items-center gap-1.5">
+                <button
+                    ref={colorSwatchRef}
+                    className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer
+                        shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
+                    style={{ backgroundColor: node.color }}
+                    onClick={() => setColorPickerOpen((v) => !v)}
+                    title="Pick color"
                 />
-                <SelectInput
-                    value={node.htmlTag || ''}
-                    options={HTML_TAG_OPTIONS}
-                    onChange={(v) => onUpdate({ htmlTag: v || undefined })}
-                />
+                <span className="text-[11px] font-mono text-foreground/80 uppercase tracking-wide">
+                    {normaliseHex(node.color)}
+                </span>
             </div>
+            <ColorPicker
+                fill={{ type: 'solid', color: normaliseHex(node.color), opacity: 1 }}
+                onChange={(fill) => {
+                    if (fill.type === 'solid') onUpdate({ color: `#${normaliseHex(fill.color)}` })
+                }}
+                anchorEl={colorSwatchRef.current}
+                open={colorPickerOpen}
+                onClose={() => setColorPickerOpen(false)}
+                solidOnly
+            />
+
+            {/* ── Type Settings Overlay (floating, portal) ───────────── */}
+            {typeSettingsOpen && (
+                <TypeSettingsOverlay
+                    node={node}
+                    anchorEl={settingsBtnRef.current}
+                    onUpdate={onUpdate}
+                />
+            )}
         </Section>
     )
 }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, type ColorFormat } from '@/lib/color-utils'
 import { generateId } from '@/lib/utils'
@@ -98,6 +98,85 @@ function SwatchPalette({
 }
 
 // ─────────────────────────────────────────────────────────────
+// BlendModeDropdown — custom dropdown with hover preview
+// ─────────────────────────────────────────────────────────────
+
+function BlendModeDropdown({
+    value,
+    onChange,
+    onPreview,
+}: {
+    value: BlendMode
+    onChange: (mode: BlendMode) => void
+    onPreview: (mode: BlendMode | null) => void
+}) {
+    const [isOpen, setIsOpen] = useState(false)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const currentLabel = BLEND_MODES.find((bm) => bm.value === value)?.label ?? 'Normal'
+
+    // Close on outside click
+    useEffect(() => {
+        if (!isOpen) return
+        const handler = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setIsOpen(false)
+                onPreview(null)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [isOpen, onPreview])
+
+    return (
+        <div ref={containerRef} className="relative">
+            {/* Trigger button */}
+            <button
+                className={cn(
+                    'h-5 px-1.5 flex items-center gap-0.5 rounded-sm text-[10px] transition-colors',
+                    'bg-muted text-foreground hover:bg-muted/80',
+                    isOpen && 'ring-1 ring-primary/40',
+                )}
+                onClick={() => setIsOpen((v) => !v)}
+            >
+                <span>{currentLabel}</span>
+                <ChevronDown size={8} className="text-muted-foreground/50" />
+            </button>
+
+            {/* Dropdown */}
+            {isOpen && (
+                <div
+                    className={cn(
+                        'absolute right-0 bottom-full mb-1 z-[10000]',
+                        'w-32 max-h-48 overflow-y-auto py-0.5',
+                        'bg-popover border border-border/60 rounded-md shadow-lg',
+                    )}
+                >
+                    {BLEND_MODES.map((bm) => (
+                        <button
+                            key={bm.value}
+                            className={cn(
+                                'w-full h-6 px-2 text-left text-[10px] transition-colors',
+                                'hover:bg-muted/60',
+                                bm.value === value && 'bg-primary/10 text-primary font-medium',
+                            )}
+                            onPointerEnter={() => onPreview(bm.value)}
+                            onPointerLeave={() => onPreview(null)}
+                            onClick={() => {
+                                onChange(bm.value)
+                                setIsOpen(false)
+                                onPreview(null)
+                            }}
+                        >
+                            {bm.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────
 // Props
 // ─────────────────────────────────────────────────────────────
 
@@ -113,6 +192,8 @@ interface ColorPickerProps {
     onClose: () => void
     /** Document colors for the swatches panel */
     documentColors?: string[]
+    /** Restrict to solid color only (hides gradient/image tabs) — for stroke and effect pickers */
+    solidOnly?: boolean
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -141,6 +222,7 @@ export function ColorPicker({
     open,
     onClose,
     documentColors = [],
+    solidOnly = false,
 }: ColorPickerProps) {
     const pickerRef = useRef<HTMLDivElement>(null)
     const [activeTab, setActiveTab] = useState<FillTypeTab>(() => tabFromFill(fill))
@@ -149,15 +231,57 @@ export function ColorPicker({
         return (localStorage.getItem('scytle:colorFormat') as ColorFormat) ?? 'HEX'
     })
 
-    // ── Drag-to-reposition state ──────────────────────────────
-    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+    // ── Refs for latest fill/onChange — prevents stale closures during drag ──
+    const fillRef = useRef(fill)
+    fillRef.current = fill
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
+
+    // ── Drag-to-reposition (all refs — zero re-renders during drag) ──
+    const posRef = useRef({ left: 0, top: 0 })         // base position (set on open)
+    const dragOffsetRef = useRef({ x: 0, y: 0 })       // accumulated drag delta
     const isDraggingHeader = useRef(false)
     const dragStart = useRef({ pointerX: 0, pointerY: 0, offsetX: 0, offsetY: 0 })
 
-    // Reset drag position when picker opens
-    useEffect(() => {
-        if (open) setDragOffset({ x: 0, y: 0 })
-    }, [open])
+    // ── Blend mode hover preview ─────────────────────────────
+    const savedBlendRef = useRef<BlendMode | null>(null)
+
+    const handleBlendPreview = useCallback((mode: BlendMode | null) => {
+        if (mode !== null) {
+            // Save original blend mode on first Enter, then apply preview
+            if (savedBlendRef.current === null) {
+                savedBlendRef.current = fillRef.current.blendMode ?? 'NORMAL'
+            }
+            onChangeRef.current({ ...fillRef.current, blendMode: mode })
+        } else {
+            // Restore original on Leave
+            if (savedBlendRef.current !== null) {
+                onChangeRef.current({ ...fillRef.current, blendMode: savedBlendRef.current })
+                savedBlendRef.current = null
+            }
+        }
+    }, [])
+
+    const handleBlendChange = useCallback((mode: BlendMode) => {
+        savedBlendRef.current = null // commit — no need to restore
+        onChangeRef.current({ ...fillRef.current, blendMode: mode })
+    }, [])
+
+    // Compute picker position once when it opens — runs before browser paint (no flicker)
+    useLayoutEffect(() => {
+        if (!open || !anchorEl || !pickerRef.current) return
+        const anchorRect = anchorEl.getBoundingClientRect()
+        const PICKER_W = 240
+        let baseLeft = anchorRect.left - PICKER_W - 8
+        let baseTop = anchorRect.top
+        if (baseLeft < 8) baseLeft = anchorRect.right + 8
+        if (baseTop + 460 > window.innerHeight - 8) baseTop = window.innerHeight - 460 - 8
+        if (baseTop < 8) baseTop = 8
+        posRef.current = { left: baseLeft, top: baseTop }
+        dragOffsetRef.current = { x: 0, y: 0 }
+        pickerRef.current.style.left = `${baseLeft}px`
+        pickerRef.current.style.top = `${baseTop}px`
+    }, [open, anchorEl])
 
     const handleFormatChange = useCallback((format: ColorFormat) => {
         setColorFormat(format)
@@ -192,45 +316,67 @@ export function ColorPicker({
         return () => document.removeEventListener('keydown', handleKey)
     }, [open, onClose])
 
+    // Stable callbacks that always read the latest fill — critical for drag operations
+    // MUST be before any early return to satisfy React's Rules of Hooks
+    const handleSolidHexChange = useCallback((newHex: string) => {
+        const f = fillRef.current
+        if (f.type !== 'solid') return
+        onChangeRef.current({ ...f, color: newHex })
+    }, [])
+    const handleSolidOpacityChange = useCallback((newOpacity: number) => {
+        const f = fillRef.current
+        if (f.type !== 'solid') return
+        onChangeRef.current({ ...f, opacity: newOpacity })
+    }, [])
+    const handleFillChange = useCallback((newFill: Fill) => {
+        onChangeRef.current(newFill)
+    }, [])
+
     if (!open || !anchorEl) return null
 
-    // Position: to the LEFT of the anchor (fills panel), at the same vertical level.
-    // This mirrors Figma's picker which appears to the left of the right panel.
-    const anchorRect = anchorEl.getBoundingClientRect()
-    const PICKER_W = 240
-    let baseLeft = anchorRect.left - PICKER_W - 8
-    let baseTop = anchorRect.top
-    // Clamp to viewport
-    if (baseLeft < 8) baseLeft = anchorRect.right + 8  // fallback: right of anchor
-    if (baseTop + 460 > window.innerHeight - 8) baseTop = window.innerHeight - 460 - 8
-    if (baseTop < 8) baseTop = 8
-
-    const left = baseLeft + dragOffset.x
-    const top = baseTop + dragOffset.y
+    // Position is computed in useLayoutEffect and applied directly to the DOM.
+    // We render with left:0/top:0 as a placeholder — useLayoutEffect corrects this
+    // before the browser paints, so the user never sees the wrong position.
 
     const handleHeaderPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
         if ((e.target as HTMLElement).closest('button')) return // don't drag when clicking tab buttons
+        e.preventDefault()   // prevent text-selection cursor during drag
+        e.stopPropagation()  // prevent canvas from starting its own pan/drag
         isDraggingHeader.current = true
         dragStart.current = {
             pointerX: e.clientX,
             pointerY: e.clientY,
-            offsetX: dragOffset.x,
-            offsetY: dragOffset.y,
+            offsetX: dragOffsetRef.current.x,
+            offsetY: dragOffsetRef.current.y,
         }
         ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
     }
 
     const handleHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
         if (!isDraggingHeader.current) return
-        setDragOffset({
-            x: dragStart.current.offsetX + (e.clientX - dragStart.current.pointerX),
-            y: dragStart.current.offsetY + (e.clientY - dragStart.current.pointerY),
-        })
+        if (e.buttons === 0) {
+            isDraggingHeader.current = false
+            return
+        }
+        const newX = dragStart.current.offsetX + (e.clientX - dragStart.current.pointerX)
+        const newY = dragStart.current.offsetY + (e.clientY - dragStart.current.pointerY)
+        dragOffsetRef.current = { x: newX, y: newY }
+        // Direct DOM write — zero React re-renders, zero layout reflows
+        if (pickerRef.current) {
+            pickerRef.current.style.left = `${posRef.current.left + newX}px`
+            pickerRef.current.style.top = `${posRef.current.top + newY}px`
+        }
     }
 
     const handleHeaderPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+        if (!isDraggingHeader.current) return
         isDraggingHeader.current = false
-        ;(e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId)
+        const el = e.currentTarget as HTMLDivElement
+        if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    }
+
+    const handleHeaderPointerCancel = () => {
+        isDraggingHeader.current = false
     }
 
     // ── Tab switch logic ─────────────────────────────────────
@@ -286,8 +432,6 @@ export function ColorPicker({
         }
     }
 
-    // ── Derived values for solid picker ─────────────────────
-
     const solidFill = fill.type === 'solid' ? fill : null
     const gradientFill = fill.type === 'gradient' ? fill : null
     const imageFill = fill.type === 'image' ? fill : null
@@ -300,8 +444,11 @@ export function ColorPicker({
                 'bg-popover border border-border/60',
                 'flex flex-col overflow-hidden',
             )}
-            style={{ left, top }}
+            style={{ left: 0, top: 0 }}  // overwritten by useLayoutEffect before paint
             onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
         >
             {/* Header: drag handle + fill type tabs + close */}
             <div
@@ -309,26 +456,32 @@ export function ColorPicker({
                 onPointerDown={handleHeaderPointerDown}
                 onPointerMove={handleHeaderPointerMove}
                 onPointerUp={handleHeaderPointerUp}
+                onPointerCancel={handleHeaderPointerCancel}
             >
-                <span className="text-[11px] font-medium text-muted-foreground mr-1">Fill</span>
-                {/* Fill type tab icons */}
-                <div className="flex items-center gap-0.5 flex-1">
-                    {FILL_TYPE_TABS.map((tab) => (
-                        <button
-                            key={tab.id}
-                            title={tab.label}
-                            className={cn(
-                                'w-6 h-6 flex items-center justify-center rounded-sm transition-colors',
-                                activeTab === tab.id
-                                    ? 'bg-muted text-foreground'
-                                    : 'text-muted-foreground/50 hover:text-foreground hover:bg-muted/50'
-                            )}
-                            onClick={() => handleTabChange(tab.id)}
-                        >
-                            {tab.icon}
-                        </button>
-                    ))}
-                </div>
+                <span className="text-[11px] font-medium text-muted-foreground mr-1">
+                    {solidOnly ? 'Color' : 'Fill'}
+                </span>
+                {/* Fill type tab icons — hidden when solidOnly */}
+                {!solidOnly && (
+                    <div className="flex items-center gap-0.5 flex-1">
+                        {FILL_TYPE_TABS.map((tab) => (
+                            <button
+                                key={tab.id}
+                                title={tab.label}
+                                className={cn(
+                                    'w-6 h-6 flex items-center justify-center rounded-sm transition-colors',
+                                    activeTab === tab.id
+                                        ? 'bg-muted text-foreground'
+                                        : 'text-muted-foreground/50 hover:text-foreground hover:bg-muted/50'
+                                )}
+                                onClick={() => handleTabChange(tab.id)}
+                            >
+                                {tab.icon}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {solidOnly && <div className="flex-1" />}
                 <button
                     className="w-6 h-6 flex items-center justify-center rounded-sm
                         text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -344,8 +497,8 @@ export function ColorPicker({
                     <SolidPicker
                         hex={normaliseHex(solidFill.color)}
                         opacity={solidFill.opacity ?? 1}
-                        onHexChange={(newHex) => onChange({ ...solidFill, color: newHex })}
-                        onOpacityChange={(newOpacity) => onChange({ ...solidFill, opacity: newOpacity })}
+                        onHexChange={handleSolidHexChange}
+                        onOpacityChange={handleSolidOpacityChange}
                         colorFormat={colorFormat}
                         onColorFormatChange={handleFormatChange}
                     />
@@ -353,7 +506,7 @@ export function ColorPicker({
                 {activeTab === 'gradient' && gradientFill && (
                     <GradientPicker
                         fill={gradientFill}
-                        onChange={onChange}
+                        onChange={handleFillChange}
                         colorFormat={colorFormat}
                         onColorFormatChange={handleFormatChange}
                     />
@@ -361,7 +514,7 @@ export function ColorPicker({
                 {activeTab === 'image' && imageFill && (
                     <ImagePicker
                         fill={imageFill}
-                        onChange={onChange}
+                        onChange={handleFillChange}
                     />
                 )}
                 {activeTab === 'image' && !imageFill && (
@@ -372,19 +525,15 @@ export function ColorPicker({
             </div>
 
             {/* Document swatches — only for solid fills */}
-            {activeTab === 'solid' && documentColors.length > 0 && (
+            {!solidOnly && activeTab === 'solid' && documentColors.length > 0 && (
                 <div className="px-2.5 pb-2.5 border-t border-border/40 pt-2">
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] text-muted-foreground/60">Blend</span>
-                        <select
-                            value={fill.blendMode ?? 'NORMAL'}
-                            onChange={(e) => onChange({ ...fill, blendMode: e.target.value as BlendMode })}
-                            className="h-5 text-[10px] bg-muted border-0 rounded-sm px-1 text-foreground outline-none cursor-pointer"
-                        >
-                            {BLEND_MODES.map((bm) => (
-                                <option key={bm.value} value={bm.value}>{bm.label}</option>
-                            ))}
-                        </select>
+                        <BlendModeDropdown
+                            value={(fill.blendMode ?? 'NORMAL') as BlendMode}
+                            onChange={handleBlendChange}
+                            onPreview={handleBlendPreview}
+                        />
                     </div>
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-[10px] text-muted-foreground/60">Document</span>
@@ -398,19 +547,15 @@ export function ColorPicker({
                 </div>
             )}
             {/* Blend mode for non-solid fills or when no document colors */}
-            {!(activeTab === 'solid' && documentColors.length > 0) && (
+            {!solidOnly && !(activeTab === 'solid' && documentColors.length > 0) && (
                 <div className="px-2.5 pb-2.5 border-t border-border/40 pt-2">
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] text-muted-foreground/60">Blend</span>
-                        <select
-                            value={fill.blendMode ?? 'NORMAL'}
-                            onChange={(e) => onChange({ ...fill, blendMode: e.target.value as BlendMode })}
-                            className="h-5 text-[10px] bg-muted border-0 rounded-sm px-1 text-foreground outline-none cursor-pointer"
-                        >
-                            {BLEND_MODES.map((bm) => (
-                                <option key={bm.value} value={bm.value}>{bm.label}</option>
-                            ))}
-                        </select>
+                        <BlendModeDropdown
+                            value={(fill.blendMode ?? 'NORMAL') as BlendMode}
+                            onChange={handleBlendChange}
+                            onPreview={handleBlendPreview}
+                        />
                     </div>
                 </div>
             )}

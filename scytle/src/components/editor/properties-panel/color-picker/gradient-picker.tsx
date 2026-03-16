@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { RotateCcw, FlipHorizontal, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
@@ -86,10 +86,34 @@ function StopRow({
     const hex = normaliseHex(stop.color)
     const opacity = stop.opacity ?? 1
 
+    // Local state for hex input — allows intermediate typing (e.g. selecting all and retyping)
+    const [localHex, setLocalHex] = useState(hex.toUpperCase())
+    const hexInputRef = useRef<HTMLInputElement>(null)
+
+    // Sync from props when not focused
+    useEffect(() => {
+        if (document.activeElement !== hexInputRef.current) {
+            setLocalHex(hex.toUpperCase())
+        }
+    }, [hex])
+
+    const commitHex = useCallback(() => {
+        const raw = localHex.replace('#', '').toUpperCase()
+        if (/^[0-9A-F]{6}$/.test(raw)) {
+            onHexChange(raw.toLowerCase())
+        } else if (/^[0-9A-F]{3}$/.test(raw)) {
+            // Expand shorthand
+            const expanded = raw[0] + raw[0] + raw[1] + raw[1] + raw[2] + raw[2]
+            onHexChange(expanded.toLowerCase())
+        } else {
+            setLocalHex(hex.toUpperCase()) // revert
+        }
+    }, [localHex, hex, onHexChange])
+
     return (
         <div
             className={cn(
-                'group flex items-center gap-1.5 h-6 rounded-sm px-1 -mx-1 cursor-pointer',
+                'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1 cursor-pointer',
                 'transition-colors',
                 isSelected ? 'bg-muted/60' : 'hover:bg-muted/30',
             )}
@@ -101,8 +125,8 @@ function StopRow({
                 inputMode="numeric"
                 value={Math.round(stop.position * 100)}
                 className={cn(
-                    'w-8 h-5 text-[10px] text-center font-mono rounded-sm shrink-0',
-                    'bg-transparent border border-transparent',
+                    'w-8 h-5 text-[11px] text-center font-mono rounded-sm shrink-0',
+                    'bg-transparent border border-transparent text-foreground',
                     'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
                     'transition-colors tabular-nums',
                 )}
@@ -118,7 +142,7 @@ function StopRow({
                 }}
                 onFocus={(e) => e.target.select()}
             />
-            <span className="text-[9px] text-muted-foreground/40 shrink-0">%</span>
+            <span className="text-[10px] text-muted-foreground/50 shrink-0">%</span>
 
             {/* Color swatch */}
             <button
@@ -137,23 +161,23 @@ function StopRow({
                 />
             </button>
 
-            {/* Hex input */}
+            {/* Hex input — with local state for editability */}
             <input
+                ref={hexInputRef}
                 type="text"
-                value={hex.toUpperCase()}
+                value={localHex}
                 className={cn(
-                    'flex-1 h-5 px-1 text-[10px] font-mono rounded-sm uppercase',
+                    'flex-1 h-5 px-1 text-[11px] font-mono rounded-sm uppercase text-foreground',
                     'bg-transparent border border-transparent',
                     'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
-                    'transition-colors',
+                    'transition-colors min-w-0',
                 )}
                 onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                    const raw = e.target.value.replace('#', '').toUpperCase()
-                    if (/^[0-9A-F]{6}$/.test(raw)) onHexChange(raw.toLowerCase())
-                }}
+                onChange={(e) => setLocalHex(e.target.value.replace('#', '').toUpperCase())}
+                onBlur={commitHex}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    if (e.key === 'Enter') { commitHex(); hexInputRef.current?.blur() }
+                    if (e.key === 'Escape') { setLocalHex(hex.toUpperCase()); hexInputRef.current?.blur() }
                 }}
                 onFocus={(e) => e.target.select()}
             />
@@ -164,7 +188,7 @@ function StopRow({
                 inputMode="numeric"
                 value={Math.round(opacity * 100)}
                 className={cn(
-                    'w-7 h-5 text-[10px] text-center font-mono rounded-sm shrink-0',
+                    'w-10 h-5 text-[11px] text-center font-mono rounded-sm shrink-0 text-foreground',
                     'bg-transparent border border-transparent',
                     'hover:bg-muted focus:bg-muted/80 focus:border-border/50 focus:outline-none',
                     'transition-colors tabular-nums',
@@ -179,17 +203,15 @@ function StopRow({
                 }}
                 onFocus={(e) => e.target.select()}
             />
-            <span className="text-[9px] text-muted-foreground/40 shrink-0">%</span>
+            <span className="text-[10px] text-muted-foreground/50 shrink-0">%</span>
 
-            {/* Delete button */}
+            {/* Delete button — always visible when deletable */}
             <button
                 className={cn(
                     'w-4 h-4 flex items-center justify-center rounded-sm shrink-0',
-                    'text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10',
+                    'text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10',
                     'transition-all',
-                    canDelete
-                        ? 'opacity-0 group-hover:opacity-100'
-                        : 'opacity-0 pointer-events-none',
+                    !canDelete && 'opacity-0 pointer-events-none',
                 )}
                 onClick={(e) => { e.stopPropagation(); onDelete() }}
                 title="Remove stop"
@@ -220,32 +242,47 @@ export function GradientPicker({
         stops[0]?.id ?? null
     )
 
+    // ── Refs for latest values — prevents stale closures in drag callbacks ──
+    const fillRef = useRef(fill)
+    fillRef.current = fill
+    const onChangeRef = useRef(onChange)
+    onChangeRef.current = onChange
+
     // ── Controls ────────────────────────────────────────────
 
     const handleTypeChange = useCallback((type: GradientType) => {
-        onChange({ ...fill, gradientType: type, stops })
-    }, [fill, onChange, stops])
+        const f = fillRef.current
+        onChangeRef.current({ ...f, gradientType: type, stops: f.stops ?? defaultGradientStops() })
+    }, [])
 
     const handleAngleChange = useCallback((val: string) => {
         const n = parseInt(val)
-        if (!isNaN(n)) onChange({ ...fill, angle: ((n % 360) + 360) % 360, stops })
-    }, [fill, onChange, stops])
+        if (isNaN(n)) return
+        const f = fillRef.current
+        onChangeRef.current({ ...f, angle: ((n % 360) + 360) % 360, stops: f.stops ?? defaultGradientStops() })
+    }, [])
 
     const handleFlip = useCallback(() => {
-        const flipped = stops.map((s) => ({ ...s, position: 1 - s.position }))
-        onChange({ ...fill, stops: flipped })
-    }, [fill, onChange, stops])
+        const f = fillRef.current
+        const s = f.stops ?? defaultGradientStops()
+        const flipped = s.map((st) => ({ ...st, position: 1 - st.position }))
+        onChangeRef.current({ ...f, stops: flipped })
+    }, [])
 
     const handleRotate = useCallback(() => {
-        onChange({ ...fill, angle: ((angle + 45) % 360), stops })
-    }, [fill, onChange, stops, angle])
+        const f = fillRef.current
+        const a = f.angle ?? 90
+        onChangeRef.current({ ...f, angle: ((a + 45) % 360), stops: f.stops ?? defaultGradientStops() })
+    }, [])
 
     // ── Stop CRUD ──────────────────────────────────────────
 
     const handleAddStop = useCallback((position?: number) => {
+        const f = fillRef.current
+        const currentStops = f.stops ?? defaultGradientStops()
         const pos = position ?? 0.5
-        const sorted = [...stops].sort((a, b) => a.position - b.position)
-        let color = lightenHex(stops[0]?.color ?? '000000')
+        const sorted = [...currentStops].sort((a, b) => a.position - b.position)
+        let color = lightenHex(currentStops[0]?.color ?? '000000')
         let stopOpacity = 1
 
         if (sorted.length >= 2) {
@@ -266,45 +303,65 @@ export function GradientPicker({
         }
 
         const newStop: GradientStop = { id: generateId(), position: pos, color, opacity: stopOpacity }
-        const newStops = [...stops, newStop].sort((a, b) => a.position - b.position)
+        const newStops = [...currentStops, newStop].sort((a, b) => a.position - b.position)
         setSelectedStopId(newStop.id ?? null)
-        onChange({ ...fill, stops: newStops })
-    }, [fill, onChange, stops])
+        onChangeRef.current({ ...f, stops: newStops })
+    }, [])
 
     const handleMoveStop = useCallback((id: string, position: number) => {
-        onChange({ ...fill, stops: stops.map((s) => s.id === id ? { ...s, position } : s) })
-    }, [fill, onChange, stops])
+        const f = fillRef.current
+        const s = f.stops ?? defaultGradientStops()
+        onChangeRef.current({ ...f, stops: s.map((st) => st.id === id ? { ...st, position } : st) })
+    }, [])
 
     const handleDeleteStop = useCallback((id: string) => {
-        if (stops.length <= 2) return
-        const newStops = stops.filter((s) => s.id !== id)
-        const idx = stops.findIndex((s) => s.id === id)
+        const f = fillRef.current
+        const s = f.stops ?? defaultGradientStops()
+        if (s.length <= 2) return
+        const newStops = s.filter((st) => st.id !== id)
+        const idx = s.findIndex((st) => st.id === id)
         setSelectedStopId(newStops[Math.min(idx, newStops.length - 1)]?.id ?? null)
-        onChange({ ...fill, stops: newStops })
-    }, [fill, onChange, stops])
+        onChangeRef.current({ ...f, stops: newStops })
+    }, [])
 
     // ── Stop list editing ──────────────────────────────────
 
     const updateStop = useCallback((id: string, patch: Partial<GradientStop>) => {
-        onChange({ ...fill, stops: stops.map((s) => s.id === id ? { ...s, ...patch } : s) })
-    }, [fill, onChange, stops])
+        const f = fillRef.current
+        const s = f.stops ?? defaultGradientStops()
+        onChangeRef.current({ ...f, stops: s.map((st) => st.id === id ? { ...st, ...patch } : st) })
+    }, [])
 
     // ── Selected stop color editor (in picker) ─────────────
 
     const selectedStop = stops.find((s) => s.id === selectedStopId) ?? stops[0]
     const selectedHex = selectedStop ? normaliseHex(selectedStop.color) : 'ffffff'
     const selectedOpacity = selectedStop?.opacity ?? 1
-    const { h: hue, s: sat, b: bri } = hexToHsb(selectedHex)
+    const hsb = hexToHsb(selectedHex)
+
+    // Preserve hue across hex roundtrips (same fix as SolidPicker)
+    const hueRef = useRef(hsb.h)
+    if (hsb.s > 0 && hsb.b > 0) {
+        hueRef.current = hsb.h
+    }
+    const stableHue = hsb.s > 0 && hsb.b > 0 ? hsb.h : hueRef.current
+
+    // Use refs for latest values so gradient field callback never goes stale
+    const colorRef = useRef({ h: stableHue, s: hsb.s, b: hsb.b, selectedStop, updateStop })
+    colorRef.current = { h: stableHue, s: hsb.s, b: hsb.b, selectedStop, updateStop }
 
     const handleFieldChange = useCallback((s: number, b: number) => {
-        if (!selectedStop) return
-        updateStop(selectedStop.id!, { color: hsbToHex(hue, s, b) })
-    }, [selectedStop, hue, updateStop])
+        const { h, selectedStop: stop, updateStop: update } = colorRef.current
+        if (!stop) return
+        update(stop.id!, { color: hsbToHex(h, s, b) })
+    }, [])
 
     const handleHueChange = useCallback((newHue: number) => {
-        if (!selectedStop) return
-        updateStop(selectedStop.id!, { color: hsbToHex(newHue, sat, bri) })
-    }, [selectedStop, sat, bri, updateStop])
+        hueRef.current = newHue
+        const { s, b, selectedStop: stop, updateStop: update } = colorRef.current
+        if (!stop) return
+        update(stop.id!, { color: hsbToHex(newHue, s, b) })
+    }, [])
 
     return (
         <div className="flex flex-col gap-2">
@@ -337,7 +394,7 @@ export function GradientPicker({
                                     if (e.key === 'ArrowDown') { e.preventDefault(); handleAngleChange(String(angle - (e.shiftKey ? 10 : 1))) }
                                 }}
                                 className={cn(
-                                    'w-10 h-6 rounded-sm px-1 text-[11px] text-center',
+                                    'w-12 h-6 rounded-sm px-1.5 text-[11px] text-center',
                                     'bg-muted border-0 text-foreground',
                                     'outline-none focus:ring-1 focus:ring-primary/50',
                                     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
@@ -401,12 +458,13 @@ export function GradientPicker({
                     <div className="h-px bg-border/30 -mx-2.5" />
 
                     <GradientField
-                        hue={hue}
-                        saturation={sat}
-                        brightness={bri}
+                        hue={stableHue}
+                        saturation={hsb.s}
+                        brightness={hsb.b}
                         onChange={handleFieldChange}
+                        className="h-[140px] w-full"
                     />
-                    <HueSlider value={hue} onChange={handleHueChange} />
+                    <HueSlider value={stableHue} onChange={handleHueChange} />
                     <OpacitySlider
                         value={selectedOpacity}
                         hex={selectedHex}

@@ -54,6 +54,33 @@ function fillLabel(fill: Fill): string {
     }
 }
 
+/** Get a short blend mode label */
+function blendLabel(mode: string | undefined): string | null {
+    if (!mode || mode === 'NORMAL') return null
+    const found = BLEND_MODE_LABELS[mode]
+    return found ?? mode.charAt(0) + mode.slice(1).toLowerCase().replace(/_/g, ' ')
+}
+
+const BLEND_MODE_LABELS: Record<string, string> = {
+    DARKEN: 'Darken',
+    MULTIPLY: 'Multiply',
+    PLUS_DARKER: 'Plus Darker',
+    COLOR_BURN: 'Color Burn',
+    LIGHTEN: 'Lighten',
+    SCREEN: 'Screen',
+    PLUS_LIGHTER: 'Plus Lighter',
+    COLOR_DODGE: 'Color Dodge',
+    OVERLAY: 'Overlay',
+    SOFT_LIGHT: 'Soft Light',
+    HARD_LIGHT: 'Hard Light',
+    DIFFERENCE: 'Difference',
+    EXCLUSION: 'Exclusion',
+    HUE: 'Hue',
+    SATURATION: 'Saturation',
+    COLOR: 'Color',
+    LUMINOSITY: 'Luminosity',
+}
+
 /** Get the swatch background style for a fill */
 function fillSwatchStyle(fill: Fill): React.CSSProperties {
     if (fill.type === 'solid') {
@@ -91,7 +118,6 @@ interface FillRowProps {
 function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
-    const [hovered, setHovered] = useState(false)
 
     const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: fillId })
     const style: React.CSSProperties = {
@@ -101,7 +127,6 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
     }
 
     const isVisible = fill.visible !== false
-    const hex = fill.type === 'solid' ? normaliseHex(fill.color) : 'ffffff'
     const opacity = fill.opacity ?? 1
 
     const handleSwatchClick = useCallback(() => {
@@ -118,8 +143,6 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                 'transition-colors',
                 pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
             )}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
         >
             {/* Drag handle */}
             <button
@@ -154,36 +177,22 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                 )}
             </button>
 
-            {/* Hex / type label */}
-            {fill.type === 'solid' ? (
-                <input
-                    type="text"
-                    value={hex.toUpperCase()}
-                    className={cn(
-                        'flex-1 h-6 px-1 text-[11px] font-mono rounded-sm',
-                        'bg-transparent border border-transparent',
-                        'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                        'transition-colors uppercase',
-                        !isVisible && 'opacity-40',
-                    )}
-                    onChange={(e) => {
-                        const raw = e.target.value.replace('#', '').toUpperCase()
-                        // Only update when valid 6-digit hex
-                        if (/^[0-9A-F]{6}$/.test(raw)) {
-                            onUpdate({ ...fill, color: raw.toLowerCase() })
-                        }
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    onClick={(e) => e.stopPropagation()}
-                />
-            ) : (
-                <span className={cn('flex-1 text-[11px] text-muted-foreground', !isVisible && 'opacity-40')}>
-                    {fillLabel(fill)}
-                </span>
-            )}
+            {/* Fill type label + blend mode */}
+            <span
+                className={cn(
+                    'flex-1 text-[11px] text-muted-foreground truncate cursor-default',
+                    !isVisible && 'opacity-40',
+                )}
+                onClick={handleSwatchClick}
+                title={blendLabel(fill.blendMode) ? `${fillLabel(fill)} · ${blendLabel(fill.blendMode)}` : fillLabel(fill)}
+            >
+                {fillLabel(fill)}
+                {blendLabel(fill.blendMode) && (
+                    <span className="text-[10px] text-primary/60 ml-1">
+                        · {blendLabel(fill.blendMode)}
+                    </span>
+                )}
+            </span>
 
             {/* Opacity % — compact */}
             <input
@@ -191,7 +200,7 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                 inputMode="numeric"
                 value={Math.round(opacity * 100)}
                 className={cn(
-                    'w-9 h-6 px-1 text-[11px] text-center font-mono rounded-sm',
+                    'w-10 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
                     'bg-transparent border border-transparent',
                     'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
                     'transition-colors tabular-nums',
@@ -202,7 +211,14 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                     if (!isNaN(n)) onUpdate({ ...fill, opacity: Math.max(0, Math.min(100, n)) / 100 })
                 }}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur()
+                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
+                        const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
+                        onUpdate({ ...fill, opacity: newVal / 100 })
+                    }
                 }}
                 onFocus={(e) => e.target.select()}
                 onClick={(e) => e.stopPropagation()}
@@ -222,12 +238,11 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                 {isVisible ? <Eye size={11} /> : <EyeOff size={11} />}
             </button>
 
-            {/* Remove button — only visible on hover */}
+            {/* Remove button — always visible */}
             <button
                 className={cn(
                     'w-5 h-5 flex items-center justify-center rounded-sm transition-all shrink-0',
                     'text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10',
-                    hovered || pickerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
                 )}
                 onClick={onRemove}
                 title="Remove fill"
@@ -263,6 +278,8 @@ interface FillSectionProps {
 export function FillSection({ node, onUpdate }: FillSectionProps) {
     const allNodes = useEditorStore((s) => s.nodes)
     const setGradientEditingFillIdx = useEditorStore((s) => s.setGradientEditingFillIdx)
+    const setImageCropEditingFillIdx = useEditorStore((s) => s.setImageCropEditingFillIdx)
+    const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
     const fills = node.fills ?? []
     const documentColors = collectDocumentColors(allNodes)
 
@@ -285,11 +302,21 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
     const updateFill = useCallback((index: number, newFill: Fill) => {
         const newFills = fills.map((f, i) => (i === index ? newFill : f))
         onUpdate({ fills: newFills })
-    }, [fills, onUpdate])
+        // Auto-enter crop mode when a fill switches to crop
+        if (newFill.type === 'image' && newFill.fit === 'crop') {
+            setImageCropEditingFillIdx(index)
+        }
+    }, [fills, onUpdate, setImageCropEditingFillIdx])
 
     const removeFill = useCallback((index: number) => {
         onUpdate({ fills: fills.filter((_, i) => i !== index) })
-    }, [fills, onUpdate])
+        // Update crop editing index: clear if own fill removed, shift down if a fill above was removed
+        if (index === imageCropEditingFillIdx) {
+            setImageCropEditingFillIdx(null)
+        } else if (imageCropEditingFillIdx !== null && index < imageCropEditingFillIdx) {
+            setImageCropEditingFillIdx(imageCropEditingFillIdx - 1)
+        }
+    }, [fills, onUpdate, imageCropEditingFillIdx, setImageCropEditingFillIdx])
 
     const addSolidFill = useCallback(() => {
         const newFill: SolidFill = {
@@ -300,8 +327,12 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
             visible: true,
             blendMode: 'NORMAL',
         }
-        onUpdate({ fills: [...fills, newFill] })
-    }, [fills, onUpdate])
+        onUpdate({ fills: [newFill, ...fills] })
+        // New fill is prepended — shift the crop editing index so it still points to the same fill
+        if (imageCropEditingFillIdx !== null) {
+            setImageCropEditingFillIdx(imageCropEditingFillIdx + 1)
+        }
+    }, [fills, onUpdate, imageCropEditingFillIdx, setImageCropEditingFillIdx])
 
     return (
         <div className="border-b border-border/40">
@@ -344,6 +375,8 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
                                     onPickerOpenChange={(open) => {
                                         if (open && fill.type === 'gradient') setGradientEditingFillIdx(i)
                                         else if (!open) setGradientEditingFillIdx(null)
+                                        if (open && fill.type === 'image' && fill.fit === 'crop') setImageCropEditingFillIdx(i)
+                                        // Don't clear imageCropEditingFillIdx on close — crop overlay persists while fit=crop
                                     }}
                                 />
                             ))}

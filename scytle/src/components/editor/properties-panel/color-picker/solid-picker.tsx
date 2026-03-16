@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useRef, useCallback } from 'react'
 import { GradientField } from './gradient-field'
 import { HueSlider } from './hue-slider'
 import { OpacitySlider } from './opacity-slider'
@@ -34,19 +34,35 @@ export function SolidPicker({
     const normHex = normaliseHex(hex)
     const hsb = hexToHsb(normHex)
 
+    // Preserve hue across hex roundtrips (hex→HSB loses hue when S=0 or B=0).
+    // We store our "canonical" hue in a ref and only update it from the derived
+    // value when the derived saturation is >0 (i.e., hue is meaningful).
+    const hueRef = useRef(hsb.h)
+    if (hsb.s > 0 && hsb.b > 0) {
+        hueRef.current = hsb.h
+    }
+    const stableHue = hsb.s > 0 && hsb.b > 0 ? hsb.h : hueRef.current
+
+    // Use refs for latest values so callbacks never go stale
+    const latestRef = useRef({ h: stableHue, s: hsb.s, b: hsb.b, onHexChange })
+    latestRef.current = { h: stableHue, s: hsb.s, b: hsb.b, onHexChange }
+
     const handleFieldChange = useCallback((s: number, b: number) => {
-        onHexChange(hsbToHex(hsb.h, s, b))
-    }, [hsb.h, onHexChange])
+        const { h, onHexChange: cb } = latestRef.current
+        cb(hsbToHex(h, s, b))
+    }, [])
 
     const handleHueChange = useCallback((h: number) => {
-        onHexChange(hsbToHex(h, hsb.s, hsb.b))
-    }, [hsb.s, hsb.b, onHexChange])
+        hueRef.current = h
+        const { s, b, onHexChange: cb } = latestRef.current
+        cb(hsbToHex(h, s, b))
+    }, [])
 
     return (
         <div className="flex flex-col gap-2.5">
             {/* 2D gradient field */}
             <GradientField
-                hue={hsb.h}
+                hue={stableHue}
                 saturation={hsb.s}
                 brightness={hsb.b}
                 onChange={handleFieldChange}
@@ -82,7 +98,7 @@ export function SolidPicker({
 
                 {/* Hue + Opacity sliders stacked */}
                 <div className="flex-1 flex flex-col gap-2">
-                    <HueSlider value={hsb.h} onChange={handleHueChange} />
+                    <HueSlider value={stableHue} onChange={handleHueChange} />
                     <OpacitySlider value={opacity} hex={normHex} onChange={onOpacityChange} />
                 </div>
             </div>
