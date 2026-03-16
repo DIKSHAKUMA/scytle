@@ -34,3 +34,6 @@ npm-debug.log*
 
 # Test/dev screenshots
 screenshots/
+
+# Design reference screenshots
+*.png
