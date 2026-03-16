@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback } from 'react'
+import { useEditorStore } from '@/store/editor-store'
+import { findNodeById } from '@/types/canvas'
 import type { VectorNode, HandleMirroring, StrokeCap, StrokeJoin } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
 import { cn } from '@/lib/utils'
@@ -66,17 +68,91 @@ const ALIGN_OPTIONS: { value: string; label: string }[] = [
 
 /**
  * VectorSection — properties specific to VectorNode:
- *  - Handle mirroring toggle
+ *  - Vertex Position X/Y (live when single vertex selected, — when none/multi)
+ *  - Handle mirroring toggle (per-vertex when selected, node-level fallback)
+ *  - Corner radius (per-vertex)
  *  - Stroke weight, cap, join, align
  */
 export function VectorSection({ node, onUpdate }: VectorSectionProps) {
+    const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
+    const selectedVertexIndices = useEditorStore((s) => s.selectedVertexIndices)
+    const updateVertex = useEditorStore((s) => s.updateVertex)
+
+    const inEditMode = vectorEditNodeId === node.id
+    const singleVertex = inEditMode && selectedVertexIndices.length === 1
+        ? node.vectorNetwork.vertices[selectedVertexIndices[0]]
+        : null
+    const singleVertexIdx = singleVertex ? selectedVertexIndices[0] : -1
+
+    // Mirroring: per-vertex override when selected, otherwise node-level
+    const activeMirroring = singleVertex?.handleMirroring ?? node.handleMirroring
     const setMirroring = useCallback(
-        (m: HandleMirroring) => onUpdate({ handleMirroring: m }),
-        [onUpdate],
+        (m: HandleMirroring) => {
+            if (singleVertex && vectorEditNodeId) {
+                updateVertex(vectorEditNodeId, singleVertexIdx, { handleMirroring: m })
+            } else {
+                onUpdate({ handleMirroring: m })
+            }
+        },
+        [onUpdate, singleVertex, singleVertexIdx, vectorEditNodeId, updateVertex],
+    )
+
+    // Vertex position
+    const handleVertexX = useCallback(
+        (v: number) => {
+            if (vectorEditNodeId && singleVertexIdx >= 0) {
+                updateVertex(vectorEditNodeId, singleVertexIdx, { x: v })
+            }
+        },
+        [vectorEditNodeId, singleVertexIdx, updateVertex],
+    )
+    const handleVertexY = useCallback(
+        (v: number) => {
+            if (vectorEditNodeId && singleVertexIdx >= 0) {
+                updateVertex(vectorEditNodeId, singleVertexIdx, { y: v })
+            }
+        },
+        [vectorEditNodeId, singleVertexIdx, updateVertex],
+    )
+
+    // Corner radius (per-vertex)
+    const activeCornerRadius = singleVertex?.cornerRadius ?? 0
+    const handleCornerRadius = useCallback(
+        (v: number) => {
+            if (vectorEditNodeId && singleVertexIdx >= 0) {
+                updateVertex(vectorEditNodeId, singleVertexIdx, { cornerRadius: v })
+            }
+        },
+        [vectorEditNodeId, singleVertexIdx, updateVertex],
     )
 
     return (
         <div className="border-b border-border/40">
+            {/* Vertex position (only in vector edit mode) */}
+            {inEditMode && (
+                <div className="px-3 py-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] text-muted-foreground/70">Position</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <NumberInput
+                            label="X"
+                            value={singleVertex ? Math.round(singleVertex.x * 100) / 100 : 0}
+                            disabled={!singleVertex}
+                            step={1}
+                            onChange={handleVertexX}
+                        />
+                        <NumberInput
+                            label="Y"
+                            value={singleVertex ? Math.round(singleVertex.y * 100) / 100 : 0}
+                            disabled={!singleVertex}
+                            step={1}
+                            onChange={handleVertexY}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Mirroring */}
             <div className="px-3 py-2">
                 <div className="flex items-center justify-between mb-1.5">
@@ -89,7 +165,7 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
                             title={opt.label}
                             className={cn(
                                 'flex-1 flex items-center justify-center h-7 rounded-[5px] transition-colors',
-                                node.handleMirroring === opt.value
+                                activeMirroring === opt.value
                                     ? 'bg-background shadow-sm text-foreground'
                                     : 'text-muted-foreground/60 hover:text-muted-foreground',
                             )}
@@ -100,6 +176,21 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
                     ))}
                 </div>
             </div>
+
+            {/* Corner radius (per-vertex, only in edit mode with selection) */}
+            {inEditMode && (
+                <div className="px-3 py-2">
+                    <NumberInput
+                        label="Corner radius"
+                        value={singleVertex ? activeCornerRadius : 0}
+                        disabled={!singleVertex}
+                        min={0}
+                        max={1000}
+                        step={1}
+                        onChange={handleCornerRadius}
+                    />
+                </div>
+            )}
 
             {/* Stroke properties */}
             <div className="px-3 py-2 space-y-2">

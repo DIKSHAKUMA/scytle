@@ -140,7 +140,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     useKeyboardShortcuts()
 
     // Pen tool drawing hook
-    const { handlePenPointerDown, handlePenPointerMove } = usePenTool(screenToCanvas)
+    const { handlePenPointerDown, handlePenPointerMove, handlePenPointerUp } = usePenTool(screenToCanvas)
 
     // ----------------------------------------------------------
     // Wheel handler: scroll = pan, Cmd/Ctrl+scroll = zoom
@@ -509,6 +509,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     return
                 }
 
+                // Double-click vector → enter vector edit mode
+                if (node && node.type === 'vector') {
+                    state.enterVectorEditMode(selectedId)
+                    return
+                }
+
                 // Double-click frame → drill in
                 if (node && node.type === 'frame' && node.children.length > 0) {
                     state.enterFrame(selectedId)
@@ -545,6 +551,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             if (node && node.type === 'text') {
                 state.selectNode(nodeId)
                 state.setEditingNodeId(nodeId)
+            } else if (node && node.type === 'vector') {
+                state.selectNode(nodeId)
+                state.enterVectorEditMode(nodeId)
             } else if (node && node.type === 'frame' && node.children.length > 0) {
                 state.enterFrame(nodeId)
             }
@@ -620,6 +629,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     )
 
     const handlePointerUp = useCallback(() => {
+        // Pen tool: finalize drag gesture (bezier handle)
+        if (activeTool === 'pen') {
+            handlePenPointerUp()
+            return
+        }
+
         // Marquee selection complete → select all nodes within the rect
         if (marquee) {
             if (marquee.active) {
@@ -715,7 +730,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             setIsDragging(false)
             panSourceRef.current = null
         }
-    }, [isDragging, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp])
+    }, [isDragging, activeTool, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp, handlePenPointerUp])
 
     const handlePointerLeave = useCallback(() => {
         useEditorStore.getState().setHoveredId(null)

@@ -4,8 +4,9 @@
 // ImageNode→<img>. Produces clean, semantic HTML+Tailwind.
 // ============================================================
 
-import type { ScytleNode, FrameNode, TextNode, ImageNode } from '@/types/canvas'
+import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode, Fill } from '@/types/canvas'
 import { buildFrameClasses, buildTextClasses, buildImageClasses } from './class-builder'
+import { networkToSVGPath } from '@/lib/vector-utils'
 
 // ---- Public API ----
 
@@ -17,6 +18,7 @@ export function nodeToHtml(node: ScytleNode, indent: number = 0): string {
         case 'frame': return frameToHtml(node, indent)
         case 'text': return textToHtml(node, indent)
         case 'image': return imageToHtml(node, indent)
+        case 'vector': return vectorToHtml(node, indent)
         default: return ''
     }
 }
@@ -94,6 +96,50 @@ function imageToHtml(node: ImageNode, indent: number): string {
     return classes
         ? `${pad}<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" class="${classes}" />`
         : `${pad}<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" />`
+}
+
+function vectorToHtml(node: VectorNode, indent: number): string {
+    const pad = '  '.repeat(indent)
+    const d = networkToSVGPath(node.vectorNetwork)
+    if (!d) return ''
+
+    // Build fill <path> elements
+    const fillPaths = node.fills
+        .filter((f) => f.visible !== false)
+        .map((f) => `${pad}  <path d="${d}" fill="${fillToSVGAttr(f)}"${f.opacity != null && f.opacity < 1 ? ` fill-opacity="${f.opacity}"` : ''} />`)
+
+    // Build stroke <path> element
+    const strokePath = node.strokeVisible
+        ? `${pad}  <path d="${d}" fill="none" stroke="${escapeAttr(node.strokeColor)}" stroke-width="${node.strokeWeight}"${node.strokeOpacity < 1 ? ` stroke-opacity="${node.strokeOpacity}"` : ''} stroke-linecap="${strokeCapToSVG(node.strokeCap)}" stroke-linejoin="${strokeJoinToSVG(node.strokeJoin)}" />`
+        : ''
+
+    const style = `position:absolute;left:${node.x}px;top:${node.y}px;${node.opacity < 1 ? `opacity:${node.opacity};` : ''}overflow:visible;`
+
+    const inner = [...fillPaths, strokePath].filter(Boolean).join('\n')
+
+    return `${pad}<svg width="${node.width}" height="${node.height}" viewBox="0 0 ${node.width} ${node.height}" style="${style}">\n${inner}\n${pad}</svg>`
+}
+
+function fillToSVGAttr(fill: Fill): string {
+    if (fill.type === 'solid') return fill.color
+    if (fill.type === 'gradient' && fill.gradient) return fill.gradient
+    return 'none'
+}
+
+function strokeCapToSVG(cap: string): string {
+    switch (cap) {
+        case 'ROUND': return 'round'
+        case 'SQUARE': return 'square'
+        default: return 'butt'
+    }
+}
+
+function strokeJoinToSVG(join: string): string {
+    switch (join) {
+        case 'ROUND': return 'round'
+        case 'BEVEL': return 'bevel'
+        default: return 'miter'
+    }
 }
 
 // ---- Semantic Tag Inference ----

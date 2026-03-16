@@ -74,6 +74,9 @@ export interface PenDrawingState {
     cursorY: number
     /** Whether the cursor is near the start vertex (for closing the path) */
     nearStartPoint: boolean
+    /** Outgoing tangent from the last-placed vertex (set by click+drag).
+     *  Used as tangentStart on the next segment created. */
+    _outgoingTangent?: { x: number; y: number }
 }
 
 // ============================================================

@@ -53,9 +53,17 @@ export function useKeyboardShortcuts() {
             ) return
 
             const meta = e.metaKey || e.ctrlKey
+            const ctrl = e.ctrlKey
             const shift = e.shiftKey
             const key = e.key.toLowerCase()
             const store = useEditorStore.getState()
+
+            // ⌘/Ctrl hold → bend tool in vector edit mode
+            if ((key === 'meta' || key === 'control') && store.vectorEditNodeId && store.vectorEditTool !== 'bend') {
+                _prevToolBeforeBend = store.vectorEditTool
+                store.setVectorEditTool('bend')
+                return
+            }
 
             // ── Modifier commands (Cmd/Ctrl + key) ───────────────
 
@@ -167,6 +175,12 @@ export function useKeyboardShortcuts() {
 
             // Delete
             if (key === 'delete' || key === 'backspace') {
+                // In vector edit mode: delete selected vertices
+                if (store.vectorEditNodeId && store.selectedVertexIndices.length > 0) {
+                    e.preventDefault()
+                    store.deleteSelectedVertices(store.vectorEditNodeId)
+                    return
+                }
                 if (store.selectedIds.length > 0) {
                     e.preventDefault()
                     store.deleteSelectedNodes()
@@ -180,6 +194,12 @@ export function useKeyboardShortcuts() {
                 if (isDragActive() || isResizeActive()) return
 
                 e.preventDefault()
+
+                // Vector edit mode: exit back to selection
+                if (store.vectorEditNodeId) {
+                    store.exitVectorEditMode()
+                    return
+                }
 
                 // Pen tool: commit current path and switch to select
                 if (store.penDrawingState) {
@@ -196,6 +216,44 @@ export function useKeyboardShortcuts() {
                     store.deselectAll()
                 }
                 return
+            }
+
+            // Enter — enter vector edit mode when a single vector node is selected
+            if (key === 'enter' && !store.editingNodeId && !store.vectorEditNodeId) {
+                if (store.selectedIds.length === 1) {
+                    const node = findNodeById(store.nodes, store.selectedIds[0])
+                    if (node && node.type === 'vector') {
+                        e.preventDefault()
+                        store.enterVectorEditMode(node.id)
+                        return
+                    }
+                }
+            }
+
+            // ── Vector edit mode sub-tool shortcuts ───────────────────
+            if (store.vectorEditNodeId) {
+                // Bare key shortcuts (no modifiers)
+                if (!meta && !ctrl && !e.altKey) {
+                    const vectorToolMap: Record<string, import('@/store/editor-store').VectorEditTool> = {
+                        v: 'move',
+                        q: 'lasso',
+                        m: 'shape-builder',
+                        x: 'cut',
+                    }
+                    const vtool = vectorToolMap[key]
+                    if (vtool) {
+                        e.preventDefault()
+                        store.setVectorEditTool(vtool)
+                        return
+                    }
+                    // Shift+B → paint, Shift+W → variable-width
+                    if (shift) {
+                        if (key === 'b') { e.preventDefault(); store.setVectorEditTool('paint'); return }
+                        if (key === 'w') { e.preventDefault(); store.setVectorEditTool('variable-width'); return }
+                    }
+                }
+                // Don't fall through to main tool switch while in vector edit
+                if (!meta && !ctrl) return
             }
 
             // Tool shortcuts (bare keys, no modifiers)
@@ -233,7 +291,25 @@ export function useKeyboardShortcuts() {
             }
         }
 
+        // ── ⌘/Ctrl hold → temporarily switch to bend tool in vector edit ──
+        let _prevToolBeforeBend: import('@/store/editor-store').VectorEditTool | null = null
+
+        const handleKeyUp = (e: KeyboardEvent) => {
+            // Restore previous tool when ⌘/Ctrl released
+            if ((e.key === 'Meta' || e.key === 'Control') && _prevToolBeforeBend) {
+                const store = useEditorStore.getState()
+                if (store.vectorEditNodeId && store.vectorEditTool === 'bend') {
+                    store.setVectorEditTool(_prevToolBeforeBend)
+                }
+                _prevToolBeforeBend = null
+            }
+        }
+
         window.addEventListener('keydown', handleKeyDown)
-        return () => window.removeEventListener('keydown', handleKeyDown)
+        window.addEventListener('keyup', handleKeyUp)
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
     }, [])
 }
