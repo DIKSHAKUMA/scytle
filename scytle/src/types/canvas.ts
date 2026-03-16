@@ -10,7 +10,7 @@ export const MAX_ZOOM = 256
 export const DEFAULT_ZOOM = 1
 export const ZOOM_STEP = 1.2
 
-export type CanvasTool = 'select' | 'hand' | 'frame' | 'text'
+export type CanvasTool = 'select' | 'hand' | 'frame' | 'text' | 'pen'
 
 // ============================================================
 // Zod Sub-Schemas (non-recursive leaf types)
@@ -159,6 +159,159 @@ export type Layout = z.infer<typeof LayoutSchema>
 export type BorderRadius = z.infer<typeof BorderRadiusSchema>
 
 // ============================================================
+// Vector / Pen Tool Primitives
+// Mirrors Figma Plugin API:
+//   VectorNetwork  → https://developers.figma.com/docs/plugins/api/VectorNetwork/
+//   VectorPath     → https://developers.figma.com/docs/plugins/api/VectorPath/
+//   HandleMirroring→ https://developers.figma.com/docs/plugins/api/HandleMirroring/
+// ============================================================
+
+/**
+ * Controls how the two bezier handles at a vertex relate to each other.
+ * Figma API: HandleMirroring — "NONE" | "ANGLE" | "ANGLE_AND_LENGTH"
+ *
+ *   NONE             → each handle is fully independent (corner/sharp point)
+ *   ANGLE            → handles stay collinear but lengths are independent (smooth tangent)
+ *   ANGLE_AND_LENGTH → handles are perfectly symmetric (classic smooth point)
+ */
+export type HandleMirroring = 'NONE' | 'ANGLE' | 'ANGLE_AND_LENGTH'
+
+/**
+ * Decoration at the open end of a stroke segment.
+ * Figma API: StrokeCap
+ */
+export type StrokeCap =
+    | 'NONE'
+    | 'ROUND'
+    | 'SQUARE'
+    | 'LINE_ARROW'
+    | 'TRIANGLE_ARROW'
+    | 'REVERSED_TRIANGLE'
+    | 'CIRCLE_ARROW'
+    | 'DIAMOND_ARROW'
+
+/**
+ * How two segments join at a shared vertex.
+ * Figma API: StrokeJoin
+ */
+export type StrokeJoin = 'MITER' | 'BEVEL' | 'ROUND'
+
+/**
+ * A single point in a vector network graph.
+ * Coordinates are RELATIVE to the VectorNode's own x/y origin.
+ * Figma API: VectorVertex
+ */
+export interface VectorVertex {
+    /** X position relative to the node's bounding-box origin */
+    x: number
+    /** Y position relative to the node's bounding-box origin */
+    y: number
+    /** Per-vertex stroke cap override. Falls back to VectorNode.strokeCap if omitted. */
+    strokeCap?: StrokeCap
+    /** Per-vertex stroke join override. Falls back to VectorNode.strokeJoin if omitted. */
+    strokeJoin?: StrokeJoin
+    /** Per-vertex corner radius (rounds this specific corner). Falls back to 0. */
+    cornerRadius?: number
+    /**
+     * How this vertex's bezier handles mirror each other.
+     * Default: 'NONE' (independent handles = sharp/corner point).
+     * Set to 'ANGLE_AND_LENGTH' for a smooth round point.
+     */
+    handleMirroring?: HandleMirroring
+}
+
+/**
+ * An edge connecting two vertices by index, optionally curved via cubic bezier.
+ * Segments are NON-DIRECTIONAL — start/end are just indices, not an order.
+ * Figma API: VectorSegment
+ *
+ * Straight line  → both tangents omitted or {x:0, y:0}
+ * Cubic bezier   → set tangentStart and/or tangentEnd
+ *
+ * Bezier control point math (ABSOLUTE coords):
+ *   cp1 = { x: vertices[start].x + tangentStart.x,
+ *            y: vertices[start].y + tangentStart.y }
+ *   cp2 = { x: vertices[end].x   + tangentEnd.x,
+ *            y: vertices[end].y   + tangentEnd.y }
+ */
+export interface VectorSegment {
+    /** Index into VectorNetwork.vertices[] for the start vertex */
+    start: number
+    /** Index into VectorNetwork.vertices[] for the end vertex */
+    end: number
+    /** Bezier control offset from the start vertex. Default {x:0, y:0} = straight. */
+    tangentStart?: { x: number; y: number }
+    /** Bezier control offset from the end vertex. Default {x:0, y:0} = straight. */
+    tangentEnd?: { x: number; y: number }
+}
+
+/**
+ * A closed fillable area defined by one or more loops of segments.
+ * Each loop is an array of segment indices forming a continuous closed chain.
+ * Figma API: VectorRegion
+ *
+ * A single VectorNode can have multiple regions, each with its own fills.
+ * Example — letter "o": outer boundary loop + inner hole loop.
+ */
+export interface VectorRegion {
+    /** Fill rule for determining inside vs outside */
+    windingRule: 'NONZERO' | 'EVENODD'
+    /**
+     * Array of loops; each loop is an ordered array of segment indices.
+     * Segments in a loop must form a connected continuous chain (no forks/gaps).
+     */
+    loops: number[][]
+    /** Per-region fill overrides. If omitted, the node-level fills[] apply. */
+    fills?: Fill[]
+}
+
+/**
+ * The complete graph representation of a vector shape.
+ * This is the canonical (source-of-truth) format — never derive from vectorPaths.
+ * Figma API: VectorNetwork
+ *
+ * Key rules:
+ *   - If regions[] is empty, Figma auto-fills all enclosed space (NONZERO rule).
+ *   - Vertex coords are relative to the VectorNode's own origin (x/y).
+ *   - After any vertex move, recompute the node's bounding box and re-offset vertices.
+ */
+export interface VectorNetwork {
+    vertices: VectorVertex[]
+    segments: VectorSegment[]
+    /** Fillable closed regions. Empty = auto-fill all enclosed space. */
+    regions: VectorRegion[]
+}
+
+/**
+ * A single SVG-path representation of a vector shape.
+ * This is a DERIVED/CACHED value — always recompute from vectorNetwork.
+ * Figma API: VectorPath
+ *
+ * data uses standard SVG path commands: M, L, C, Z
+ * Example triangle: "M 150 0 L 300 200 L 0 200 Z"
+ */
+export interface VectorPath {
+    /** SVG winding rule — 'NONE' means no fill for this path */
+    windingRule: 'NONZERO' | 'EVENODD' | 'NONE'
+    /** SVG path data string (M/L/C/Q/Z commands) */
+    data: string
+}
+
+/** Ordered array of VectorPath objects — one entry per region + open paths */
+export type VectorPaths = VectorPath[]
+
+/**
+ * A width control point along a variable-width stroke.
+ * Used by the Variable Width tool (⇧W) in vector edit mode.
+ */
+export interface VariableWidthPoint {
+    /** Normalized position along the segment (0 = start vertex, 1 = end vertex) */
+    t: number
+    /** Stroke width in pixels at this point */
+    width: number
+}
+
+// ============================================================
 // Node Type Interfaces (manual — recursive tree can't infer)
 // ============================================================
 
@@ -249,8 +402,64 @@ export interface ImageNode extends BaseNodeProperties {
     placeholderLabel?: string
 }
 
+/**
+ * Vector path node — renders as an inline SVG.
+ * Created by the Pen tool (P). Edited in Vector Edit Mode (Enter / double-click).
+ * Mirrors Figma Plugin API: VectorNode (type: 'VECTOR')
+ * https://developers.figma.com/docs/plugins/api/VectorNode/
+ *
+ * DATA INVARIANTS:
+ *   1. vectorNetwork is the canonical source of truth — vectorPaths is a derived cache.
+ *   2. All vertex coords are RELATIVE to this node's x/y origin.
+ *   3. node.x/y/width/height = bounding box of all vertices (recompute after any vertex move).
+ *   4. Tangents are offsets from their vertex, not absolute canvas positions.
+ *   5. strokeCap/strokeJoin on the node are defaults; per-vertex overrides take precedence.
+ */
+export interface VectorNode extends BaseNodeProperties {
+    type: 'vector'
+
+    // ── Core geometry ──────────────────────────────────────────
+    /**
+     * The full graph representation of the shape.
+     * Always update this; never write vectorPaths directly.
+     */
+    vectorNetwork: VectorNetwork
+    /**
+     * Cached SVG path strings derived from vectorNetwork.
+     * Recompute via networkToSVGPaths() whenever vectorNetwork changes.
+     * Optional — can be null and recomputed on demand.
+     */
+    vectorPaths?: VectorPaths
+
+    // ── Stroke ────────────────────────────────────────────────
+    /** Node-level handle mirroring default. Per-vertex handleMirroring overrides this. */
+    handleMirroring: HandleMirroring
+    /** Decoration at open path endpoints. Default: 'ROUND'. */
+    strokeCap: StrokeCap
+    /** Style of segment joins at non-smooth vertices. Default: 'MITER'. */
+    strokeJoin: StrokeJoin
+    /** Stroke thickness in pixels. Default: 1. */
+    strokeWeight: number
+    /** Stroke position relative to path edge. Default: 'CENTER'. */
+    strokeAlign: 'CENTER' | 'INSIDE' | 'OUTSIDE'
+    /** Stroke hex color (e.g. '#000000'). Default: '#000000'. */
+    strokeColor: string
+    /** Stroke opacity 0–1. Default: 1. */
+    strokeOpacity: number
+    /** Stroke visibility toggle. Default: true. */
+    strokeVisible: boolean
+
+    // ── Variable width stroke (Phase D3-7) ────────────────────
+    /**
+     * Width control points placed by the Variable Width tool (⇧W).
+     * When present, the stroke tapers between these points.
+     * Not supported on: dashed strokes, branching vector networks.
+     */
+    variableWidthStroke?: VariableWidthPoint[]
+}
+
 /** Discriminated union of all node types */
-export type ScytleNode = FrameNode | TextNode | ImageNode
+export type ScytleNode = FrameNode | TextNode | ImageNode | VectorNode
 
 /** Just the type discriminator values */
 export type NodeType = ScytleNode['type']
@@ -346,6 +555,49 @@ export function createImage(
         fit: 'cover',
         isPlaceholder: true,
         placeholderLabel: 'Image',
+        ...overrides,
+    }
+}
+
+/**
+ * Create a new VectorNode with sensible defaults.
+ *
+ * Width/height start at 0 — they are computed from the bounding box
+ * of vertices once the path is committed via commitPenPath().
+ *
+ * The vectorNetwork starts empty — it is populated by the Pen tool
+ * as the user places anchor points on the canvas.
+ */
+export function createVector(
+    overrides?: Partial<Omit<VectorNode, 'type'>>
+): VectorNode {
+    return {
+        ...DEFAULT_BASE,
+        id: generateId(),
+        name: 'Vector',
+        type: 'vector',
+        // Bounding box is 0 until vertices are committed
+        width: 0,
+        height: 0,
+        // VectorNodes are always fixed-size (bounding box driven by geometry)
+        sizing: { horizontal: 'fixed', vertical: 'fixed' },
+        // Vectors sit at absolute canvas position
+        positioning: 'absolute',
+        // Empty network — populated by the Pen tool
+        vectorNetwork: { vertices: [], segments: [], regions: [] },
+        vectorPaths: undefined,
+        // Stroke defaults (match Figma's defaults for new pen paths)
+        handleMirroring: 'NONE',
+        strokeCap: 'ROUND',
+        strokeJoin: 'MITER',
+        strokeWeight: 1,
+        strokeAlign: 'CENTER',
+        strokeColor: '#000000',
+        strokeOpacity: 1,
+        strokeVisible: true,
+        // No fill by default (outline only — same as Figma pen default)
+        fills: [],
+        shadows: [],
         ...overrides,
     }
 }

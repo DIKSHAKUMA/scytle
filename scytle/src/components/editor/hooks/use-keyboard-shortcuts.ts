@@ -180,6 +180,14 @@ export function useKeyboardShortcuts() {
                 if (isDragActive() || isResizeActive()) return
 
                 e.preventDefault()
+
+                // Pen tool: commit current path and switch to select
+                if (store.penDrawingState) {
+                    store.commitPenPath()
+                    store.setActiveTool('select')
+                    return
+                }
+
                 if (store.editingNodeId) {
                     store.setEditingNodeId(null)
                 } else if (store.enteredFrameId) {
@@ -215,6 +223,7 @@ export function useKeyboardShortcuts() {
                 f: 'frame',
                 t: 'text',
                 h: 'hand',
+                p: 'pen',
             }
             const tool = toolMap[key]
             if (tool) {

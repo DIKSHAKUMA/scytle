@@ -3,6 +3,7 @@ import type { ScytleNode } from '@/types/canvas'
 import { FrameRenderer } from './frame-renderer'
 import { TextRenderer } from './text-renderer'
 import { ImageRenderer } from './image-renderer'
+import { VectorRenderer } from './vector-renderer'
 
 // ============================================================
 // Props
@@ -52,6 +53,15 @@ export const NodeRenderer = memo(function NodeRenderer({
         case 'image':
             return (
                 <ImageRenderer
+                    node={node}
+                    isTopLevel={isTopLevel}
+                    parentDirection={parentDirection}
+                    parentLayoutMode={parentLayoutMode}
+                />
+            )
+        case 'vector':
+            return (
+                <VectorRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}

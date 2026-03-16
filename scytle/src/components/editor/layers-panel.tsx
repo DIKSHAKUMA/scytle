@@ -22,6 +22,7 @@ import {
     Rows3,
     LayoutGrid,
     Lock,
+    Pen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -47,6 +48,9 @@ function NodeTypeIcon({ node }: { node: ScytleNode }) {
     }
     if (node.type === 'image') {
         return <Image className="shrink-0 text-muted-foreground/70" size={size} />
+    }
+    if (node.type === 'vector') {
+        return <Pen className="shrink-0 text-muted-foreground/70" size={size} />
     }
 
     // Frame — differentiate by layout mode

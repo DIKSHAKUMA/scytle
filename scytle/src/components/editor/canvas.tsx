@@ -15,6 +15,10 @@ import { Toolbar } from './toolbar'
 import { useNodeDrag } from './hooks/use-node-drag'
 import { useNodeResize, handleToCursor } from './hooks/use-node-resize'
 import { useKeyboardShortcuts } from './hooks/use-keyboard-shortcuts'
+import { usePenTool } from './hooks/use-pen-tool'
+import { PenOverlay } from './pen-overlay'
+import { VectorEditToolbar } from './vector-edit-toolbar'
+import { AnchorPointOverlay } from './anchor-point-overlay'
 import type { HandleDirection } from './hooks/use-node-resize'
 
 // ============================================================
@@ -134,6 +138,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
     // Global keyboard shortcuts (Delete, Undo/Redo, Copy/Paste, etc.)
     useKeyboardShortcuts()
+
+    // Pen tool drawing hook
+    const { handlePenPointerDown, handlePenPointerMove } = usePenTool(screenToCanvas)
 
     // ----------------------------------------------------------
     // Wheel handler: scroll = pan, Cmd/Ctrl+scroll = zoom
@@ -398,6 +405,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 return
             }
 
+            // ── Pen tool → place vertices ──────────────────────────
+            if (activeTool === 'pen') {
+                handlePenPointerDown(e)
+                return
+            }
+
             // ── Select tool ───────────────────────────────────────
             if (activeTool === 'select') {
                 const target = e.target as HTMLElement
@@ -536,7 +549,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 state.enterFrame(nodeId)
             }
         },
-        [activeTool, resolveClickTarget]
+        [activeTool, resolveClickTarget, handlePenPointerDown]
     )
 
     // ----------------------------------------------------------
@@ -586,6 +599,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 return
             }
 
+            // Pen tool cursor tracking
+            if (activeTool === 'pen') {
+                handlePenPointerMove(e.clientX, e.clientY)
+                return
+            }
+
             // Hover tracking — context-aware so hover matches what
             // would be selected on click (Figma behaviour)
             if (activeTool === 'select') {
@@ -597,7 +616,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 }
             }
         },
-        [isDragging, activeTool, drawState, marquee, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas]
+        [isDragging, activeTool, drawState, marquee, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas, handlePenPointerMove]
     )
 
     const handlePointerUp = useCallback(() => {
@@ -715,7 +734,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 ? 'crosshair'
                 : dragInfo.isDragging
                     ? 'grabbing'
-                    : (activeTool === 'frame' || activeTool === 'text')
+                    : (activeTool === 'frame' || activeTool === 'text' || activeTool === 'pen')
                         ? 'crosshair'
                         : 'default'
     // ----------------------------------------------------------
@@ -774,6 +793,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             {/* Image crop handles (shown when an image fill has fit=crop) */}
             <ImageCropOverlay viewportRef={viewportRef} />
 
+            {/* Pen tool drawing overlay (shown while placing vertices) */}
+            <PenOverlay />
+
+            {/* Vector edit anchor points + bezier handles (shown in vector edit mode) */}
+            <AnchorPointOverlay />
+
             {/* Snap alignment guides (shown while dragging freeform) */}
             <SnapGuideOverlay dragInfo={dragInfo} />
 
@@ -803,6 +828,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     <Toolbar />
                 </div>
             )}
+
+            {/* Vector edit mode toolbar — bottom center, above main toolbar */}
+            <VectorEditToolbar />
 
 
         </div>

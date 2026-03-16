@@ -9,7 +9,7 @@
 import { useCallback, useMemo } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
-import type { ScytleNode, FrameNode, TextNode, ImageNode } from '@/types/canvas'
+import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode } from '@/types/canvas'
 import { PositionSection } from './position-section'
 import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
@@ -19,8 +19,9 @@ import { AppearanceSection, StrokeSection } from './border-section'
 import { TypographySection } from './typography-section'
 import { EffectsSection } from './effects-section'
 import { ImageSection } from './image-section'
+import { VectorSection } from './vector-section'
 import { ColorInput, SectionHeader } from './inputs'
-import { Frame, Type, ImageIcon, FileText } from 'lucide-react'
+import { Frame, Type, ImageIcon, FileText, Pen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Type icons for the header
@@ -28,12 +29,14 @@ const TYPE_ICONS: Record<ScytleNode['type'], React.ReactNode> = {
     frame: <Frame size={14} />,
     text: <Type size={14} />,
     image: <ImageIcon size={14} />,
+    vector: <Pen size={14} />,
 }
 
 const TYPE_LABELS: Record<ScytleNode['type'], string> = {
     frame: 'Frame',
     text: 'Text',
     image: 'Image',
+    vector: 'Vector',
 }
 
 /* ── Page Settings (deselected state) ──────────────────────── */
@@ -134,6 +137,7 @@ export function PropertiesPanel() {
     const isFrame = node.type === 'frame'
     const isText = node.type === 'text'
     const isImage = node.type === 'image'
+    const isVector = node.type === 'vector'
 
     return (
         <div
@@ -173,6 +177,7 @@ export function PropertiesPanel() {
 
             {isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
             {isImage && <ImageSection node={node as ImageNode} onUpdate={onUpdate} />}
+            {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
 
             {/* Appearance → Fill → Stroke → Effects (Figma order) */}
             <AppearanceSection node={node} onUpdate={onUpdate} />

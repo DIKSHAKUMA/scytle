@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { devtools } from 'zustand/middleware'
 import { current } from 'immer'
-import type { ScytleNode, FrameNode, CanvasTool } from '@/types/canvas'
+import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 
 // ============================================================
@@ -50,6 +50,30 @@ function createEditorPage(name: string): EditorPage {
         panX: 0,
         panY: 0,
     }
+}
+
+// ============================================================
+// Vector / Pen editing types
+// ============================================================
+
+/** Sub-tools available within vector edit mode (overlay toolbar) */
+export type VectorEditTool = 'move' | 'lasso' | 'shape-builder' | 'paint' | 'bend' | 'cut' | 'variable-width'
+
+/** Live state while the pen tool is actively placing vertices */
+export interface PenDrawingState {
+    /** ID of the VectorNode being drawn into */
+    nodeId: string
+    /** Vertices placed so far (canvas-relative to node origin) */
+    vertices: VectorVertex[]
+    /** Segments connecting the vertices */
+    segments: VectorSegment[]
+    /** Whether the user is actively placing points */
+    isDrawing: boolean
+    /** Current cursor position in canvas space */
+    cursorX: number
+    cursorY: number
+    /** Whether the cursor is near the start vertex (for closing the path) */
+    nearStartPoint: boolean
 }
 
 // ============================================================
@@ -115,6 +139,16 @@ interface EditorState {
     // Type Settings overlay ----------------------------------------
     /** Whether the Type Settings floating overlay is open */
     typeSettingsOpen: boolean
+
+    // Vector / Pen editing ----------------------------------------
+    /** ID of the VectorNode currently in edit mode (null when not in vector edit) */
+    vectorEditNodeId: string | null
+    /** Active sub-tool within vector edit mode overlay */
+    vectorEditTool: VectorEditTool
+    /** Indices of currently selected vertices in the active VectorNode */
+    selectedVertexIndices: number[]
+    /** Live in-progress pen drawing state (null when not actively drawing) */
+    penDrawingState: PenDrawingState | null
 
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
@@ -214,6 +248,30 @@ interface EditorState {
     /** Set multiple selected IDs at once (for marquee selection) */
     setSelectedIds: (ids: string[]) => void
 
+    // Vector / Pen editing actions --------------------------------
+    /** Enter vector edit mode for a specific VectorNode */
+    enterVectorEditMode: (nodeId: string) => void
+    /** Exit vector edit mode, returning to select tool */
+    exitVectorEditMode: () => void
+    /** Set the active sub-tool within vector edit overlay */
+    setVectorEditTool: (tool: VectorEditTool) => void
+    /** Select vertex indices (additive = add to current selection) */
+    selectVertices: (indices: number[], additive?: boolean) => void
+    /** Clear vertex selection */
+    deselectVertices: () => void
+    /** Patch a single vertex in a VectorNode */
+    updateVertex: (nodeId: string, index: number, patch: Partial<VectorVertex>) => void
+    /** Add a new vertex to a VectorNode (optionally splitting a segment) */
+    addVertex: (nodeId: string, vertex: VectorVertex, afterSegmentIndex?: number) => void
+    /** Delete selected vertices and their connected segments */
+    deleteSelectedVertices: (nodeId: string) => void
+    /** Replace the entire VectorNetwork on a node */
+    updateVectorNetwork: (nodeId: string, network: VectorNetwork) => void
+    /** Update or clear the live pen drawing state */
+    setPenDrawingState: (state: PenDrawingState | null) => void
+    /** Commit the pen drawing state into the VectorNode and finalize bounding box */
+    commitPenPath: () => void
+
     // Page management -----------------------------------------
     addPage: (name?: string) => string
     deletePage: (pageId: string) => void
@@ -250,6 +308,10 @@ export const useEditorStore = create<EditorState>()(
             fontPickerOpen: false,
             fontPickerNodeId: null,
             typeSettingsOpen: false,
+            vectorEditNodeId: null,
+            vectorEditTool: 'move' as VectorEditTool,
+            selectedVertexIndices: [] as number[],
+            penDrawingState: null as PenDrawingState | null,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -366,9 +428,52 @@ export const useEditorStore = create<EditorState>()(
             setActiveTool: (tool) =>
                 set(
                     (state) => {
+                        // Commit in-progress pen path before switching away
+                        if (tool !== 'pen' && state.penDrawingState) {
+                            const ps = state.penDrawingState
+                            if (ps.vertices.length >= 2) {
+                                // Commit the open path
+                                const node = findNodeById(state.nodes, ps.nodeId)
+                                if (node && node.type === 'vector') {
+                                    _snap(state)
+                                    const vn = (node as VectorNode).vectorNetwork
+                                    vn.vertices = ps.vertices
+                                    vn.segments = ps.segments
+                                    let minX = Infinity, minY = Infinity
+                                    let maxX = -Infinity, maxY = -Infinity
+                                    for (const v of ps.vertices) {
+                                        if (v.x < minX) minX = v.x
+                                        if (v.y < minY) minY = v.y
+                                        if (v.x > maxX) maxX = v.x
+                                        if (v.y > maxY) maxY = v.y
+                                    }
+                                    for (const v of vn.vertices) {
+                                        v.x -= minX
+                                        v.y -= minY
+                                    }
+                                    node.x += minX
+                                    node.y += minY
+                                    node.width = Math.max(maxX - minX, 1)
+                                    node.height = Math.max(maxY - minY, 1)
+                                }
+                            } else {
+                                // Only 0-1 vertices — delete the empty vector node
+                                const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
+                                if (idx !== -1) state.nodes.splice(idx, 1)
+                                state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            }
+                            state.penDrawingState = null
+                        }
+
                         state.activeTool = tool
                         // Exit inline editing when switching tools
                         if (state.editingNodeId) state.editingNodeId = null
+                        // Exit vector edit mode when switching away from pen
+                        if (tool !== 'pen' && state.vectorEditNodeId) {
+                            state.vectorEditNodeId = null
+                            state.vectorEditTool = 'move'
+                            state.selectedVertexIndices = []
+                        }
                     },
                     false,
                     'setActiveTool'
@@ -1228,6 +1333,10 @@ export const useEditorStore = create<EditorState>()(
                         draft.hoveredId = null
                         draft.enteredFrameId = null
                         draft.editingNodeId = null
+                        draft.vectorEditNodeId = null
+                        draft.vectorEditTool = 'move'
+                        draft.selectedVertexIndices = []
+                        draft.penDrawingState = null
                         draft._past = []
                         draft._future = []
                         draft._batchDepth = 0
@@ -1301,6 +1410,10 @@ export const useEditorStore = create<EditorState>()(
                         draft.hoveredId = null
                         draft.enteredFrameId = null
                         draft.editingNodeId = null
+                        draft.vectorEditNodeId = null
+                        draft.vectorEditTool = 'move'
+                        draft.selectedVertexIndices = []
+                        draft.penDrawingState = null
                         draft._past = []
                         draft._future = []
                     },
@@ -1336,6 +1449,10 @@ export const useEditorStore = create<EditorState>()(
                             draft.hoveredId = null
                             draft.enteredFrameId = null
                             draft.editingNodeId = null
+                            draft.vectorEditNodeId = null
+                            draft.vectorEditTool = 'move'
+                            draft.selectedVertexIndices = []
+                            draft.penDrawingState = null
                             draft._past = []
                             draft._future = []
                         }
@@ -1386,6 +1503,10 @@ export const useEditorStore = create<EditorState>()(
                         draft.hoveredId = null
                         draft.enteredFrameId = null
                         draft.editingNodeId = null
+                        draft.vectorEditNodeId = null
+                        draft.vectorEditTool = 'move'
+                        draft.selectedVertexIndices = []
+                        draft.penDrawingState = null
                         draft._past = []
                         draft._future = []
                     },
@@ -1434,6 +1555,10 @@ export const useEditorStore = create<EditorState>()(
                         draft.hoveredId = null
                         draft.enteredFrameId = null
                         draft.editingNodeId = null
+                        draft.vectorEditNodeId = null
+                        draft.vectorEditTool = 'move'
+                        draft.selectedVertexIndices = []
+                        draft.penDrawingState = null
                         draft._past = []
                         draft._future = []
                     },
@@ -1441,6 +1566,235 @@ export const useEditorStore = create<EditorState>()(
                     'switchPage'
                 )
             },
+
+            // ── Vector / Pen editing ──────────────────────────────────
+
+            enterVectorEditMode: (nodeId) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        state.vectorEditNodeId = nodeId
+                        state.vectorEditTool = 'move'
+                        state.selectedVertexIndices = []
+                        state.penDrawingState = null
+                        state.selectedIds = [nodeId]
+                    },
+                    false,
+                    'enterVectorEditMode'
+                ),
+
+            exitVectorEditMode: () =>
+                set(
+                    (state) => {
+                        state.vectorEditNodeId = null
+                        state.vectorEditTool = 'move'
+                        state.selectedVertexIndices = []
+                        state.penDrawingState = null
+                        state.activeTool = 'select'
+                    },
+                    false,
+                    'exitVectorEditMode'
+                ),
+
+            setVectorEditTool: (tool) =>
+                set(
+                    (state) => {
+                        state.vectorEditTool = tool
+                    },
+                    false,
+                    'setVectorEditTool'
+                ),
+
+            selectVertices: (indices, additive = false) =>
+                set(
+                    (state) => {
+                        if (additive) {
+                            const merged = new Set([...state.selectedVertexIndices, ...indices])
+                            state.selectedVertexIndices = [...merged]
+                        } else {
+                            state.selectedVertexIndices = indices
+                        }
+                    },
+                    false,
+                    'selectVertices'
+                ),
+
+            deselectVertices: () =>
+                set(
+                    (state) => {
+                        state.selectedVertexIndices = []
+                    },
+                    false,
+                    'deselectVertices'
+                ),
+
+            updateVertex: (nodeId, index, patch) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        const vn = (node as VectorNode).vectorNetwork
+                        const v = vn.vertices[index]
+                        if (!v) return
+                        _snap(state)
+                        Object.assign(v, patch)
+                    },
+                    false,
+                    'updateVertex'
+                ),
+
+            addVertex: (nodeId, vertex, afterSegmentIndex) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        _snap(state)
+                        const vn = (node as VectorNode).vectorNetwork
+                        const newIdx = vn.vertices.length
+                        vn.vertices.push(vertex)
+
+                        if (afterSegmentIndex !== undefined) {
+                            // Split the segment: remove old segment, insert two new
+                            const seg = vn.segments[afterSegmentIndex]
+                            if (seg) {
+                                vn.segments.splice(afterSegmentIndex, 1,
+                                    { start: seg.start, end: newIdx },
+                                    { start: newIdx, end: seg.end }
+                                )
+                            }
+                        }
+                    },
+                    false,
+                    'addVertex'
+                ),
+
+            deleteSelectedVertices: (nodeId) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        if (state.selectedVertexIndices.length === 0) return
+                        _snap(state)
+
+                        const vn = (node as VectorNode).vectorNetwork
+                        const toDelete = new Set(state.selectedVertexIndices)
+
+                        // Build index remapping (old index -> new index)
+                        const remap: Record<number, number> = {}
+                        let nextIdx = 0
+                        for (let i = 0; i < vn.vertices.length; i++) {
+                            if (!toDelete.has(i)) {
+                                remap[i] = nextIdx++
+                            }
+                        }
+
+                        // Filter vertices
+                        vn.vertices = vn.vertices.filter((_, i) => !toDelete.has(i))
+
+                        // Filter & remap segments (drop any touching deleted vertices)
+                        vn.segments = vn.segments
+                            .filter((s) => !toDelete.has(s.start) && !toDelete.has(s.end))
+                            .map((s) => ({
+                                ...s,
+                                start: remap[s.start],
+                                end: remap[s.end],
+                            }))
+
+                        // Clear regions (would need full recomputation)
+                        vn.regions = []
+
+                        state.selectedVertexIndices = []
+                    },
+                    false,
+                    'deleteSelectedVertices'
+                ),
+
+            updateVectorNetwork: (nodeId, network) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        _snap(state);
+                        (node as VectorNode).vectorNetwork = network
+                    },
+                    false,
+                    'updateVectorNetwork'
+                ),
+
+            setPenDrawingState: (penState) =>
+                set(
+                    (state) => {
+                        state.penDrawingState = penState
+                    },
+                    false,
+                    'setPenDrawingState'
+                ),
+
+            commitPenPath: () =>
+                set(
+                    (state) => {
+                        const ps = state.penDrawingState
+                        if (!ps) return
+
+                        // Need at least 2 vertices for a valid path
+                        if (ps.vertices.length < 2) {
+                            // Delete the empty vector node
+                            const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
+                            if (idx !== -1) state.nodes.splice(idx, 1)
+                            state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            state.penDrawingState = null
+                            return
+                        }
+
+                        const node = findNodeById(state.nodes, ps.nodeId)
+                        if (!node || node.type !== 'vector') return
+
+                        _snap(state)
+
+                        const vn = (node as VectorNode).vectorNetwork
+
+                        // Transfer vertices and segments from drawing state
+                        vn.vertices = ps.vertices
+                        vn.segments = ps.segments
+
+                        // Recalculate bounding box from vertices
+                        if (ps.vertices.length > 0) {
+                            let minX = Infinity, minY = Infinity
+                            let maxX = -Infinity, maxY = -Infinity
+                            for (const v of ps.vertices) {
+                                if (v.x < minX) minX = v.x
+                                if (v.y < minY) minY = v.y
+                                if (v.x > maxX) maxX = v.x
+                                if (v.y > maxY) maxY = v.y
+                            }
+
+                            // Offset all vertices so origin is top-left of bounding box
+                            for (const v of vn.vertices) {
+                                v.x -= minX
+                                v.y -= minY
+                            }
+
+                            // Also offset tangents are relative to their vertex, no adjust needed
+
+                            // Update node position and dimensions
+                            node.x += minX
+                            node.y += minY
+                            node.width = Math.max(maxX - minX, 1)
+                            node.height = Math.max(maxY - minY, 1)
+                        }
+
+                        // Clear drawing state
+                        state.penDrawingState = null
+
+                        // Enter vector edit mode on this node
+                        state.vectorEditNodeId = ps.nodeId
+                        state.vectorEditTool = 'move'
+                        state.selectedVertexIndices = []
+                    },
+                    false,
+                    'commitPenPath'
+                ),
         })),
         { name: 'editor-store' }
     )
