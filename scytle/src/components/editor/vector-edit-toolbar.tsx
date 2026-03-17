@@ -71,7 +71,12 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
             )}
 
             {/* Toolbar row */}
-            <div className="flex items-center bg-neutral-800 rounded-lg shadow-xl p-1 gap-0.5">
+            {/* onPointerDown stopPropagation prevents canvas handlePointerDown from
+                calling e.preventDefault(), which would suppress the click event */}
+            <div
+                className="flex items-center bg-neutral-800 rounded-lg shadow-xl p-1 gap-0.5"
+                onPointerDown={(e) => e.stopPropagation()}
+            >
                 {TOOLS.map((tool) => (
                     <button
                         key={tool.id}

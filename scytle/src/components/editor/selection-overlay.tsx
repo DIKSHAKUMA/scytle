@@ -114,6 +114,8 @@ export function SelectionOverlay({
 }) {
     const selectedIds = useEditorStore((s) => s.selectedIds)
     const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
+    // Figma: selection handles hide when in vector edit mode (anchor points take over)
+    const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
 
     const [rects, setRects] = useState<Map<string, ScreenRect>>(new Map())
     const rafRef = useRef<number>(0)
@@ -193,6 +195,10 @@ export function SelectionOverlay({
 
     // Hide selection overlay when in crop mode — crop overlay handles its own borders
     if (imageCropEditingFillIdx !== null) return null
+
+    // Hide resize handles in vector edit mode — anchor point overlay takes over
+    // (Figma hides bounding-box handles when editing vector anchor points)
+    if (vectorEditNodeId) return null
 
     return (
         <>

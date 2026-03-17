@@ -72,8 +72,9 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             }
 
             // Select the vertex
+            // Figma spec: normal click = replace selection, Shift+click = additive
             const additive = e.shiftKey
-            store.selectVertices([idx], !additive)
+            store.selectVertices([idx], additive)
 
             // Move tool: begin drag
             if (tool === 'move' && store.vectorEditNodeId) {
