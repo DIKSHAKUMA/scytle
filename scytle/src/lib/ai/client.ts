@@ -12,6 +12,10 @@ export interface GenerateOptions {
     systemPrompt?: SystemPromptKey | string
     temperature?: number
     maxTokens?: number
+    /** Enable thinking mode for deeper reasoning (Gemini 2.5 Pro) */
+    thinking?: boolean
+    /** Thinking budget in tokens (default: 2048) */
+    thinkingBudget?: number
 }
 
 export interface StreamChunk {
@@ -116,6 +120,10 @@ export async function generate(
             }
 
             // Normal GEMINI / generic generation
+            // Enable thinking mode for Gemini 2.5 Pro when requested
+            const supportsThinking = actualModelName.includes('gemini-2.5-pro')
+            const useThinking = options.thinking !== false && supportsThinking
+            
             const result = await ai.models.generateContent({
                 model: actualModelName,
                 contents,
@@ -124,7 +132,7 @@ export async function generate(
                     temperature: options.temperature ?? AI_CONFIG.generation.temperature,
                     topP: AI_CONFIG.generation.topP,
                     maxOutputTokens,
-                    thinkingConfig: actualModelName.includes('gemini-3.1-pro') ? { thinkingLevel: 'HIGH' } as any : undefined,
+                    thinkingConfig: useThinking ? { thinkingBudget: options.thinkingBudget ?? 2048 } as any : undefined,
                     safetySettings: [
                         { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'OFF' as any },
                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'OFF' as any },
@@ -182,6 +190,10 @@ export async function* generateStream(
                  ? new GoogleGenAI({ vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any })
                  : ai;
 
+            // Enable thinking mode for Gemini 2.5 Pro when requested
+            const supportsThinking = actualModelName.includes('gemini-2.5-pro')
+            const useThinking = options.thinking !== false && supportsThinking
+            
             const responseStream = await clientToUse.models.generateContentStream({
                 model: actualModelName,
                 contents,
@@ -190,7 +202,7 @@ export async function* generateStream(
                     temperature: options.temperature ?? AI_CONFIG.generation.temperature,
                     topP: AI_CONFIG.generation.topP,
                     maxOutputTokens,
-                    thinkingConfig: actualModelName.includes('gemini-3.1-pro') ? { thinkingLevel: 'HIGH' } as any : undefined,
+                    thinkingConfig: useThinking ? { thinkingBudget: options.thinkingBudget ?? 2048 } as any : undefined,
                     safetySettings: [
                         { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'OFF' as any },
                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'OFF' as any },

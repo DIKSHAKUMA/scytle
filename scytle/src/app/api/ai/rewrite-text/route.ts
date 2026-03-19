@@ -83,7 +83,7 @@ Modified text:`
 
         // Call Vertex AI via shared client
         const generatedText = await generate(fullPrompt, [], {
-            model: 'fast',
+            model: 'gemini-flash',
             temperature: 0.7,
             maxTokens: 1024,
         })

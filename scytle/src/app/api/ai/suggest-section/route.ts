@@ -102,7 +102,7 @@ What section would improve this page? Return ONLY valid JSON.`
 
         const response = await generate(userPrompt, [], {
             systemPrompt: SUGGESTION_PROMPT,
-            model: 'fast',
+            model: 'gemini-flash',
             temperature: 0.7,
         })
 

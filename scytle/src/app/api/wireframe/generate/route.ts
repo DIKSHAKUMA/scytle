@@ -85,7 +85,7 @@ Return ONLY a JSON array of objects with "name" and "description" fields. No mar
 Example: [{"name": "Hero", "description": "Headline: 'Build AI-Powered Apps in Minutes' with a gradient CTA button and product screenshot"}]`
 
                 const aiResult = await generate(enrichPrompt, [], {
-                    model: 'fast',
+                    model: 'gemini-flash',
                     maxTokens: 2048,
                     temperature: 0.6,
                 })

@@ -218,7 +218,7 @@ ${features?.length ? `Key features: ${features.join(', ')}` : ''}
 Every page MUST have "context" and "layout" fields. Use children[] for sub-pages. Return JSON only.`
 
         const aiResponse = await generate(userMessage, [], {
-            model: 'fast',
+            model: 'gemini-flash',
             systemPrompt,
             temperature: 0.7,
         })

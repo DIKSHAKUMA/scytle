@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         // 4. Generate content using AI
         const response = await generate(userPrompt, [], {
             systemPrompt: SECTION_COPY_PROMPT,
-            model: 'fast',
+            model: 'gemini-flash',
             temperature: 0.8,
         })
 

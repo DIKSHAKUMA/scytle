@@ -80,14 +80,16 @@ export async function POST(request: NextRequest) {
         const systemPrompt = buildPageGenerationPrompt(ctx)
         const userMessage = buildPageGenerationMessage(ctx)
 
-        console.log(`🤖 Generating HTML for "${data.pageName}" [model: ${data.model || 'gemini-pro'}, type: ${data.productType || 'web'}]`)
+        console.log(`🤖 Generating HTML for "${data.pageName}" [model: ${data.model || 'gemini-pro'}, type: ${data.productType || 'web'}, thinking: enabled]`)
 
-        // 4. Stream SSE response
+        // 4. Stream SSE response with thinking mode enabled for better design quality
         const stream = createStreamResponse(userMessage, [], {
             model: (data.model || 'gemini-pro') as import('@/lib/ai/config').AIModel,
             systemPrompt,
-            temperature: 0.7,
+            temperature: 0.9, // Higher creativity for design tasks
             maxTokens: 16384,
+            thinking: true,
+            thinkingBudget: 4096, // More thinking budget for complex designs
         })
 
         return new Response(stream, {

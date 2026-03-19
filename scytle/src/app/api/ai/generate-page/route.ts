@@ -110,7 +110,7 @@ ${existingSections?.length ? `EXISTING: ${existingSections.join(', ')}` : ''}
 Generate ${sectionCount} sections for "${context}" context. Section names must be specific and descriptive.`
 
         const aiResponse = await generate(userMessage, [], {
-            model: 'fast',
+            model: 'gemini-flash',
             systemPrompt,
             temperature: 0.7,
         })
