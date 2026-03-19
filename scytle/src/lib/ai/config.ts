@@ -1,20 +1,23 @@
 // AI Configuration for Scytle
-// Supports Gemini and Claude via Google Gen AI SDK
+// Supports Gemini via Google Gen AI SDK
 export type AIModel = 'gemini-pro' | 'gemini-flash'
 
 export const AI_CONFIG = {
     // Available models
+    // gemini-pro: Best quality (Gemini 3.1 Pro Preview - has built-in thinking)
+    // gemini-flash: Fast operations (Gemini 2.5 Flash)
     models: {
-        'gemini-pro': 'gemini-2.5-pro',
+        'gemini-pro': 'gemini-3.1-pro-preview',
         'gemini-flash': 'gemini-2.5-flash',
     } satisfies Record<AIModel, string>,
+
+    // Models that require global location (not regional)
+    globalLocationModels: ['gemini-3.1-pro-preview'] as string[],
 
     // Per-model max output token limits
     modelMaxTokens: {
         'gemini-pro': 65535,
         'gemini-flash': 65535,
-        'claude-sonnet': 8192,
-        'claude-opus': 4096,
     } as Record<string, number>,
 
     // Default model for generation

@@ -43,14 +43,16 @@ const resolveSystemPrompt = (systemPrompt?: SystemPromptKey | string): string =>
     return typeof systemPrompt === 'string' ? systemPrompt : SYSTEM_PROMPTS.default
 }
 
-function getClient() {
+function getClient(modelName?: string) {
     // If the user provided GOOGLE_CLOUD_API_KEY it will automatically be picked up
     // by new GoogleGenAI(). If using Vertex AI, we initialize with vertexai config.
     const project = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT
-    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
-    
-    // For Claude models, Vertex usually requires us-east5
-    // But @google/genai lets us route models easily
+    const defaultLocation = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
+
+    // Gemini 3.1 Pro Preview requires global location
+    const requiresGlobal = modelName && AI_CONFIG.globalLocationModels.includes(modelName)
+    const location = requiresGlobal ? 'global' : defaultLocation
+
     if (process.env.GOOGLE_CLOUD_API_KEY) {
         return new GoogleGenAI({ apiKey: process.env.GOOGLE_CLOUD_API_KEY })
     }
@@ -85,7 +87,7 @@ export async function generate(
     const contents = history
         .slice(-AI_CONFIG.context.maxHistoryMessages)
         .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
-    
+
     contents.push({ role: 'user', parts: [{ text: message }] })
 
     for (const currentModelKey of modelsToTry) {
@@ -98,37 +100,37 @@ export async function generate(
 
         try {
             console.log(`🤖 Generating with model: ${actualModelName}`)
-            
+
             // Adjust location for Claude models on Vertex
             const isClaude = actualModelName.includes('claude')
             if (isClaude && ai.vertexai && (ai.vertexai as any).location !== 'us-east5') {
-                 // Create a specific client for Claude in us-east5
-                 const claudeClient = new GoogleGenAI({
+                // Create a specific client for Claude in us-east5
+                const claudeClient = new GoogleGenAI({
                     vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any
-                 })
-                 const result = await claudeClient.models.generateContent({
-                     model: actualModelName,
-                     contents,
-                     config: {
-                         systemInstruction: { parts: [{ text: systemInstruction }]},
-                         temperature: options.temperature ?? AI_CONFIG.generation.temperature,
-                         maxOutputTokens,
-                     }
-                 })
-                 if (!result.text) throw new Error('Empty response')
-                 return result.text
+                })
+                const result = await claudeClient.models.generateContent({
+                    model: actualModelName,
+                    contents,
+                    config: {
+                        systemInstruction: { parts: [{ text: systemInstruction }] },
+                        temperature: options.temperature ?? AI_CONFIG.generation.temperature,
+                        maxOutputTokens,
+                    }
+                })
+                if (!result.text) throw new Error('Empty response')
+                return result.text
             }
 
             // Normal GEMINI / generic generation
             // Enable thinking mode for Gemini 2.5 Pro when requested
             const supportsThinking = actualModelName.includes('gemini-2.5-pro')
             const useThinking = options.thinking !== false && supportsThinking
-            
+
             const result = await ai.models.generateContent({
                 model: actualModelName,
                 contents,
                 config: {
-                    systemInstruction: { parts: [{ text: systemInstruction }]},
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
                     temperature: options.temperature ?? AI_CONFIG.generation.temperature,
                     topP: AI_CONFIG.generation.topP,
                     maxOutputTokens,
@@ -171,7 +173,7 @@ export async function* generateStream(
     const contents = history
         .slice(-AI_CONFIG.context.maxHistoryMessages)
         .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
-    
+
     contents.push({ role: 'user', parts: [{ text: message }] })
 
     for (const currentModelKey of modelsToTry) {
@@ -184,21 +186,21 @@ export async function* generateStream(
 
         try {
             console.log(`🔄 Streaming from model: ${actualModelName}`)
-            
+
             const isClaude = actualModelName.includes('claude')
-            const clientToUse = (isClaude && ai.vertexai) 
-                 ? new GoogleGenAI({ vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any })
-                 : ai;
+            const clientToUse = (isClaude && ai.vertexai)
+                ? new GoogleGenAI({ vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any })
+                : ai;
 
             // Enable thinking mode for Gemini 2.5 Pro when requested
             const supportsThinking = actualModelName.includes('gemini-2.5-pro')
             const useThinking = options.thinking !== false && supportsThinking
-            
+
             const responseStream = await clientToUse.models.generateContentStream({
                 model: actualModelName,
                 contents,
                 config: {
-                    systemInstruction: { parts: [{ text: systemInstruction }]},
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
                     temperature: options.temperature ?? AI_CONFIG.generation.temperature,
                     topP: AI_CONFIG.generation.topP,
                     maxOutputTokens,
@@ -219,7 +221,7 @@ export async function* generateStream(
                     yield { text: chunk.text, done: false }
                 }
             }
-            
+
             if (hasYielded) {
                 console.log(`✅ Stream complete: ${actualModelName}`)
                 yield { text: '', done: true }
