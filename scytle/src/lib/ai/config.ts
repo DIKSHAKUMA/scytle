@@ -1,34 +1,30 @@
 // AI Configuration for Scytle
-// Supports Anthropic Claude (via Vertex AI) and Google Gemini
+// Supports Gemini and Claude via Google Gen AI SDK
+export type AIModel = 'gemini-pro'
 
 export const AI_CONFIG = {
-    // Available models — Claude (Anthropic via Vertex) + Gemini (Google Vertex)
+    // Available models — using exactly what the user requested
     models: {
-        'claude-sonnet': 'claude-sonnet-4',
-        'claude-opus': 'claude-opus-4',
-        fast: 'gemini-2.0-flash',                    // Fastest, cheapest
-        balanced: 'gemini-2.5-flash',                 // Good balance
-        powerful: 'gemini-2.5-pro',                   // Best Gemini reasoning
-    } as Record<string, string>,
+        'gemini-pro': 'gemini-2.5-pro',
+    } satisfies Record<AIModel, string>,
 
     // Per-model max output token limits
     modelMaxTokens: {
-        'claude-sonnet': 16384,
-        'claude-opus': 16384,
-        fast: 8192,
-        balanced: 65536,
-        powerful: 65536,
+        'gemini-pro': 65535,
+        'claude-sonnet': 8192,
+        'claude-opus': 4096,
     } as Record<string, number>,
 
     // Default model for generation
-    defaultModel: 'claude-sonnet',
+    defaultModel: 'gemini-pro',
 
     // Generation settings
     generation: {
-        temperature: 0.7,
+        temperature: 1,
         topP: 0.95,
         topK: 40,
         maxOutputTokens: 8192,
+        thinkingLevel: "HIGH",
     },
 
     // Streaming settings
@@ -46,7 +42,7 @@ export const AI_CONFIG = {
     // Context limits
     context: {
         maxHistoryMessages: 20,
-        maxContextTokens: 32000,
+        maxContextTokens: 64000,
     },
 
     // Planner max tokens (for page planner calls)
@@ -68,7 +64,7 @@ Your capabilities:
 - Research competitors and market gaps
 - Generate sitemaps and page structures
 - Create design systems and style guides
-- Generate production-ready Next.js code
+- Generate production-ready HTML/Tailwind wireframes
 
 Current phase: CONVERSATION
 Guide the user through their product journey.`,
@@ -117,18 +113,15 @@ Based on the product and target audience, suggest:
 
 Output as structured JSON for the design system.`,
 
-    code: `You are in CODE mode. Generate production-ready Next.js code.
+    code: `You are in CODE mode. Generate production-ready Tailwind HTML.
 
 Rules:
-- Use TypeScript with proper types
-- Use Tailwind CSS for styling
-- Use Shadcn/ui components when possible
-- Follow React best practices
-- Include proper comments
-- Make code accessible (semantic HTML, ARIA)
+- Use semantic HTML
+- Use Tailwind CSS strictly
+- Output visually stunning, highly detailed components
+- Do not output markdown codeblocks, just raw HTML
 
 Generate complete, runnable components.`,
 } as const
 
-export type AIModel = keyof typeof AI_CONFIG.models
 export type SystemPromptKey = keyof typeof SYSTEM_PROMPTS

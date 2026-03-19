@@ -90,7 +90,7 @@ export const WireframeDataSchema = z.array(WireframePageSchema)
 
 // Product & AI Model
 export const ProductTypeSchema = z.enum(['web', 'app'])
-export const AiModelSchema = z.enum(['claude-sonnet', 'claude-opus', 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'])
+export const AiModelSchema = z.enum(['gemini-pro'])
 
 // Project
 export const ProjectSchema = z.object({
@@ -100,7 +100,7 @@ export const ProjectSchema = z.object({
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.default('draft'),
     productType: ProductTypeSchema.optional().default('web'),
-    aiModel: AiModelSchema.optional().default('claude-sonnet'),
+    aiModel: AiModelSchema.optional().default('gemini-pro'),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     sitemapData: z.array(SitemapPageSchema).nullable().optional(),
@@ -254,6 +254,8 @@ export const AIConversationSchema = z.object({
 export const ChatMessageSchema = z.object({
     message: z.string().min(1).max(4000),
     projectId: z.string(),
+    selectedNodeId: z.string().nullable().optional(),
+    canvasNodes: z.array(z.any()).optional(), // Will contain subset of ScytleNode fields
 })
 
 // ============================================

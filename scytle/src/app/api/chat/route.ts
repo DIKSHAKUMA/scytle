@@ -98,9 +98,22 @@ export async function POST(request: NextRequest) {
         }
 
         // 5. Create streaming response
+        // If the client sent canvas context, we inject it as a system prompt
+        // to turn the AI into a design agent capable of structured JSON actions.
+        let systemPrompt: string | undefined = 'default'
+        const hasCanvasContext = validation.data.canvasNodes && validation.data.canvasNodes.length > 0
+
+        if (hasCanvasContext) {
+            const { buildDesignChatPrompt } = await import('@/lib/ai/prompts/chat-design')
+            systemPrompt = buildDesignChatPrompt({
+                canvasNodes: validation.data.canvasNodes || [],
+                selectedNodeId: validation.data.selectedNodeId
+            })
+        }
+
         const stream = createStreamResponse(message, conversationHistory, {
-            model: 'fast',
-            systemPrompt: 'default',
+            model: 'gemini-pro', // Upgrade from 'fast' to 'gemini-pro' for complex reasoning
+            systemPrompt: systemPrompt
         })
 
         // 6. Save user message to conversation (async, don't await)

@@ -2,17 +2,17 @@
 
 import { useCallback } from 'react'
 import { useEditorStore } from '@/store/editor-store'
-import { findNodeById } from '@/types/canvas'
 import type { VectorNode, HandleMirroring, StrokeCap, StrokeJoin } from '@/types/canvas'
-import { NumberInput, SelectInput } from './inputs'
+import { NumberInput, SelectInput, ColorInput } from './inputs'
 import { cn } from '@/lib/utils'
+import { Plus, Minus } from 'lucide-react'
 
 interface VectorSectionProps {
     node: VectorNode
     onUpdate: (updates: Record<string, unknown>) => void
 }
 
-/* ── Mirroring icons ───────────────────────────────────────── */
+/* ── Mirroring icons (Figma-style) ─────────────────────────── */
 
 function MirrorNoneIcon({ size = 14 }: { size?: number }) {
     return (
@@ -50,8 +50,6 @@ const CAP_OPTIONS: { value: StrokeCap; label: string }[] = [
     { value: 'NONE', label: 'None' },
     { value: 'ROUND', label: 'Round' },
     { value: 'SQUARE', label: 'Square' },
-    { value: 'LINE_ARROW', label: 'Arrow' },
-    { value: 'TRIANGLE_ARROW', label: 'Triangle' },
 ]
 
 const JOIN_OPTIONS: { value: StrokeJoin; label: string }[] = [
@@ -67,11 +65,12 @@ const ALIGN_OPTIONS: { value: string; label: string }[] = [
 ]
 
 /**
- * VectorSection — properties specific to VectorNode:
- *  - Vertex Position X/Y (live when single vertex selected, — when none/multi)
- *  - Handle mirroring toggle (per-vertex when selected, node-level fallback)
- *  - Corner radius (per-vertex)
- *  - Stroke weight, cap, join, align
+ * VectorSection — Clean Figma-style properties for VectorNode:
+ *  - X/Y position (node-level, always shown)
+ *  - Handle mirroring (3 icons)
+ *  - Corner radius (per-vertex in edit mode)
+ *  - Fill (color + opacity)
+ *  - Stroke (color + weight + align + cap + join)
  */
 export function VectorSection({ node, onUpdate }: VectorSectionProps) {
     const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
@@ -97,24 +96,6 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
         [onUpdate, singleVertex, singleVertexIdx, vectorEditNodeId, updateVertex],
     )
 
-    // Vertex position
-    const handleVertexX = useCallback(
-        (v: number) => {
-            if (vectorEditNodeId && singleVertexIdx >= 0) {
-                updateVertex(vectorEditNodeId, singleVertexIdx, { x: v })
-            }
-        },
-        [vectorEditNodeId, singleVertexIdx, updateVertex],
-    )
-    const handleVertexY = useCallback(
-        (v: number) => {
-            if (vectorEditNodeId && singleVertexIdx >= 0) {
-                updateVertex(vectorEditNodeId, singleVertexIdx, { y: v })
-            }
-        },
-        [vectorEditNodeId, singleVertexIdx, updateVertex],
-    )
-
     // Corner radius (per-vertex)
     const activeCornerRadius = singleVertex?.cornerRadius ?? 0
     const handleCornerRadius = useCallback(
@@ -126,34 +107,71 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
         [vectorEditNodeId, singleVertexIdx, updateVertex],
     )
 
+    // Fill helpers
+    const hasFill = node.fills.length > 0 && node.fills[0]?.visible !== false
+    const fillColor = node.fills[0]?.type === 'solid' ? node.fills[0].color : '#000000'
+    const fillOpacity = node.fills[0]?.opacity ?? 1
+
+    const toggleFill = useCallback(() => {
+        if (hasFill) {
+            onUpdate({ fills: [] })
+        } else {
+            onUpdate({
+                fills: [{ type: 'solid', color: '#000000', opacity: 1, visible: true }],
+            })
+        }
+    }, [hasFill, onUpdate])
+
+    const setFillColor = useCallback(
+        (color: string) => {
+            const fills = [...node.fills]
+            if (fills.length === 0) {
+                fills.push({ type: 'solid', color, opacity: 1, visible: true })
+            } else {
+                fills[0] = { ...fills[0], color, type: 'solid' }
+            }
+            onUpdate({ fills })
+        },
+        [node.fills, onUpdate],
+    )
+
+    const setFillOpacity = useCallback(
+        (pct: number) => {
+            const fills = [...node.fills]
+            if (fills.length > 0) {
+                fills[0] = { ...fills[0], opacity: pct / 100 }
+            }
+            onUpdate({ fills })
+        },
+        [node.fills, onUpdate],
+    )
+
+    // Stroke toggle
+    const toggleStroke = useCallback(() => {
+        onUpdate({ strokeVisible: !node.strokeVisible })
+    }, [node.strokeVisible, onUpdate])
+
     return (
         <div className="border-b border-border/40">
-            {/* Vertex position (only in vector edit mode) */}
-            {inEditMode && (
-                <div className="px-3 py-2">
-                    <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[11px] text-muted-foreground/70">Position</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <NumberInput
-                            label="X"
-                            value={singleVertex ? Math.round(singleVertex.x * 100) / 100 : 0}
-                            disabled={!singleVertex}
-                            step={1}
-                            onChange={handleVertexX}
-                        />
-                        <NumberInput
-                            label="Y"
-                            value={singleVertex ? Math.round(singleVertex.y * 100) / 100 : 0}
-                            disabled={!singleVertex}
-                            step={1}
-                            onChange={handleVertexY}
-                        />
-                    </div>
+            {/* ── X/Y Position ── */}
+            <div className="px-3 py-2">
+                <div className="grid grid-cols-2 gap-2">
+                    <NumberInput
+                        label="X"
+                        value={Math.round(node.x * 100) / 100}
+                        step={1}
+                        onChange={(v) => onUpdate({ x: v })}
+                    />
+                    <NumberInput
+                        label="Y"
+                        value={Math.round(node.y * 100) / 100}
+                        step={1}
+                        onChange={(v) => onUpdate({ y: v })}
+                    />
                 </div>
-            )}
+            </div>
 
-            {/* Mirroring */}
+            {/* ── Mirroring (3 icons) ── */}
             <div className="px-3 py-2">
                 <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] text-muted-foreground/70">Mirroring</span>
@@ -177,13 +195,12 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
                 </div>
             </div>
 
-            {/* Corner radius (per-vertex, only in edit mode with selection) */}
-            {inEditMode && (
+            {/* ── Corner radius (only in edit mode with vertex selected) ── */}
+            {inEditMode && singleVertex && (
                 <div className="px-3 py-2">
                     <NumberInput
                         label="Corner radius"
-                        value={singleVertex ? activeCornerRadius : 0}
-                        disabled={!singleVertex}
+                        value={activeCornerRadius}
                         min={0}
                         max={1000}
                         step={1}
@@ -192,38 +209,80 @@ export function VectorSection({ node, onUpdate }: VectorSectionProps) {
                 </div>
             )}
 
-            {/* Stroke properties */}
+            {/* ── Fill ── */}
+            <div className="px-3 py-2">
+                <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] text-muted-foreground/70">Fill</span>
+                    <button
+                        className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        onClick={toggleFill}
+                        title={hasFill ? 'Remove fill' : 'Add fill'}
+                    >
+                        {hasFill ? <Minus size={12} /> : <Plus size={12} />}
+                    </button>
+                </div>
+                {hasFill && (
+                    <ColorInput
+                        value={fillColor}
+                        onChange={setFillColor}
+                        opacity={Math.round(fillOpacity * 100)}
+                        onOpacityChange={setFillOpacity}
+                    />
+                )}
+            </div>
+
+            {/* ── Stroke ── */}
             <div className="px-3 py-2 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                    <NumberInput
-                        label="Weight"
-                        value={node.strokeWeight}
-                        min={0}
-                        max={100}
-                        step={1}
-                        onChange={(v) => onUpdate({ strokeWeight: v })}
-                    />
-                    <SelectInput
-                        label="Align"
-                        value={node.strokeAlign}
-                        options={ALIGN_OPTIONS}
-                        onChange={(v) => onUpdate({ strokeAlign: v })}
-                    />
+                <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[11px] text-muted-foreground/70">Stroke</span>
+                    <button
+                        className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        onClick={toggleStroke}
+                        title={node.strokeVisible ? 'Remove stroke' : 'Add stroke'}
+                    >
+                        {node.strokeVisible ? <Minus size={12} /> : <Plus size={12} />}
+                    </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                    <SelectInput
-                        label="Cap"
-                        value={node.strokeCap}
-                        options={CAP_OPTIONS}
-                        onChange={(v) => onUpdate({ strokeCap: v })}
-                    />
-                    <SelectInput
-                        label="Join"
-                        value={node.strokeJoin}
-                        options={JOIN_OPTIONS}
-                        onChange={(v) => onUpdate({ strokeJoin: v })}
-                    />
-                </div>
+                {node.strokeVisible && (
+                    <>
+                        <ColorInput
+                            value={node.strokeColor}
+                            onChange={(c) => onUpdate({ strokeColor: c })}
+                            opacity={Math.round(node.strokeOpacity * 100)}
+                            onOpacityChange={(pct) => onUpdate({ strokeOpacity: pct / 100 })}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                            <NumberInput
+                                label="Weight"
+                                value={node.strokeWeight}
+                                min={0}
+                                max={100}
+                                step={0.5}
+                                onChange={(v) => onUpdate({ strokeWeight: v })}
+                            />
+                            <SelectInput
+                                label="Align"
+                                value={node.strokeAlign}
+                                options={ALIGN_OPTIONS}
+                                onChange={(v) => onUpdate({ strokeAlign: v })}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <SelectInput
+                                label="Cap"
+                                value={node.strokeCap}
+                                options={CAP_OPTIONS}
+                                onChange={(v) => onUpdate({ strokeCap: v })}
+                            />
+                            <SelectInput
+                                label="Join"
+                                value={node.strokeJoin}
+                                options={JOIN_OPTIONS}
+                                onChange={(v) => onUpdate({ strokeJoin: v })}
+                            />
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     )

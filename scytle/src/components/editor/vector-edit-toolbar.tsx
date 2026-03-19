@@ -24,15 +24,24 @@ interface ToolDef {
 
 const ICON_SIZE = 16
 
-const TOOLS: ToolDef[] = [
-    { id: 'move', label: 'Move', shortcut: 'V', icon: <MousePointer2 size={ICON_SIZE} /> },
-    { id: 'lasso', label: 'Lasso', shortcut: 'L', icon: <Lasso size={ICON_SIZE} /> },
-    { id: 'shape-builder', label: 'Shape Builder', shortcut: 'J', icon: <Combine size={ICON_SIZE} /> },
-    { id: 'paint', label: 'Paint', shortcut: '\u21E7B', icon: <PaintBucket size={ICON_SIZE} /> },
-    { id: 'bend', label: 'Bend', shortcut: '\u2318', icon: <Spline size={ICON_SIZE} /> },
-    { id: 'cut', label: 'Cut', shortcut: 'C', icon: <Scissors size={ICON_SIZE} /> },
-    { id: 'variable-width', label: 'Variable Width', shortcut: 'W', icon: <WrapText size={ICON_SIZE} /> },
+/** Tool groups separated by dividers — matches Figma's vector edit toolbar layout */
+const TOOL_GROUPS: ToolDef[][] = [
+    // Group 1: Selection tools
+    [
+        { id: 'move', label: 'Move', shortcut: 'V', icon: <MousePointer2 size={ICON_SIZE} /> },
+        { id: 'lasso', label: 'Lasso', shortcut: 'L', icon: <Lasso size={ICON_SIZE} /> },
+    ],
+    // Group 2: Editing tools
+    [
+        { id: 'paint', label: 'Paint', shortcut: '\u21E7B', icon: <PaintBucket size={ICON_SIZE} /> },
+        { id: 'shape-builder', label: 'Shape Builder', shortcut: 'J', icon: <Combine size={ICON_SIZE} /> },
+        { id: 'bend', label: 'Bend', shortcut: '\u2318', icon: <Spline size={ICON_SIZE} /> },
+        { id: 'cut', label: 'Cut', shortcut: 'C', icon: <Scissors size={ICON_SIZE} /> },
+        { id: 'variable-width', label: 'Variable Width', shortcut: 'W', icon: <WrapText size={ICON_SIZE} /> },
+    ],
 ]
+
+const ALL_TOOLS = TOOL_GROUPS.flat()
 
 /**
  * VectorEditToolbar — floating bar shown when in vector edit mode.
@@ -60,38 +69,43 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
                     <span>
                         {hoveredTool === 'close'
                             ? 'Done'
-                            : TOOLS.find((t) => t.id === hoveredTool)?.label}
+                            : ALL_TOOLS.find((t) => t.id === hoveredTool)?.label}
                     </span>
                     <span className="text-white/50 text-[10px]">
                         {hoveredTool === 'close'
                             ? 'Esc'
-                            : TOOLS.find((t) => t.id === hoveredTool)?.shortcut}
+                            : ALL_TOOLS.find((t) => t.id === hoveredTool)?.shortcut}
                     </span>
                 </div>
             )}
 
-            {/* Toolbar row */}
-            {/* onPointerDown stopPropagation prevents canvas handlePointerDown from
-                calling e.preventDefault(), which would suppress the click event */}
+            {/* Toolbar row — grouped with dividers like Figma */}
             <div
                 className="flex items-center bg-neutral-800 rounded-lg shadow-xl p-1 gap-0.5"
                 onPointerDown={(e) => e.stopPropagation()}
             >
-                {TOOLS.map((tool) => (
-                    <button
-                        key={tool.id}
-                        className={cn(
-                            'relative flex items-center justify-center w-8 h-8 rounded-md transition-colors',
-                            vectorEditTool === tool.id
-                                ? 'bg-blue-500 text-white'
-                                : 'text-neutral-300 hover:text-white hover:bg-neutral-700',
+                {TOOL_GROUPS.map((group, gi) => (
+                    <div key={gi} className="flex items-center gap-0.5">
+                        {gi > 0 && (
+                            <div className="w-px h-5 bg-neutral-600 mx-0.5" />
                         )}
-                        onClick={() => setVectorEditTool(tool.id)}
-                        onMouseEnter={() => setHoveredTool(tool.id)}
-                        onMouseLeave={() => setHoveredTool(null)}
-                    >
-                        {tool.icon}
-                    </button>
+                        {group.map((tool) => (
+                            <button
+                                key={tool.id}
+                                className={cn(
+                                    'relative flex items-center justify-center w-8 h-8 rounded-md transition-colors',
+                                    vectorEditTool === tool.id
+                                        ? 'bg-blue-500 text-white'
+                                        : 'text-neutral-300 hover:text-white hover:bg-neutral-700',
+                                )}
+                                onClick={() => setVectorEditTool(tool.id)}
+                                onMouseEnter={() => setHoveredTool(tool.id)}
+                                onMouseLeave={() => setHoveredTool(null)}
+                            >
+                                {tool.icon}
+                            </button>
+                        ))}
+                    </div>
                 ))}
 
                 {/* Close button */}

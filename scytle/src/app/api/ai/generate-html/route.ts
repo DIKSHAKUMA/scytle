@@ -80,11 +80,11 @@ export async function POST(request: NextRequest) {
         const systemPrompt = buildPageGenerationPrompt(ctx)
         const userMessage = buildPageGenerationMessage(ctx)
 
-        console.log(`🤖 Generating HTML for "${data.pageName}" [model: ${data.model || 'claude-sonnet'}, type: ${data.productType || 'web'}]`)
+        console.log(`🤖 Generating HTML for "${data.pageName}" [model: ${data.model || 'gemini-pro'}, type: ${data.productType || 'web'}]`)
 
         // 4. Stream SSE response
         const stream = createStreamResponse(userMessage, [], {
-            model: (data.model || 'claude-sonnet') as import('@/lib/ai/config').AIModel,
+            model: (data.model || 'gemini-pro') as import('@/lib/ai/config').AIModel,
             systemPrompt,
             temperature: 0.7,
             maxTokens: 16384,

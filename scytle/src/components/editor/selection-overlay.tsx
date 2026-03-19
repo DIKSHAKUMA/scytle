@@ -196,15 +196,11 @@ export function SelectionOverlay({
     // Hide selection overlay when in crop mode — crop overlay handles its own borders
     if (imageCropEditingFillIdx !== null) return null
 
-    // Hide resize handles in vector edit mode — anchor point overlay takes over
-    // (Figma hides bounding-box handles when editing vector anchor points)
-    if (vectorEditNodeId) return null
-
     return (
         <>
             {Array.from(rects.entries()).map(([id, rect]) => (
                 <div key={id}>
-                    {/* Blue outline */}
+                    {/* Blue outline — always visible (Figma shows outline during vector edit too) */}
                     <div
                         className="pointer-events-none"
                         style={{
@@ -219,53 +215,58 @@ export function SelectionOverlay({
                         }}
                     />
 
-                    {/* 4 corner resize handles — visible dots */}
-                    {CORNER_POSITIONS.map((pos) => {
-                        const hs = getCornerHandleStyle(pos, rect)
-                        return (
-                            <div
-                                key={pos}
-                                data-handle={pos}
-                                data-node-handle={id}
-                                style={{
-                                    position: 'absolute',
-                                    left: hs.left,
-                                    top: hs.top,
-                                    width: CORNER_HANDLE_SIZE,
-                                    height: CORNER_HANDLE_SIZE,
-                                    backgroundColor: '#ffffff',
-                                    border: '1.5px solid #3b82f6',
-                                    borderRadius: 1,
-                                    cursor: hs.cursor,
-                                    zIndex: 1000,
-                                    pointerEvents: 'auto',
-                                }}
-                            />
-                        )
-                    })}
+                    {/* Hide resize handles in vector edit mode — anchor points take over.
+                        Figma shows the outline but hides corner/edge handles during vector editing. */}
+                    {!vectorEditNodeId && (
+                        <>
+                            {/* 4 corner resize handles — visible dots */}
+                            {CORNER_POSITIONS.map((pos) => {
+                                const hs = getCornerHandleStyle(pos, rect)
+                                return (
+                                    <div
+                                        key={pos}
+                                        data-handle={pos}
+                                        data-node-handle={id}
+                                        style={{
+                                            position: 'absolute',
+                                            left: hs.left,
+                                            top: hs.top,
+                                            width: CORNER_HANDLE_SIZE,
+                                            height: CORNER_HANDLE_SIZE,
+                                            backgroundColor: '#ffffff',
+                                            border: '1.5px solid #3b82f6',
+                                            borderRadius: 1,
+                                            cursor: hs.cursor,
+                                            zIndex: 1000,
+                                            pointerEvents: 'auto',
+                                        }}
+                                    />
+                                )
+                            })}
 
-                    {/* 4 edge resize hit zones — invisible but interactive */}
-                    {EDGE_POSITIONS.map((pos) => {
-                        const ez = getEdgeHitZoneStyle(pos, rect)
-                        return (
-                            <div
-                                key={pos}
-                                data-handle={pos}
-                                data-node-handle={id}
-                                style={{
-                                    position: 'absolute',
-                                    left: ez.left,
-                                    top: ez.top,
-                                    width: ez.width,
-                                    height: ez.height,
-                                    cursor: ez.cursor,
-                                    zIndex: 1000,
-                                    pointerEvents: 'auto',
-                                    // Invisible — no background, no border
-                                }}
-                            />
-                        )
-                    })}
+                            {/* 4 edge resize hit zones — invisible but interactive */}
+                            {EDGE_POSITIONS.map((pos) => {
+                                const ez = getEdgeHitZoneStyle(pos, rect)
+                                return (
+                                    <div
+                                        key={pos}
+                                        data-handle={pos}
+                                        data-node-handle={id}
+                                        style={{
+                                            position: 'absolute',
+                                            left: ez.left,
+                                            top: ez.top,
+                                            width: ez.width,
+                                            height: ez.height,
+                                            cursor: ez.cursor,
+                                            zIndex: 1000,
+                                            pointerEvents: 'auto',
+                                        }}
+                                    />
+                                )
+                            })}
+                        </>
+                    )}
                 </div>
             ))}
         </>

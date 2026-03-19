@@ -71,6 +71,43 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 return
             }
 
+            // Ctrl+click (or Cmd+click on Mac): toggle corner/smooth point
+            // This converts the vertex between sharp corner (NONE) and smooth (ANGLE_AND_LENGTH)
+            if ((e.ctrlKey || e.metaKey) && store.vectorEditNodeId) {
+                const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
+                if (!node) return
+                const vertex = node.vectorNetwork.vertices[idx]
+                if (!vertex) return
+
+                // Toggle between NONE (corner) and ANGLE_AND_LENGTH (smooth)
+                const currentMirroring = vertex.handleMirroring ?? 'NONE'
+                const newMirroring = currentMirroring === 'NONE' ? 'ANGLE_AND_LENGTH' : 'NONE'
+
+                // If converting to corner (NONE), also clear tangent handles on connected segments
+                if (newMirroring === 'NONE') {
+                    const net = node.vectorNetwork
+                    const updatedSegments = net.segments.map((seg, si) => {
+                        if (seg.start === idx) {
+                            return { ...seg, tangentStart: { x: 0, y: 0 } }
+                        }
+                        if (seg.end === idx) {
+                            return { ...seg, tangentEnd: { x: 0, y: 0 } }
+                        }
+                        return seg
+                    })
+                    store.updateVectorNetwork(store.vectorEditNodeId, {
+                        ...net,
+                        vertices: net.vertices.map((v, vi) =>
+                            vi === idx ? { ...v, handleMirroring: newMirroring } : v
+                        ),
+                        segments: updatedSegments,
+                    })
+                } else {
+                    store.updateVertex(store.vectorEditNodeId, idx, { handleMirroring: newMirroring })
+                }
+                return
+            }
+
             // Select the vertex
             // Figma spec: normal click = replace selection, Shift+click = additive
             const additive = e.shiftKey
@@ -211,15 +248,39 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
         [screenToCanvas],
     )
 
-    // ── Bend tool: click segment → toggle curve ─────────────
+    // ── Bend segment: click or double-click → toggle curve ───
+    // Works in bend tool mode OR with double-click from any tool
 
     const handleSegmentClick = useCallback(
         (e: React.MouseEvent, segIdx: number) => {
             e.stopPropagation()
             const store = useEditorStore.getState()
+
+            // Only bend tool can single-click toggle
             if (store.vectorEditTool !== 'bend' || !store.vectorEditNodeId) return
 
-            const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
+            toggleSegmentCurve(store.vectorEditNodeId, segIdx)
+        },
+        [],
+    )
+
+    const handleSegmentDoubleClick = useCallback(
+        (e: React.MouseEvent, segIdx: number) => {
+            e.stopPropagation()
+            const store = useEditorStore.getState()
+            if (!store.vectorEditNodeId) return
+
+            // Double-click toggles curve from any tool
+            toggleSegmentCurve(store.vectorEditNodeId, segIdx)
+        },
+        [],
+    )
+
+    /** Shared logic to toggle a segment between straight and curved */
+    const toggleSegmentCurve = useCallback(
+        (nodeId: string, segIdx: number) => {
+            const store = useEditorStore.getState()
+            const node = findNodeById(store.nodes, nodeId) as VectorNode | null
             if (!node) return
             const net = node.vectorNetwork
             const seg = net.segments[segIdx]
@@ -252,7 +313,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 }
             }
 
-            store.updateVectorNetwork(store.vectorEditNodeId, { ...net, segments: updatedSegs })
+            store.updateVectorNetwork(nodeId, { ...net, segments: updatedSegs })
         },
         [],
     )
@@ -322,169 +383,209 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const toolCursor = toolCursors[vectorEditTool] || 'default'
 
     return (
-        <svg
-            className="absolute inset-0 pointer-events-none"
-            style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 31 }}
-        >
-            {/* Invisible fat segment hit targets (for Bend tool clicks) */}
-            {(vectorEditTool === 'bend') && vn.segments.map((seg: VectorSegment, si: number) => {
-                const startV = vn.vertices[seg.start]
-                const endV = vn.vertices[seg.end]
-                if (!startV || !endV) return null
+        <>
+            {/* Decorative SVG layer — non-interactive */}
+            <svg
+                className="absolute inset-0 pointer-events-none"
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 31 }}
+            >
+                {/* Segment lines (thin blue for visibility) */}
+                {vn.segments.map((seg: VectorSegment, si: number) => {
+                    const startV = vn.vertices[seg.start]
+                    const endV = vn.vertices[seg.end]
+                    if (!startV || !endV) return null
 
-                const a = toScreen(startV.x, startV.y)
-                const b = toScreen(endV.x, endV.y)
+                    const a = toScreen(startV.x, startV.y)
+                    const b = toScreen(endV.x, endV.y)
 
-                const ts = seg.tangentStart
-                const te = seg.tangentEnd
-                const hasCurve =
-                    (ts && (ts.x !== 0 || ts.y !== 0)) ||
-                    (te && (te.x !== 0 || te.y !== 0))
+                    const ts = seg.tangentStart
+                    const te = seg.tangentEnd
+                    const hasCurve =
+                        (ts && (ts.x !== 0 || ts.y !== 0)) ||
+                        (te && (te.x !== 0 || te.y !== 0))
 
-                if (hasCurve) {
-                    const cp1 = ts ? toScreen(startV.x + ts.x, startV.y + ts.y) : a
-                    const cp2 = te ? toScreen(endV.x + te.x, endV.y + te.y) : b
+                    if (hasCurve) {
+                        const cp1 = ts ? toScreen(startV.x + ts.x, startV.y + ts.y) : a
+                        const cp2 = te ? toScreen(endV.x + te.x, endV.y + te.y) : b
+                        return (
+                            <path
+                                key={`seg-curve-${si}`}
+                                d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`}
+                                fill="none"
+                                stroke={BLUE}
+                                strokeWidth={1}
+                                opacity={0.4}
+                            />
+                        )
+                    }
+
                     return (
-                        <path
-                            key={`seg-hit-${si}`}
-                            d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`}
-                            fill="none"
-                            stroke="transparent"
-                            strokeWidth={SEGMENT_HIT_WIDTH}
-                            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-                            onClick={(e) => handleSegmentClick(e, si)}
-                        />
-                    )
-                }
-
-                return (
-                    <line
-                        key={`seg-hit-${si}`}
-                        x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                        stroke="transparent"
-                        strokeWidth={SEGMENT_HIT_WIDTH}
-                        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-                        onClick={(e) => handleSegmentClick(e, si)}
-                    />
-                )
-            })}
-
-            {/* Bezier tangent handles */}
-            {vn.segments.map((seg: VectorSegment, si: number) => {
-                const startV = vn.vertices[seg.start]
-                const endV = vn.vertices[seg.end]
-                if (!startV || !endV) return null
-
-                const elements: React.ReactNode[] = []
-
-                const ts = seg.tangentStart
-                if (ts && (ts.x !== 0 || ts.y !== 0)) {
-                    const anchor = toScreen(startV.x, startV.y)
-                    const cp = toScreen(startV.x + ts.x, startV.y + ts.y)
-                    elements.push(
                         <line
-                            key={`ts-line-${si}`}
-                            x1={anchor.x} y1={anchor.y}
-                            x2={cp.x} y2={cp.y}
-                            stroke={BLUE} strokeWidth={1} opacity={0.6}
-                        />,
-                        <circle
-                            key={`ts-cp-${si}`}
-                            cx={cp.x} cy={cp.y} r={HANDLE_R}
-                            fill={WHITE} stroke={BLUE} strokeWidth={1}
-                            style={{ pointerEvents: 'auto', cursor: toolCursor }}
-                            onPointerDown={(e) => handleHandlePointerDown(e, si, 'tangent-start')}
-                        />,
-                    )
-                }
-
-                const te = seg.tangentEnd
-                if (te && (te.x !== 0 || te.y !== 0)) {
-                    const anchor = toScreen(endV.x, endV.y)
-                    const cp = toScreen(endV.x + te.x, endV.y + te.y)
-                    elements.push(
-                        <line
-                            key={`te-line-${si}`}
-                            x1={anchor.x} y1={anchor.y}
-                            x2={cp.x} y2={cp.y}
-                            stroke={BLUE} strokeWidth={1} opacity={0.6}
-                        />,
-                        <circle
-                            key={`te-cp-${si}`}
-                            cx={cp.x} cy={cp.y} r={HANDLE_R}
-                            fill={WHITE} stroke={BLUE} strokeWidth={1}
-                            style={{ pointerEvents: 'auto', cursor: toolCursor }}
-                            onPointerDown={(e) => handleHandlePointerDown(e, si, 'tangent-end')}
-                        />,
-                    )
-                }
-
-                return elements.length > 0 ? <g key={`seg-handles-${si}`}>{elements}</g> : null
-            })}
-
-            {/* Segment lines (thin blue for visibility) */}
-            {vn.segments.map((seg: VectorSegment, si: number) => {
-                const startV = vn.vertices[seg.start]
-                const endV = vn.vertices[seg.end]
-                if (!startV || !endV) return null
-
-                const a = toScreen(startV.x, startV.y)
-                const b = toScreen(endV.x, endV.y)
-
-                const ts = seg.tangentStart
-                const te = seg.tangentEnd
-                const hasCurve =
-                    (ts && (ts.x !== 0 || ts.y !== 0)) ||
-                    (te && (te.x !== 0 || te.y !== 0))
-
-                if (hasCurve) {
-                    const cp1 = ts ? toScreen(startV.x + ts.x, startV.y + ts.y) : a
-                    const cp2 = te ? toScreen(endV.x + te.x, endV.y + te.y) : b
-                    return (
-                        <path
-                            key={`seg-curve-${si}`}
-                            d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`}
-                            fill="none"
+                            key={`seg-line-${si}`}
+                            x1={a.x} y1={a.y}
+                            x2={b.x} y2={b.y}
                             stroke={BLUE}
                             strokeWidth={1}
                             opacity={0.4}
                         />
                     )
-                }
+                })}
 
-                return (
-                    <line
-                        key={`seg-line-${si}`}
-                        x1={a.x} y1={a.y}
-                        x2={b.x} y2={b.y}
-                        stroke={BLUE}
-                        strokeWidth={1}
-                        opacity={0.4}
-                    />
-                )
-            })}
+                {/* Bezier tangent handle lines */}
+                {vn.segments.map((seg: VectorSegment, si: number) => {
+                    const startV = vn.vertices[seg.start]
+                    const endV = vn.vertices[seg.end]
+                    if (!startV || !endV) return null
 
-            {/* Anchor points (vertices) — on top */}
-            {vn.vertices.map((v: VectorVertex, vi: number) => {
-                const pos = toScreen(v.x, v.y)
-                const isSelected = selectedSet.has(vi)
-                const half = ANCHOR_SIZE / 2
+                    const elements: React.ReactNode[] = []
 
-                return (
-                    <rect
-                        key={`anchor-${vi}`}
-                        x={pos.x - half}
-                        y={pos.y - half}
-                        width={ANCHOR_SIZE}
-                        height={ANCHOR_SIZE}
-                        fill={isSelected ? BLUE : WHITE}
-                        stroke={BLUE}
-                        strokeWidth={1.5}
-                        style={{ pointerEvents: 'auto', cursor: vectorEditTool === 'cut' ? 'crosshair' : 'move' }}
-                        onPointerDown={(e) => handleVertexPointerDown(e, vi)}
-                    />
-                )
-            })}
-        </svg>
+                    const ts = seg.tangentStart
+                    if (ts && (ts.x !== 0 || ts.y !== 0)) {
+                        const anchor = toScreen(startV.x, startV.y)
+                        const cp = toScreen(startV.x + ts.x, startV.y + ts.y)
+                        elements.push(
+                            <line
+                                key={`ts-line-${si}`}
+                                x1={anchor.x} y1={anchor.y}
+                                x2={cp.x} y2={cp.y}
+                                stroke={BLUE} strokeWidth={1} opacity={0.6}
+                            />,
+                        )
+                    }
+
+                    const te = seg.tangentEnd
+                    if (te && (te.x !== 0 || te.y !== 0)) {
+                        const anchor = toScreen(endV.x, endV.y)
+                        const cp = toScreen(endV.x + te.x, endV.y + te.y)
+                        elements.push(
+                            <line
+                                key={`te-line-${si}`}
+                                x1={anchor.x} y1={anchor.y}
+                                x2={cp.x} y2={cp.y}
+                                stroke={BLUE} strokeWidth={1} opacity={0.6}
+                            />,
+                        )
+                    }
+
+                    return elements.length > 0 ? <g key={`seg-handle-lines-${si}`}>{elements}</g> : null
+                })}
+            </svg>
+
+            {/* Interactive SVG layer — handles clicks */}
+            <svg
+                className="absolute inset-0"
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 32 }}
+            >
+                {/* All clickable elements in a group with pointer-events: all */}
+                <g style={{ pointerEvents: 'all' }}>
+                    {/* Invisible fat segment hit targets — for bend tool clicks AND double-click from any tool */}
+                    {vn.segments.map((seg: VectorSegment, si: number) => {
+                        const startV = vn.vertices[seg.start]
+                        const endV = vn.vertices[seg.end]
+                        if (!startV || !endV) return null
+
+                        const a = toScreen(startV.x, startV.y)
+                        const b = toScreen(endV.x, endV.y)
+
+                        const ts = seg.tangentStart
+                        const te = seg.tangentEnd
+                        const hasCurve =
+                            (ts && (ts.x !== 0 || ts.y !== 0)) ||
+                            (te && (te.x !== 0 || te.y !== 0))
+
+                        // Show pointer cursor in bend mode, default otherwise
+                        const cursor = vectorEditTool === 'bend' ? 'pointer' : 'default'
+
+                        if (hasCurve) {
+                            const cp1 = ts ? toScreen(startV.x + ts.x, startV.y + ts.y) : a
+                            const cp2 = te ? toScreen(endV.x + te.x, endV.y + te.y) : b
+                            return (
+                                <path
+                                    key={`seg-hit-${si}`}
+                                    d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`}
+                                    fill="none"
+                                    stroke="transparent"
+                                    strokeWidth={SEGMENT_HIT_WIDTH}
+                                    style={{ cursor }}
+                                    onClick={(e) => handleSegmentClick(e, si)}
+                                    onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
+                                />
+                            )
+                        }
+
+                        return (
+                            <line
+                                key={`seg-hit-${si}`}
+                                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                                stroke="transparent"
+                                strokeWidth={SEGMENT_HIT_WIDTH}
+                                style={{ cursor }}
+                                onClick={(e) => handleSegmentClick(e, si)}
+                                onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
+                            />
+                        )
+                    })}
+
+                    {/* Bezier tangent handle circles */}
+                    {vn.segments.map((seg: VectorSegment, si: number) => {
+                        const startV = vn.vertices[seg.start]
+                        const endV = vn.vertices[seg.end]
+                        if (!startV || !endV) return null
+
+                        const elements: React.ReactNode[] = []
+
+                        const ts = seg.tangentStart
+                        if (ts && (ts.x !== 0 || ts.y !== 0)) {
+                            const cp = toScreen(startV.x + ts.x, startV.y + ts.y)
+                            elements.push(
+                                <circle
+                                    key={`ts-cp-${si}`}
+                                    cx={cp.x} cy={cp.y} r={HANDLE_R}
+                                    fill={WHITE} stroke={BLUE} strokeWidth={1}
+                                    style={{ cursor: toolCursor }}
+                                    onPointerDown={(e) => handleHandlePointerDown(e, si, 'tangent-start')}
+                                />,
+                            )
+                        }
+
+                        const te = seg.tangentEnd
+                        if (te && (te.x !== 0 || te.y !== 0)) {
+                            const cp = toScreen(endV.x + te.x, endV.y + te.y)
+                            elements.push(
+                                <circle
+                                    key={`te-cp-${si}`}
+                                    cx={cp.x} cy={cp.y} r={HANDLE_R}
+                                    fill={WHITE} stroke={BLUE} strokeWidth={1}
+                                    style={{ cursor: toolCursor }}
+                                    onPointerDown={(e) => handleHandlePointerDown(e, si, 'tangent-end')}
+                                />,
+                            )
+                        }
+
+                        return elements.length > 0 ? <g key={`seg-handles-${si}`}>{elements}</g> : null
+                    })}
+
+                    {/* Anchor points (vertices) — circles like Figma */}
+                    {vn.vertices.map((v: VectorVertex, vi: number) => {
+                        const pos = toScreen(v.x, v.y)
+                        const isSelected = selectedSet.has(vi)
+
+                        return (
+                            <circle
+                                key={`anchor-${vi}`}
+                                cx={pos.x}
+                                cy={pos.y}
+                                r={ANCHOR_SIZE / 2}
+                                fill={isSelected ? BLUE : WHITE}
+                                stroke={BLUE}
+                                strokeWidth={1.5}
+                                style={{ cursor: vectorEditTool === 'cut' ? 'crosshair' : 'move' }}
+                                onPointerDown={(e) => handleVertexPointerDown(e, vi)}
+                            />
+                        )
+                    })}
+                </g>
+            </svg>
+        </>
     )
 })

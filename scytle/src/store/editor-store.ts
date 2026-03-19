@@ -203,6 +203,8 @@ interface EditorState {
     setNodes: (nodes: ScytleNode[]) => void
     addNode: (node: ScytleNode, parentId?: string, index?: number) => void
     updateNode: (id: string, updates: Record<string, unknown>) => void
+    /** Replace a top-level node entirely (used for skeleton → real frame swap) */
+    replaceNode: (oldId: string, newNode: ScytleNode) => void
     deleteNode: (id: string) => void
     deleteSelectedNodes: () => void
     /** Reorder a node within its parent's children array.
@@ -244,6 +246,8 @@ interface EditorState {
     // Project persistence -------------------------------------
     /** Currently loaded project ID (for per-project storage) */
     _projectId: string | null
+    /** Whether nodes have EVER been added for this project (prevents re-generation after delete-all) */
+    hasEverHadNodes: boolean
     /** Initialize editor for a specific project — loads state from localStorage */
     initForProject: (projectId: string) => void
     /** Save current state to project-specific localStorage */
@@ -320,6 +324,7 @@ export const useEditorStore = create<EditorState>()(
             _batchDepth: 0,
             _clipboard: [],
             _projectId: null,
+            hasEverHadNodes: false,
             pages: [],
             activePageId: '',
 
@@ -662,6 +667,8 @@ export const useEditorStore = create<EditorState>()(
                 set(
                     (state) => {
                         _snap(state)
+                        // Mark that this project has had nodes (prevents re-generation on delete-all)
+                        state.hasEverHadNodes = true
                         if (!parentId) {
                             if (index !== undefined) {
                                 state.nodes.splice(index, 0, node)
@@ -694,6 +701,19 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'updateNode'
+                ),
+
+            replaceNode: (oldId, newNode) =>
+                set(
+                    (state) => {
+                        const idx = state.nodes.findIndex((n) => n.id === oldId)
+                        if (idx !== -1) {
+                            _snap(state)
+                            state.nodes[idx] = newNode
+                        }
+                    },
+                    false,
+                    'replaceNode'
                 ),
 
             deleteNode: (id) =>
@@ -1331,6 +1351,8 @@ export const useEditorStore = create<EditorState>()(
                         draft.zoom = activePage.zoom
                         draft.panX = activePage.panX
                         draft.panY = activePage.panY
+                        // Restore hasEverHadNodes flag (or derive from existing nodes)
+                        draft.hasEverHadNodes = loaded?.hasEverHadNodes ?? activePage.nodes.length > 0
                         // Reset interaction state
                         draft.selectedIds = []
                         draft.hoveredId = null
@@ -1366,6 +1388,7 @@ export const useEditorStore = create<EditorState>()(
                 const data = {
                     pages,
                     activePageId: state.activePageId,
+                    hasEverHadNodes: state.hasEverHadNodes,
                 }
                 try {
                     localStorage.setItem(
@@ -1590,11 +1613,17 @@ export const useEditorStore = create<EditorState>()(
             exitVectorEditMode: () =>
                 set(
                     (state) => {
+                        // Figma: exiting vector edit keeps the node selected
+                        const nodeId = state.vectorEditNodeId
                         state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []
                         state.penDrawingState = null
                         state.activeTool = 'select'
+                        // Ensure the node remains in selectedIds
+                        if (nodeId && !state.selectedIds.includes(nodeId)) {
+                            state.selectedIds = [nodeId]
+                        }
                     },
                     false,
                     'exitVectorEditMode'
@@ -1761,10 +1790,13 @@ export const useEditorStore = create<EditorState>()(
                         vn.vertices = ps.vertices
                         vn.segments = ps.segments
 
-                        // Recalculate bounding box from vertices
+                        // Recalculate bounding box from vertices AND bezier control points
+                        // This ensures the entire shape fits within the frame bounds
                         if (ps.vertices.length > 0) {
                             let minX = Infinity, minY = Infinity
                             let maxX = -Infinity, maxY = -Infinity
+
+                            // Include vertex positions
                             for (const v of ps.vertices) {
                                 if (v.x < minX) minX = v.x
                                 if (v.y < minY) minY = v.y
@@ -1772,13 +1804,44 @@ export const useEditorStore = create<EditorState>()(
                                 if (v.y > maxY) maxY = v.y
                             }
 
+                            // Include bezier control points (tangent extents)
+                            for (const seg of ps.segments) {
+                                const startV = ps.vertices[seg.start]
+                                const endV = ps.vertices[seg.end]
+                                if (!startV || !endV) continue
+
+                                if (seg.tangentStart) {
+                                    const cpX = startV.x + seg.tangentStart.x
+                                    const cpY = startV.y + seg.tangentStart.y
+                                    if (cpX < minX) minX = cpX
+                                    if (cpY < minY) minY = cpY
+                                    if (cpX > maxX) maxX = cpX
+                                    if (cpY > maxY) maxY = cpY
+                                }
+                                if (seg.tangentEnd) {
+                                    const cpX = endV.x + seg.tangentEnd.x
+                                    const cpY = endV.y + seg.tangentEnd.y
+                                    if (cpX < minX) minX = cpX
+                                    if (cpY < minY) minY = cpY
+                                    if (cpX > maxX) maxX = cpX
+                                    if (cpY > maxY) maxY = cpY
+                                }
+                            }
+
+                            // Add padding for stroke width (half on each side for center-aligned stroke)
+                            const strokePad = ((node as VectorNode).strokeWeight ?? 2) / 2
+                            minX -= strokePad
+                            minY -= strokePad
+                            maxX += strokePad
+                            maxY += strokePad
+
                             // Offset all vertices so origin is top-left of bounding box
                             for (const v of vn.vertices) {
                                 v.x -= minX
                                 v.y -= minY
                             }
 
-                            // Also offset tangents are relative to their vertex, no adjust needed
+                            // Tangents are relative to their vertex, so no adjustment needed
 
                             // Update node position and dimensions
                             node.x += minX
@@ -1790,8 +1853,11 @@ export const useEditorStore = create<EditorState>()(
                         // Clear drawing state
                         state.penDrawingState = null
 
-                        // Enter vector edit mode on this node
-                        state.vectorEditNodeId = ps.nodeId
+                        // Keep the node selected and exit pen tool to select mode
+                        state.selectedIds = [ps.nodeId]
+                        state.activeTool = 'select'
+                        // Don't auto-enter vector edit mode — Figma shows the shape selected
+                        state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []
                     },

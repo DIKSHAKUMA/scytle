@@ -15,18 +15,9 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useProjectStore } from '@/store'
-import type { AiModel } from '@/types'
-
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
-
-const AI_MODELS = [
-    { id: 'claude-sonnet' as AiModel, label: 'Claude Sonnet', desc: 'Best design quality', recommended: true },
-    { id: 'claude-opus' as AiModel, label: 'Claude Opus', desc: 'Premium quality' },
-    { id: 'gemini-2.5-flash' as AiModel, label: 'Gemini 2.5 Flash', desc: 'Fast & balanced' },
-    { id: 'gemini-2.5-pro' as AiModel, label: 'Gemini 2.5 Pro', desc: 'Best Gemini quality' },
-] as const
 
 const SUGGESTIONS = {
     web: [
@@ -68,7 +59,6 @@ export default function NewProjectPage() {
 
     const [input, setInput] = useState('')
     const [productType, setProductType] = useState<'web' | 'app'>('web')
-    const [selectedModel, setSelectedModel] = useState<AiModel>('claude-sonnet')
     const [attachments, setAttachments] = useState<string[]>([])
     const [showAttachMenu, setShowAttachMenu] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
@@ -111,13 +101,12 @@ export default function NewProjectPage() {
             name: name || 'Untitled Project',
             description: trimmed,
             productType,
-            aiModel: selectedModel,
+            aiModel: 'gemini-pro',
         })
 
         if (project) {
             const params = new URLSearchParams()
             if (productType !== 'web') params.set('type', productType)
-            if (selectedModel !== 'claude-sonnet') params.set('model', selectedModel)
             const qs = params.toString()
             router.push(`/project/${project.projectId}${qs ? `?${qs}` : ''}`)
         } else {
@@ -131,8 +120,6 @@ export default function NewProjectPage() {
             handleSubmit()
         }
     }
-
-    const currentModel = AI_MODELS.find(m => m.id === selectedModel) ?? AI_MODELS[1]
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
@@ -260,41 +247,6 @@ export default function NewProjectPage() {
                             </div>
 
                             <div className="flex-1" />
-
-                            {/* Model selector */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors mr-2">
-                                        <Zap className="w-3 h-3" />
-                                        {currentModel.label}
-                                        <ChevronDown className="w-3 h-3 opacity-50" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" sideOffset={8} className="w-56 rounded-xl p-1.5">
-                                    {AI_MODELS.map((model) => (
-                                        <DropdownMenuItem
-                                            key={model.id}
-                                            onClick={() => setSelectedModel(model.id)}
-                                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer"
-                                        >
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-medium">{model.label}</span>
-                                                    {'recommended' in model && model.recommended && (
-                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent leading-none">
-                                                            Default
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-xs text-muted-foreground mt-0.5">{model.desc}</p>
-                                            </div>
-                                            {selectedModel === model.id && (
-                                                <Check className="w-3.5 h-3.5 text-accent shrink-0" />
-                                            )}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
 
                             {/* Generate button */}
                             <button

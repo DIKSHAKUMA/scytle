@@ -1,12 +1,6 @@
-// ============================================================
-// AI Client — Public API
-// Delegates to provider abstraction (Anthropic Claude / Vertex Gemini)
-// ============================================================
-
+import { GoogleGenAI } from '@google/genai'
 import { AI_CONFIG, SYSTEM_PROMPTS, type SystemPromptKey, type AIModel } from './config'
-import { getProvider, getFallbackModelKeys } from './providers'
 
-// Types
 export interface ChatMessage {
     role: 'user' | 'assistant'
     content: string
@@ -37,8 +31,6 @@ export class RateLimitError extends Error {
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────────
-
 const resolveSystemPrompt = (systemPrompt?: SystemPromptKey | string): string => {
     if (!systemPrompt) return SYSTEM_PROMPTS.default
     if (typeof systemPrompt === 'string' && systemPrompt in SYSTEM_PROMPTS) {
@@ -47,199 +39,195 @@ const resolveSystemPrompt = (systemPrompt?: SystemPromptKey | string): string =>
     return typeof systemPrompt === 'string' ? systemPrompt : SYSTEM_PROMPTS.default
 }
 
-const getErrorStatus = (error: unknown): number | undefined => {
-    if (!error || typeof error !== 'object') return undefined
-    const err = error as { status?: number; statusCode?: number; code?: number; response?: { status?: number }; error?: { status?: number } }
-    return err.status ?? err.statusCode ?? err.code ?? err.response?.status ?? err.error?.status
+function getClient() {
+    // If the user provided GOOGLE_CLOUD_API_KEY it will automatically be picked up
+    // by new GoogleGenAI(). If using Vertex AI, we initialize with vertexai config.
+    const project = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT
+    const location = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
+    
+    // For Claude models, Vertex usually requires us-east5
+    // But @google/genai lets us route models easily
+    if (process.env.GOOGLE_CLOUD_API_KEY) {
+        return new GoogleGenAI({ apiKey: process.env.GOOGLE_CLOUD_API_KEY })
+    }
+
+    if (!project) {
+        throw new Error('Missing GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_API_KEY in .env.local')
+    }
+
+    return new GoogleGenAI({
+        vertexai: { project, location } as any
+    })
 }
 
-const getErrorMessage = (error: unknown): string => {
-    if (error instanceof Error) return error.message
-    return String(error)
+/** Fallback chain */
+const MODEL_FALLBACK_CHAIN: Record<string, string[]> = {
+    'gemini-pro': ['claude-sonnet'],
+    'claude-opus': ['claude-sonnet', 'gemini-pro'],
+    'claude-sonnet': ['gemini-pro'],
 }
-
-const isQuotaExceededError = (error: unknown): boolean => {
-    const message = getErrorMessage(error).toLowerCase()
-    return message.includes('exceeded your current quota')
-        || message.includes('quota')
-        || message.includes('billing')
-        || message.includes('resource_exhausted')
-}
-
-/** Model not found / not enabled in this GCP project */
-const isModelNotFoundError = (error: unknown): boolean => {
-    const status = getErrorStatus(error)
-    const message = getErrorMessage(error).toLowerCase()
-    return status === 404
-        || message.includes('was not found')
-        || message.includes('does not have access')
-}
-
-/** Should this error trigger a fallback to the next model? */
-const shouldFallback = (error: unknown): boolean => {
-    const status = getErrorStatus(error)
-    return isModelNotFoundError(error)
-        || ((status === 429 || status === 403) && isQuotaExceededError(error))
-}
-
-const shouldRetry = (error: unknown, attempt: number, maxAttempts: number): boolean => {
-    if (attempt >= maxAttempts - 1) return false
-    const status = getErrorStatus(error)
-    if (status === 429 && !isQuotaExceededError(error)) return true
-    return status === 500 || status === 502 || status === 503 || status === 504
-}
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // ── Public API ──────────────────────────────────────────────
 
-/**
- * Generate a non-streaming response using the configured AI provider
- */
 export async function generate(
     message: string,
     history: ChatMessage[] = [],
     options: GenerateOptions = {}
 ): Promise<string> {
-    const modelKey = options.model ?? ('fast' as AIModel)
-    const modelsToTry: AIModel[] = [modelKey, ...getFallbackModelKeys(modelKey)]
-    const systemPrompt = resolveSystemPrompt(options.systemPrompt)
+    const modelKey = options.model ?? ('gemini-pro' as AIModel)
+    const modelsToTry: AIModel[] = [modelKey, ...(MODEL_FALLBACK_CHAIN[modelKey] ?? []) as AIModel[]]
+    const systemInstruction = resolveSystemPrompt(options.systemPrompt)
 
-    const historyForProvider = history
+    const contents = history
         .slice(-AI_CONFIG.context.maxHistoryMessages)
-        .map(msg => ({ role: msg.role, content: msg.content }))
+        .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
+    
+    contents.push({ role: 'user', parts: [{ text: message }] })
 
-    for (const currentModel of modelsToTry) {
-        const provider = getProvider(currentModel)
-        const modelLimit = AI_CONFIG.modelMaxTokens[currentModel] ?? AI_CONFIG.generation.maxOutputTokens
-        const requestedTokens = options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens
-        const maxTokens = Math.min(requestedTokens, modelLimit)
+    for (const currentModelKey of modelsToTry) {
+        const ai = getClient()
+        const actualModelName = AI_CONFIG.models[currentModelKey]
+        const maxOutputTokens = Math.min(
+            options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens,
+            AI_CONFIG.modelMaxTokens[currentModelKey] ?? 8192
+        )
 
-        const maxAttempts = 3
-        let modelUnavailable = false
-
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            try {
-                const result = await provider.generate({
-                    systemPrompt,
-                    userMessage: message,
-                    history: historyForProvider,
-                    temperature: options.temperature ?? AI_CONFIG.generation.temperature,
-                    maxTokens,
-                })
-                console.log(`✅ AI generate success — provider: ${provider.name}, model: ${currentModel}`)
-                return result
-            } catch (error) {
-                const status = getErrorStatus(error)
-
-                // Model not found / quota exceeded -> try next model in fallback chain
-                if (shouldFallback(error)) {
-                    console.warn(`⚠️ Model ${currentModel} unavailable (${provider.name}): ${getErrorMessage(error).slice(0, 100)}. Trying fallback...`)
-                    modelUnavailable = true
-                    break
-                }
-
-                // Transient error -> retry with backoff
-                if (shouldRetry(error, attempt, maxAttempts)) {
-                    const backoff = 400 * Math.pow(2, attempt) + Math.floor(Math.random() * 200)
-                    console.warn(`⚠️ AI request failed (attempt ${attempt + 1}/${maxAttempts}): ${getErrorMessage(error)}. Retrying in ${backoff}ms...`)
-                    await sleep(backoff)
-                    continue
-                }
-
-                // Rate limit (not quota) -> surface to caller
-                if (status === 429) {
-                    throw new RateLimitError('AI rate limit exceeded. Please try again in a minute.')
-                }
-
-                console.error(`🤖 AI generation error (${provider.name}):`, getErrorMessage(error))
-                throw new Error(`AI generation failed (${provider.name}): ${getErrorMessage(error)}`)
+        try {
+            console.log(`🤖 Generating with model: ${actualModelName}`)
+            
+            // Adjust location for Claude models on Vertex
+            const isClaude = actualModelName.includes('claude')
+            if (isClaude && ai.vertexai && (ai.vertexai as any).location !== 'us-east5') {
+                 // Create a specific client for Claude in us-east5
+                 const claudeClient = new GoogleGenAI({
+                    vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any
+                 })
+                 const result = await claudeClient.models.generateContent({
+                     model: actualModelName,
+                     contents,
+                     config: {
+                         systemInstruction: { parts: [{ text: systemInstruction }]},
+                         temperature: options.temperature ?? AI_CONFIG.generation.temperature,
+                         maxOutputTokens,
+                     }
+                 })
+                 if (!result.text) throw new Error('Empty response')
+                 return result.text
             }
-        }
 
-        if (!modelUnavailable) break
+            // Normal GEMINI / generic generation
+            const result = await ai.models.generateContent({
+                model: actualModelName,
+                contents,
+                config: {
+                    systemInstruction: { parts: [{ text: systemInstruction }]},
+                    temperature: options.temperature ?? AI_CONFIG.generation.temperature,
+                    topP: AI_CONFIG.generation.topP,
+                    maxOutputTokens,
+                    thinkingConfig: actualModelName.includes('gemini-3.1-pro') ? { thinkingLevel: 'HIGH' } as any : undefined,
+                    safetySettings: [
+                        { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'OFF' as any }
+                    ]
+                }
+            })
+
+            if (!result.text) throw new Error('Empty response from AI')
+            console.log(`✅ Success with ${actualModelName}`)
+            return result.text
+
+        } catch (error: any) {
+            console.warn(`⚠️ Failed with ${actualModelName}: ${error.message}`)
+            const status = error.status || error.code
+            if (status === 429 && !error.message.includes('quota')) {
+                throw new RateLimitError('AI rate limit exceeded. Please try again.')
+            }
+            // continue to fallback
+        }
     }
 
-    throw new RateLimitError('All AI models unavailable. Enable Claude in GCP Model Garden or check your Vertex AI configuration.', false)
+    throw new Error('All AI models failed or were unavailable. Check GCP Model Garden / API keys.')
 }
 
-/**
- * Generate a streaming response — returns an async generator
- */
 export async function* generateStream(
     message: string,
     history: ChatMessage[] = [],
     options: GenerateOptions = {}
 ): AsyncGenerator<StreamChunk> {
-    const modelKey = options.model ?? ('fast' as AIModel)
-    const modelsToTry: AIModel[] = [modelKey, ...getFallbackModelKeys(modelKey)]
-    const systemPrompt = resolveSystemPrompt(options.systemPrompt)
+    const modelKey = options.model ?? ('gemini-pro' as AIModel)
+    const modelsToTry: AIModel[] = [modelKey, ...(MODEL_FALLBACK_CHAIN[modelKey] ?? []) as AIModel[]]
+    const systemInstruction = resolveSystemPrompt(options.systemPrompt)
 
-    const historyForProvider = history
+    const contents = history
         .slice(-AI_CONFIG.context.maxHistoryMessages)
-        .map(msg => ({ role: msg.role, content: msg.content }))
+        .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
+    
+    contents.push({ role: 'user', parts: [{ text: message }] })
 
-    for (const currentModel of modelsToTry) {
-        const provider = getProvider(currentModel)
-        const modelLimit = AI_CONFIG.modelMaxTokens[currentModel] ?? AI_CONFIG.generation.maxOutputTokens
-        const requestedTokens = options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens
-        const maxTokens = Math.min(requestedTokens, modelLimit)
+    for (const currentModelKey of modelsToTry) {
+        const ai = getClient()
+        const actualModelName = AI_CONFIG.models[currentModelKey]
+        const maxOutputTokens = Math.min(
+            options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens,
+            AI_CONFIG.modelMaxTokens[currentModelKey] ?? 8192
+        )
 
-        const maxAttempts = 3
-        let modelUnavailable = false
+        try {
+            console.log(`🔄 Streaming from model: ${actualModelName}`)
+            
+            const isClaude = actualModelName.includes('claude')
+            const clientToUse = (isClaude && ai.vertexai) 
+                 ? new GoogleGenAI({ vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any })
+                 : ai;
 
-        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            try {
-                const generator = provider.generateStream({
-                    systemPrompt,
-                    userMessage: message,
-                    history: historyForProvider,
+            const responseStream = await clientToUse.models.generateContentStream({
+                model: actualModelName,
+                contents,
+                config: {
+                    systemInstruction: { parts: [{ text: systemInstruction }]},
                     temperature: options.temperature ?? AI_CONFIG.generation.temperature,
-                    maxTokens,
-                })
-
-                console.log(`🔄 AI stream started — provider: ${provider.name}, model: ${currentModel}`)
-                for await (const chunk of generator) {
-                    yield chunk as StreamChunk
+                    topP: AI_CONFIG.generation.topP,
+                    maxOutputTokens,
+                    thinkingConfig: actualModelName.includes('gemini-3.1-pro') ? { thinkingLevel: 'HIGH' } as any : undefined,
+                    safetySettings: [
+                        { category: 'HARM_CATEGORY_HATE_SPEECH' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as any, threshold: 'OFF' as any },
+                        { category: 'HARM_CATEGORY_HARASSMENT' as any, threshold: 'OFF' as any }
+                    ]
                 }
-                console.log(`✅ AI stream complete — provider: ${provider.name}, model: ${currentModel}`)
-                return
-            } catch (error) {
-                const status = getErrorStatus(error)
+            })
 
-                // Model not found / quota exceeded -> try next model
-                if (shouldFallback(error)) {
-                    console.warn(`⚠️ Model ${currentModel} unavailable (${provider.name}): ${getErrorMessage(error).slice(0, 100)}. Trying fallback...`)
-                    modelUnavailable = true
-                    break
+            let hasYielded = false
+            for await (const chunk of responseStream) {
+                if (chunk.text) {
+                    hasYielded = true
+                    yield { text: chunk.text, done: false }
                 }
-
-                if (shouldRetry(error, attempt, maxAttempts)) {
-                    const backoff = 400 * Math.pow(2, attempt) + Math.floor(Math.random() * 200)
-                    console.warn(`⚠️ AI stream failed (attempt ${attempt + 1}/${maxAttempts}): ${getErrorMessage(error)}. Retrying in ${backoff}ms...`)
-                    await sleep(backoff)
-                    continue
-                }
-
-                if (status === 429) {
-                    throw new RateLimitError('AI rate limit exceeded. Please try again in a minute.')
-                }
-
-                console.error(`🤖 AI streaming error (${provider.name}):`, getErrorMessage(error))
-                throw new Error(`AI streaming failed (${provider.name}): ${getErrorMessage(error)}`)
             }
-        }
+            
+            if (hasYielded) {
+                console.log(`✅ Stream complete: ${actualModelName}`)
+                yield { text: '', done: true }
+                return
+            }
+            throw new Error('Empty stream response')
 
-        if (!modelUnavailable) break
+        } catch (error: any) {
+            console.warn(`⚠️ Stream failed with ${actualModelName}: ${error.message}`)
+            const status = error.status || error.code
+            if (status === 429 && !error.message.includes('quota')) {
+                throw new RateLimitError('AI rate limit exceeded. Please try again.')
+            }
+            // continue to fallback
+        }
     }
 
-    throw new RateLimitError('All AI models unavailable. Enable Claude in GCP Model Garden or check your Vertex AI configuration.', false)
+    throw new Error('All AI models failed streaming. Check GCP Model Garden / API keys.')
 }
 
-/**
- * Create a ReadableStream for Server-Sent Events
- * Use this in API routes for streaming responses to the client
- */
 export function createStreamResponse(
     message: string,
     history: ChatMessage[] = [],
@@ -263,13 +251,9 @@ export function createStreamResponse(
                         controller.enqueue(encoder.encode(`data: ${doneData}\n\n`))
                     }
                 }
-
                 controller.close()
-            } catch (error) {
-                const errorData = JSON.stringify({
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    done: true
-                })
+            } catch (error: any) {
+                const errorData = JSON.stringify({ error: error.message, done: true })
                 controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
                 controller.close()
             }
@@ -277,5 +261,4 @@ export function createStreamResponse(
     })
 }
 
-// Export types
 export type { AIModel, SystemPromptKey }

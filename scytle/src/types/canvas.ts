@@ -590,7 +590,7 @@ export function createVector(
         handleMirroring: 'NONE',
         strokeCap: 'ROUND',
         strokeJoin: 'MITER',
-        strokeWeight: 1,
+        strokeWeight: 2,
         strokeAlign: 'CENTER',
         strokeColor: '#000000',
         strokeOpacity: 1,

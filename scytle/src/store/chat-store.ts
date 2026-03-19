@@ -16,7 +16,7 @@ interface ChatState {
     abortController: AbortController | null
 
     // Actions
-    sendMessage: (content: string, projectId: string) => Promise<void>
+    sendMessage: (content: string, projectId: string, selectedNodeId?: string | null, canvasNodes?: any[]) => Promise<void>
     generateSitemap: (projectId: string, description: string) => Promise<void>
     loadHistory: (projectId: string) => Promise<void>
     addMessage: (role: MessageRole, content: string) => void
@@ -38,7 +38,12 @@ export const useChatStore = create<ChatState>()(
         abortController: null,
 
         // Send message to AI
-        sendMessage: async (content: string, projectId: string) => {
+        sendMessage: async (
+            content: string, 
+            projectId: string, 
+            selectedNodeId?: string | null, 
+            canvasNodes?: any[]
+        ) => {
             // Create abort controller for this request
             const abortController = new AbortController()
 
@@ -69,7 +74,12 @@ export const useChatStore = create<ChatState>()(
                         'Authorization': `Bearer ${jwt.jwt}`,
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ message: content, projectId }),
+                    body: JSON.stringify({ 
+                        message: content, 
+                        projectId,
+                        selectedNodeId,
+                        canvasNodes
+                    }),
                     signal: abortController.signal,
                 })
 

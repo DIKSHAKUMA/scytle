@@ -74,6 +74,8 @@ export function PropertiesPanel() {
     const nodes = useEditorStore((s) => s.nodes)
     const selectedIds = useEditorStore((s) => s.selectedIds)
     const updateNode = useEditorStore((s) => s.updateNode)
+    // Must call ALL hooks before any early returns (React rules of hooks)
+    const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
 
     // Get selected node
     const node: ScytleNode | null = useMemo(() => {
@@ -139,6 +141,11 @@ export function PropertiesPanel() {
     const isImage = node.type === 'image'
     const isVector = node.type === 'vector'
 
+    // Figma: vector nodes show "Vector" in edit mode, "Vector path" in select mode
+    const vectorLabel = isVector
+        ? (vectorEditNodeId === node.id ? 'Vector' : 'Vector path')
+        : TYPE_LABELS[node.type]
+
     return (
         <div
             data-properties-panel
@@ -162,7 +169,7 @@ export function PropertiesPanel() {
                         onChange={(e) => onUpdate({ name: e.target.value })}
                     />
                     <span className="text-[10px] text-muted-foreground/40">
-                        {TYPE_LABELS[node.type]}
+                        {vectorLabel}
                     </span>
                 </div>
             </div>
@@ -180,9 +187,10 @@ export function PropertiesPanel() {
             {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
 
             {/* Appearance → Fill → Stroke → Effects (Figma order) */}
+            {/* VectorSection handles fill + stroke for vectors — skip generic sections */}
             <AppearanceSection node={node} onUpdate={onUpdate} />
-            <FillSection node={node} onUpdate={onUpdate} />
-            <StrokeSection node={node} onUpdate={onUpdate} />
+            {!isVector && <FillSection node={node} onUpdate={onUpdate} />}
+            {!isVector && <StrokeSection node={node} onUpdate={onUpdate} />}
             <EffectsSection node={node} onUpdate={onUpdate} />
 
             {/* Bottom spacer to prevent scroll cutoff */}

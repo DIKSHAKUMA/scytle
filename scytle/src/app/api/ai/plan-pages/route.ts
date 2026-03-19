@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
         const data = validation.data
         const productType = data.productType ?? 'web'
-        const modelKey = (data.model || 'claude-sonnet') as AIModel
+        const modelKey = (data.model || 'gemini-pro') as AIModel
 
         console.log(`📋 Planning pages for "${data.description.slice(0, 50)}..." [model: ${modelKey}, type: ${productType}]`)
 

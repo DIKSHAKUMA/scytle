@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
@@ -8,6 +8,7 @@ import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
 import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
 import { Loader2, Sparkles } from 'lucide-react'
 import { generateProject } from '@/lib/generate-page'
+import { createSkeletonFrame } from '@/components/workspace/skeleton-frame'
 import type { ProductType, AiModel } from '@/types'
 
 export default function ProjectEditorPage() {
@@ -37,16 +38,41 @@ function ProjectEditor() {
 
     const hasNodes = useEditorStore((s) => s.nodes.length > 0)
     const projectReady = useEditorStore((s) => s._projectId === projectId)
+    const hasEverHadNodes = useEditorStore((s) => s.hasEverHadNodes)
 
     const [authChecked, setAuthChecked] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [genError, setGenError] = useState<string | null>(null)
     const [genPhase, setGenPhase] = useState<string>('Planning...')
     const [genProgress, setGenProgress] = useState<{ current: number; total: number } | null>(null)
-    const generationTriggered = useRef(false)
 
     // Centralized keyboard shortcuts (tools, zoom, clipboard, undo/redo, z-order, etc.)
     useKeyboardShortcuts()
+
+    // Helper: auto-zoom to fit all nodes on canvas
+    const zoomToFitAll = useCallback(() => {
+        const allNodes = useEditorStore.getState().nodes
+        if (allNodes.length === 0) return
+
+        const minX = Math.min(...allNodes.map(n => n.x))
+        const maxX = Math.max(...allNodes.map(n => n.x + n.width))
+        const minY = Math.min(...allNodes.map(n => n.y))
+        const maxY = Math.max(...allNodes.map(n => n.y + n.height))
+        const contentW = maxX - minX
+        const contentH = maxY - minY
+
+        const viewportW = window.innerWidth - 520
+        const viewportH = window.innerHeight - 48
+        const padding = 80
+        const zoomX = (viewportW - padding * 2) / contentW
+        const zoomY = (viewportH - padding * 2) / contentH
+        const fitZoom = Math.min(zoomX, zoomY, 1)
+        const centerX = (viewportW / 2) - ((minX + contentW / 2) * fitZoom)
+        const centerY = (viewportH / 2) - ((minY + contentH / 2) * fitZoom)
+
+        useEditorStore.getState().setZoom(Math.max(0.05, fitZoom))
+        useEditorStore.getState().setPan(centerX, centerY)
+    }, [])
 
     // Multi-page project generation handler
     const handleGenerate = useCallback(async () => {
@@ -55,6 +81,9 @@ function ProjectEditor() {
         setGenError(null)
         setGenPhase('Planning your pages...')
         setGenProgress(null)
+
+        // Track skeleton frame IDs so we can replace them as pages complete
+        const skeletonIds: string[] = []
 
         try {
             const productType = urlProductType ?? currentProject.productType ?? 'web'
@@ -67,59 +96,64 @@ function ProjectEditor() {
                 onPlanReady: (plan) => {
                     setGenPhase(`Generating ${plan.pages.length} pages...`)
                     setGenProgress({ current: 0, total: plan.pages.length })
+
+                    // Sort pages by priority (matches generate-page.ts order)
+                    const sortedPages = [...plan.pages].sort((a, b) => a.priority - b.priority)
+
+                    // Immediately place skeleton frames on the canvas
+                    const PAGE_GAP = 100
+                    const FRAME_WIDTH = 1440
+
+                    sortedPages.forEach((page, index) => {
+                        const skeleton = createSkeletonFrame(page.name)
+                        skeleton.x = index * (FRAME_WIDTH + PAGE_GAP)
+                        skeleton.y = 0
+
+                        skeletonIds.push(skeleton.id)
+                        useEditorStore.getState().addNode(skeleton)
+                    })
+
+                    // Auto-zoom to fit all skeleton frames
+                    zoomToFitAll()
                 },
-                onPageStart: (index, pageName, total) => {
+                onPageStart: (index, pageName) => {
                     setGenPhase(`Generating "${pageName}"`)
-                    setGenProgress({ current: index, total })
+                    setGenProgress(prev => prev
+                        ? { current: index, total: prev.total }
+                        : { current: index, total: index + 1 }
+                    )
                 },
                 onPageComplete: (index, pageName, frame) => {
                     const store = useEditorStore.getState()
 
-                    // Place all page frames on the SAME canvas, side-by-side with gaps
-                    const PAGE_GAP = 100 // px gap between artboard frames
-
-                    // Calculate x offset: sum of widths of previously placed frames + gaps
-                    const existingNodes = store.nodes
-                    let xOffset = 0
-                    if (existingNodes.length > 0) {
-                        const lastNode = existingNodes[existingNodes.length - 1]
-                        xOffset = lastNode.x + lastNode.width + PAGE_GAP
+                    // Get the skeleton node we're replacing to preserve its position
+                    const skeletonId = skeletonIds[index]
+                    if (skeletonId) {
+                        const skeletonNode = store.nodes.find(n => n.id === skeletonId)
+                        if (skeletonNode) {
+                            frame.x = skeletonNode.x
+                            frame.y = skeletonNode.y
+                        }
                     }
 
-                    // Position the frame at the calculated offset
-                    frame.x = xOffset
-                    frame.y = 0
                     frame.name = pageName
 
-                    store.addNode(frame)
-
-                    // Auto-zoom to fit all frames on canvas
-                    const allNodes = useEditorStore.getState().nodes
-                    if (allNodes.length > 0) {
-                        const minX = Math.min(...allNodes.map(n => n.x))
-                        const maxX = Math.max(...allNodes.map(n => n.x + n.width))
-                        const minY = Math.min(...allNodes.map(n => n.y))
-                        const maxY = Math.max(...allNodes.map(n => n.y + n.height))
-                        const contentW = maxX - minX
-                        const contentH = maxY - minY
-                        // Get the canvas area dimensions (approximate viewport)
-                        const viewportW = window.innerWidth - 520 // subtract left+right panels
-                        const viewportH = window.innerHeight - 48 // subtract top bar
-                        const padding = 80
-                        const zoomX = (viewportW - padding * 2) / contentW
-                        const zoomY = (viewportH - padding * 2) / contentH
-                        const fitZoom = Math.min(zoomX, zoomY, 1) // don't zoom in past 100%
-                        const centerX = (viewportW / 2) - ((minX + contentW / 2) * fitZoom)
-                        const centerY = (viewportH / 2) - ((minY + contentH / 2) * fitZoom)
-                        useEditorStore.getState().setZoom(Math.max(0.05, fitZoom))
-                        useEditorStore.getState().setPan(centerX, centerY)
+                    // Replace the skeleton with the real frame
+                    if (skeletonId) {
+                        store.replaceNode(skeletonId, frame)
+                    } else {
+                        // Fallback: just add if no skeleton
+                        store.addNode(frame)
                     }
+
+                    // Re-zoom to fit
+                    zoomToFitAll()
 
                     setGenProgress(prev => prev
                         ? { current: index + 1, total: prev.total }
                         : { current: index + 1, total: index + 1 }
                     )
-                    console.log(`✅ Page "${pageName}" added to canvas`)
+                    console.log(`✅ Page "${pageName}" replaced skeleton on canvas`)
                 },
             })
 
@@ -127,6 +161,14 @@ function ProjectEditor() {
         } catch (error) {
             console.error('❌ Generation failed:', error)
             setGenError(error instanceof Error ? error.message : 'Generation failed')
+
+            // Clean up any remaining skeleton frames on error
+            const store = useEditorStore.getState()
+            for (const skelId of skeletonIds) {
+                if (store.nodes.some(n => n.id === skelId)) {
+                    store.deleteNode(skelId)
+                }
+            }
         } finally {
             setIsGenerating(false)
             setGenPhase('')
@@ -134,21 +176,23 @@ function ProjectEditor() {
         }
     }, [currentProject, isGenerating, urlProductType, urlModel])
 
-    // Auto-trigger generation when canvas is empty and project has a description
+    // Auto-trigger generation ONLY on first visit when:
+    // - Project is ready and has a description
+    // - Canvas is empty AND nodes have NEVER existed for this project
+    // This prevents re-triggering after the user deletes all screens
     useEffect(() => {
         if (
-            !generationTriggered.current &&
             projectReady &&
             !hasNodes &&
+            !hasEverHadNodes &&
             currentProject?.description &&
             authChecked &&
             !projectLoading &&
             !isGenerating
         ) {
-            generationTriggered.current = true
             handleGenerate()
         }
-    }, [projectReady, hasNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate])
+    }, [projectReady, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate])
 
     // Initialize editor state for this project (per-project persistence)
     useEffect(() => {
