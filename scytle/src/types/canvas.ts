@@ -338,6 +338,14 @@ export interface BaseNodeProperties {
     fills: Fill[]
     border?: Border
     shadows: Shadow[]
+
+    // === CONSTRAINTS (Phase 4) ===
+    // Min/max dimensions (Figma: minWidth, maxWidth, minHeight, maxHeight)
+    // https://www.figma.com/plugin-docs/api/properties/nodes-minwidth/
+    minWidth?: number
+    maxWidth?: number
+    minHeight?: number
+    maxHeight?: number
 }
 
 /** Container node — div with optional auto-layout (flexbox/grid) */
@@ -346,6 +354,20 @@ export interface FrameNode extends BaseNodeProperties {
     children: ScytleNode[]
     layout: Layout
     padding: Padding
+
+    // === FLEX CHILD PROPERTIES (Phase 4) ===
+    // Set on children when parent has layoutMode: 'flex'
+    // https://www.figma.com/plugin-docs/api/properties/nodes-layoutgrow/
+    /** Flex grow factor (0 = don't grow, 1+ = grow proportionally) */
+    layoutGrow?: number
+    /** Flex shrink factor (0 = don't shrink, 1 = shrink if needed) */
+    flexShrink?: number
+    /** Flex basis in pixels (initial size before grow/shrink) */
+    flexBasis?: number
+    /** Order for flex item reordering (-9999 = first, 9999 = last) */
+    order?: number
+    /** Self alignment (overrides parent's alignItems) */
+    alignSelf?: 'auto' | 'start' | 'center' | 'end' | 'stretch' | 'baseline'
 }
 
 /** Text leaf node — renders as heading/paragraph/span */

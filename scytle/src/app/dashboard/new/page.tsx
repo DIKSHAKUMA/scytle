@@ -14,7 +14,9 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ModelSelector } from '@/components/model-selector'
 import { useProjectStore } from '@/store'
+import { getDefaultModel } from '@/lib/ai/models'
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
@@ -59,6 +61,7 @@ export default function NewProjectPage() {
 
     const [input, setInput] = useState('')
     const [productType, setProductType] = useState<'web' | 'app'>('web')
+    const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
     const [attachments, setAttachments] = useState<string[]>([])
     const [showAttachMenu, setShowAttachMenu] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
@@ -101,18 +104,19 @@ export default function NewProjectPage() {
             name: name || 'Untitled Project',
             description: trimmed,
             productType,
-            aiModel: 'gemini-pro',
+            aiModel: selectedModel as 'gemini-pro' | 'gemini-flash',
         })
 
         if (project) {
             const params = new URLSearchParams()
             if (productType !== 'web') params.set('type', productType)
+            if (selectedModel !== 'gemini-pro') params.set('model', selectedModel)
             const qs = params.toString()
             router.push(`/project/${project.projectId}${qs ? `?${qs}` : ''}`)
         } else {
             setIsGenerating(false)
         }
-    }, [input, isLoading, isGenerating, createProject, router])
+    }, [input, isLoading, isGenerating, createProject, router, productType, selectedModel])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -217,6 +221,16 @@ export default function NewProjectPage() {
                         <div className="absolute bottom-3 left-3 right-3 flex items-center">
                             {/* Left tools */}
                             <div className="flex items-center gap-1">
+                                {/* Model Selector */}
+                                <ModelSelector 
+                                    value={selectedModel} 
+                                    onChange={setSelectedModel}
+                                    compact
+                                />
+                                
+                                {/* Divider */}
+                                <div className="w-px h-4 bg-border/50 mx-1" />
+                                
                                 {/* Attach */}
                                 <div className="relative" ref={attachMenuRef}>
                                     <button

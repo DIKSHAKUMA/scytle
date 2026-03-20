@@ -327,6 +327,21 @@ export function computeBaseStyles(
     }
     // hug → height unset (auto)
 
+    // ── Min/Max Constraints (Phase 4) ─────────────────────────
+    // These override the flex-based minWidth/minHeight set above
+    if (node.minWidth != null && node.minWidth > 0) {
+        s.minWidth = `calc(${node.minWidth}px * var(--z, 1))`
+    }
+    if (node.maxWidth != null) {
+        s.maxWidth = `calc(${node.maxWidth}px * var(--z, 1))`
+    }
+    if (node.minHeight != null && node.minHeight > 0) {
+        s.minHeight = `calc(${node.minHeight}px * var(--z, 1))`
+    }
+    if (node.maxHeight != null) {
+        s.maxHeight = `calc(${node.maxHeight}px * var(--z, 1))`
+    }
+
     // ── Opacity ───────────────────────────────────────────────
     if (node.opacity < 1) s.opacity = node.opacity
 
@@ -410,6 +425,24 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
         if (gridRowGap != null) s.rowGap = `calc(${gridRowGap}px * var(--z, 1))`
     }
     // mode: 'none' → no display override; position context handled by renderer
+
+    // ── Flex child properties (Phase 4) ───────────────────────
+    // These apply when this frame is a child of a flex parent
+    if (node.flexShrink != null) {
+        s.flexShrink = node.flexShrink
+    }
+    if (node.flexBasis != null) {
+        s.flexBasis = `calc(${node.flexBasis}px * var(--z, 1))`
+    }
+    if (node.order != null) {
+        s.order = node.order
+    }
+    if (node.alignSelf && node.alignSelf !== 'auto') {
+        s.alignSelf = ALIGN_MAP[node.alignSelf] ?? node.alignSelf
+    }
+    if (node.layoutGrow != null && node.layoutGrow > 0) {
+        s.flexGrow = node.layoutGrow
+    }
 
     // Padding
     Object.assign(s, computePadding(node.padding))

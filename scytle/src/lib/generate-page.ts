@@ -13,11 +13,20 @@ import type { PagePlan } from '@/lib/ai/prompts/page-planner'
 
 /** Map full model IDs → route keys (for backwards compat) */
 const MODEL_KEY_MAP: Record<string, string> = {
-    'claude-sonnet-4-20250514': 'claude-sonnet',
-    'claude-opus-4-20250514': 'claude-opus',
-    'gemini-2.0-flash': 'fast',
-    'gemini-2.5-flash': 'balanced',
-    'gemini-2.5-pro': 'powerful',
+    // New Gemini models
+    'gemini-3.1-pro-preview': 'gemini-pro',
+    'gemini-2.5-pro': 'gemini-pro',
+    'gemini-2.5-flash': 'gemini-flash',
+    'gemini-2.0-flash': 'gemini-flash',
+    // Legacy aliases
+    'fast': 'gemini-flash',
+    'balanced': 'gemini-pro',
+    'powerful': 'gemini-pro',
+    // Old Claude references → redirect to gemini-pro
+    'claude-sonnet': 'gemini-pro',
+    'claude-opus': 'gemini-pro',
+    'claude-sonnet-4-20250514': 'gemini-pro',
+    'claude-opus-4-20250514': 'gemini-pro',
 }
 
 export interface GeneratePageOptions {
@@ -26,7 +35,7 @@ export interface GeneratePageOptions {
     projectDescription?: string
     industry?: string
     productType?: ProductType   // 'web' | 'app'
-    model?: string // Model key (claude-sonnet, fast, balanced, etc.) or full model ID
+    model?: string // Model key (gemini-pro, gemini-flash, fast, balanced, etc.)
     themeContext?: {
         primary: string
         secondary: string
@@ -49,7 +58,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     const jwt = await createJWT()
     if (!jwt) throw new Error('Not authenticated')
 
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'claude-sonnet'
+    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-pro'
 
     const response = await fetch('/api/ai/generate-html', {
         method: 'POST',
@@ -184,7 +193,7 @@ export async function generateProject(options: GenerateProjectOptions): Promise<
     const jwt = await createJWT()
     if (!jwt) throw new Error('Not authenticated')
 
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'claude-sonnet'
+    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-pro'
 
     // Step 1: Get page plan from AI
     const planResponse = await fetch('/api/ai/plan-pages', {

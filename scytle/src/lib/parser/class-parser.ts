@@ -84,6 +84,21 @@ export interface ParsedStyles {
     gap: number
     gridColumns: number
 
+    // === NEW: Flex child properties (Phase 2) ===
+    flexShrink: number | null       // shrink-0 → 0, shrink → 1
+    flexBasis: number | null        // basis-* in px
+    order: number | null            // order-*
+    alignSelf: 'auto' | 'start' | 'end' | 'center' | 'stretch' | 'baseline' | null
+
+    // === NEW: Grid gap split (Phase 2) ===
+    columnGap: number | null        // gap-x-*
+    rowGap: number | null           // gap-y-*
+
+    // === NEW: Grid span (Phase 2) ===
+    gridColumnSpan: number | null   // col-span-*
+    gridRowSpan: number | null      // row-span-*
+    gridRows: number                // grid-rows-*
+
     // Spacing
     padding: { top: number; right: number; bottom: number; left: number }
     margin: { top: number; right: number; bottom: number; left: number }
@@ -120,6 +135,8 @@ export interface ParsedStyles {
     width: number | null
     height: number | null
     maxWidth: number | null
+    minWidth: number | null         // NEW: min-w-*
+    maxHeight: number | null        // NEW: max-h-*
     minHeight: number | null
     widthRatio: number | null
 
@@ -181,6 +198,19 @@ export function defaultStyles(): ParsedStyles {
         flexWrap: false,
         gap: 0,
         gridColumns: 1,
+        // NEW: Flex child properties
+        flexShrink: null,
+        flexBasis: null,
+        order: null,
+        alignSelf: null,
+        // NEW: Grid gap split
+        columnGap: null,
+        rowGap: null,
+        // NEW: Grid span
+        gridColumnSpan: null,
+        gridRowSpan: null,
+        gridRows: 1,
+        // Spacing
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
         margin: { top: 0, right: 0, bottom: 0, left: 0 },
         fontSize: 16,
@@ -206,6 +236,8 @@ export function defaultStyles(): ParsedStyles {
         width: null,
         height: null,
         maxWidth: null,
+        minWidth: null,
+        maxHeight: null,
         minHeight: null,
         widthRatio: null,
         hidden: false,
@@ -241,6 +273,51 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'flex-nowrap') { s.flexWrap = false; continue }
         if (raw === 'flex-1' || raw === 'flex-grow' || raw === 'grow') { s.flexGrow = true; continue }
         if (raw === 'flex-none') { s.flexGrow = false; continue }
+        
+        // === NEW: Flex shrink (Phase 2) ===
+        if (raw === 'shrink-0' || raw === 'flex-shrink-0') { s.flexShrink = 0; continue }
+        if (raw === 'shrink' || raw === 'flex-shrink') { s.flexShrink = 1; continue }
+        
+        // === NEW: Flex basis (Phase 2) ===
+        if (raw.startsWith('basis-')) {
+            const val = raw.slice(6)
+            if (val === 'full') { s.flexBasis = null; s.widthRatio = 1; continue }
+            if (val === 'auto') { s.flexBasis = null; continue }
+            if (val === '0') { s.flexBasis = 0; continue }
+            // Fractions
+            if (WIDTH_FRACTIONS[val] !== undefined) { 
+                s.flexBasis = null; 
+                s.widthRatio = WIDTH_FRACTIONS[val]; 
+                continue 
+            }
+            // Arbitrary [Npx]
+            const arb = resolveArbitrary(val)
+            if (arb !== null) { s.flexBasis = arb; continue }
+            // Standard spacing scale
+            const px = resolveSpacing(val)
+            if (px > 0) { s.flexBasis = px; continue }
+            continue
+        }
+        
+        // === NEW: Order (Phase 2) ===
+        if (raw.startsWith('order-')) {
+            const val = raw.slice(6)
+            if (val === 'first') { s.order = -9999; continue }
+            if (val === 'last') { s.order = 9999; continue }
+            if (val === 'none') { s.order = 0; continue }
+            const n = parseInt(val)
+            if (!isNaN(n)) { s.order = n; continue }
+            continue
+        }
+        
+        // === NEW: Self alignment (Phase 2) ===
+        if (raw === 'self-auto') { s.alignSelf = 'auto'; continue }
+        if (raw === 'self-start') { s.alignSelf = 'start'; continue }
+        if (raw === 'self-end') { s.alignSelf = 'end'; continue }
+        if (raw === 'self-center') { s.alignSelf = 'center'; continue }
+        if (raw === 'self-stretch') { s.alignSelf = 'stretch'; continue }
+        if (raw === 'self-baseline') { s.alignSelf = 'baseline'; continue }
+        
         if (raw === 'items-start') { s.alignItems = 'start'; continue }
         if (raw === 'items-end') { s.alignItems = 'end'; continue }
         if (raw === 'items-center') { s.alignItems = 'center'; continue }
@@ -250,7 +327,6 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'justify-end') { s.justifyContent = 'end'; continue }
         if (raw === 'justify-center') { s.justifyContent = 'center'; continue }
         if (raw === 'justify-between') { s.justifyContent = 'between'; continue }
-        if (raw === 'self-center' || raw === 'self-auto') { continue } // skip self align for now
 
         // ---- Overflow ----
         if (raw === 'overflow-hidden') { s.overflow = 'hidden'; continue }
@@ -274,19 +350,36 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'italic') { s.fontStyle = 'italic'; continue }
         if (raw === 'not-italic') { s.fontStyle = 'normal'; continue }
 
-        // ---- Aspect ratio ----
+        // ---- Aspect ratio (Phase 2: arbitrary value support) ----
         if (raw === 'aspect-square') { s.aspectRatio = '1/1'; continue }
         if (raw === 'aspect-video') { s.aspectRatio = '16/9'; continue }
         if (raw === 'aspect-auto') { s.aspectRatio = null; continue }
+        if (raw.startsWith('aspect-')) {
+            const val = raw.slice(7)
+            // Handle arbitrary values: aspect-[16/9] or aspect-[1.5]
+            if (val.startsWith('[') && val.endsWith(']')) {
+                const inner = val.slice(1, -1)
+                s.aspectRatio = inner  // Store as-is, can be "16/9" or "1.5"
+            }
+            continue
+        }
 
-        // ---- Gap ----
+        // ---- Gap (Phase 2: Split gap-x/gap-y support) ----
         if (raw.startsWith('gap-')) {
             const val = raw.slice(4)
-            if (raw.startsWith('gap-x-') || raw.startsWith('gap-y-')) {
-                // We simplify to uniform gap
-                s.gap = resolveSpacing(val.slice(2))
+            if (raw.startsWith('gap-x-')) {
+                // Column gap (horizontal spacing)
+                s.columnGap = resolveSpacing(val.slice(2))
+                if (s.gap === 0) s.gap = s.columnGap  // Fallback for renderers that don't support split gaps
+            } else if (raw.startsWith('gap-y-')) {
+                // Row gap (vertical spacing)
+                s.rowGap = resolveSpacing(val.slice(2))
+                if (s.gap === 0) s.gap = s.rowGap  // Fallback
             } else {
+                // Uniform gap
                 s.gap = resolveSpacing(val)
+                s.columnGap = s.gap
+                s.rowGap = s.gap
             }
             continue
         }
@@ -308,6 +401,32 @@ export function parseClasses(classList: string[]): ParsedStyles {
             const val = raw.slice(10)
             const n = parseInt(val)
             if (!isNaN(n)) s.gridColumns = n
+            continue
+        }
+
+        // === NEW: Grid rows (Phase 2) ===
+        if (raw.startsWith('grid-rows-')) {
+            const val = raw.slice(10)
+            const n = parseInt(val)
+            if (!isNaN(n)) s.gridRows = n
+            continue
+        }
+
+        // === NEW: Column span (Phase 2) ===
+        if (raw.startsWith('col-span-')) {
+            const val = raw.slice(9)
+            if (val === 'full') { s.gridColumnSpan = -1; continue }  // -1 = full width
+            const n = parseInt(val)
+            if (!isNaN(n)) { s.gridColumnSpan = n; continue }
+            continue
+        }
+
+        // === NEW: Row span (Phase 2) ===
+        if (raw.startsWith('row-span-')) {
+            const val = raw.slice(9)
+            if (val === 'full') { s.gridRowSpan = -1; continue }  // -1 = full height
+            const n = parseInt(val)
+            if (!isNaN(n)) { s.gridRowSpan = n; continue }
             continue
         }
 
@@ -370,6 +489,32 @@ export function parseClasses(classList: string[]): ParsedStyles {
             if (MAX_WIDTHS[val] !== undefined) { s.maxWidth = MAX_WIDTHS[val]; continue }
             const arb = resolveArbitrary(val)
             if (arb !== null) { s.maxWidth = arb; continue }
+            continue
+        }
+
+        // === NEW: Min-width (Phase 2) ===
+        if (raw.startsWith('min-w-')) {
+            const val = raw.slice(6)
+            if (val === 'full') { s.minWidth = null; s.widthRatio = 1; continue }  // min-w-full
+            if (val === '0') { s.minWidth = 0; continue }
+            if (val === 'min' || val === 'max' || val === 'fit') { continue }  // CSS keywords, skip
+            const arb = resolveArbitrary(val)
+            if (arb !== null) { s.minWidth = arb; continue }
+            const px = resolveSpacing(val)
+            if (px > 0) { s.minWidth = px; continue }
+            continue
+        }
+
+        // === NEW: Max-height (Phase 2) ===
+        if (raw.startsWith('max-h-')) {
+            const val = raw.slice(6)
+            if (val === 'screen') { s.maxHeight = 900; continue }
+            if (val === 'full') { s.maxHeight = null; continue }  // 100%
+            if (val === 'min' || val === 'max' || val === 'fit' || val === 'none') { continue }
+            const arb = resolveArbitrary(val)
+            if (arb !== null) { s.maxHeight = arb; continue }
+            const px = resolveSpacing(val)
+            if (px > 0) { s.maxHeight = px; continue }
             continue
         }
 

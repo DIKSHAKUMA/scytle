@@ -1,7 +1,17 @@
 // ============================================================
-// HTML → ScytleNode[] Parser
+// HTML → ScytleNode[] Parser (V2)
 // Converts AI-generated HTML+Tailwind into a canvas node tree.
 // Runs client-side (uses browser DOMParser).
+//
+// V2 CHANGES (Figma-aligned):
+// - layoutMode defaults to 'none' (not forced flex)
+// - sizing defaults to 'hug' (not fill)
+// - No forced gap injection (respects explicit gaps only)
+// - Context-aware text sizing (headings hug, paragraphs fill)
+// - Improved currentColor resolution for SVG icons
+// - Phase 3: Enhanced SVG handling (DOM cloning, recursive color replacement)
+//
+// See docs/phases/HTML-TO-NODE-V2.md for full spec.
 // ============================================================
 
 import {
@@ -206,70 +216,227 @@ function buildImageNode(el: Element, styles: ParsedStyles): ScytleNode {
     })
 }
 
+/**
+ * Build an ImageNode from an SVG element.
+ * 
+ * Phase 3 improvements:
+ * - Clone DOM before modifying to avoid side effects
+ * - Recursively replace currentColor in all child elements
+ * - Handle both attributes (fill, stroke) and style attributes
+ * - Better dimension extraction with viewBox fallback
+ * - Extract name from aria-label, title, or class
+ */
 function buildSvgNode(el: Element): ScytleNode {
-    const width = parseInt(el.getAttribute('width') || '') || 24
-    const height = parseInt(el.getAttribute('height') || '') || 24
-
-    // Serialize the SVG element to a data URI so it renders as a real image
+    // 1. Clone SVG to avoid modifying original DOM
+    const svgEl = el.cloneNode(true) as Element
+    
+    // 2. Get dimensions - prefer explicit width/height, fallback to viewBox
+    let width = parseFloat(el.getAttribute('width') || '')
+    let height = parseFloat(el.getAttribute('height') || '')
+    
+    if (isNaN(width) || isNaN(height) || width === 0 || height === 0) {
+        // Try viewBox: "minX minY width height"
+        const viewBox = el.getAttribute('viewBox')
+        if (viewBox) {
+            const parts = viewBox.split(/\s+/).map(Number)
+            if (parts.length >= 4) {
+                width = width || parts[2] || 24
+                height = height || parts[3] || 24
+            }
+        }
+    }
+    
+    // Default to 24x24 (common icon size)
+    width = width || 24
+    height = height || 24
+    
+    // 3. Resolve currentColor from context
+    const inheritedColor = resolveCurrentColor(el)
+    
+    // 4. Recursively replace currentColor in all elements
+    replaceCurrentColorInElement(svgEl, inheritedColor)
+    
+    // 5. Serialize with resolved colors
     const serializer = new XMLSerializer()
-    let svgMarkup = serializer.serializeToString(el)
-
-    // Ensure the SVG has xmlns for standalone rendering
+    let svgMarkup = serializer.serializeToString(svgEl)
+    
+    // Ensure xmlns for standalone rendering
     if (!svgMarkup.includes('xmlns=')) {
         svgMarkup = svgMarkup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
     }
-
-    // Resolve `currentColor` to the inherited text color from the nearest parent
-    // Walk up the DOM to find the closest parent with a text color class
-    const inheritedColor = resolveCurrentColor(el)
-    if (inheritedColor) {
-        svgMarkup = svgMarkup.replace(/currentColor/g, inheritedColor)
-    }
-
+    
     const dataUri = `data:image/svg+xml,${encodeURIComponent(svgMarkup)}`
-
+    
+    // 6. Extract meaningful name
+    const name = extractSvgName(el)
+    
     return createImage({
-        name: 'Icon',
+        name,
         width,
         height,
         src: dataUri,
-        alt: 'Icon',
+        alt: name,
         fit: 'contain',
         isPlaceholder: false,
         sizing: { horizontal: 'fixed', vertical: 'fixed' },
     })
 }
 
+/**
+ * Recursively replace currentColor in an element's attributes and inline styles.
+ * Handles: fill, stroke, color, stop-color attributes and style attribute.
+ */
+function replaceCurrentColorInElement(el: Element, resolvedColor: string): void {
+    // Attributes that can contain currentColor
+    const colorAttrs = ['fill', 'stroke', 'color', 'stop-color', 'flood-color', 'lighting-color']
+    
+    for (const attr of colorAttrs) {
+        const value = el.getAttribute(attr)
+        if (value === 'currentColor') {
+            el.setAttribute(attr, resolvedColor)
+        }
+    }
+    
+    // Handle style attribute
+    const style = el.getAttribute('style')
+    if (style && style.includes('currentColor')) {
+        el.setAttribute('style', style.replace(/currentColor/gi, resolvedColor))
+    }
+    
+    // Recurse into children
+    for (const child of Array.from(el.children)) {
+        replaceCurrentColorInElement(child, resolvedColor)
+    }
+}
+
+/**
+ * Extract a meaningful name from an SVG element.
+ * Priority: aria-label > title element > class name > default "Icon"
+ */
+function extractSvgName(el: Element): string {
+    // 1. aria-label
+    const ariaLabel = el.getAttribute('aria-label')
+    if (ariaLabel) return ariaLabel
+    
+    // 2. title element
+    const titleEl = el.querySelector('title')
+    if (titleEl?.textContent) return titleEl.textContent.trim()
+    
+    // 3. Look for icon library class names (lucide, heroicons, etc.)
+    const classList = (el.getAttribute('class') || '').split(/\s+/)
+    for (const cls of classList) {
+        // Common patterns: lucide-check, heroicon-check, icon-check
+        if (cls.includes('lucide-') || cls.includes('heroicon-') || cls.includes('icon-')) {
+            const iconName = cls.split('-').slice(1).join(' ')
+            if (iconName) {
+                return iconName.charAt(0).toUpperCase() + iconName.slice(1) + ' Icon'
+            }
+        }
+    }
+    
+    // 4. Default
+    return 'Icon'
+}
+
 /** Walk up from an SVG element to find the nearest text color for currentColor resolution */
-function resolveCurrentColor(el: Element): string | null {
+function resolveCurrentColor(el: Element): string {
+    // 1. Check SVG's own stroke/fill that's NOT currentColor (explicit color set)
+    const svgFill = el.getAttribute('fill')
+    const svgStroke = el.getAttribute('stroke')
+    if (svgFill && svgFill !== 'none' && svgFill !== 'currentColor' && svgFill.startsWith('#')) {
+        return svgFill
+    }
+    if (svgStroke && svgStroke !== 'none' && svgStroke !== 'currentColor' && svgStroke.startsWith('#')) {
+        return svgStroke
+    }
+    
+    // 2. Check element's own text color class
+    const ownClasses = (el.getAttribute('class') || '').split(/\s+/)
+    for (const cls of ownClasses) {
+        const color = extractTextColor(cls)
+        if (color) return color
+    }
+    
+    // 3. Walk up the DOM tree
     let current = el.parentElement
     while (current) {
         const classes = (current.getAttribute('class') || '').split(/\s+/)
+        
+        // Check for text color
         for (const cls of classes) {
-            if (cls.startsWith('text-') && !cls.startsWith('text-xs') && !cls.startsWith('text-sm') &&
-                !cls.startsWith('text-base') && !cls.startsWith('text-lg') && !cls.startsWith('text-xl') &&
-                !cls.startsWith('text-2xl') && !cls.startsWith('text-3xl') && !cls.startsWith('text-4xl') &&
-                !cls.startsWith('text-5xl') && !cls.startsWith('text-6xl') && !cls.startsWith('text-7xl') &&
-                !cls.startsWith('text-8xl') && !cls.startsWith('text-9xl') &&
-                !cls.startsWith('text-left') && !cls.startsWith('text-center') && !cls.startsWith('text-right') &&
-                !cls.startsWith('text-justify') && !cls.startsWith('text-wrap') && !cls.startsWith('text-nowrap') &&
-                !cls.startsWith('text-balance') && !cls.startsWith('text-pretty')) {
-                // Skip responsive prefixes
-                if (cls.includes(':')) continue
-                const colorVal = cls.slice(5) // remove 'text-'
-                const hex = resolveColor(colorVal)
-                if (hex) return hex
-            }
+            const color = extractTextColor(cls)
+            if (color) return color
         }
-        // Also check inline style
+        
+        // Check inline style
         const inlineColor = current.getAttribute('style')
         if (inlineColor) {
             const match = inlineColor.match(/(?:^|;)\s*color:\s*(#[0-9a-fA-F]{3,8}|rgb[a]?\([^)]+\))/)
             if (match) return match[1]
         }
+        
         current = current.parentElement
     }
-    return '#6b7280' // gray-500 fallback
+    
+    // 4. Check for dark mode context - if in dark section, default to white
+    const darkBgPatterns = [
+        'bg-gray-900', 'bg-gray-800', 'bg-slate-900', 'bg-slate-800',
+        'bg-zinc-900', 'bg-zinc-800', 'bg-neutral-900', 'bg-neutral-800',
+        'bg-stone-900', 'bg-stone-800', 'bg-black',
+        // Also check for gradient dark backgrounds
+        'from-gray-900', 'from-slate-900', 'from-zinc-900',
+    ]
+    
+    let parent = el.parentElement
+    while (parent) {
+        const classes = (parent.getAttribute('class') || '').split(/\s+/)
+        const isDark = classes.some(cls => darkBgPatterns.some(dark => cls === dark || cls.endsWith(':' + dark)))
+        if (isDark) return '#ffffff'
+        parent = parent.parentElement
+    }
+    
+    // 5. Default: common body text color (gray-800)
+    return '#1f2937'
+}
+
+/** Extract hex color from a text-* Tailwind class */
+function extractTextColor(cls: string): string | null {
+    // Skip non-color text classes
+    const nonColorPrefixes = [
+        'text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl',
+        'text-2xl', 'text-3xl', 'text-4xl', 'text-5xl', 'text-6xl', 'text-7xl', 'text-8xl', 'text-9xl',
+        'text-left', 'text-center', 'text-right', 'text-justify',
+        'text-wrap', 'text-nowrap', 'text-balance', 'text-pretty',
+    ]
+    
+    if (!cls.startsWith('text-')) return null
+    
+    // Skip responsive prefixes (sm:text-*, md:text-*, etc.)
+    if (cls.includes(':')) {
+        const baseCls = cls.split(':').pop()!
+        if (!baseCls.startsWith('text-')) return null
+        cls = baseCls
+    }
+    
+    // Check if it's a non-color text class
+    for (const prefix of nonColorPrefixes) {
+        if (cls.startsWith(prefix)) return null
+    }
+    
+    // Extract color value
+    const colorVal = cls.slice(5) // remove 'text-'
+    
+    // Handle special colors
+    if (colorVal === 'white') return '#ffffff'
+    if (colorVal === 'black') return '#000000'
+    if (colorVal === 'transparent') return 'transparent'
+    if (colorVal === 'current' || colorVal === 'inherit') return null
+    
+    // Handle opacity modifiers: text-gray-500/50
+    const [baseColor] = colorVal.split('/')
+    
+    const hex = resolveColor(baseColor)
+    return hex || null
 }
 
 function buildHrNode(): ScytleNode {
@@ -306,6 +473,62 @@ function buildTextNode(
 ): TextNode {
     const text = getTextContent(el)
     const htmlTag = HTML_TAG_MAP[tag]
+    const classList = getClassList(el)
+    
+    // === TEXT SIZING (Figma-aligned) ===
+    // Figma's textAutoResize modes:
+    //   'NONE' = fixed size
+    //   'WIDTH_AND_HEIGHT' = hug both (auto width)
+    //   'HEIGHT' = fixed width, auto height (default for paragraphs)
+    //   'TRUNCATE' = fixed with ellipsis
+    
+    const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)
+    const isInline = INLINE_ELEMENTS.has(tag) || tag === 'span' || tag === 'a'
+    
+    // Check for explicit width classes
+    const hasExplicitWidth = styles.width !== null
+    const hasFillWidth = classList.some(cls => {
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return baseCls === 'w-full'
+    })
+    
+    // Check for truncation
+    const hasTruncate = classList.some(cls => {
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return baseCls === 'truncate' || baseCls.startsWith('line-clamp-')
+    })
+    
+    // Determine sizing based on element type and context
+    let sizing: { horizontal: 'fixed' | 'hug' | 'fill'; vertical: 'fixed' | 'hug' | 'fill' }
+    let autoResize: 'none' | 'height' | 'width-and-height'
+    
+    if (hasTruncate) {
+        // Truncated text needs fixed width
+        sizing = { horizontal: hasFillWidth ? 'fill' : 'fixed', vertical: 'fixed' }
+        autoResize = 'none'
+    } else if (isHeading) {
+        // Headings: hug content by default (like Figma auto-width)
+        if (hasFillWidth) {
+            sizing = { horizontal: 'fill', vertical: 'hug' }
+            autoResize = 'height'
+        } else {
+            sizing = { horizontal: 'hug', vertical: 'hug' }
+            autoResize = 'width-and-height'
+        }
+    } else if (isInline) {
+        // Inline elements: always hug (they flow with text)
+        sizing = { horizontal: 'hug', vertical: 'hug' }
+        autoResize = 'width-and-height'
+    } else if (hasExplicitWidth) {
+        // Explicit width: fixed horizontal, hug vertical
+        sizing = { horizontal: 'fixed', vertical: 'hug' }
+        autoResize = 'height'
+    } else {
+        // Paragraphs and block text: fill width, hug height (Figma HEIGHT mode)
+        sizing = { horizontal: 'fill', vertical: 'hug' }
+        autoResize = 'height'
+    }
+    
     const width = computeTextWidth(styles, parentWidth)
     const lh = styles.lineHeight
 
@@ -323,10 +546,10 @@ function buildTextNode(
         textTransform: styles.textTransform,
         textDecoration: styles.textDecoration,
         color: effectiveColor,
-        width,
+        width: sizing.horizontal === 'hug' ? estimateInlineTextWidth(text, styles.fontSize) : width,
         height: estimateTextHeight(text, styles.fontSize, width, lh),
-        sizing: { horizontal: 'fill', vertical: 'hug' },
-        autoResize: 'height',
+        sizing,
+        autoResize,
         opacity: styles.opacity,
     })
 }
@@ -436,6 +659,7 @@ function buildContainerNode(
     effectiveColor: string,
     parentWidth: number,
 ): FrameNode | null {
+    const classList = getClassList(el)
     const containerWidth = computeWidth(styles, parentWidth)
 
     // Determine section-level defaults early so padding affects child width
@@ -472,22 +696,46 @@ function buildContainerNode(
     if (children.length === 0 && !hasVisuals) return null
 
     const fills = buildFills(styles)
-    const layoutMode = resolveLayoutMode(styles)
-
-    // Block elements default to column (vertical stack) like natural document flow.
-    // Only explicitly flex elements keep their parsed direction.
+    
+    // === LAYOUT MODE DETECTION (Figma-aligned) ===
+    // 1. Check explicit display property
+    let layoutMode = resolveLayoutMode(styles)
+    
+    // 2. Infer flex from utility classes if not explicitly set
     const isExplicitFlex = styles.display === 'flex' || styles.display === 'inline-flex'
-    const direction = isExplicitFlex ? styles.flexDirection : 'column'
+    const isExplicitGrid = styles.display === 'grid'
+    
+    let direction: 'row' | 'column' = styles.flexDirection
+    
+    if (!isExplicitFlex && !isExplicitGrid) {
+        const inferred = inferFlexFromClasses(classList)
+        if (inferred.isInferred) {
+            layoutMode = 'flex'
+            direction = inferred.direction
+        } else {
+            // FIGMA DEFAULT: No auto-layout for containers without flex indicators
+            // For sections, we still want column layout for document flow
+            layoutMode = isSectionLevel ? 'flex' : 'none'
+            direction = 'column'
+        }
+    }
 
-    // Use a sensible default gap for containers without explicit gap.
-    // Sections and large containers get generous gaps matching professional design standards.
-    const effectiveGap = styles.gap > 0
-        ? styles.gap
-        : direction === 'column' && children.length > 1
-            ? (isSectionLevel ? 32 : 16)
-            : direction === 'row' && children.length > 1
-                ? 16
-                : 0
+    // === GAP HANDLING (Figma-aligned, Phase 2 enhanced) ===
+    // Only use explicit gap - NO forced defaults!
+    // Figma default: itemSpacing = 0
+    // Support split gap-x/gap-y when specified
+    const effectiveGap = styles.gap > 0 ? styles.gap : 0
+    const effectiveColumnGap = styles.columnGap ?? effectiveGap
+    const effectiveRowGap = styles.rowGap ?? effectiveGap
+
+    // === SIZING LOGIC (Figma-aligned) ===
+    // Default to 'hug' not 'fill'!
+    const sizing = determineSizing(styles, classList, isSectionLevel)
+
+    // === GRID PROPERTIES (Phase 2) ===
+    const isGrid = layoutMode === 'grid'
+    const gridColumns = isGrid && styles.gridColumns > 1 ? styles.gridColumns : undefined
+    const gridRows = isGrid && styles.gridRows > 1 ? styles.gridRows : undefined
 
     return createFrame({
         name: getContainerName(tag, el),
@@ -498,12 +746,7 @@ function buildContainerNode(
             effectiveGap,
             direction,
         ),
-        sizing: {
-            horizontal: styles.flexGrow || styles.widthRatio === 1
-                ? 'fill'
-                : (styles.width ? 'fixed' : 'fill'),
-            vertical: styles.height ? 'fixed' : 'hug',
-        },
+        sizing,
         layout: {
             mode: layoutMode,
             direction,
@@ -511,11 +754,10 @@ function buildContainerNode(
             align: styles.alignItems,
             wrap: styles.flexWrap || undefined,
             gap: effectiveGap || undefined,
-            columns: layoutMode === 'grid' && styles.gridColumns > 1
-                ? styles.gridColumns
-                : undefined,
-            columnGap: layoutMode === 'grid' && effectiveGap ? effectiveGap : undefined,
-            rowGap: layoutMode === 'grid' && effectiveGap ? effectiveGap : undefined,
+            columns: gridColumns,
+            rows: gridRows,
+            columnGap: isGrid ? effectiveColumnGap : undefined,
+            rowGap: isGrid ? effectiveRowGap : undefined,
         },
         padding: effectivePadding,
         fills,
@@ -524,8 +766,71 @@ function buildContainerNode(
         shadows: styles.shadows.map(s => ({ ...s })),
         opacity: styles.opacity,
         overflow: styles.overflow === 'auto' ? 'hidden' : styles.overflow,
+        // === Phase 4: Min/max constraints ===
+        minWidth: styles.minWidth ?? undefined,
+        maxWidth: styles.maxWidth ?? undefined,
+        minHeight: styles.minHeight ?? undefined,
+        maxHeight: styles.maxHeight ?? undefined,
+        // === Phase 4: Flex child properties ===
+        flexShrink: styles.flexShrink ?? undefined,
+        flexBasis: styles.flexBasis ?? undefined,
+        order: styles.order ?? undefined,
+        alignSelf: styles.alignSelf ?? undefined,
         children,
     })
+}
+
+/**
+ * Determine sizing for containers (Figma-aligned).
+ * FIGMA BEHAVIOR: Default is 'hug' (shrink-wrap), not 'fill'!
+ */
+function determineSizing(
+    styles: ParsedStyles, 
+    classList: string[],
+    isSectionLevel: boolean
+): { horizontal: 'fixed' | 'hug' | 'fill'; vertical: 'fixed' | 'hug' | 'fill' } {
+    // === HORIZONTAL SIZING ===
+    let horizontal: 'fixed' | 'hug' | 'fill' = 'hug' // Figma default
+    
+    // Check for fill indicators
+    const fillHorizontal = classList.some(cls => {
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return baseCls === 'w-full' || 
+               baseCls === 'flex-1' || 
+               baseCls === 'grow' || 
+               baseCls === 'flex-grow' ||
+               baseCls === 'basis-full'
+    })
+    
+    if (fillHorizontal || styles.widthRatio === 1 || styles.flexGrow) {
+        horizontal = 'fill'
+    } else if (styles.width) {
+        horizontal = 'fixed'
+    } else if (isSectionLevel) {
+        // Sections typically fill width (they're document-level containers)
+        horizontal = 'fill'
+    }
+    // else: stays 'hug' (Figma default)
+    
+    // === VERTICAL SIZING ===
+    let vertical: 'fixed' | 'hug' | 'fill' = 'hug' // Figma default
+    
+    const fillVertical = classList.some(cls => {
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return baseCls === 'h-full' || 
+               baseCls === 'h-screen' ||
+               baseCls === 'min-h-full' ||
+               baseCls === 'min-h-screen'
+    })
+    
+    if (fillVertical) {
+        vertical = 'fill'
+    } else if (styles.height) {
+        vertical = 'fixed'
+    }
+    // else: stays 'hug' (Figma default)
+    
+    return { horizontal, vertical }
 }
 
 // ---- Helpers ----
@@ -577,10 +882,50 @@ function mergeInlineStyles(target: ParsedStyles, style: string): void {
     }
 }
 
+/**
+ * Determine layout mode from explicit display classes.
+ * FIGMA BEHAVIOR: Default is 'none' (absolute positioning), not flex!
+ * Only return flex/grid when explicitly declared.
+ */
 function resolveLayoutMode(styles: ParsedStyles): 'flex' | 'grid' | 'none' {
     if (styles.display === 'flex' || styles.display === 'inline-flex') return 'flex'
     if (styles.display === 'grid') return 'grid'
-    return 'flex' // Default containers to flex column for canvas
+    return 'none' // Figma default: no auto-layout
+}
+
+/**
+ * Infer flex layout from utility classes even without explicit 'flex' class.
+ * Checks for items-*, justify-*, gap-*, flex-row/col, space-x/y.
+ */
+function inferFlexFromClasses(classList: string[]): { isInferred: boolean; direction: 'row' | 'column' } {
+    const flexIndicators = [
+        'items-start', 'items-center', 'items-end', 'items-baseline', 'items-stretch',
+        'justify-start', 'justify-center', 'justify-end', 'justify-between', 'justify-around', 'justify-evenly',
+        'flex-row', 'flex-row-reverse', 'flex-col', 'flex-col-reverse',
+        'flex-wrap', 'flex-nowrap',
+    ]
+
+    // Check for flex indicators or gap/space utilities
+    const hasFlexIndicator = classList.some(cls => {
+        // Remove responsive prefixes like sm:, md:, lg:
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return flexIndicators.includes(baseCls) ||
+            baseCls.startsWith('gap-') ||
+            baseCls.startsWith('space-x-') ||
+            baseCls.startsWith('space-y-')
+    })
+
+    if (!hasFlexIndicator) {
+        return { isInferred: false, direction: 'row' }
+    }
+
+    // Infer direction from classes
+    const hasCol = classList.some(cls => {
+        const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
+        return baseCls === 'flex-col' || baseCls === 'flex-col-reverse'
+    })
+
+    return { isInferred: true, direction: hasCol ? 'column' : 'row' }
 }
 
 function buildFills(styles: ParsedStyles): Fill[] {

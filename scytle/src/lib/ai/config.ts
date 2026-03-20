@@ -1,27 +1,37 @@
 // AI Configuration for Scytle
 // Supports Gemini via Google Gen AI SDK
-export type AIModel = 'gemini-pro' | 'gemini-flash'
+import { 
+    MODEL_REGISTRY, 
+    getEnabledModels, 
+    getGlobalLocationModelIds,
+    resolveModelId,
+    type AIModelKey 
+} from './models'
+
+export type AIModel = AIModelKey
+
+// Build models map from registry
+const modelsMap = Object.fromEntries(
+    MODEL_REGISTRY.map(m => [m.key, m.modelId])
+) as Record<AIModel, string>
+
+// Build max tokens map from registry
+const modelMaxTokensMap = Object.fromEntries(
+    MODEL_REGISTRY.map(m => [m.key, m.maxOutputTokens])
+) as Record<string, number>
 
 export const AI_CONFIG = {
-    // Available models
-    // gemini-pro: Best quality (Gemini 3.1 Pro Preview - has built-in thinking)
-    // gemini-flash: Fast operations (Gemini 2.5 Flash)
-    models: {
-        'gemini-pro': 'gemini-3.1-pro-preview',
-        'gemini-flash': 'gemini-2.5-flash',
-    } satisfies Record<AIModel, string>,
+    // Available models (built from registry)
+    models: modelsMap,
 
     // Models that require global location (not regional)
-    globalLocationModels: ['gemini-3.1-pro-preview'] as string[],
+    globalLocationModels: getGlobalLocationModelIds(),
 
     // Per-model max output token limits
-    modelMaxTokens: {
-        'gemini-pro': 65535,
-        'gemini-flash': 65535,
-    } as Record<string, number>,
+    modelMaxTokens: modelMaxTokensMap,
 
     // Default model for generation
-    defaultModel: 'gemini-pro',
+    defaultModel: 'gemini-pro' as AIModel,
 
     // Generation settings
     generation: {

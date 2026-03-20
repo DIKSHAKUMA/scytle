@@ -90,7 +90,7 @@ export const WireframeDataSchema = z.array(WireframePageSchema)
 
 // Product & AI Model
 export const ProductTypeSchema = z.enum(['web', 'app'])
-export const AiModelSchema = z.enum(['gemini-pro'])
+export const AiModelSchema = z.enum(['gemini-pro', 'gemini-flash'])
 
 // Project
 export const ProjectSchema = z.object({

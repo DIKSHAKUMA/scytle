@@ -53,6 +53,8 @@ function getClient(modelName?: string) {
     const requiresGlobal = modelName && AI_CONFIG.globalLocationModels.includes(modelName)
     const location = requiresGlobal ? 'global' : defaultLocation
 
+    console.log(`🔧 getClient: model=${modelName}, requiresGlobal=${requiresGlobal}, location=${location}`)
+
     if (process.env.GOOGLE_CLOUD_API_KEY) {
         return new GoogleGenAI({ apiKey: process.env.GOOGLE_CLOUD_API_KEY })
     }
@@ -61,16 +63,18 @@ function getClient(modelName?: string) {
         throw new Error('Missing GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_API_KEY in .env.local')
     }
 
+    // vertexai, project, location are top-level options (not nested)
     return new GoogleGenAI({
-        vertexai: { project, location } as any
+        vertexai: true,
+        project,
+        location,
     })
 }
 
 /** Fallback chain */
 const MODEL_FALLBACK_CHAIN: Record<string, string[]> = {
-    'gemini-pro': ['claude-sonnet'],
-    'claude-opus': ['claude-sonnet', 'gemini-pro'],
-    'claude-sonnet': ['gemini-pro'],
+    'gemini-pro': ['gemini-flash'],
+    'gemini-flash': [],  // Don't fallback to slow model
 }
 
 // ── Public API ──────────────────────────────────────────────
@@ -91,8 +95,8 @@ export async function generate(
     contents.push({ role: 'user', parts: [{ text: message }] })
 
     for (const currentModelKey of modelsToTry) {
-        const ai = getClient()
         const actualModelName = AI_CONFIG.models[currentModelKey]
+        const ai = getClient(actualModelName)
         const maxOutputTokens = Math.min(
             options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens,
             AI_CONFIG.modelMaxTokens[currentModelKey] ?? 8192
@@ -101,30 +105,10 @@ export async function generate(
         try {
             console.log(`🤖 Generating with model: ${actualModelName}`)
 
-            // Adjust location for Claude models on Vertex
-            const isClaude = actualModelName.includes('claude')
-            if (isClaude && ai.vertexai && (ai.vertexai as any).location !== 'us-east5') {
-                // Create a specific client for Claude in us-east5
-                const claudeClient = new GoogleGenAI({
-                    vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any
-                })
-                const result = await claudeClient.models.generateContent({
-                    model: actualModelName,
-                    contents,
-                    config: {
-                        systemInstruction: { parts: [{ text: systemInstruction }] },
-                        temperature: options.temperature ?? AI_CONFIG.generation.temperature,
-                        maxOutputTokens,
-                    }
-                })
-                if (!result.text) throw new Error('Empty response')
-                return result.text
-            }
-
-            // Normal GEMINI / generic generation
-            // Enable thinking mode for Gemini 2.5 Pro when requested
-            const supportsThinking = actualModelName.includes('gemini-2.5-pro')
-            const useThinking = options.thinking !== false && supportsThinking
+            // Gemini 3.1 Pro has built-in thinking, no need to configure
+            // For 2.5 Pro, enable thinking mode when requested
+            const supportsExplicitThinking = actualModelName.includes('gemini-2.5-pro')
+            const useThinking = options.thinking !== false && supportsExplicitThinking
 
             const result = await ai.models.generateContent({
                 model: actualModelName,
@@ -177,8 +161,8 @@ export async function* generateStream(
     contents.push({ role: 'user', parts: [{ text: message }] })
 
     for (const currentModelKey of modelsToTry) {
-        const ai = getClient()
         const actualModelName = AI_CONFIG.models[currentModelKey]
+        const ai = getClient(actualModelName)
         const maxOutputTokens = Math.min(
             options.maxTokens ?? AI_CONFIG.generation.maxOutputTokens,
             AI_CONFIG.modelMaxTokens[currentModelKey] ?? 8192
@@ -187,16 +171,12 @@ export async function* generateStream(
         try {
             console.log(`🔄 Streaming from model: ${actualModelName}`)
 
-            const isClaude = actualModelName.includes('claude')
-            const clientToUse = (isClaude && ai.vertexai)
-                ? new GoogleGenAI({ vertexai: { project: (ai.vertexai as any).project, location: 'us-east5' } as any })
-                : ai;
+            // Gemini 3.1 Pro has built-in thinking, no need to configure
+            // For 2.5 Pro, enable thinking mode when requested
+            const supportsExplicitThinking = actualModelName.includes('gemini-2.5-pro')
+            const useThinking = options.thinking !== false && supportsExplicitThinking
 
-            // Enable thinking mode for Gemini 2.5 Pro when requested
-            const supportsThinking = actualModelName.includes('gemini-2.5-pro')
-            const useThinking = options.thinking !== false && supportsThinking
-
-            const responseStream = await clientToUse.models.generateContentStream({
+            const responseStream = await ai.models.generateContentStream({
                 model: actualModelName,
                 contents,
                 config: {
