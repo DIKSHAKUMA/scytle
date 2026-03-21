@@ -1,6 +1,6 @@
 'use client'
 
-import type { ScytleNode, FrameNode } from '@/types/canvas'
+import type { ScytleNode, FrameNode, Padding } from '@/types/canvas'
 import { findParentOfNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { Section, NumberInput, IconButton } from './inputs'
@@ -247,6 +247,59 @@ export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectio
                     onClick={() => onUpdate({ flipY: !node.flipY })}
                     title="Flip vertical (Shift+V)"
                     active={!!node.flipY}
+                />
+            </div>
+        </Section>
+    )
+}
+
+/* ── Margin Section ────────────────────────────────────────── */
+
+interface MarginSectionProps {
+    node: ScytleNode
+    onUpdate: (updates: Record<string, unknown>) => void
+}
+
+export function MarginSection({ node, onUpdate }: MarginSectionProps) {
+    const m = node.margin
+    if (!m) return null
+    const hasMargin = m.top > 0 || m.right > 0 || m.bottom > 0 || m.left > 0
+    if (!hasMargin) return null
+
+    const updateMargin = (partial: Partial<Padding>) => {
+        onUpdate({ margin: { ...m, ...partial } })
+    }
+
+    return (
+        <Section title="Margin">
+            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+                <NumberInput
+                    label="T"
+                    value={m.top}
+                    onChange={(v) => updateMargin({ top: v })}
+                    min={0}
+                    step={1}
+                />
+                <NumberInput
+                    label="R"
+                    value={m.right}
+                    onChange={(v) => updateMargin({ right: v })}
+                    min={0}
+                    step={1}
+                />
+                <NumberInput
+                    label="B"
+                    value={m.bottom}
+                    onChange={(v) => updateMargin({ bottom: v })}
+                    min={0}
+                    step={1}
+                />
+                <NumberInput
+                    label="L"
+                    value={m.left}
+                    onChange={(v) => updateMargin({ left: v })}
+                    min={0}
+                    step={1}
                 />
             </div>
         </Section>

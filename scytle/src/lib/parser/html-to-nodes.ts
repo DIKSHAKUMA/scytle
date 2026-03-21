@@ -731,9 +731,8 @@ function buildTextNode(
 
     const width = computeTextWidth(styles, parentWidth)
     const lh = styles.lineHeight
-    // Convert lineHeight to multiplier for height estimation
-    // If lineHeight is > 10, it's in pixels (from text-* classes), otherwise it's a multiplier
-    const lineHeightMultiplier = lh > 10 ? lh / styles.fontSize : lh
+    // lineHeight is always in pixels now — convert to multiplier for height estimation
+    const lineHeightMultiplier = lh / styles.fontSize
 
     return createText({
         name: text.slice(0, 40) + (text.length > 40 ? '...' : ''),
@@ -880,13 +879,7 @@ function buildContainerNode(
 
     // Determine section-level defaults early so padding affects child width
     const isSectionLevel = ['section', 'header', 'footer', 'nav', 'main', 'article'].includes(tag)
-    const hasPadding = styles.padding.top > 0 || styles.padding.bottom > 0 ||
-        styles.padding.left > 0 || styles.padding.right > 0
-    const effectivePadding = hasPadding
-        ? styles.padding
-        : isSectionLevel
-            ? { top: 64, right: 80, bottom: 64, left: 80 }
-            : styles.padding
+    const effectivePadding = styles.padding
 
     const childWidth = containerWidth - effectivePadding.left - effectivePadding.right
 
@@ -896,10 +889,37 @@ function buildContainerNode(
         const totalGap = (styles.gridColumns - 1) * (styles.gap || 0)
         effectiveChildWidth = Math.floor((childWidth - totalGap) / styles.gridColumns)
     } else if ((styles.display === 'flex' || styles.display === 'inline-flex') && styles.flexDirection === 'row') {
-        const childCount = el.children.length
+        const childEls = Array.from(el.children)
+        const childCount = childEls.length
         if (childCount > 1) {
             const totalGap = (childCount - 1) * (styles.gap || 0)
-            effectiveChildWidth = Math.floor((childWidth - totalGap) / childCount)
+            const availableWidth = childWidth - totalGap
+
+            // Check each child for explicit widths
+            let fixedTotal = 0
+            let flexCount = 0
+            const childWidths: (number | null)[] = []
+
+            for (const childEl of childEls) {
+                const childClasses = getClassList(childEl)
+                const childStyles = parseClasses(childClasses)
+                if (childStyles.width !== null) {
+                    childWidths.push(childStyles.width)
+                    fixedTotal += childStyles.width
+                } else if (childStyles.widthRatio !== null) {
+                    const w = Math.round(availableWidth * childStyles.widthRatio)
+                    childWidths.push(w)
+                    fixedTotal += w
+                } else {
+                    childWidths.push(null)
+                    flexCount++
+                }
+            }
+
+            // Distribute remaining space to flex children
+            const remaining = availableWidth - fixedTotal
+            const flexChildWidth = flexCount > 0 ? Math.floor(remaining / flexCount) : Math.floor(availableWidth / childCount)
+            effectiveChildWidth = flexCount > 0 ? flexChildWidth : Math.floor(availableWidth / childCount)
         }
     }
 

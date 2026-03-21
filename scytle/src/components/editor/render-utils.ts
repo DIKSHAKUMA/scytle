@@ -382,6 +382,14 @@ export function computeBaseStyles(
         s.mixBlendMode = blendModeToCSS(firstFill.blendMode)
     }
 
+    // ── Margin ───────────────────────────────────────────────
+    if (node.margin) {
+        const { top, right, bottom, left } = node.margin
+        if (top || right || bottom || left) {
+            s.margin = `calc(${top}px * var(--z, 1)) calc(${right}px * var(--z, 1)) calc(${bottom}px * var(--z, 1)) calc(${left}px * var(--z, 1))`
+        }
+    }
+
     return s
 }
 
@@ -442,6 +450,13 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
     }
     if (node.layoutGrow != null && node.layoutGrow > 0) {
         s.flexGrow = node.layoutGrow
+    }
+
+    // ── Grid child properties ────────────────────────────────
+    if (node.gridColumnSpan != null) {
+        s.gridColumn = node.gridColumnSpan === -1
+            ? '1 / -1'
+            : `span ${node.gridColumnSpan}`
     }
 
     // Padding

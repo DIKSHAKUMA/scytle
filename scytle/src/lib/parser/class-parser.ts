@@ -239,7 +239,7 @@ export function defaultStyles(): ParsedStyles {
         textTransform: 'none',
         textDecoration: 'none',
         letterSpacing: 0,
-        lineHeight: 1.5,
+        lineHeight: 24,  // 16px × 1.5 — always in pixels
         textColor: null,
         bgColor: null,
         gradient: null,
@@ -719,16 +719,19 @@ export function parseClasses(classList: string[]): ParsedStyles {
         // ---- Line height ----
         if (raw.startsWith('leading-')) {
             const val = raw.slice(8)
-            if (LINE_HEIGHTS[val] !== undefined) { s.lineHeight = LINE_HEIGHTS[val]; continue }
-            // Numeric leading (leading-3 through leading-10): convert to multiplier
+            if (LINE_HEIGHTS[val] !== undefined) {
+                // Named multiplier (e.g., leading-normal → 1.5) — convert to pixels
+                s.lineHeight = LINE_HEIGHTS[val] * s.fontSize
+                continue
+            }
+            // Numeric leading (leading-3 through leading-10): value × 4 = pixels
             const num = parseFloat(val)
             if (!isNaN(num)) {
-                const px = num * 4
-                s.lineHeight = px / (s.fontSize || 16)
+                s.lineHeight = num * 4
                 continue
             }
             const arb = resolveArbitrary(val)
-            if (arb !== null) { s.lineHeight = arb / (s.fontSize || 16); continue }
+            if (arb !== null) { s.lineHeight = arb; continue }
             continue
         }
 

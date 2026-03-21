@@ -10,7 +10,7 @@ import { useCallback, useMemo } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
 import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode } from '@/types/canvas'
-import { PositionSection } from './position-section'
+import { PositionSection, MarginSection } from './position-section'
 import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
 import { LayoutSection } from './layout-section'
@@ -175,6 +175,7 @@ export function PropertiesPanel() {
             {/* Property sections — Figma order */}
 
             <PositionSection node={node} onUpdate={onUpdate} isAutoLayout={isAutoLayout} />
+            <MarginSection node={node} onUpdate={onUpdate} />
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
 

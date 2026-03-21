@@ -5,83 +5,319 @@ import dynamic from 'next/dynamic'
 import { parseHtmlToNodes } from '@/lib/parser/html-to-nodes'
 import type { FrameNode, ScytleNode, VectorNode } from '@/types/canvas'
 import { networkToSVGPaths } from '@/lib/vector-utils'
-import { ChevronRight, ChevronDown, Save, Trash2, Plus, Copy, Check } from 'lucide-react'
+import { ChevronRight, ChevronDown, Save, Trash2, Copy, Check, Monitor, Smartphone, Tablet } from 'lucide-react'
 
-// Dynamic import Monaco to avoid SSR issues
 const Editor = dynamic(() => import('@monaco-editor/react'), { ssr: false })
 
-// Load Inter font for the main page (to match iframe preview)
 const INTER_FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap'
 
 // ============================================================
-// Preset Examples
+// Viewport Presets
+// ============================================================
+
+const VIEWPORTS = [
+  { name: 'Mobile', width: 375, icon: Smartphone },
+  { name: 'Tablet', width: 768, icon: Tablet },
+  { name: 'Desktop', width: 1280, icon: Monitor },
+] as const
+
+// ============================================================
+// Complex Test Presets
 // ============================================================
 
 const PRESETS: Record<string, string> = {
-  'Flex Row': `<div class="flex flex-row gap-4 p-4 bg-gray-100">
-  <span class="px-3 py-1 bg-blue-500 text-white rounded">Item A</span>
-  <span class="px-3 py-1 bg-green-500 text-white rounded">Item B</span>
-  <span class="px-3 py-1 bg-purple-500 text-white rounded">Item C</span>
-</div>`,
-
-  'Flex Column': `<div class="flex flex-col gap-4 p-6 bg-white">
-  <h1 class="text-2xl font-bold">Hello World</h1>
-  <p class="text-gray-600 w-full">This is a full-width paragraph that should fill the container.</p>
-  <button class="px-4 py-2 bg-blue-600 text-white rounded-lg">Click Me</button>
-</div>`,
-
-  'Grid Layout': `<div class="grid grid-cols-3 gap-6 p-4">
-  <div class="p-4 bg-red-100 rounded-lg">Card 1</div>
-  <div class="p-4 bg-green-100 rounded-lg">Card 2</div>
-  <div class="p-4 bg-blue-100 rounded-lg">Card 3</div>
-  <div class="p-4 bg-yellow-100 rounded-lg col-span-2">Wide Card</div>
-  <div class="p-4 bg-purple-100 rounded-lg">Card 5</div>
-</div>`,
-
-  'SVG Icon': `<div class="flex items-center gap-2 p-4 text-blue-600">
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-    <path d="M2 17l10 5 10-5"/>
-    <path d="M2 12l10 5 10-5"/>
-  </svg>
-  <span class="font-medium">Icon with currentColor</span>
-</div>`,
-
-  'Image': `<div class="p-4">
-  <img src="https://picsum.photos/400/300" alt="Sample Image" width="400" height="300" class="rounded-lg shadow-lg"/>
-</div>`,
-
-  'Hero Section': `<section class="flex flex-col items-center justify-center min-h-[400px] bg-gradient-to-br from-blue-600 to-purple-700 text-white p-8">
-  <h1 class="text-4xl font-bold mb-4">Welcome to Scytle</h1>
-  <p class="text-xl text-center max-w-2xl mb-8 opacity-90">Build beautiful designs with AI-powered generation</p>
-  <div class="flex gap-4">
-    <button class="px-6 py-3 bg-white text-blue-600 rounded-full font-semibold">Get Started</button>
-    <button class="px-6 py-3 border-2 border-white rounded-full font-semibold">Learn More</button>
+  'Margin Spacing': `<div class="flex flex-col gap-2 p-4 bg-gray-50">
+  <div class="m-4 p-4 bg-blue-100 rounded-lg">
+    <p class="text-sm text-blue-800">m-4 (16px all sides)</p>
   </div>
-</section>`,
-
-  'Card Component': `<div class="max-w-sm bg-white rounded-xl shadow-lg overflow-hidden">
-  <img src="https://picsum.photos/400/200" alt="Card image" class="w-full h-48 object-cover"/>
-  <div class="p-6">
-    <h3 class="text-xl font-bold mb-2">Card Title</h3>
-    <p class="text-gray-600 mb-4">This is a sample card with an image, title, description and a call-to-action button.</p>
-    <button class="w-full py-2 bg-blue-600 text-white rounded-lg">Read More</button>
+  <div class="mx-8 my-2 p-4 bg-green-100 rounded-lg">
+    <p class="text-sm text-green-800">mx-8 my-2 (32px horizontal, 8px vertical)</p>
+  </div>
+  <div class="mt-6 mb-2 ml-12 p-4 bg-purple-100 rounded-lg">
+    <p class="text-sm text-purple-800">mt-6 mb-2 ml-12 (asymmetric)</p>
+  </div>
+  <div class="flex flex-row gap-2">
+    <div class="flex-1 mr-4 p-3 bg-red-100 rounded">
+      <p class="text-xs text-red-800">flex-1 mr-4</p>
+    </div>
+    <div class="flex-1 ml-4 p-3 bg-orange-100 rounded">
+      <p class="text-xs text-orange-800">flex-1 ml-4</p>
+    </div>
   </div>
 </div>`,
 
-  'Navigation': `<nav class="flex items-center justify-between px-6 py-4 bg-white shadow">
-  <div class="text-xl font-bold text-blue-600">Logo</div>
-  <div class="flex gap-6">
-    <a href="#" class="text-gray-600 hover:text-blue-600">Home</a>
-    <a href="#" class="text-gray-600 hover:text-blue-600">About</a>
-    <a href="#" class="text-gray-600 hover:text-blue-600">Services</a>
-    <a href="#" class="text-gray-600 hover:text-blue-600">Contact</a>
+  'Grid Col-Span': `<div class="grid grid-cols-4 gap-4 p-6 bg-white">
+  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
+  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
+  <div class="col-span-2 p-4 bg-indigo-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
+  <div class="col-span-3 p-4 bg-purple-200 rounded-lg text-center text-sm font-medium">col-span-3</div>
+  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
+  <div class="col-span-full p-4 bg-pink-200 rounded-lg text-center text-sm font-medium">col-span-full (entire row)</div>
+  <div class="col-span-2 p-4 bg-rose-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
+  <div class="col-span-2 p-4 bg-rose-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
+</div>`,
+
+  'Section No Padding': `<div class="bg-white">
+  <section class="bg-gray-900 text-white">
+    <h2 class="text-2xl font-bold">Section with NO padding classes</h2>
+    <p class="text-gray-300 mt-2">Should have zero padding, not hardcoded 64/80px</p>
+  </section>
+  <section class="p-8 bg-blue-50">
+    <h2 class="text-2xl font-bold text-blue-900">Section with p-8</h2>
+    <p class="text-blue-700 mt-2">Should have exactly 32px padding all sides</p>
+  </section>
+  <section class="px-4 py-12 bg-green-50">
+    <h2 class="text-2xl font-bold text-green-900">Section with px-4 py-12</h2>
+    <p class="text-green-700 mt-2">16px horizontal, 48px vertical</p>
+  </section>
+</div>`,
+
+  'Flex Mixed Widths': `<div class="flex flex-row gap-4 p-6 bg-gray-50">
+  <div class="w-1/4 p-4 bg-blue-100 rounded-lg shrink-0">
+    <p class="text-sm font-medium">w-1/4 (fixed 25%)</p>
+    <p class="text-xs text-gray-500 mt-1">shrink-0</p>
   </div>
-  <button class="px-4 py-2 bg-blue-600 text-white rounded-lg">Sign Up</button>
-</nav>`,
+  <div class="flex-1 p-4 bg-green-100 rounded-lg">
+    <p class="text-sm font-medium">flex-1 (grows)</p>
+    <p class="text-xs text-gray-500 mt-1">Takes remaining space</p>
+  </div>
+  <div class="w-48 p-4 bg-purple-100 rounded-lg shrink-0">
+    <p class="text-sm font-medium">w-48 (192px fixed)</p>
+    <p class="text-xs text-gray-500 mt-1">shrink-0</p>
+  </div>
+</div>`,
+
+  'Typography & Line Height': `<div class="flex flex-col gap-6 p-8 bg-white">
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-xs (12px / leading 16px)</p>
+    <p class="text-xs">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.</p>
+  </div>
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-base (16px / leading 24px)</p>
+    <p class="text-base">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.</p>
+  </div>
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-2xl (24px / leading 32px)</p>
+    <p class="text-2xl font-bold">The quick brown fox jumps over the lazy dog.</p>
+  </div>
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-base leading-tight (1.25x)</p>
+    <p class="text-base leading-tight">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump.</p>
+  </div>
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-base leading-loose (2x)</p>
+    <p class="text-base leading-loose">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump.</p>
+  </div>
+  <div>
+    <p class="text-xs text-gray-400 mb-1">text-lg leading-8 (32px line-height)</p>
+    <p class="text-lg leading-8">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.</p>
+  </div>
+</div>`,
+
+  'Nested Complex Layout': `<div class="flex flex-col bg-white">
+  <nav class="flex items-center justify-between px-6 py-4 bg-white shadow">
+    <div class="text-xl font-bold text-blue-600">Brand</div>
+    <div class="flex items-center gap-6">
+      <a class="text-sm text-gray-600">Products</a>
+      <a class="text-sm text-gray-600">Pricing</a>
+      <a class="text-sm text-gray-600">About</a>
+      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">Sign Up</button>
+    </div>
+  </nav>
+  <section class="flex flex-col items-center py-16 px-8 bg-gradient-to-br from-blue-600 to-purple-700 text-white">
+    <h1 class="text-4xl font-bold mb-4 text-center">Build Something Amazing</h1>
+    <p class="text-lg text-center max-w-2xl mb-8 opacity-90">The all-in-one platform for teams to design, build, and ship products faster than ever before.</p>
+    <div class="flex gap-4">
+      <button class="px-6 py-3 bg-white text-blue-600 rounded-full font-semibold text-sm">Get Started Free</button>
+      <button class="px-6 py-3 border-2 border-white rounded-full font-semibold text-sm">Watch Demo</button>
+    </div>
+  </section>
+  <section class="py-16 px-8">
+    <h2 class="text-2xl font-bold text-center mb-12">Features</h2>
+    <div class="grid grid-cols-3 gap-8 max-w-5xl mx-auto">
+      <div class="p-6 bg-gray-50 rounded-xl">
+        <div class="w-10 h-10 bg-blue-100 rounded-lg mb-4"></div>
+        <h3 class="text-lg font-semibold mb-2">Lightning Fast</h3>
+        <p class="text-sm text-gray-600">Built for speed with optimized rendering and smart caching.</p>
+      </div>
+      <div class="p-6 bg-gray-50 rounded-xl">
+        <div class="w-10 h-10 bg-green-100 rounded-lg mb-4"></div>
+        <h3 class="text-lg font-semibold mb-2">Team Ready</h3>
+        <p class="text-sm text-gray-600">Real-time collaboration with built-in version control.</p>
+      </div>
+      <div class="p-6 bg-gray-50 rounded-xl">
+        <div class="w-10 h-10 bg-purple-100 rounded-lg mb-4"></div>
+        <h3 class="text-lg font-semibold mb-2">AI Powered</h3>
+        <p class="text-sm text-gray-600">Smart suggestions and automated workflows save hours.</p>
+      </div>
+    </div>
+  </section>
+  <footer class="flex items-center justify-between px-8 py-6 bg-gray-900 text-white">
+    <p class="text-sm text-gray-400">2024 Brand Inc. All rights reserved.</p>
+    <div class="flex gap-6">
+      <a class="text-sm text-gray-400">Privacy</a>
+      <a class="text-sm text-gray-400">Terms</a>
+      <a class="text-sm text-gray-400">Contact</a>
+    </div>
+  </footer>
+</div>`,
+
+  'Card Grid + Margins': `<div class="p-8 bg-gray-100">
+  <h2 class="text-2xl font-bold mb-6">Popular Products</h2>
+  <div class="grid grid-cols-3 gap-6">
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+      <div class="h-40 bg-gradient-to-br from-blue-400 to-blue-600"></div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg mb-1">Product One</h3>
+        <p class="text-sm text-gray-500 mb-3">A fantastic product with great features.</p>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-bold text-blue-600">$49</span>
+          <button class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg">Buy Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+      <div class="h-40 bg-gradient-to-br from-green-400 to-green-600"></div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg mb-1">Product Two</h3>
+        <p class="text-sm text-gray-500 mb-3">Another amazing product for your needs.</p>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-bold text-green-600">$79</span>
+          <button class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg">Buy Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+      <div class="h-40 bg-gradient-to-br from-purple-400 to-purple-600"></div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg mb-1">Product Three</h3>
+        <p class="text-sm text-gray-500 mb-3">Premium product with exclusive features.</p>
+        <div class="flex items-center justify-between">
+          <span class="text-lg font-bold text-purple-600">$99</span>
+          <button class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg">Buy Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`,
+
+  'Dashboard Layout': `<div class="flex flex-row h-[600px] bg-gray-100">
+  <aside class="w-56 bg-gray-900 text-white flex flex-col shrink-0">
+    <div class="px-5 py-4 text-lg font-bold border-b border-gray-700">Dashboard</div>
+    <nav class="flex flex-col gap-1 p-3">
+      <a class="px-3 py-2 bg-blue-600 rounded-lg text-sm">Overview</a>
+      <a class="px-3 py-2 text-gray-300 text-sm">Analytics</a>
+      <a class="px-3 py-2 text-gray-300 text-sm">Projects</a>
+      <a class="px-3 py-2 text-gray-300 text-sm">Settings</a>
+    </nav>
+  </aside>
+  <main class="flex-1 flex flex-col p-6 gap-6 overflow-hidden">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">Overview</h1>
+      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">New Project</button>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      <div class="p-5 bg-white rounded-xl shadow-sm">
+        <p class="text-sm text-gray-500 mb-1">Total Revenue</p>
+        <p class="text-2xl font-bold">$45,231</p>
+        <p class="text-xs text-green-600 mt-1">+20.1% from last month</p>
+      </div>
+      <div class="p-5 bg-white rounded-xl shadow-sm">
+        <p class="text-sm text-gray-500 mb-1">Active Users</p>
+        <p class="text-2xl font-bold">2,350</p>
+        <p class="text-xs text-green-600 mt-1">+180 new this week</p>
+      </div>
+      <div class="p-5 bg-white rounded-xl shadow-sm">
+        <p class="text-sm text-gray-500 mb-1">Projects</p>
+        <p class="text-2xl font-bold">12</p>
+        <p class="text-xs text-gray-400 mt-1">3 in progress</p>
+      </div>
+    </div>
+    <div class="flex-1 bg-white rounded-xl shadow-sm p-5">
+      <h3 class="font-semibold mb-4">Recent Activity</h3>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+          <div class="w-8 h-8 bg-blue-100 rounded-full shrink-0"></div>
+          <div class="flex-1">
+            <p class="text-sm font-medium">New project created</p>
+            <p class="text-xs text-gray-400">2 hours ago</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+          <div class="w-8 h-8 bg-green-100 rounded-full shrink-0"></div>
+          <div class="flex-1">
+            <p class="text-sm font-medium">Design review completed</p>
+            <p class="text-xs text-gray-400">5 hours ago</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>`,
 }
 
-const DEFAULT_HTML = PRESETS['Flex Row']
+const DEFAULT_HTML = PRESETS['Margin Spacing']
+
+// ============================================================
+// Resize Handle Hook
+// ============================================================
+
+function useResizeHandle(
+  initialWidth: number,
+  minWidth: number,
+  maxWidth: number,
+  direction: 'left' | 'right' = 'right'
+) {
+  const [width, setWidth] = useState(initialWidth)
+  const dragging = useRef(false)
+  const startX = useRef(0)
+  const startW = useRef(0)
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    dragging.current = true
+    startX.current = e.clientX
+    startW.current = width
+
+    const onMouseMove = (me: MouseEvent) => {
+      if (!dragging.current) return
+      const dx = me.clientX - startX.current
+      const delta = direction === 'right' ? dx : -dx
+      const newW = Math.max(minWidth, Math.min(maxWidth, startW.current + delta))
+      setWidth(newW)
+    }
+
+    const onMouseUp = () => {
+      dragging.current = false
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [width, minWidth, maxWidth, direction])
+
+  return { width, onMouseDown }
+}
+
+// ============================================================
+// Drag Handle Component
+// ============================================================
+
+function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      className="w-1.5 cursor-col-resize flex items-center justify-center group hover:bg-blue-500/20 active:bg-blue-500/30 transition-colors shrink-0 select-none"
+      onMouseDown={onMouseDown}
+    >
+      <div className="w-0.5 h-8 bg-gray-300 group-hover:bg-blue-500 rounded-full transition-colors" />
+    </div>
+  )
+}
 
 // ============================================================
 // Node Tree Component
@@ -115,11 +351,12 @@ function NodeTree({ node, depth = 0, onSelect, selectedId }: NodeTreeProps) {
     return `${h}×${v}`
   }
 
+  const hasMargin = node.margin && (node.margin.top > 0 || node.margin.right > 0 || node.margin.bottom > 0 || node.margin.left > 0)
+
   return (
     <div style={{ paddingLeft: depth * 12 }}>
       <div
-        className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer text-sm font-mono ${isSelected ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-100'
-          }`}
+        className={`flex items-center gap-1 py-1 px-2 rounded cursor-pointer text-sm font-mono ${isSelected ? 'bg-blue-100 text-blue-800' : 'hover:bg-gray-100'}`}
         onClick={() => onSelect?.(node)}
       >
         {hasChildren ? (
@@ -139,6 +376,7 @@ function NodeTree({ node, depth = 0, onSelect, selectedId }: NodeTreeProps) {
           {node.type}
         </span>
         <span className="truncate flex-1">{node.name}</span>
+        {hasMargin && <span className="text-xs text-orange-500 mr-1" title="Has margin">M</span>}
         <span className="text-xs text-gray-400">{getSizingBadge()}</span>
       </div>
       {hasChildren && expanded && (
@@ -183,11 +421,7 @@ function NodeInspector({ node }: { node: ScytleNode | null }) {
     <div className="p-3">
       <div className="flex items-center justify-between mb-2">
         <h4 className="font-semibold text-sm">{node.name}</h4>
-        <button
-          onClick={copyJson}
-          className="p-1 hover:bg-gray-100 rounded"
-          title="Copy JSON"
-        >
+        <button onClick={copyJson} className="p-1 hover:bg-gray-100 rounded" title="Copy JSON">
           {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
         </button>
       </div>
@@ -234,7 +468,6 @@ function CanvasPreview({ root }: { root: FrameNode | null }) {
   )
 }
 
-// Simple renderer for preview (mirrors the actual canvas logic)
 function ScytleNodeRenderer({ node }: { node: ScytleNode }) {
   const style = useMemo(() => computeNodeStyle(node), [node])
 
@@ -282,7 +515,6 @@ function ScytleNodeRenderer({ node }: { node: ScytleNode }) {
         data-node-name={`VectorNode: ${node.name}`}
       >
         <title>{`VectorNode: ${node.name}`}</title>
-        {/* Fill path */}
         {vector.fills?.length > 0 && (
           <path
             d={d}
@@ -290,7 +522,6 @@ function ScytleNodeRenderer({ node }: { node: ScytleNode }) {
             stroke="none"
           />
         )}
-        {/* Stroke path */}
         {vector.strokeVisible && (
           <path
             d={d}
@@ -312,46 +543,42 @@ function ScytleNodeRenderer({ node }: { node: ScytleNode }) {
 function computeNodeStyle(node: ScytleNode): React.CSSProperties {
   const style: React.CSSProperties = {}
 
-  // Dimensions - respect sizing mode
-  // Only set fixed width/height when sizing is 'fixed', not when 'hug' or 'fill'
   const horizontalSizing = node.sizing?.horizontal || 'hug'
   const verticalSizing = node.sizing?.vertical || 'hug'
 
   if (horizontalSizing === 'fixed' && node.width) {
     style.width = node.width
   } else if (horizontalSizing === 'fill') {
-    // 'fill' means stretch to parent width - use alignSelf: stretch for flex children
     style.alignSelf = 'stretch'
     style.width = '100%'
   }
-  // 'hug' = no width set, let content determine size
 
   if (verticalSizing === 'fixed' && node.height) {
     style.height = node.height
   } else if (verticalSizing === 'fill') {
     style.height = '100%'
   }
-  // 'hug' = no height set, let content determine size
 
   if (node.minWidth) style.minWidth = node.minWidth
   if (node.minHeight) style.minHeight = node.minHeight
   if (node.maxWidth) style.maxWidth = node.maxWidth
   if (node.maxHeight) style.maxHeight = node.maxHeight
 
-  // Opacity
   if (node.opacity !== undefined && node.opacity !== 1) {
     style.opacity = node.opacity
   }
 
-  // Margin (CSS spacing)
+  // Margin rendering
   if (node.margin) {
-    style.marginTop = node.margin.top
-    style.marginRight = node.margin.right
-    style.marginBottom = node.margin.bottom
-    style.marginLeft = node.margin.left
+    const { top, right, bottom, left } = node.margin
+    if (top || right || bottom || left) {
+      style.marginTop = top
+      style.marginRight = right
+      style.marginBottom = bottom
+      style.marginLeft = left
+    }
   }
 
-  // Border radius
   if (node.borderRadius) {
     if (typeof node.borderRadius === 'number') {
       style.borderRadius = node.borderRadius
@@ -363,7 +590,6 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
     }
   }
 
-  // Shadows
   if (node.shadows?.length) {
     style.boxShadow = node.shadows
       .map((shadow) => {
@@ -373,23 +599,19 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
       .join(', ')
   }
 
-  // Fills (background)
   if (node.fills?.length) {
     const fill = node.fills[0]
     if (fill.type === 'solid') {
       style.backgroundColor = fill.color
     } else if (fill.type === 'gradient') {
-      // Gradient fill - check for stops array or legacy gradient string
       if ('stops' in fill && fill.stops?.length) {
         const stops = fill.stops.map(s => `${s.color} ${s.position * 100}%`).join(', ')
         const angle = ('angle' in fill && fill.angle) || 180
         style.background = `linear-gradient(${angle}deg, ${stops})`
       } else if ('gradient' in fill && typeof fill.gradient === 'string') {
-        // Legacy gradient string
         style.background = fill.gradient
       }
     } else if (fill.type === 'image' && 'src' in fill && fill.src) {
-      // Image fill - render as background image
       style.backgroundImage = `url(${fill.src})`
       const fitMode = ('fit' in fill && fill.fit) || 'cover'
       if (fitMode === 'cover' || fitMode === 'contain') {
@@ -405,7 +627,6 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
     }
   }
 
-  // Text styles
   if (node.type === 'text') {
     if (node.fontFamily) style.fontFamily = node.fontFamily
     if (node.fontSize) style.fontSize = node.fontSize
@@ -418,7 +639,6 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
     if (node.textDecoration && node.textDecoration !== 'none') {
       style.textDecoration = node.textDecoration
     }
-    // Use direct color property (preferred) or fallback to fills
     if (node.color) {
       style.color = node.color
     } else {
@@ -428,20 +648,18 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
       }
     }
     if (node.lineHeight) {
-      // Line-height: if it's a small multiplier (< 10), use as unitless; otherwise treat as px
+      // lineHeight is now always in pixels from the parser
       if (typeof node.lineHeight === 'number') {
-        style.lineHeight = node.lineHeight < 10 ? node.lineHeight : `${node.lineHeight}px`
+        style.lineHeight = `${node.lineHeight}px`
       } else {
         style.lineHeight = node.lineHeight
       }
     }
   }
 
-  // Frame layout
   if (node.type === 'frame') {
     const frame = node as FrameNode
 
-    // Overflow
     if (frame.overflow === 'hidden') {
       style.overflow = 'hidden'
     }
@@ -463,6 +681,9 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
         }
         style.alignItems = alignMap[frame.layout.align] || frame.layout.align
       }
+      if (frame.layout.wrap) {
+        style.flexWrap = 'wrap'
+      }
     } else if (frame.layout?.mode === 'grid') {
       style.display = 'grid'
       if (frame.layout.columns) {
@@ -471,7 +692,6 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
       if (frame.layout.gap) style.gap = frame.layout.gap
     }
 
-    // Padding
     if (frame.padding) {
       style.paddingTop = frame.padding.top
       style.paddingRight = frame.padding.right
@@ -479,25 +699,30 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
       style.paddingLeft = frame.padding.left
     }
 
-    // Border
     if (frame.border) {
       style.borderWidth = frame.border.width
       style.borderColor = frame.border.color
       style.borderStyle = frame.border.style || 'solid'
     }
 
-    // Grid child properties (col-span)
+    // Grid child: col-span
     if (frame.gridColumnSpan) {
       if (frame.gridColumnSpan === -1) {
-        // col-span-full
         style.gridColumn = '1 / -1'
       } else {
         style.gridColumn = `span ${frame.gridColumnSpan}`
       }
     }
+
+    // Flex child properties
+    if (frame.flexShrink != null) {
+      style.flexShrink = frame.flexShrink
+    }
+    if (frame.layoutGrow != null && frame.layoutGrow > 0) {
+      style.flexGrow = frame.layoutGrow
+    }
   }
 
-  // Image fit
   if (node.type === 'image') {
     style.objectFit = node.fit || 'cover'
   }
@@ -543,63 +768,37 @@ export default function ParserTestPage() {
   const [selectedNode, setSelectedNode] = useState<ScytleNode | null>(null)
   const [savedTests, setSavedTests] = useState<SavedTest[]>([])
   const [testName, setTestName] = useState('')
+  const [viewportWidth, setViewportWidth] = useState(VIEWPORTS[2].width) // Desktop default
 
-  // Dynamic width measurement for pixel-perfect rendering
-  const iframeContainerRef = useRef<HTMLDivElement>(null)
-  const [contentWidth, setContentWidth] = useState<number | null>(null)
+  // Resizable panels
+  const leftPanel = useResizeHandle(400, 250, 700, 'right')
+  const rightPanel = useResizeHandle(350, 250, 600, 'left')
 
   // Load saved tests on mount
   useEffect(() => {
     setSavedTests(loadSavedTests())
   }, [])
 
-  // Load Inter font for the main page to match iframe preview
+  // Load Inter font
   useEffect(() => {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
     link.href = INTER_FONT_URL
     document.head.appendChild(link)
-    return () => {
-      document.head.removeChild(link)
-    }
+    return () => { document.head.removeChild(link) }
   }, [])
 
-  // Measure iframe container width dynamically
+  // Parse HTML whenever it changes or viewport changes
   useEffect(() => {
-    const container = iframeContainerRef.current
-    if (!container) return
-
-    const updateWidth = () => {
-      const containerWidth = container.clientWidth
-      // Subtract 32px for body padding (16px on each side) in the iframe
-      setContentWidth(containerWidth - 32)
-    }
-
-    // Initial measurement
-    updateWidth()
-
-    // Update on resize
-    const resizeObserver = new ResizeObserver(updateWidth)
-    resizeObserver.observe(container)
-
-    return () => resizeObserver.disconnect()
-  }, [])
-
-  // Parse HTML whenever it changes or content width changes
-  useEffect(() => {
-    // Wait for width measurement
-    if (contentWidth === null) return
-
     try {
-      // Use measured content width to match browser preview exactly
-      const root = parseHtmlToNodes(html, 'Test', { rootWidth: contentWidth })
+      const root = parseHtmlToNodes(html, 'Test', { rootWidth: viewportWidth })
       setParsedRoot(root)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Parse error')
       setParsedRoot(null)
     }
-  }, [html, contentWidth])
+  }, [html, viewportWidth])
 
   const handleSaveTest = useCallback(() => {
     const name = testName.trim() || `Test ${savedTests.length + 1}`
@@ -629,7 +828,6 @@ export default function ParserTestPage() {
     setHtml(PRESETS[name])
   }, [])
 
-  // Dev-only check
   if (process.env.NODE_ENV === 'production') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -641,9 +839,30 @@ export default function ParserTestPage() {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b">
-        <h1 className="text-lg font-bold">🧪 Parser Test Lab</h1>
+      <header className="flex items-center justify-between px-4 py-2 bg-white border-b shrink-0">
+        <h1 className="text-lg font-bold">Parser Test Lab</h1>
         <div className="flex items-center gap-4">
+          {/* Viewport selector */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            {VIEWPORTS.map(vp => {
+              const Icon = vp.icon
+              return (
+                <button
+                  key={vp.name}
+                  onClick={() => setViewportWidth(vp.width)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all ${viewportWidth === vp.width
+                    ? 'bg-white text-blue-600 shadow-sm font-medium'
+                    : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  title={`${vp.name} (${vp.width}px)`}
+                >
+                  <Icon size={14} />
+                  <span>{vp.width}</span>
+                </button>
+              )
+            })}
+          </div>
+
           {/* Presets dropdown */}
           <select
             className="px-3 py-1.5 border rounded-lg text-sm"
@@ -678,23 +897,17 @@ export default function ParserTestPage() {
 
       {/* Saved Tests Bar */}
       {savedTests.length > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 border-b overflow-x-auto">
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 border-b overflow-x-auto shrink-0">
           <span className="text-xs text-gray-500 shrink-0">Saved:</span>
           {savedTests.map(test => (
             <div
               key={test.id}
               className="flex items-center gap-1 px-2 py-1 bg-white border rounded text-sm shrink-0"
             >
-              <button
-                onClick={() => handleLoadTest(test)}
-                className="hover:text-blue-600"
-              >
+              <button onClick={() => handleLoadTest(test)} className="hover:text-blue-600">
                 {test.name}
               </button>
-              <button
-                onClick={() => handleDeleteTest(test.id)}
-                className="text-gray-400 hover:text-red-600"
-              >
+              <button onClick={() => handleDeleteTest(test.id)} className="text-gray-400 hover:text-red-600">
                 <Trash2 size={12} />
               </button>
             </div>
@@ -702,11 +915,11 @@ export default function ParserTestPage() {
         </div>
       )}
 
-      {/* Main Content - 3 Panels */}
+      {/* Main Content - 3 Resizable Panels */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Monaco Editor */}
-        <div className="w-1/3 border-r flex flex-col">
-          <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium">
+        <div className="flex flex-col" style={{ width: leftPanel.width }}>
+          <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium shrink-0">
             HTML + Tailwind Input
           </div>
           <div className="flex-1">
@@ -728,15 +941,18 @@ export default function ParserTestPage() {
           </div>
         </div>
 
-        {/* Middle: HTML Preview + Scytle Canvas */}
-        <div className="w-1/3 border-r flex flex-col">
-          {/* HTML Preview */}
-          <div className="flex-1 flex flex-col border-b">
-            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium flex items-center gap-2">
+        <DragHandle onMouseDown={leftPanel.onMouseDown} />
+
+        {/* Middle: Browser Preview + Scytle Canvas */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Browser Preview */}
+          <div className="flex-1 flex flex-col border-b min-h-0">
+            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium flex items-center gap-2 shrink-0">
               <span className="w-2 h-2 bg-green-500 rounded-full" />
               Browser Preview
+              <span className="text-xs text-gray-400 ml-auto">{viewportWidth}px</span>
             </div>
-            <div ref={iframeContainerRef} className="flex-1">
+            <div className="flex-1 overflow-auto bg-gray-200 flex justify-center p-4">
               <iframe
                 srcDoc={`
                 <!DOCTYPE html>
@@ -744,8 +960,8 @@ export default function ParserTestPage() {
                 <head>
                   <link rel="preconnect" href="https://fonts.googleapis.com">
                   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-                  <script src="https://cdn.tailwindcss.com"></script>
+                  <link href="${INTER_FONT_URL}" rel="stylesheet">
+                  <script src="https://cdn.tailwindcss.com"><\/script>
                   <script>
                     tailwind.config = {
                       theme: {
@@ -756,36 +972,44 @@ export default function ParserTestPage() {
                         },
                       },
                     }
-                  </script>
-                  <style>body { margin: 0; padding: 16px; font-family: 'Inter', sans-serif; }</style>
+                  <\/script>
+                  <style>body { margin: 0; font-family: 'Inter', sans-serif; }</style>
                 </head>
                 <body>${html}</body>
                 </html>
               `}
-                className="flex-1 w-full bg-white"
+                style={{ width: viewportWidth, minHeight: 200 }}
+                className="bg-white shadow-lg border"
                 title="HTML Preview"
               />
             </div>
           </div>
 
           {/* Scytle Canvas Preview */}
-          <div className="flex-1 flex flex-col">
-            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium flex items-center gap-2">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium flex items-center gap-2 shrink-0">
               <span className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-blue-500'}`} />
               Scytle Canvas Output
               {error && <span className="text-red-500 text-xs ml-2">{error}</span>}
+              <span className="text-xs text-gray-400 ml-auto">
+                {parsedRoot ? `${Math.round(parsedRoot.width)}×${Math.round(parsedRoot.height)}` : ''}
+              </span>
             </div>
-            <div className="flex-1 overflow-auto">
-              <CanvasPreview root={parsedRoot} />
+            <div className="flex-1 overflow-auto bg-gray-200 flex justify-center p-4">
+              <div style={{ width: viewportWidth }} className="bg-white shadow-lg border">
+                <CanvasPreview root={parsedRoot} />
+              </div>
             </div>
           </div>
         </div>
 
+        <DragHandle onMouseDown={rightPanel.onMouseDown} />
+
         {/* Right: Node Tree + Inspector */}
-        <div className="w-1/3 flex flex-col">
+        <div className="flex flex-col" style={{ width: rightPanel.width }}>
           {/* Node Tree */}
-          <div className="flex-1 flex flex-col border-b overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium">
+          <div className="flex-1 flex flex-col border-b overflow-hidden min-h-0">
+            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium shrink-0">
               Node Tree
             </div>
             <div className="flex-1 overflow-auto p-2">
@@ -801,7 +1025,7 @@ export default function ParserTestPage() {
 
           {/* Node Inspector */}
           <div className="h-[40%] flex flex-col overflow-hidden">
-            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium">
+            <div className="px-3 py-2 bg-gray-100 border-b text-sm font-medium shrink-0">
               Node Inspector
             </div>
             <div className="flex-1 overflow-auto">
