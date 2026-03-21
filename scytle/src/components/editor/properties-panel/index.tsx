@@ -18,7 +18,6 @@ import { FillSection } from './fill-section'
 import { AppearanceSection, StrokeSection } from './border-section'
 import { TypographySection } from './typography-section'
 import { EffectsSection } from './effects-section'
-import { ImageSection } from './image-section'
 import { VectorSection } from './vector-section'
 import { ColorInput, SectionHeader } from './inputs'
 import { Frame, Type, ImageIcon, FileText, Pen } from 'lucide-react'
@@ -138,7 +137,6 @@ export function PropertiesPanel() {
 
     const isFrame = node.type === 'frame'
     const isText = node.type === 'text'
-    const isImage = node.type === 'image'
     const isVector = node.type === 'vector'
 
     // Figma: vector nodes show "Vector" in edit mode, "Vector path" in select mode
@@ -183,7 +181,6 @@ export function PropertiesPanel() {
             <SizeSection node={node} onUpdate={onUpdate} />
 
             {isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
-            {isImage && <ImageSection node={node as ImageNode} onUpdate={onUpdate} />}
             {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
 
             {/* Appearance → Fill → Stroke → Effects (Figma order) */}

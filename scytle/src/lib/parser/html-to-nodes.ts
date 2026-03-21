@@ -1,27 +1,14 @@
-// ============================================================
-// HTML → ScytleNode[] Parser (V2)
-// Converts AI-generated HTML+Tailwind into a canvas node tree.
-// Runs client-side (uses browser DOMParser).
-//
-// V2 CHANGES (Figma-aligned):
-// - layoutMode defaults to 'none' (not forced flex)
-// - sizing defaults to 'hug' (not fill)
-// - No forced gap injection (respects explicit gaps only)
-// - Context-aware text sizing (headings hug, paragraphs fill)
-// - Improved currentColor resolution for SVG icons
-// - Phase 3: Enhanced SVG handling (DOM cloning, recursive color replacement)
-//
-// See docs/phases/HTML-TO-NODE-V2.md for full spec.
-// ============================================================
+
 
 import {
-    createFrame, createText, createImage,
-    type FrameNode, type TextNode, type ScytleNode,
+    createFrame, createText, createImage, createVector,
+    type FrameNode, type TextNode, type ScytleNode, type VectorNode,
     type Fill, type Border,
 } from '@/types/canvas'
 import { parseClasses, parseInlineStyles, type ParsedStyles } from './class-parser'
 import { resolveColor } from './color-map'
-import { PAGE_WIDTH, estimateTextHeight, estimateContainerHeight } from './size-utils'
+import { PAGE_WIDTH, estimateTextHeight, estimateContainerHeight, estimateContainerWidth } from './size-utils'
+import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
 
 // ---- Element Classification ----
 
@@ -53,7 +40,7 @@ const SECTION_TAG_NAMES: Record<string, string> = {
  * The AI is expected to output a `<div>` root with `<section>` children.
  * The root div becomes the page frame, its sections become children.
  */
-export function parseHtmlToNodes(html: string, pageName: string = 'Page'): FrameNode {
+export function parseHtmlToNodes(html: string, pageName: string = 'Page', options?: { rootWidth?: number }): FrameNode {
     const sanitized = sanitizeHtml(html)
     const parser = new DOMParser()
     const doc = parser.parseFromString(sanitized, 'text/html')
@@ -72,28 +59,41 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page'): Frame
 
     const effectiveColor = rootStyles.textColor || '#000000'
 
-    // Use parsed root width if present (e.g., w-[390px] for mobile), else default
-    const rootWidth = rootStyles.width || PAGE_WIDTH
+    // Check if root looks like a full-page container or a small component
+    const isFullPage = rootStyles.width !== null ||
+        rootStyles.minHeight !== null ||
+        rootClasses.includes('min-h-screen') ||
+        rootClasses.includes('h-screen')
+
+    // Use explicit rootWidth option if provided, else parsed root width, else default for full pages
+    const defaultWidth = options?.rootWidth || PAGE_WIDTH
+    const rootWidth = rootStyles.width || (isFullPage ? defaultWidth : null)
 
     // Walk children of the root element
-    const children = walkChildren(root, rootWidth, effectiveColor)
+    const children = walkChildren(root, rootWidth || defaultWidth, effectiveColor)
 
     const fills = buildFills(rootStyles)
     const layoutMode = resolveLayoutMode(rootStyles)
 
+    // Determine direction: respect explicit flex-row/flex-col, default to column for pages
+    const direction = rootStyles.flexDirection
+
+    // Sizing: full pages get fixed width, components hug
+    const horizontalSizing = rootStyles.width ? 'fixed' : (isFullPage ? 'fixed' : 'hug')
+
     return createFrame({
         name: pageName,
-        width: rootWidth,
+        width: rootWidth || estimateContainerWidth(children, rootStyles.padding, rootStyles.gap, direction),
         height: rootStyles.minHeight || estimateContainerHeight(
             children,
             rootStyles.padding,
             rootStyles.gap,
-            'column',
+            direction,
         ),
-        sizing: { horizontal: 'fixed', vertical: rootStyles.minHeight ? 'fixed' : 'hug' },
+        sizing: { horizontal: horizontalSizing, vertical: rootStyles.minHeight ? 'fixed' : 'hug' },
         layout: {
             mode: layoutMode,
-            direction: 'column', // Pages are always vertical stacks
+            direction, // Respect parsed direction instead of forcing column
             justify: rootStyles.justifyContent,
             align: rootStyles.alignItems,
             wrap: rootStyles.flexWrap || undefined,
@@ -163,17 +163,32 @@ function walkElement(
         return buildInputNode(el, tag, styles, effectiveColor, parentWidth)
     }
 
-    // <li> with only text → TextNode
-    if (tag === 'li' && hasOnlyInlineContent(el)) {
+    // <li> with only text AND no visual styling → TextNode
+    if (tag === 'li' && hasOnlyInlineContent(el) && !hasVisualStyling(styles)) {
         return buildTextNode(el, 'li', styles, effectiveColor, parentWidth)
     }
 
+    // Check if element has visual styling that requires it to be a FrameNode
+    const hasVisuals = hasVisualStyling(styles)
+
+    // Check if element is a layout container
+    const isLayoutContainer = styles.display === 'flex' ||
+        styles.display === 'grid' ||
+        styles.display === 'inline-flex' ||
+        classes.includes('flex') ||
+        classes.includes('inline-flex') ||
+        classes.includes('grid')
+
     // Any element with only text/inline content → TextNode
-    if (hasOnlyInlineContent(el) && el.textContent?.trim()) {
+    // UNLESS it has:
+    // 1. Explicit flex/grid layout
+    // 2. Visual styling (bg, padding, borders, etc.) - these become FrameNode with TextNode child
+    if (!isLayoutContainer && !hasVisuals && hasOnlyInlineContent(el) && el.textContent?.trim()) {
         return buildTextNode(el, tag, styles, effectiveColor, parentWidth)
     }
 
     // Container → FrameNode with recursive children
+    // For styled inline elements with text, this will create Frame containing Text
     return buildContainerNode(el, tag, styles, effectiveColor, parentWidth)
 }
 
@@ -192,94 +207,258 @@ function walkChildren(
 
 // ---- Node Builders ----
 
+/**
+ * Build a FrameNode with ImageFill from an <img> element.
+ *
+ * Instead of creating an ImageNode, we create a FrameNode with an image fill.
+ * This allows images to be edited through the Fill system (with crop, adjustments, etc.)
+ * rather than requiring a separate Image section in the properties panel.
+ */
 function buildImageNode(el: Element, styles: ParsedStyles): ScytleNode {
     const src = el.getAttribute('src') || ''
     const alt = el.getAttribute('alt') || 'Image'
     const width = styles.width || parseInt(el.getAttribute('width') || '') || 300
     const height = styles.height || parseInt(el.getAttribute('height') || '') || 200
 
-    return createImage({
+    // Map objectFit to ImageFill fit mode
+    const objectFit = el.getAttribute('style')?.includes('object-fit')
+        ? (el.getAttribute('style')?.match(/object-fit:\s*(\w+)/)?.[1] || 'cover')
+        : 'cover'
+
+    // Create ImageFill
+    const imageFill: Fill = {
+        type: 'image',
+        src,
+        fit: objectFit as 'cover' | 'contain' | 'fill',
+        opacity: styles.opacity < 1 ? styles.opacity : undefined,
+    }
+
+    return createFrame({
         name: alt.slice(0, 40) || 'Image',
         width,
         height,
-        src,
-        alt,
-        fit: 'cover',
-        isPlaceholder: !src || src.includes('placeholder'),
-        placeholderLabel: alt || 'Image',
         sizing: {
             horizontal: styles.widthRatio ? 'fill' : (styles.width ? 'fixed' : 'fill'),
             vertical: 'fixed',
         },
+        layout: { mode: 'none' },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        fills: src ? [imageFill] : [], // Only add fill if src exists
         borderRadius: styles.borderRadiusPerCorner || styles.borderRadius,
-        opacity: styles.opacity,
+        overflow: 'hidden', // Clip image to frame bounds
+        children: [],
     })
 }
 
 /**
- * Build an ImageNode from an SVG element.
- * 
- * Phase 3 improvements:
- * - Clone DOM before modifying to avoid side effects
- * - Recursively replace currentColor in all child elements
- * - Handle both attributes (fill, stroke) and style attributes
- * - Better dimension extraction with viewBox fallback
- * - Extract name from aria-label, title, or class
+ * Build a VectorNode from an SVG element.
+ *
+ * Converts SVG paths to VectorNetwork format for pen tool integration.
+ * Falls back to ImageNode for complex SVGs that can't be parsed.
+ *
+ * Features:
+ * - Parses SVG path data (M, L, C, Q, A, Z commands) to VectorNetwork
+ * - Resolves currentColor from parent elements
+ * - Extracts stroke/fill colors and weights
+ * - Handles viewBox transformation
  */
 function buildSvgNode(el: Element): ScytleNode {
     // 1. Clone SVG to avoid modifying original DOM
     const svgEl = el.cloneNode(true) as Element
-    
+
     // 2. Get dimensions - prefer explicit width/height, fallback to viewBox
     let width = parseFloat(el.getAttribute('width') || '')
     let height = parseFloat(el.getAttribute('height') || '')
-    
-    if (isNaN(width) || isNaN(height) || width === 0 || height === 0) {
-        // Try viewBox: "minX minY width height"
-        const viewBox = el.getAttribute('viewBox')
-        if (viewBox) {
-            const parts = viewBox.split(/\s+/).map(Number)
-            if (parts.length >= 4) {
-                width = width || parts[2] || 24
-                height = height || parts[3] || 24
-            }
+    let viewBoxMinX = 0, viewBoxMinY = 0, viewBoxWidth = 0, viewBoxHeight = 0
+
+    const viewBox = el.getAttribute('viewBox')
+    if (viewBox) {
+        const parts = viewBox.split(/[\s,]+/).map(Number)
+        if (parts.length >= 4) {
+            viewBoxMinX = parts[0] || 0
+            viewBoxMinY = parts[1] || 0
+            viewBoxWidth = parts[2] || 24
+            viewBoxHeight = parts[3] || 24
         }
     }
-    
-    // Default to 24x24 (common icon size)
-    width = width || 24
-    height = height || 24
-    
+
+    if (isNaN(width) || width === 0) width = viewBoxWidth || 24
+    if (isNaN(height) || height === 0) height = viewBoxHeight || 24
+
     // 3. Resolve currentColor from context
     const inheritedColor = resolveCurrentColor(el)
-    
+
     // 4. Recursively replace currentColor in all elements
     replaceCurrentColorInElement(svgEl, inheritedColor)
-    
-    // 5. Serialize with resolved colors
+
+    // 5. Extract stroke/fill properties from SVG or first path
+    const strokeColor = extractSvgStrokeColor(svgEl, inheritedColor)
+    const strokeWeight = extractSvgStrokeWeight(svgEl)
+    const fillColor = extractSvgFillColor(svgEl, inheritedColor)
+    const hasFill = fillColor !== 'none' && fillColor !== null
+
+    // 6. Try to parse SVG paths into VectorNetwork
+    const paths = svgEl.querySelectorAll('path')
+    if (paths.length === 0) {
+        // No paths - fall back to ImageNode for complex shapes (circle, rect, etc.)
+        return buildSvgAsImage(el, svgEl, width, height)
+    }
+
+    try {
+        // Parse all paths into a single VectorNetwork
+        const network = parseSvgToNetwork(svgEl)
+
+        if (network.vertices.length === 0) {
+            // Parsing failed or empty paths - fall back to ImageNode
+            return buildSvgAsImage(el, svgEl, width, height)
+        }
+
+        // Normalize vertices so bounding box starts at (0, 0)
+        normalizeNetwork(network)
+        const bounds = computeBoundingBox(network)
+
+        // Scale vertices if viewBox differs from display size
+        if (viewBoxWidth && viewBoxHeight && (viewBoxWidth !== width || viewBoxHeight !== height)) {
+            const scaleX = width / viewBoxWidth
+            const scaleY = height / viewBoxHeight
+            for (const v of network.vertices) {
+                v.x = (v.x - viewBoxMinX) * scaleX
+                v.y = (v.y - viewBoxMinY) * scaleY
+            }
+            // Recalculate bounds after scaling
+            const newBounds = computeBoundingBox(network)
+            bounds.width = newBounds.width
+            bounds.height = newBounds.height
+        }
+
+        // 7. Extract meaningful name
+        const name = extractSvgName(el)
+
+        // 8. Build fills array if SVG has fill
+        const fills: Fill[] = hasFill && fillColor
+            ? [{ type: 'solid', color: fillColor }]
+            : []
+
+        return createVector({
+            name,
+            width: bounds.width || width,
+            height: bounds.height || height,
+            vectorNetwork: network,
+            strokeColor,
+            strokeWeight,
+            strokeOpacity: 1,
+            strokeVisible: true,
+            strokeCap: 'ROUND',
+            strokeJoin: 'ROUND',
+            handleMirroring: 'NONE',
+            fills,
+            sizing: { horizontal: 'fixed', vertical: 'fixed' },
+            positioning: 'auto', // Use auto so it flows in parent layout
+        })
+    } catch {
+        // Parsing error - fall back to ImageNode
+        return buildSvgAsImage(el, svgEl, width, height)
+    }
+}
+
+/**
+ * Build a FrameNode with ImageFill from an SVG element (fallback for complex SVGs).
+ * Used when SVG cannot be parsed into VectorNetwork (e.g., has circle, rect, etc.).
+ */
+function buildSvgAsImage(originalEl: Element, svgEl: Element, width: number, height: number): ScytleNode {
     const serializer = new XMLSerializer()
     let svgMarkup = serializer.serializeToString(svgEl)
-    
+
     // Ensure xmlns for standalone rendering
     if (!svgMarkup.includes('xmlns=')) {
         svgMarkup = svgMarkup.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
     }
-    
+
     const dataUri = `data:image/svg+xml,${encodeURIComponent(svgMarkup)}`
-    
-    // 6. Extract meaningful name
-    const name = extractSvgName(el)
-    
-    return createImage({
+    const name = extractSvgName(originalEl)
+
+    // Create ImageFill with the SVG data URI
+    const imageFill: Fill = {
+        type: 'image',
+        src: dataUri,
+        fit: 'contain',
+    }
+
+    return createFrame({
         name,
         width,
         height,
-        src: dataUri,
-        alt: name,
-        fit: 'contain',
-        isPlaceholder: false,
         sizing: { horizontal: 'fixed', vertical: 'fixed' },
+        layout: { mode: 'none' },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        fills: [imageFill],
+        overflow: 'visible',
+        children: [],
     })
+}
+
+/**
+ * Extract stroke color from SVG element.
+ */
+function extractSvgStrokeColor(svgEl: Element, fallback: string): string {
+    // Check SVG root first
+    let stroke = svgEl.getAttribute('stroke')
+    if (stroke && stroke !== 'none' && stroke !== 'currentColor') {
+        return stroke
+    }
+
+    // Check first path
+    const path = svgEl.querySelector('path')
+    if (path) {
+        stroke = path.getAttribute('stroke')
+        if (stroke && stroke !== 'none' && stroke !== 'currentColor') {
+            return stroke
+        }
+    }
+
+    // Return fallback (resolved currentColor)
+    return fallback
+}
+
+/**
+ * Extract stroke weight from SVG element.
+ */
+function extractSvgStrokeWeight(svgEl: Element): number {
+    let weight = svgEl.getAttribute('stroke-width')
+    if (weight) {
+        const parsed = parseFloat(weight)
+        if (!isNaN(parsed)) return parsed
+    }
+
+    const path = svgEl.querySelector('path')
+    if (path) {
+        weight = path.getAttribute('stroke-width')
+        if (weight) {
+            const parsed = parseFloat(weight)
+            if (!isNaN(parsed)) return parsed
+        }
+    }
+
+    return 2 // Default stroke weight
+}
+
+/**
+ * Extract fill color from SVG element.
+ */
+function extractSvgFillColor(svgEl: Element, fallback: string): string | null {
+    let fill = svgEl.getAttribute('fill')
+    if (fill === 'none') return null
+    if (fill && fill !== 'currentColor') return fill
+
+    const path = svgEl.querySelector('path')
+    if (path) {
+        fill = path.getAttribute('fill')
+        if (fill === 'none') return null
+        if (fill && fill !== 'currentColor') return fill
+    }
+
+    // Most icons use stroke-only, not fill
+    return null
 }
 
 /**
@@ -289,20 +468,20 @@ function buildSvgNode(el: Element): ScytleNode {
 function replaceCurrentColorInElement(el: Element, resolvedColor: string): void {
     // Attributes that can contain currentColor
     const colorAttrs = ['fill', 'stroke', 'color', 'stop-color', 'flood-color', 'lighting-color']
-    
+
     for (const attr of colorAttrs) {
         const value = el.getAttribute(attr)
         if (value === 'currentColor') {
             el.setAttribute(attr, resolvedColor)
         }
     }
-    
+
     // Handle style attribute
     const style = el.getAttribute('style')
     if (style && style.includes('currentColor')) {
         el.setAttribute('style', style.replace(/currentColor/gi, resolvedColor))
     }
-    
+
     // Recurse into children
     for (const child of Array.from(el.children)) {
         replaceCurrentColorInElement(child, resolvedColor)
@@ -317,11 +496,11 @@ function extractSvgName(el: Element): string {
     // 1. aria-label
     const ariaLabel = el.getAttribute('aria-label')
     if (ariaLabel) return ariaLabel
-    
+
     // 2. title element
     const titleEl = el.querySelector('title')
     if (titleEl?.textContent) return titleEl.textContent.trim()
-    
+
     // 3. Look for icon library class names (lucide, heroicons, etc.)
     const classList = (el.getAttribute('class') || '').split(/\s+/)
     for (const cls of classList) {
@@ -333,7 +512,7 @@ function extractSvgName(el: Element): string {
             }
         }
     }
-    
+
     // 4. Default
     return 'Icon'
 }
@@ -349,35 +528,35 @@ function resolveCurrentColor(el: Element): string {
     if (svgStroke && svgStroke !== 'none' && svgStroke !== 'currentColor' && svgStroke.startsWith('#')) {
         return svgStroke
     }
-    
+
     // 2. Check element's own text color class
     const ownClasses = (el.getAttribute('class') || '').split(/\s+/)
     for (const cls of ownClasses) {
         const color = extractTextColor(cls)
         if (color) return color
     }
-    
+
     // 3. Walk up the DOM tree
     let current = el.parentElement
     while (current) {
         const classes = (current.getAttribute('class') || '').split(/\s+/)
-        
+
         // Check for text color
         for (const cls of classes) {
             const color = extractTextColor(cls)
             if (color) return color
         }
-        
+
         // Check inline style
         const inlineColor = current.getAttribute('style')
         if (inlineColor) {
             const match = inlineColor.match(/(?:^|;)\s*color:\s*(#[0-9a-fA-F]{3,8}|rgb[a]?\([^)]+\))/)
             if (match) return match[1]
         }
-        
+
         current = current.parentElement
     }
-    
+
     // 4. Check for dark mode context - if in dark section, default to white
     const darkBgPatterns = [
         'bg-gray-900', 'bg-gray-800', 'bg-slate-900', 'bg-slate-800',
@@ -386,7 +565,7 @@ function resolveCurrentColor(el: Element): string {
         // Also check for gradient dark backgrounds
         'from-gray-900', 'from-slate-900', 'from-zinc-900',
     ]
-    
+
     let parent = el.parentElement
     while (parent) {
         const classes = (parent.getAttribute('class') || '').split(/\s+/)
@@ -394,7 +573,7 @@ function resolveCurrentColor(el: Element): string {
         if (isDark) return '#ffffff'
         parent = parent.parentElement
     }
-    
+
     // 5. Default: common body text color (gray-800)
     return '#1f2937'
 }
@@ -408,33 +587,33 @@ function extractTextColor(cls: string): string | null {
         'text-left', 'text-center', 'text-right', 'text-justify',
         'text-wrap', 'text-nowrap', 'text-balance', 'text-pretty',
     ]
-    
+
     if (!cls.startsWith('text-')) return null
-    
+
     // Skip responsive prefixes (sm:text-*, md:text-*, etc.)
     if (cls.includes(':')) {
         const baseCls = cls.split(':').pop()!
         if (!baseCls.startsWith('text-')) return null
         cls = baseCls
     }
-    
+
     // Check if it's a non-color text class
     for (const prefix of nonColorPrefixes) {
         if (cls.startsWith(prefix)) return null
     }
-    
+
     // Extract color value
     const colorVal = cls.slice(5) // remove 'text-'
-    
+
     // Handle special colors
     if (colorVal === 'white') return '#ffffff'
     if (colorVal === 'black') return '#000000'
     if (colorVal === 'transparent') return 'transparent'
     if (colorVal === 'current' || colorVal === 'inherit') return null
-    
+
     // Handle opacity modifiers: text-gray-500/50
     const [baseColor] = colorVal.split('/')
-    
+
     const hex = resolveColor(baseColor)
     return hex || null
 }
@@ -474,47 +653,48 @@ function buildTextNode(
     const text = getTextContent(el)
     const htmlTag = HTML_TAG_MAP[tag]
     const classList = getClassList(el)
-    
+
     // === TEXT SIZING (Figma-aligned) ===
     // Figma's textAutoResize modes:
     //   'NONE' = fixed size
     //   'WIDTH_AND_HEIGHT' = hug both (auto width)
     //   'HEIGHT' = fixed width, auto height (default for paragraphs)
     //   'TRUNCATE' = fixed with ellipsis
-    
+
     const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)
     const isInline = INLINE_ELEMENTS.has(tag) || tag === 'span' || tag === 'a'
-    
+
     // Check for explicit width classes
     const hasExplicitWidth = styles.width !== null
     const hasFillWidth = classList.some(cls => {
         const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
         return baseCls === 'w-full'
     })
-    
+
     // Check for truncation
     const hasTruncate = classList.some(cls => {
         const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
         return baseCls === 'truncate' || baseCls.startsWith('line-clamp-')
     })
-    
+
     // Determine sizing based on element type and context
     let sizing: { horizontal: 'fixed' | 'hug' | 'fill'; vertical: 'fixed' | 'hug' | 'fill' }
     let autoResize: 'none' | 'height' | 'width-and-height'
-    
+
     if (hasTruncate) {
         // Truncated text needs fixed width
         sizing = { horizontal: hasFillWidth ? 'fill' : 'fixed', vertical: 'fixed' }
         autoResize = 'none'
     } else if (isHeading) {
-        // Headings: hug content by default (like Figma auto-width)
-        if (hasFillWidth) {
-            sizing = { horizontal: 'fill', vertical: 'hug' }
-            autoResize = 'height'
+        // Headings: fill container by default for proper text wrapping
+        // In flex containers, headings should wrap at the container boundary
+        if (hasFillWidth || hasExplicitWidth) {
+            sizing = { horizontal: hasExplicitWidth ? 'fixed' : 'fill', vertical: 'hug' }
         } else {
-            sizing = { horizontal: 'hug', vertical: 'hug' }
-            autoResize = 'width-and-height'
+            // Default: fill container width so text wraps correctly
+            sizing = { horizontal: 'fill', vertical: 'hug' }
         }
+        autoResize = 'height'
     } else if (isInline) {
         // Inline elements: always hug (they flow with text)
         sizing = { horizontal: 'hug', vertical: 'hug' }
@@ -528,9 +708,12 @@ function buildTextNode(
         sizing = { horizontal: 'fill', vertical: 'hug' }
         autoResize = 'height'
     }
-    
+
     const width = computeTextWidth(styles, parentWidth)
     const lh = styles.lineHeight
+    // Convert lineHeight to multiplier for height estimation
+    // If lineHeight is > 10, it's in pixels (from text-* classes), otherwise it's a multiplier
+    const lineHeightMultiplier = lh > 10 ? lh / styles.fontSize : lh
 
     return createText({
         name: text.slice(0, 40) + (text.length > 40 ? '...' : ''),
@@ -547,10 +730,11 @@ function buildTextNode(
         textDecoration: styles.textDecoration,
         color: effectiveColor,
         width: sizing.horizontal === 'hug' ? estimateInlineTextWidth(text, styles.fontSize) : width,
-        height: estimateTextHeight(text, styles.fontSize, width, lh),
+        height: estimateTextHeight(text, styles.fontSize, width, lineHeightMultiplier),
         sizing,
         autoResize,
         opacity: styles.opacity,
+        margin: styles.margin,
     })
 }
 
@@ -687,7 +871,21 @@ function buildContainerNode(
         }
     }
 
-    const children = walkChildren(el, effectiveChildWidth, effectiveColor)
+    let children = walkChildren(el, effectiveChildWidth, effectiveColor)
+
+    // If container has only text content (no element children), create a TextNode child
+    // This handles styled inline elements like <span class="bg-blue-500 text-white">Item A</span>
+    if (children.length === 0 && hasOnlyInlineContent(el)) {
+        const textContent = el.textContent?.trim()
+        if (textContent) {
+            // Use THIS element's text color if specified, otherwise inherit
+            const textColor = styles.textColor || effectiveColor
+            const textNode = buildTextNode(el, tag, styles, textColor, effectiveChildWidth)
+            if (textNode) {
+                children = [textNode]
+            }
+        }
+    }
 
     // Drop empty containers unless they have visual properties
     const hasVisuals = styles.bgColor || styles.gradient || styles.borderWidth > 0 ||
@@ -696,17 +894,17 @@ function buildContainerNode(
     if (children.length === 0 && !hasVisuals) return null
 
     const fills = buildFills(styles)
-    
+
     // === LAYOUT MODE DETECTION (Figma-aligned) ===
     // 1. Check explicit display property
     let layoutMode = resolveLayoutMode(styles)
-    
+
     // 2. Infer flex from utility classes if not explicitly set
     const isExplicitFlex = styles.display === 'flex' || styles.display === 'inline-flex'
     const isExplicitGrid = styles.display === 'grid'
-    
+
     let direction: 'row' | 'column' = styles.flexDirection
-    
+
     if (!isExplicitFlex && !isExplicitGrid) {
         const inferred = inferFlexFromClasses(classList)
         if (inferred.isInferred) {
@@ -776,6 +974,8 @@ function buildContainerNode(
         flexBasis: styles.flexBasis ?? undefined,
         order: styles.order ?? undefined,
         alignSelf: styles.alignSelf ?? undefined,
+        // === Grid child properties ===
+        gridColumnSpan: styles.gridColumnSpan ?? undefined,
         children,
     })
 }
@@ -785,23 +985,23 @@ function buildContainerNode(
  * FIGMA BEHAVIOR: Default is 'hug' (shrink-wrap), not 'fill'!
  */
 function determineSizing(
-    styles: ParsedStyles, 
+    styles: ParsedStyles,
     classList: string[],
     isSectionLevel: boolean
 ): { horizontal: 'fixed' | 'hug' | 'fill'; vertical: 'fixed' | 'hug' | 'fill' } {
     // === HORIZONTAL SIZING ===
     let horizontal: 'fixed' | 'hug' | 'fill' = 'hug' // Figma default
-    
+
     // Check for fill indicators
     const fillHorizontal = classList.some(cls => {
         const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
-        return baseCls === 'w-full' || 
-               baseCls === 'flex-1' || 
-               baseCls === 'grow' || 
-               baseCls === 'flex-grow' ||
-               baseCls === 'basis-full'
+        return baseCls === 'w-full' ||
+            baseCls === 'flex-1' ||
+            baseCls === 'grow' ||
+            baseCls === 'flex-grow' ||
+            baseCls === 'basis-full'
     })
-    
+
     if (fillHorizontal || styles.widthRatio === 1 || styles.flexGrow) {
         horizontal = 'fill'
     } else if (styles.width) {
@@ -811,25 +1011,25 @@ function determineSizing(
         horizontal = 'fill'
     }
     // else: stays 'hug' (Figma default)
-    
+
     // === VERTICAL SIZING ===
     let vertical: 'fixed' | 'hug' | 'fill' = 'hug' // Figma default
-    
+
     const fillVertical = classList.some(cls => {
         const baseCls = cls.includes(':') ? cls.split(':').pop()! : cls
-        return baseCls === 'h-full' || 
-               baseCls === 'h-screen' ||
-               baseCls === 'min-h-full' ||
-               baseCls === 'min-h-screen'
+        return baseCls === 'h-full' ||
+            baseCls === 'h-screen' ||
+            baseCls === 'min-h-full' ||
+            baseCls === 'min-h-screen'
     })
-    
+
     if (fillVertical) {
         vertical = 'fill'
     } else if (styles.height) {
         vertical = 'fixed'
     }
     // else: stays 'hug' (Figma default)
-    
+
     return { horizontal, vertical }
 }
 
@@ -861,6 +1061,23 @@ function hasOnlyInlineContent(el: Element): boolean {
         }
     }
     return true
+}
+
+/**
+ * Check if parsed styles have visual properties that require a FrameNode.
+ * Elements with backgrounds, padding, borders, shadows should be frames, not plain text.
+ */
+function hasVisualStyling(styles: ParsedStyles): boolean {
+    return (
+        styles.bgColor !== null ||
+        (styles.padding.top > 0 || styles.padding.right > 0 ||
+            styles.padding.bottom > 0 || styles.padding.left > 0) ||
+        styles.borderWidth > 0 ||
+        styles.borderRadius > 0 ||
+        styles.borderRadiusPerCorner !== null ||
+        styles.shadows.length > 0 ||  // Fix: check array length, not null (default is [])
+        styles.gradient !== null
+    )
 }
 
 function isButtonLike(styles: ParsedStyles): boolean {

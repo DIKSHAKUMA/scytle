@@ -14,6 +14,24 @@ const FONT_SIZES: Record<string, number> = {
     '7xl': 72, '8xl': 96, '9xl': 128,
 }
 
+// Tailwind text-* classes include BOTH font-size AND line-height
+// These are the exact Tailwind v3/v4 line-heights in PIXELS for each text size
+const TEXT_LINE_HEIGHTS: Record<string, number> = {
+    xs: 16,      // text-xs: 0.75rem/1rem
+    sm: 20,      // text-sm: 0.875rem/1.25rem
+    base: 24,    // text-base: 1rem/1.5rem
+    lg: 28,      // text-lg: 1.125rem/1.75rem
+    xl: 28,      // text-xl: 1.25rem/1.75rem
+    '2xl': 32,   // text-2xl: 1.5rem/2rem
+    '3xl': 36,   // text-3xl: 1.875rem/2.25rem
+    '4xl': 40,   // text-4xl: 2.25rem/2.5rem
+    '5xl': 48,   // text-5xl: 3rem/1 (line-height: 1)
+    '6xl': 60,   // text-6xl: 3.75rem/1
+    '7xl': 72,   // text-7xl: 4.5rem/1
+    '8xl': 96,   // text-8xl: 6rem/1
+    '9xl': 128,  // text-9xl: 8rem/1
+}
+
 const FONT_WEIGHTS: Record<string, number> = {
     thin: 100, extralight: 200, light: 300, normal: 400,
     medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900,
@@ -273,11 +291,11 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'flex-nowrap') { s.flexWrap = false; continue }
         if (raw === 'flex-1' || raw === 'flex-grow' || raw === 'grow') { s.flexGrow = true; continue }
         if (raw === 'flex-none') { s.flexGrow = false; continue }
-        
+
         // === NEW: Flex shrink (Phase 2) ===
         if (raw === 'shrink-0' || raw === 'flex-shrink-0') { s.flexShrink = 0; continue }
         if (raw === 'shrink' || raw === 'flex-shrink') { s.flexShrink = 1; continue }
-        
+
         // === NEW: Flex basis (Phase 2) ===
         if (raw.startsWith('basis-')) {
             const val = raw.slice(6)
@@ -285,10 +303,10 @@ export function parseClasses(classList: string[]): ParsedStyles {
             if (val === 'auto') { s.flexBasis = null; continue }
             if (val === '0') { s.flexBasis = 0; continue }
             // Fractions
-            if (WIDTH_FRACTIONS[val] !== undefined) { 
-                s.flexBasis = null; 
-                s.widthRatio = WIDTH_FRACTIONS[val]; 
-                continue 
+            if (WIDTH_FRACTIONS[val] !== undefined) {
+                s.flexBasis = null;
+                s.widthRatio = WIDTH_FRACTIONS[val];
+                continue
             }
             // Arbitrary [Npx]
             const arb = resolveArbitrary(val)
@@ -298,7 +316,7 @@ export function parseClasses(classList: string[]): ParsedStyles {
             if (px > 0) { s.flexBasis = px; continue }
             continue
         }
-        
+
         // === NEW: Order (Phase 2) ===
         if (raw.startsWith('order-')) {
             const val = raw.slice(6)
@@ -309,7 +327,7 @@ export function parseClasses(classList: string[]): ParsedStyles {
             if (!isNaN(n)) { s.order = n; continue }
             continue
         }
-        
+
         // === NEW: Self alignment (Phase 2) ===
         if (raw === 'self-auto') { s.alignSelf = 'auto'; continue }
         if (raw === 'self-start') { s.alignSelf = 'start'; continue }
@@ -317,7 +335,7 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'self-center') { s.alignSelf = 'center'; continue }
         if (raw === 'self-stretch') { s.alignSelf = 'stretch'; continue }
         if (raw === 'self-baseline') { s.alignSelf = 'baseline'; continue }
-        
+
         if (raw === 'items-start') { s.alignItems = 'start'; continue }
         if (raw === 'items-end') { s.alignItems = 'end'; continue }
         if (raw === 'items-center') { s.alignItems = 'center'; continue }
@@ -547,9 +565,13 @@ export function parseClasses(classList: string[]): ParsedStyles {
                 s.textAlign = val as 'left' | 'center' | 'right' | 'justify'
                 continue
             }
-            // 2. Text size
+            // 2. Text size (includes line-height from Tailwind)
             if (FONT_SIZES[val] !== undefined) {
                 s.fontSize = FONT_SIZES[val]
+                // Set the Tailwind-specific line-height for this text size (in px)
+                if (TEXT_LINE_HEIGHTS[val] !== undefined) {
+                    s.lineHeight = TEXT_LINE_HEIGHTS[val]
+                }
                 continue
             }
             // 3. Arbitrary value

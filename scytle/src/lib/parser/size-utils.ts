@@ -53,6 +53,30 @@ export function estimateContainerHeight(
 }
 
 /**
+ * Estimate width of a container based on its children and layout.
+ * Used when no explicit width is set (hug behavior).
+ */
+export function estimateContainerWidth(
+    children: ScytleNode[],
+    padding: { left: number; right: number },
+    gap: number = 0,
+    direction: 'row' | 'column' = 'column',
+): number {
+    if (children.length === 0) return padding.left + padding.right + 100 // min width
+
+    if (direction === 'row') {
+        // Horizontal row: sum widths + gaps
+        const totalChildWidth = children.reduce((sum, child) => sum + (child.width || 100), 0)
+        const totalGaps = Math.max(0, children.length - 1) * gap
+        return padding.left + padding.right + totalChildWidth + totalGaps
+    } else {
+        // Vertical stack: max width of children
+        const maxChildWidth = Math.max(...children.map(c => c.width || 100))
+        return padding.left + padding.right + maxChildWidth
+    }
+}
+
+/**
  * Estimate the height of a ScytleNode.
  * Used when a node doesn't have an explicit height.
  */

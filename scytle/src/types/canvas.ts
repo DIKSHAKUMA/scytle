@@ -339,6 +339,10 @@ export interface BaseNodeProperties {
     border?: Border
     shadows: Shadow[]
 
+    // === SPACING (for HTML/CSS compatibility) ===
+    /** Margin (CSS spacing outside element borders) - preserved from HTML parsing */
+    margin?: { top: number; right: number; bottom: number; left: number }
+
     // === CONSTRAINTS (Phase 4) ===
     // Min/max dimensions (Figma: minWidth, maxWidth, minHeight, maxHeight)
     // https://www.figma.com/plugin-docs/api/properties/nodes-minwidth/
@@ -368,6 +372,10 @@ export interface FrameNode extends BaseNodeProperties {
     order?: number
     /** Self alignment (overrides parent's alignItems) */
     alignSelf?: 'auto' | 'start' | 'center' | 'end' | 'stretch' | 'baseline'
+
+    // === GRID CHILD PROPERTIES ===
+    /** Grid column span (col-span-2 = 2, col-span-full = -1) */
+    gridColumnSpan?: number
 }
 
 /** Text leaf node — renders as heading/paragraph/span */

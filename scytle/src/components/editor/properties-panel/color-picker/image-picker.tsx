@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useRef } from 'react'
-import { Upload } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { Upload, Link2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ImageFill } from '@/types/canvas'
 
@@ -110,8 +110,25 @@ function AdjustmentSlider({
 // ImagePicker
 // ─────────────────────────────────────────────────────────────
 
+// Helper to detect if src is a URL (not data URI)
+function isUrl(src: string | undefined): boolean {
+    if (!src) return false
+    return src.startsWith('http://') || src.startsWith('https://')
+}
+
+// Helper to detect if src is a data URI
+function isDataUri(src: string | undefined): boolean {
+    if (!src) return false
+    return src.startsWith('data:')
+}
+
 export function ImagePicker({ fill, onChange }: ImagePickerProps) {
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const [urlInput, setUrlInput] = useState('')
+    const [urlError, setUrlError] = useState<string | null>(null)
+
+    // Sync URL input when fill.src changes to a URL
+    const displayUrl = isUrl(fill.src) ? fill.src : ''
 
     const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -119,11 +136,47 @@ export function ImagePicker({ fill, onChange }: ImagePickerProps) {
         const reader = new FileReader()
         reader.onload = (ev) => {
             const src = ev.target?.result as string
-            if (src) onChange({ ...fill, src })
+            if (src) {
+                onChange({ ...fill, src })
+                setUrlInput('')
+                setUrlError(null)
+            }
         }
         reader.readAsDataURL(file)
         // Reset so same file can be re-picked
         e.target.value = ''
+    }, [fill, onChange])
+
+    const handleUrlSubmit = useCallback(() => {
+        const trimmed = urlInput.trim()
+        if (!trimmed) return
+
+        // Basic URL validation
+        if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            setUrlError('URL must start with http:// or https://')
+            return
+        }
+
+        // Apply the URL
+        onChange({ ...fill, src: trimmed })
+        setUrlError(null)
+    }, [urlInput, fill, onChange])
+
+    const handleUrlKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleUrlSubmit()
+        }
+        if (e.key === 'Escape') {
+            setUrlInput(displayUrl)
+            setUrlError(null)
+        }
+    }, [handleUrlSubmit, displayUrl])
+
+    const handleClearUrl = useCallback(() => {
+        onChange({ ...fill, src: '' })
+        setUrlInput('')
+        setUrlError(null)
     }, [fill, onChange])
 
     const handleAdjust = useCallback((key: AdjustmentKey, value: number) => {
@@ -180,6 +233,68 @@ export function ImagePicker({ fill, onChange }: ImagePickerProps) {
                     className="hidden"
                     onChange={handleFileSelect}
                 />
+
+                {/* Or divider */}
+                <div className="flex items-center gap-2 my-0.5">
+                    <div className="flex-1 h-px bg-border/30" />
+                    <span className="text-[10px] text-muted-foreground/40">or</span>
+                    <div className="flex-1 h-px bg-border/30" />
+                </div>
+
+                {/* URL input */}
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                        <div className="relative flex-1">
+                            <Link2
+                                size={12}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Paste image URL..."
+                                value={urlInput || displayUrl}
+                                onChange={(e) => {
+                                    setUrlInput(e.target.value)
+                                    setUrlError(null)
+                                }}
+                                onKeyDown={handleUrlKeyDown}
+                                onBlur={() => {
+                                    // Auto-submit on blur if changed
+                                    if (urlInput && urlInput !== displayUrl) {
+                                        handleUrlSubmit()
+                                    }
+                                }}
+                                className={cn(
+                                    'w-full h-7 pl-7 pr-7 text-[11px] rounded-sm',
+                                    'bg-muted/50 border',
+                                    urlError
+                                        ? 'border-destructive/50 focus:border-destructive'
+                                        : 'border-border/30 focus:border-border/60',
+                                    'placeholder:text-muted-foreground/40',
+                                    'focus:outline-none transition-colors',
+                                )}
+                            />
+                            {(urlInput || displayUrl) && (
+                                <button
+                                    onClick={handleClearUrl}
+                                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-sm
+                                        text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted
+                                        transition-colors"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {urlError && (
+                        <p className="text-[10px] text-destructive/80">{urlError}</p>
+                    )}
+                    {isDataUri(fill.src) && (
+                        <p className="text-[10px] text-muted-foreground/50">
+                            Current image is uploaded locally
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* ── Scale mode buttons — 5 modes ── */}
