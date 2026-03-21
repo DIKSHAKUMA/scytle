@@ -59,27 +59,37 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page', option
 
     const effectiveColor = rootStyles.textColor || '#000000'
 
-    // Check if root looks like a full-page container or a small component
-    const isFullPage = rootStyles.width !== null ||
-        rootStyles.minHeight !== null ||
-        rootClasses.includes('min-h-screen') ||
-        rootClasses.includes('h-screen')
-
-    // Use explicit rootWidth option if provided, else parsed root width, else default for full pages
+    // Use measured viewport width from parser lab when available.
+    // For block-level roots, default to available width unless constrained by max-w.
     const defaultWidth = options?.rootWidth || PAGE_WIDTH
-    const rootWidth = rootStyles.width || (isFullPage ? defaultWidth : null)
+    const rootTag = root.tagName?.toLowerCase?.() || 'div'
+    const isInlineRoot = INLINE_ELEMENTS.has(rootTag)
+    const hasExplicitWidth = rootStyles.width !== null || rootStyles.widthRatio !== null
+    const rootWidth = hasExplicitWidth
+        ? computeWidth(rootStyles, defaultWidth)
+        : (isInlineRoot ? null : computeWidth(rootStyles, defaultWidth))
 
     // Walk children of the root element
     const children = walkChildren(root, rootWidth || defaultWidth, effectiveColor)
 
     const fills = buildFills(rootStyles)
-    const layoutMode = resolveLayoutMode(rootStyles)
+    let layoutMode = resolveLayoutMode(rootStyles)
+    let direction: 'row' | 'column' = rootStyles.flexDirection
 
-    // Determine direction: respect explicit flex-row/flex-col, default to column for pages
-    const direction = rootStyles.flexDirection
+    // Root containers should follow normal HTML block flow by default.
+    if (layoutMode === 'none') {
+        const inferred = inferFlexFromClasses(rootClasses)
+        if (inferred.isInferred) {
+            layoutMode = 'flex'
+            direction = inferred.direction
+        } else if (root.children.length > 0) {
+            layoutMode = 'flex'
+            direction = 'column'
+        }
+    }
 
-    // Sizing: full pages get fixed width, components hug
-    const horizontalSizing = rootStyles.width ? 'fixed' : (isFullPage ? 'fixed' : 'hug')
+    // Keep root width fixed when a concrete width was inferred.
+    const horizontalSizing = rootWidth ? 'fixed' : 'hug'
 
     return createFrame({
         name: pageName,
@@ -104,8 +114,10 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page', option
         },
         padding: rootStyles.padding,
         fills,
+        border: buildBorder(rootStyles),
         overflow: rootStyles.overflow === 'auto' ? 'hidden' : rootStyles.overflow,
         borderRadius: rootStyles.borderRadiusPerCorner || rootStyles.borderRadius,
+        shadows: rootStyles.shadows.map(s => ({ ...s })),
         children,
     })
 }
@@ -137,7 +149,7 @@ function walkElement(
     // ---- Dispatch by element type ----
 
     // <img>
-    if (tag === 'img') return buildImageNode(el, styles)
+    if (tag === 'img') return buildImageNode(el, styles, parentWidth)
 
     // <svg> → render as data URI image
     if (tag === 'svg') return buildSvgNode(el)
@@ -214,10 +226,11 @@ function walkChildren(
  * This allows images to be edited through the Fill system (with crop, adjustments, etc.)
  * rather than requiring a separate Image section in the properties panel.
  */
-function buildImageNode(el: Element, styles: ParsedStyles): ScytleNode {
+function buildImageNode(el: Element, styles: ParsedStyles, parentWidth: number): ScytleNode {
     const src = el.getAttribute('src') || ''
     const alt = el.getAttribute('alt') || 'Image'
-    const width = styles.width || parseInt(el.getAttribute('width') || '') || 300
+    const hasFillWidth = styles.widthRatio === 1 || styles.flexGrow
+    const width = styles.width || parseInt(el.getAttribute('width') || '') || (hasFillWidth ? parentWidth : 300)
     const height = styles.height || parseInt(el.getAttribute('height') || '') || 200
 
     // Map objectFit to ImageFill fit mode
@@ -238,7 +251,7 @@ function buildImageNode(el: Element, styles: ParsedStyles): ScytleNode {
         width,
         height,
         sizing: {
-            horizontal: styles.widthRatio ? 'fill' : (styles.width ? 'fixed' : 'fill'),
+            horizontal: hasFillWidth ? 'fill' : 'fixed',
             vertical: 'fixed',
         },
         layout: { mode: 'none' },
@@ -704,9 +717,16 @@ function buildTextNode(
         sizing = { horizontal: 'fixed', vertical: 'hug' }
         autoResize = 'height'
     } else {
-        // Paragraphs and block text: fill width, hug height (Figma HEIGHT mode)
-        sizing = { horizontal: 'fill', vertical: 'hug' }
-        autoResize = 'height'
+        // Paragraph-like tags should fill width; generic block text (e.g., nav logo div)
+        // should hug content width for closer browser parity in row layouts.
+        const isParagraphLike = tag === 'p' || tag === 'label'
+        if (isParagraphLike) {
+            sizing = { horizontal: 'fill', vertical: 'hug' }
+            autoResize = 'height'
+        } else {
+            sizing = { horizontal: 'hug', vertical: 'hug' }
+            autoResize = 'width-and-height'
+        }
     }
 
     const width = computeTextWidth(styles, parentWidth)
@@ -752,16 +772,22 @@ function buildButtonNode(
     if (el.children.length > 0 && !hasOnlyInlineContent(el)) {
         const childWidth = computeChildWidth(styles, parentWidth)
         const children = walkChildren(el, childWidth, effectiveColor)
+        const buttonGap = 8
+        const width = estimateContainerWidth(children, { left: styles.padding.left, right: styles.padding.right }, buttonGap, 'row')
+        const height = estimateContainerHeight(children, { top: styles.padding.top, bottom: styles.padding.bottom }, buttonGap, 'row')
         return createFrame({
             name: text.slice(0, 30) || 'Button',
+            width,
+            height,
             sizing: { horizontal: 'hug', vertical: 'hug' },
-            layout: { mode: 'flex', direction: 'row', align: 'center', justify: 'center', gap: 8 },
+            layout: { mode: 'flex', direction: 'row', align: 'center', justify: 'center', gap: buttonGap },
             padding: styles.padding,
             fills,
             borderRadius: styles.borderRadiusPerCorner || styles.borderRadius,
             border: buildBorder(styles),
             shadows: styles.shadows.map(s => ({ ...s })),
             opacity: styles.opacity,
+            margin: styles.margin,
             children,
         })
     }
@@ -781,8 +807,13 @@ function buildButtonNode(
         height: Math.ceil(styles.fontSize * styles.lineHeight),
     })
 
+    const width = styles.padding.left + styles.padding.right + (textChild.width || 0)
+    const height = styles.padding.top + styles.padding.bottom + (textChild.height || 0)
+
     return createFrame({
         name: text.slice(0, 30) || 'Button',
+        width,
+        height,
         sizing: { horizontal: 'hug', vertical: 'hug' },
         layout: { mode: 'flex', direction: 'row', align: 'center', justify: 'center' },
         padding: styles.padding,
@@ -791,6 +822,7 @@ function buildButtonNode(
         border: buildBorder(styles),
         shadows: styles.shadows.map(s => ({ ...s })),
         opacity: styles.opacity,
+        margin: styles.margin,
         children: [textChild],
     })
 }
@@ -911,9 +943,10 @@ function buildContainerNode(
             layoutMode = 'flex'
             direction = inferred.direction
         } else {
-            // FIGMA DEFAULT: No auto-layout for containers without flex indicators
-            // For sections, we still want column layout for document flow
-            layoutMode = isSectionLevel ? 'flex' : 'none'
+            // HTML block flow stacks child elements vertically.
+            // Use column auto-layout for regular containers so card/nav wrappers
+            // match browser flow instead of overlapping as freeform layers.
+            layoutMode = el.children.length > 0 ? 'flex' : (isSectionLevel ? 'flex' : 'none')
             direction = 'column'
         }
     }
@@ -935,9 +968,14 @@ function buildContainerNode(
     const gridColumns = isGrid && styles.gridColumns > 1 ? styles.gridColumns : undefined
     const gridRows = isGrid && styles.gridRows > 1 ? styles.gridRows : undefined
 
+    const hasExplicitContainerWidth = styles.width !== null || styles.widthRatio !== null || styles.maxWidth !== null
+    const frameWidth = (!hasExplicitContainerWidth && sizing.horizontal === 'hug')
+        ? estimateContainerWidth(children, { left: effectivePadding.left, right: effectivePadding.right }, effectiveGap, direction)
+        : containerWidth
+
     return createFrame({
         name: getContainerName(tag, el),
-        width: containerWidth,
+        width: frameWidth,
         height: styles.height || estimateContainerHeight(
             children,
             effectivePadding,
@@ -976,6 +1014,8 @@ function buildContainerNode(
         alignSelf: styles.alignSelf ?? undefined,
         // === Grid child properties ===
         gridColumnSpan: styles.gridColumnSpan ?? undefined,
+        // === CSS spacing ===
+        margin: styles.margin,
         children,
     })
 }

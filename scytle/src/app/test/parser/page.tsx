@@ -205,8 +205,30 @@ function NodeInspector({ node }: { node: ScytleNode | null }) {
 function CanvasPreview({ root }: { root: FrameNode | null }) {
   if (!root) return <div className="p-4 text-gray-400">No output</div>
 
+  const shadowBleed = root.shadows?.length
+    ? Math.ceil(
+      Math.max(
+        ...root.shadows.map((shadow) => {
+          const spread = Math.max(shadow.spread, 0)
+          return Math.max(
+            Math.abs(shadow.x) + shadow.blur + spread,
+            Math.abs(shadow.y) + shadow.blur + spread,
+          )
+        }),
+      ),
+    )
+    : 0
+
+  const previewPadding = 16 + shadowBleed
+
   return (
-    <div className="p-4 overflow-auto h-full bg-white" style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}>
+    <div
+      className="overflow-auto h-full bg-gray-50"
+      style={{
+        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+        padding: previewPadding,
+      }}
+    >
       <ScytleNodeRenderer node={root} />
     </div>
   )
@@ -313,10 +335,20 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
 
   if (node.minWidth) style.minWidth = node.minWidth
   if (node.minHeight) style.minHeight = node.minHeight
+  if (node.maxWidth) style.maxWidth = node.maxWidth
+  if (node.maxHeight) style.maxHeight = node.maxHeight
 
   // Opacity
   if (node.opacity !== undefined && node.opacity !== 1) {
     style.opacity = node.opacity
+  }
+
+  // Margin (CSS spacing)
+  if (node.margin) {
+    style.marginTop = node.margin.top
+    style.marginRight = node.margin.right
+    style.marginBottom = node.margin.bottom
+    style.marginLeft = node.margin.left
   }
 
   // Border radius
@@ -329,6 +361,16 @@ function computeNodeStyle(node: ScytleNode): React.CSSProperties {
       style.borderBottomRightRadius = node.borderRadius.bottomRight
       style.borderBottomLeftRadius = node.borderRadius.bottomLeft
     }
+  }
+
+  // Shadows
+  if (node.shadows?.length) {
+    style.boxShadow = node.shadows
+      .map((shadow) => {
+        const inset = shadow.type === 'inner' ? 'inset ' : ''
+        return `${inset}${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.spread}px ${shadow.color}`
+      })
+      .join(', ')
   }
 
   // Fills (background)
@@ -720,9 +762,9 @@ export default function ParserTestPage() {
                 <body>${html}</body>
                 </html>
               `}
-              className="flex-1 w-full bg-white"
-              title="HTML Preview"
-            />
+                className="flex-1 w-full bg-white"
+                title="HTML Preview"
+              />
             </div>
           </div>
 

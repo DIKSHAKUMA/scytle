@@ -38,16 +38,37 @@ export function estimateContainerHeight(
     gap: number = 0,
     direction: 'row' | 'column' = 'column',
 ): number {
+    const getChildHeight = (child: ScytleNode): number => {
+        if (child.type === 'text') {
+            const tn = child as TextNode
+            const lh = typeof tn.lineHeight === 'number' ? (tn.lineHeight > 10 ? tn.lineHeight / (tn.fontSize || 16) : tn.lineHeight) : 1.5
+            return estimateTextHeight(tn.characters, tn.fontSize, tn.width || containerFallbackWidth, lh)
+        }
+        if (child.type === 'frame') {
+            const fn = child as FrameNode
+            if (fn.sizing?.vertical === 'fixed' && fn.height) return fn.height
+            return estimateContainerHeight(
+                fn.children,
+                { top: fn.padding?.top || 0, bottom: fn.padding?.bottom || 0 },
+                fn.layout?.gap || 0,
+                fn.layout?.direction || 'column',
+            )
+        }
+        return child.height || 40
+    }
+
+    const containerFallbackWidth = 320
+
     if (children.length === 0) return padding.top + padding.bottom + 40 // min height
 
     if (direction === 'column') {
         // Vertical stack: sum heights + gaps
-        const totalChildHeight = children.reduce((sum, child) => sum + (child.height || 40), 0)
+        const totalChildHeight = children.reduce((sum, child) => sum + getChildHeight(child), 0)
         const totalGaps = Math.max(0, children.length - 1) * gap
         return padding.top + padding.bottom + totalChildHeight + totalGaps
     } else {
         // Horizontal row: max height of children
-        const maxChildHeight = Math.max(...children.map(c => c.height || 40))
+        const maxChildHeight = Math.max(...children.map(getChildHeight))
         return padding.top + padding.bottom + maxChildHeight
     }
 }
