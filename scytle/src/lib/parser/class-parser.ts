@@ -161,6 +161,10 @@ export interface ParsedStyles {
     // Misc
     hidden: boolean
     position: 'static' | 'relative' | 'absolute' | 'fixed'
+    positionTop: number | null
+    positionRight: number | null
+    positionBottom: number | null
+    positionLeft: number | null
     flexGrow: boolean
     aspectRatio: string | null
 }
@@ -260,6 +264,10 @@ export function defaultStyles(): ParsedStyles {
         widthRatio: null,
         hidden: false,
         position: 'static',
+        positionTop: null,
+        positionRight: null,
+        positionBottom: null,
+        positionLeft: null,
         flexGrow: false,
         aspectRatio: null,
     }
@@ -356,6 +364,59 @@ export function parseClasses(classList: string[]): ParsedStyles {
         if (raw === 'absolute') { s.position = 'absolute'; continue }
         if (raw === 'fixed') { s.position = 'fixed'; continue }
         if (raw === 'sticky') { s.position = 'relative'; continue } // approximate
+
+        // ---- Position offsets (top-*, left-*, right-*, bottom-*, inset-*) ----
+        if (raw.startsWith('top-')) {
+            const v = resolveSpacing(raw.slice(4))
+            if (!isNaN(v)) { s.positionTop = v; continue }
+        }
+        if (raw.startsWith('bottom-')) {
+            const v = resolveSpacing(raw.slice(7))
+            if (!isNaN(v)) { s.positionBottom = v; continue }
+        }
+        if (raw.startsWith('left-')) {
+            const v = resolveSpacing(raw.slice(5))
+            if (!isNaN(v)) { s.positionLeft = v; continue }
+        }
+        if (raw.startsWith('right-')) {
+            const v = resolveSpacing(raw.slice(6))
+            if (!isNaN(v)) { s.positionRight = v; continue }
+        }
+        if (raw.startsWith('inset-')) {
+            const val = raw.slice(6)
+            if (val.startsWith('x-')) {
+                const v = resolveSpacing(val.slice(2))
+                if (!isNaN(v)) { s.positionLeft = v; s.positionRight = v; continue }
+            } else if (val.startsWith('y-')) {
+                const v = resolveSpacing(val.slice(2))
+                if (!isNaN(v)) { s.positionTop = v; s.positionBottom = v; continue }
+            } else {
+                const v = resolveSpacing(val)
+                if (!isNaN(v)) { s.positionTop = v; s.positionRight = v; s.positionBottom = v; s.positionLeft = v; continue }
+            }
+        }
+
+        // ---- Negative offsets (-top-*, -left-*, etc.) ----
+        if (raw.startsWith('-top-')) {
+            const v = resolveSpacing(raw.slice(5))
+            if (!isNaN(v)) { s.positionTop = -v; continue }
+        }
+        if (raw.startsWith('-bottom-')) {
+            const v = resolveSpacing(raw.slice(8))
+            if (!isNaN(v)) { s.positionBottom = -v; continue }
+        }
+        if (raw.startsWith('-left-')) {
+            const v = resolveSpacing(raw.slice(6))
+            if (!isNaN(v)) { s.positionLeft = -v; continue }
+        }
+        if (raw.startsWith('-right-')) {
+            const v = resolveSpacing(raw.slice(7))
+            if (!isNaN(v)) { s.positionRight = -v; continue }
+        }
+
+        // ---- Translate (map to offsets for absolute positioning) ----
+        if (raw === '-translate-x-1/2') { s.positionLeft = -50; continue } // special: percent
+        if (raw === '-translate-y-1/2') { s.positionTop = -50; continue }  // special: percent
 
         // ---- Text transform / decoration ----
         if (raw === 'uppercase') { s.textTransform = 'uppercase'; continue }
@@ -599,9 +660,14 @@ export function parseClasses(classList: string[]): ParsedStyles {
         // ---- Background (color / gradient) ----
         if (raw.startsWith('bg-')) {
             const val = raw.slice(3)
-            // Gradient direction
+            // Gradient direction — Tailwind v3: bg-gradient-to-*, v4: bg-linear-to-*
             if (val.startsWith('gradient-to-')) {
                 const dir = val.slice(12)
+                gradientDir = GRADIENT_DIRS[dir] || 'to bottom'
+                continue
+            }
+            if (val.startsWith('linear-to-')) {
+                const dir = val.slice(10)
                 gradientDir = GRADIENT_DIRS[dir] || 'to bottom'
                 continue
             }

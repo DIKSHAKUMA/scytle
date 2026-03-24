@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { X, Globe, ChevronRight, Wand2, Layers, Sun, Moon, Palette, ImageIcon, Video } from 'lucide-react'
+import { X, Globe, ChevronRight, Wand2, Layers, Sun, Moon, Palette, ImageIcon, Video, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useUnifiedStore } from '@/store'
+import { useUnifiedStore, useProjectStore } from '@/store'
 import { useStyleGuideStore } from '@/store/style-guide-store'
+import { createJWT } from '@/lib/appwrite'
 import { getTemplateById, getPresetConfig } from '@/lib/designs/v2/layouts'
 import { SectionControls } from './section-controls'
 import type { WireframeSection, WireframePage } from '@/types'
@@ -47,6 +48,7 @@ export function SectionPanel({
 
     const {
         updateSection,
+        updateSectionContent,
         updateSectionControls,
         toggleGlobalSection,
         setActivePanelView,
@@ -105,10 +107,46 @@ export function SectionPanel({
         }
     }, [onOpenLibraryAction, setActivePanelView])
 
-    const handleGenerateCopy = useCallback(() => {
-        // TODO: Implement AI copy generation for section
-        console.log('✨ Generate copy for section:', section.id)
-    }, [section.id])
+    const [isCopyGenerating, setIsCopyGenerating] = useState(false)
+    const currentProject = useProjectStore(s => s.currentProject)
+
+    const handleGenerateCopy = useCallback(async () => {
+        if (isCopyGenerating) return
+        setIsCopyGenerating(true)
+
+        try {
+            const jwt = await createJWT()
+            if (!jwt) throw new Error('Not authenticated')
+
+            const response = await fetch('/api/ai/generate-copy', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${jwt.jwt}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sectionId: section.id,
+                    sectionType: section.type,
+                    sectionName: section.name,
+                    pageName: page.name,
+                    productName: currentProject?.name,
+                    productDescription: currentProject?.description,
+                }),
+            })
+
+            if (!response.ok) throw new Error('Failed to generate copy')
+
+            const data = await response.json()
+            if (data.success && data.content) {
+                updateSectionContent(page.id, section.id, data.content)
+                console.log('✅ Generated copy for section:', section.id)
+            }
+        } catch (error) {
+            console.error('❌ Copy generation failed:', error)
+        } finally {
+            setIsCopyGenerating(false)
+        }
+    }, [section.id, section.type, section.name, page.id, page.name, currentProject, isCopyGenerating])
 
     const handleControlChange = useCallback((key: string, value: string | number | boolean) => {
         if (selectedPageId) {
@@ -260,9 +298,19 @@ export function SectionPanel({
                         variant="ghost"
                         className="w-full justify-start h-9 px-3 text-sm font-normal"
                         onClick={handleGenerateCopy}
+                        disabled={isCopyGenerating}
                     >
-                        <Wand2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                        Generate copy
+                        {isCopyGenerating ? (
+                            <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Generating copy...
+                            </>
+                        ) : (
+                            <>
+                                <Wand2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                                Generate copy
+                            </>
+                        )}
                     </Button>
                 </div>
             </ScrollArea>

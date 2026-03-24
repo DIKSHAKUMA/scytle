@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { message, projectId } = validation.data
+        const { message, projectId, model } = validation.data
 
         // 3. Verify user owns the project
         const { databases } = createAdminClient()
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         }
 
         const stream = createStreamResponse(message, conversationHistory, {
-            model: 'gemini-pro', // Upgrade from 'fast' to 'gemini-pro' for complex reasoning
+            model: model || 'gemini-pro',
             systemPrompt: systemPrompt
         })
 

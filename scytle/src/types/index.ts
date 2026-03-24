@@ -256,6 +256,7 @@ export const ChatMessageSchema = z.object({
     projectId: z.string(),
     selectedNodeId: z.string().nullable().optional(),
     canvasNodes: z.array(z.any()).optional(), // Will contain subset of ScytleNode fields
+    model: z.string().optional(), // AI model key (e.g., 'gemini-pro', 'gemini-flash')
 })
 
 // ============================================

@@ -16,7 +16,7 @@ interface ChatState {
     abortController: AbortController | null
 
     // Actions
-    sendMessage: (content: string, projectId: string, selectedNodeId?: string | null, canvasNodes?: any[]) => Promise<void>
+    sendMessage: (content: string, projectId: string, selectedNodeId?: string | null, canvasNodes?: any[], model?: string) => Promise<void>
     generateSitemap: (projectId: string, description: string) => Promise<void>
     loadHistory: (projectId: string) => Promise<void>
     addMessage: (role: MessageRole, content: string) => void
@@ -42,7 +42,8 @@ export const useChatStore = create<ChatState>()(
             content: string, 
             projectId: string, 
             selectedNodeId?: string | null, 
-            canvasNodes?: any[]
+            canvasNodes?: any[],
+            model?: string
         ) => {
             // Create abort controller for this request
             const abortController = new AbortController()
@@ -78,7 +79,8 @@ export const useChatStore = create<ChatState>()(
                         message: content, 
                         projectId,
                         selectedNodeId,
-                        canvasNodes
+                        canvasNodes,
+                        model
                     }),
                     signal: abortController.signal,
                 })

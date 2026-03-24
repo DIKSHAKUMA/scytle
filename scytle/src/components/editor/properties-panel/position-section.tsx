@@ -3,7 +3,7 @@
 import type { ScytleNode, FrameNode, Padding } from '@/types/canvas'
 import { findParentOfNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
-import { Section, NumberInput, IconButton } from './inputs'
+import { Section, NumberInput, IconButton, SelectInput } from './inputs'
 import {
     AlignHorizontalJustifyStart,
     AlignHorizontalJustifyCenter,
@@ -14,6 +14,7 @@ import {
     RotateCw,
     FlipHorizontal,
     FlipVertical,
+    Anchor,
 } from 'lucide-react'
 import { useCallback } from 'react'
 
@@ -159,6 +160,20 @@ export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectio
 
     return (
         <Section title="Position">
+            {/* Positioning mode — auto vs absolute */}
+            <div className="flex items-center gap-1.5">
+                <Anchor size={11} className="text-muted-foreground/60 shrink-0" />
+                <SelectInput
+                    value={node.positioning}
+                    options={[
+                        { value: 'auto', label: 'Auto' },
+                        { value: 'absolute', label: 'Absolute' },
+                    ]}
+                    onChange={(v) => onUpdate({ positioning: v })}
+                    className="flex-1"
+                />
+            </div>
+
             {/* Alignment buttons — Figma: 6-button grid */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-px">

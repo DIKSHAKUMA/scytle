@@ -53,6 +53,93 @@ export function parseSvgPathToNetwork(d: string): VectorNetwork {
 }
 
 /**
+ * Convert SVG shape elements (<circle>, <rect>, <ellipse>, <line>, <polygon>,
+ * <polyline>) into <path> elements so they can be processed by the path parser.
+ * Mutates the SVG element in place.
+ */
+function convertShapesToPaths(svg: Element): void {
+    const doc = svg.ownerDocument
+    if (!doc) return
+
+    const shapes = svg.querySelectorAll('circle, rect, ellipse, line, polygon, polyline')
+    for (const shape of Array.from(shapes)) {
+        const d = shapeToPathData(shape)
+        if (!d) continue
+
+        const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path')
+        path.setAttribute('d', d)
+
+        // Copy common attributes
+        for (const attr of ['fill', 'stroke', 'stroke-width', 'opacity', 'transform', 'fill-rule', 'clip-rule']) {
+            const val = shape.getAttribute(attr)
+            if (val) path.setAttribute(attr, val)
+        }
+
+        shape.parentNode?.replaceChild(path, shape)
+    }
+}
+
+function num(el: Element, attr: string, fallback = 0): number {
+    return parseFloat(el.getAttribute(attr) || '') || fallback
+}
+
+function shapeToPathData(el: Element): string | null {
+    const tag = el.tagName.toLowerCase()
+
+    if (tag === 'circle') {
+        const cx = num(el, 'cx'), cy = num(el, 'cy'), r = num(el, 'r')
+        if (r <= 0) return null
+        // Two arcs to form a full circle
+        return `M${cx - r},${cy}A${r},${r},0,1,0,${cx + r},${cy}A${r},${r},0,1,0,${cx - r},${cy}Z`
+    }
+
+    if (tag === 'ellipse') {
+        const cx = num(el, 'cx'), cy = num(el, 'cy')
+        const rx = num(el, 'rx'), ry = num(el, 'ry')
+        if (rx <= 0 || ry <= 0) return null
+        return `M${cx - rx},${cy}A${rx},${ry},0,1,0,${cx + rx},${cy}A${rx},${ry},0,1,0,${cx - rx},${cy}Z`
+    }
+
+    if (tag === 'rect') {
+        const x = num(el, 'x'), y = num(el, 'y')
+        const w = num(el, 'width'), h = num(el, 'height')
+        if (w <= 0 || h <= 0) return null
+        const rx = Math.min(num(el, 'rx'), w / 2)
+        const ry = Math.min(num(el, 'ry') || rx, h / 2)
+        if (rx > 0 || ry > 0) {
+            // Rounded rect
+            return `M${x + rx},${y}`
+                + `L${x + w - rx},${y}A${rx},${ry},0,0,1,${x + w},${y + ry}`
+                + `L${x + w},${y + h - ry}A${rx},${ry},0,0,1,${x + w - rx},${y + h}`
+                + `L${x + rx},${y + h}A${rx},${ry},0,0,1,${x},${y + h - ry}`
+                + `L${x},${y + ry}A${rx},${ry},0,0,1,${x + rx},${y}Z`
+        }
+        return `M${x},${y}L${x + w},${y}L${x + w},${y + h}L${x},${y + h}Z`
+    }
+
+    if (tag === 'line') {
+        const x1 = num(el, 'x1'), y1 = num(el, 'y1')
+        const x2 = num(el, 'x2'), y2 = num(el, 'y2')
+        return `M${x1},${y1}L${x2},${y2}`
+    }
+
+    if (tag === 'polygon' || tag === 'polyline') {
+        const points = (el.getAttribute('points') || '').trim()
+        if (!points) return null
+        const coords = points.split(/[\s,]+/).map(Number)
+        if (coords.length < 4) return null
+        let d = `M${coords[0]},${coords[1]}`
+        for (let i = 2; i < coords.length; i += 2) {
+            d += `L${coords[i]},${coords[i + 1]}`
+        }
+        if (tag === 'polygon') d += 'Z'
+        return d
+    }
+
+    return null
+}
+
+/**
  * Parse multiple SVG path elements from an SVG string.
  * Combines all paths into a single VectorNetwork.
  */
@@ -60,6 +147,9 @@ export function parseSvgToNetwork(svgElement: Element): VectorNetwork {
     const allVertices: VectorVertex[] = []
     const allSegments: VectorSegment[] = []
     const allRegions: VectorRegion[] = []
+
+    // Convert shape elements to paths first
+    convertShapesToPaths(svgElement)
 
     // Find all <path> elements
     const paths = svgElement.querySelectorAll('path')

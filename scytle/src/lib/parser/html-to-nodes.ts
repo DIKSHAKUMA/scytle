@@ -231,7 +231,15 @@ function buildImageNode(el: Element, styles: ParsedStyles, parentWidth: number):
     const alt = el.getAttribute('alt') || 'Image'
     const hasFillWidth = styles.widthRatio === 1 || styles.flexGrow
     const width = styles.width || parseInt(el.getAttribute('width') || '') || (hasFillWidth ? parentWidth : 300)
-    const height = styles.height || parseInt(el.getAttribute('height') || '') || 200
+
+    // Height heuristic: explicit > aspect-ratio > HTML attr > default scaled to width
+    let height = styles.height || parseInt(el.getAttribute('height') || '') || 0
+    if (!height && styles.aspectRatio) {
+        const parts = styles.aspectRatio.split('/')
+        const ratio = parts.length === 2 ? Number(parts[0]) / Number(parts[1]) : Number(parts[0])
+        if (ratio > 0 && isFinite(ratio)) height = Math.round(width / ratio)
+    }
+    if (!height) height = Math.round(width * 9 / 16) // Default to 16:9 ratio
 
     // Map objectFit to ImageFill fit mode
     const objectFit = el.getAttribute('style')?.includes('object-fit')
@@ -246,8 +254,12 @@ function buildImageNode(el: Element, styles: ParsedStyles, parentWidth: number):
         opacity: styles.opacity < 1 ? styles.opacity : undefined,
     }
 
+    const isAbsolute = styles.position === 'absolute'
+
     return createFrame({
         name: alt.slice(0, 40) || 'Image',
+        positioning: isAbsolute ? 'absolute' : 'auto',
+        ...(isAbsolute ? { x: styles.positionLeft ?? 0, y: styles.positionTop ?? 0 } : {}),
         width,
         height,
         sizing: {
@@ -310,15 +322,15 @@ function buildSvgNode(el: Element): ScytleNode {
     const fillColor = extractSvgFillColor(svgEl, inheritedColor)
     const hasFill = fillColor !== 'none' && fillColor !== null
 
-    // 6. Try to parse SVG paths into VectorNetwork
-    const paths = svgEl.querySelectorAll('path')
+    // 6. Convert shape elements to paths, then try to parse
+    const paths = svgEl.querySelectorAll('path, circle, rect, ellipse, line, polygon, polyline')
     if (paths.length === 0) {
-        // No paths - fall back to ImageNode for complex shapes (circle, rect, etc.)
+        // No renderable elements at all
         return buildSvgAsImage(el, svgEl, width, height)
     }
 
     try {
-        // Parse all paths into a single VectorNetwork
+        // Parse all paths (and convert shapes) into a single VectorNetwork
         const network = parseSvgToNetwork(svgEl)
 
         if (network.vertices.length === 0) {
@@ -734,10 +746,14 @@ function buildTextNode(
     // lineHeight is always in pixels now — convert to multiplier for height estimation
     const lineHeightMultiplier = lh / styles.fontSize
 
+    const isAbsolute = styles.position === 'absolute'
+
     return createText({
         name: text.slice(0, 40) + (text.length > 40 ? '...' : ''),
         characters: text,
         htmlTag,
+        positioning: isAbsolute ? 'absolute' : 'auto',
+        ...(isAbsolute ? { x: styles.positionLeft ?? 0, y: styles.positionTop ?? 0 } : {}),
         fontSize: styles.fontSize,
         fontWeight: styles.fontWeight,
         fontFamily: styles.fontFamily,
@@ -993,8 +1009,15 @@ function buildContainerNode(
         ? estimateContainerWidth(children, { left: effectivePadding.left, right: effectivePadding.right }, effectiveGap, direction)
         : containerWidth
 
+    // Compute x/y from position offsets for absolute elements
+    const absX = styles.positionLeft ?? 0
+    const absY = styles.positionTop ?? 0
+    const isAbsolute = styles.position === 'absolute'
+
     return createFrame({
         name: getContainerName(tag, el),
+        positioning: isAbsolute ? 'absolute' : 'auto',
+        ...(isAbsolute ? { x: absX, y: absY } : {}),
         width: frameWidth,
         height: styles.height || estimateContainerHeight(
             children,

@@ -706,10 +706,18 @@ export const useEditorStore = create<EditorState>()(
             replaceNode: (oldId, newNode) =>
                 set(
                     (state) => {
+                        // Check top level first
                         const idx = state.nodes.findIndex((n) => n.id === oldId)
                         if (idx !== -1) {
                             _snap(state)
                             state.nodes[idx] = newNode
+                            return
+                        }
+                        // Deep search: find parent frame containing the node
+                        const result = findParentOfNode(state.nodes, oldId)
+                        if (result?.parent && result.parent.type === 'frame') {
+                            _snap(state)
+                            result.parent.children[result.index] = newNode
                         }
                     },
                     false,

@@ -94,11 +94,10 @@ export default function TemplatesPage() {
 
         const project = await createProject({
             name: `My ${template.name}`,
-            description: `Created from ${template.name} template`,
+            description: `${template.description}. Pages: ${template.pages.join(', ')}`,
         })
 
         if (project) {
-            // TODO: In the future, also create the pages from template
             router.push(`/project/${project.projectId}`)
         }
 

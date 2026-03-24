@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from 'react'
 import type { ScytleNode, Border, BorderRadius, Fill, SolidFill } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
-import { Plus, Eye, EyeOff, CornerUpRight, Blend } from 'lucide-react'
+import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
@@ -128,6 +128,22 @@ export function AppearanceSection({ node, onUpdate }: SectionProps) {
                         </button>
                     </div>
                 </div>
+
+                {/* Overflow — only for frames */}
+                {node.type === 'frame' && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                        <Scissors size={11} className="text-muted-foreground/60 shrink-0" style={{ minWidth: 18 }} />
+                        <SelectInput
+                            value={(node as import('@/types/canvas').FrameNode).overflow}
+                            options={[
+                                { value: 'visible', label: 'Visible' },
+                                { value: 'hidden', label: 'Clip content' },
+                            ]}
+                            onChange={(v) => onUpdate({ overflow: v })}
+                            className="flex-1"
+                        />
+                    </div>
+                )}
 
                 {perCorner && (
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 mt-1.5">

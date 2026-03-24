@@ -1,11 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Bot, Send, Square, Sparkles, MousePointer2 } from 'lucide-react'
+import { Bot, Send, Square, Sparkles, MousePointer2, ChevronDown, Zap } from 'lucide-react'
 import { useChatStore } from '@/store/chat-store'
 import { useProjectStore } from '@/store/project-store'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
+import { parseHtmlToNodes } from '@/lib/parser'
+import { ModelSelector } from '@/components/model-selector'
+import { getDefaultModel } from '@/lib/ai/models'
 import type { ScytleNode } from '@/types/canvas'
 
 /**
@@ -49,8 +52,9 @@ export function ChatTab() {
     const nodes = useEditorStore((s) => s.nodes)
 
     const [input, setInput] = useState('')
+    const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
     const messagesEndRef = useRef<HTMLDivElement>(null)
-    const inputRef = useRef<HTMLInputElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
     const historyLoaded = useRef(false)
 
     // Build selection context
@@ -88,10 +92,15 @@ export function ChatTab() {
             messageContent, 
             projectId,
             selectedIds.length > 0 ? selectedIds[0] : null,
-            simplifiedNodes
+            simplifiedNodes,
+            selectedModel
         )
         setInput('')
-    }, [input, projectId, isStreaming, selectedIds, nodes, sendMessage])
+        // Reset textarea height
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+        }
+    }, [input, projectId, isStreaming, selectedIds, nodes, sendMessage, selectedModel])
 
     // --- Execute JSON Design Actions from AI response ---
     // The AI might return a block like: ```json\n { "action": "replaceNode", "targetNodeId": "id", "html": "..." } \n```
@@ -105,14 +114,33 @@ export function ChatTab() {
             if (jsonMatch) {
                 try {
                     const actionData = JSON.parse(jsonMatch[1])
-                    if (actionData.action === 'replaceNode' && actionData.targetNodeId && actionData.html) {
-                        console.log('🤖 AI executing replaceNode on:', actionData.targetNodeId)
-                        useEditorStore.getState().replaceNode(actionData.targetNodeId, actionData.html)
-                    } else if (actionData.action === 'addNode' && actionData.targetNodeId && actionData.html) {
-                        console.log('🤖 AI executing addNode inside:', actionData.targetNodeId)
-                        // This calls a new helper we'll add to editor store or handle directly. 
-                        // For now we'll rely on the user selecting a frame to replace.
-                        if(actionData.action === 'replaceNode') useEditorStore.getState().replaceNode(actionData.targetNodeId, actionData.html)
+                    const store = useEditorStore.getState()
+
+                    if (actionData.html) {
+                        // Convert HTML string → ScytleNode tree via parser
+                        const parsed = parseHtmlToNodes(actionData.html, 'AI Section')
+                        // Use the first child if the wrapper frame only has one child
+                        const newNode: ScytleNode = parsed.children.length === 1
+                            ? parsed.children[0]
+                            : parsed
+
+                        if (actionData.action === 'replaceNode' && actionData.targetNodeId) {
+                            console.log('🤖 AI executing replaceNode on:', actionData.targetNodeId)
+                            // Preserve position from old node
+                            const oldNode = findNodeById(store.nodes, actionData.targetNodeId)
+                            if (oldNode) {
+                                newNode.x = oldNode.x
+                                newNode.y = oldNode.y
+                                newNode.id = oldNode.id
+                            }
+                            store.replaceNode(actionData.targetNodeId, newNode)
+                        } else if (actionData.action === 'addNode' && actionData.targetNodeId) {
+                            console.log('🤖 AI executing addNode inside:', actionData.targetNodeId)
+                            store.addNode(newNode, actionData.targetNodeId)
+                        }
+                    } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
+                        console.log('🤖 AI executing deleteNode:', actionData.targetNodeId)
+                        store.deleteNode(actionData.targetNodeId)
                     }
                 } catch (e) {
                     console.error("Failed to parse design action from AI:", e)
@@ -128,6 +156,32 @@ export function ChatTab() {
         }
     }
 
+    // Auto-resize textarea
+    const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setInput(e.target.value)
+        const el = e.target
+        el.style.height = 'auto'
+        el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+    }
+
+    // Strip JSON code blocks from AI messages for cleaner display
+    const renderMessageContent = (content: string) => {
+        return content.replace(/```json\n[\s\S]*?\n```/g, '').trim()
+    }
+
+    // Context-aware suggestions
+    const suggestions = selectionPath
+        ? [
+            'Redesign this section',
+            'Make it dark mode',
+            'Improve the layout',
+        ]
+        : [
+            'Add a hero section',
+            'Add a testimonials section',
+            'Generate a landing page',
+        ]
+
     return (
         <div className="flex flex-col h-full">
             {/* ── Messages area ── */}
@@ -138,23 +192,20 @@ export function ChatTab() {
                             <Sparkles className="w-5 h-5 text-accent" />
                         </div>
                         <p className="text-xs text-muted-foreground leading-relaxed max-w-[200px]">
-                            Ask AI to modify your design, add pages, or change styles.
+                            Ask AI to modify your design, add sections, or change styles.
                         </p>
                         {/* Quick action suggestions */}
                         <div className="flex flex-col gap-1.5 w-full mt-2">
-                            {[
-                                'Add a testimonials section',
-                                'Make it dark mode',
-                                'Regenerate this page',
-                            ].map((suggestion) => (
+                            {suggestions.map((suggestion) => (
                                 <button
                                     key={suggestion}
                                     onClick={() => {
                                         setInput(suggestion)
-                                        inputRef.current?.focus()
+                                        textareaRef.current?.focus()
                                     }}
                                     className="text-[11px] text-left px-3 py-2 rounded-md bg-muted/30 hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors border border-border/30"
                                 >
+                                    <Zap className="w-3 h-3 inline-block mr-1.5 -mt-0.5 text-accent/60" />
                                     {suggestion}
                                 </button>
                             ))}
@@ -162,28 +213,36 @@ export function ChatTab() {
                     </div>
                 )}
 
-                {messages.map((msg, i) => (
-                    <div key={i} className="flex gap-2">
-                        {msg.role === 'assistant' ? (
-                            <div className="w-5 h-5 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5">
-                                <Bot className="w-3 h-3 text-accent" />
+                {messages.map((msg, i) => {
+                    const displayContent = msg.role === 'assistant'
+                        ? renderMessageContent(msg.content)
+                        : msg.content
+
+                    if (!displayContent) return null
+
+                    return (
+                        <div key={i} className="flex gap-2">
+                            {msg.role === 'assistant' ? (
+                                <div className="w-5 h-5 rounded-full bg-accent/15 flex items-center justify-center shrink-0 mt-0.5">
+                                    <Bot className="w-3 h-3 text-accent" />
+                                </div>
+                            ) : (
+                                <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
+                                    <span className="text-[9px] font-semibold text-primary">U</span>
+                                </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
+                                    {displayContent}
+                                    {/* Streaming cursor */}
+                                    {msg.role === 'assistant' && isStreaming && i === messages.length - 1 && (
+                                        <span className="inline-block w-1.5 h-3.5 bg-accent/60 ml-0.5 animate-pulse rounded-sm" />
+                                    )}
+                                </p>
                             </div>
-                        ) : (
-                            <div className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                                <span className="text-[9px] font-semibold text-primary">U</span>
-                            </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
-                                {msg.content}
-                                {/* Streaming cursor */}
-                                {msg.role === 'assistant' && isStreaming && i === messages.length - 1 && (
-                                    <span className="inline-block w-1.5 h-3.5 bg-accent/60 ml-0.5 animate-pulse rounded-sm" />
-                                )}
-                            </p>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
 
                 {/* Typing indicator */}
                 {isTyping && (
@@ -220,40 +279,48 @@ export function ChatTab() {
                 <div className="px-3 py-1.5 border-t border-border/30 bg-accent/5 shrink-0">
                     <div className="flex items-center gap-1.5 text-[10px] text-accent">
                         <MousePointer2 className="w-3 h-3" />
-                        <span className="truncate">{selectionPath}</span>
+                        <span className="truncate font-medium">{selectionPath}</span>
                     </div>
                 </div>
             )}
 
-            {/* ── Input ── */}
-            <div className="p-3 border-t border-border/40 shrink-0">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 border border-border/40 focus-within:border-accent/40 transition-colors">
-                    <input
-                        ref={inputRef}
+            {/* ── Input area ── */}
+            <div className="p-2 border-t border-border/40 shrink-0 space-y-1.5">
+                <div className="flex flex-col rounded-lg bg-muted/40 border border-border/40 focus-within:border-accent/40 transition-colors">
+                    <textarea
+                        ref={textareaRef}
                         value={input}
-                        onChange={(e) => setInput(e.target.value)}
+                        onChange={handleTextareaChange}
                         onKeyDown={handleKeyDown}
-                        placeholder={selectionPath ? `Edit "${selectedIds.length > 0 ? selectionPath.split(' → ').pop() : ''}"…` : 'Ask AI anything…'}
-                        className="flex-1 bg-transparent text-xs placeholder:text-muted-foreground/50 outline-none"
+                        placeholder={selectionPath ? `Edit "${selectionPath.split(' → ').pop()}"…` : 'Ask AI anything…'}
+                        className="w-full bg-transparent text-xs placeholder:text-muted-foreground/50 outline-none resize-none px-3 pt-2.5 pb-1 min-h-[32px] max-h-[120px]"
+                        rows={1}
                         disabled={!projectId}
                     />
-                    {isStreaming ? (
-                        <button
-                            onClick={stopGeneration}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Stop generating"
-                        >
-                            <Square className="w-3 h-3" />
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleSend}
-                            disabled={!input.trim() || !projectId}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                            <Send className="w-3.5 h-3.5" />
-                        </button>
-                    )}
+                    <div className="flex items-center justify-between px-2 pb-1.5">
+                        <ModelSelector
+                            value={selectedModel}
+                            onChange={setSelectedModel}
+                            compact
+                        />
+                        {isStreaming ? (
+                            <button
+                                onClick={stopGeneration}
+                                className="w-6 h-6 rounded-md flex items-center justify-center text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                title="Stop generating"
+                            >
+                                <Square className="w-3 h-3" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSend}
+                                disabled={!input.trim() || !projectId}
+                                className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                <Send className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
