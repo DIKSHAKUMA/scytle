@@ -231,7 +231,7 @@ export function ChatTab() {
     return (
         <div className="flex flex-col h-full">
             {/* ── Messages area ── */}
-            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {messages.length === 0 && !isTyping && !isRefining && (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
                         <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
