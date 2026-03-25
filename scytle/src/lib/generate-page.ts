@@ -58,7 +58,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     const jwt = await createJWT()
     if (!jwt) throw new Error('Not authenticated')
 
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-pro'
+    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-flash'
 
     const response = await fetch('/api/ai/generate-html', {
         method: 'POST',
@@ -193,7 +193,7 @@ export async function generateProject(options: GenerateProjectOptions): Promise<
     const jwt = await createJWT()
     if (!jwt) throw new Error('Not authenticated')
 
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-pro'
+    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-flash'
 
     // Step 1: Get page plan from AI
     const planResponse = await fetch('/api/ai/plan-pages', {

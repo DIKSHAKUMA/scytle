@@ -76,7 +76,8 @@ export async function getUser() {
 export async function createJWT() {
     try {
         return await account.createJWT()
-    } catch {
+    } catch (error) {
+        console.error('❌ Failed to create Appwrite JWT:', error)
         return null
     }
 }

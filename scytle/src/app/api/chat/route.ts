@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         }
 
         const stream = createStreamResponse(message, conversationHistory, {
-            model: model || 'gemini-pro',
+            model: model || 'gemini-flash',
             systemPrompt: systemPrompt
         })
 

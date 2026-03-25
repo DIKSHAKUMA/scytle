@@ -13,13 +13,21 @@ export interface DesignChatContext {
 export function buildDesignChatPrompt(context: DesignChatContext): string {
     const hasSelection = !!context.selectedNodeId
     
-    // We only send a simplified version of the node tree to save tokens
-    const simplifiedNodes = context.canvasNodes.map(n => ({
-        id: n.id,
-        type: n.data?.type || n.type,
-        parent: n.parentId,
-        htmlSnippet: n.data?.html?.substring(0, 150) + (n.data?.html?.length > 150 ? '...' : '')
-    }))
+    // We only send a simplified version of the node tree to save tokens.
+    // Exception: the selected node gets its full HTML so the AI can make precise edits.
+    const simplifiedNodes = context.canvasNodes.map(n => {
+        const html: string = n.data?.html ?? ''
+        const isSelected = hasSelection && n.id === context.selectedNodeId
+        return {
+            id: n.id,
+            type: n.data?.type || n.type,
+            parent: n.parentId,
+            // Send full HTML for the selected node; short excerpt for context nodes
+            htmlSnippet: isSelected
+                ? html
+                : html.substring(0, 200) + (html.length > 200 ? '…' : ''),
+        }
+    })
 
     const treeContext = `
 CURRENT CANVAS STATE:

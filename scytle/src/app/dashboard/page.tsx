@@ -30,6 +30,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useProjectStore, useAuthStore } from '@/store'
+import type { Project } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 
 type StatusFilter = 'all' | 'draft' | 'in-progress' | 'completed'
@@ -139,7 +140,7 @@ export default function DashboardPage() {
 
     // Filter and search projects
     const filteredProjects = useMemo(() => {
-        return projects.filter(project => {
+        return projects.filter((project: Project) => {
             const matchesSearch = searchQuery === '' ||
                 project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (project.description?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -151,9 +152,9 @@ export default function DashboardPage() {
     // Stats
     const stats = useMemo(() => ({
         total: projects.length,
-        draft: projects.filter(p => p.status === 'draft').length,
-        inProgress: projects.filter(p => p.status === 'in-progress').length,
-        completed: projects.filter(p => p.status === 'completed').length,
+        draft: projects.filter((p: Project) => p.status === 'draft').length,
+        inProgress: projects.filter((p: Project) => p.status === 'in-progress').length,
+        completed: projects.filter((p: Project) => p.status === 'completed').length,
     }), [projects])
 
     const filterTabs: { key: StatusFilter; label: string; count: number }[] = [
@@ -339,7 +340,7 @@ export default function DashboardPage() {
                     ) : (
                         /* Project Grid */
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                            {filteredProjects.map((project, i) => {
+                            {filteredProjects.map((project: Project, i: number) => {
                                 const status = STATUS_CONFIG[project.status]
                                 return (
                                     <Link
