@@ -7,6 +7,7 @@
 import { createJWT } from '@/lib/appwrite'
 import { parseHtmlToNodes } from '@/lib/parser'
 import type { FrameNode } from '@/types/canvas'
+import { useStyleGuideStore } from '@/store'
 
 import type { ProductType } from '@/types'
 import type { PagePlan } from '@/lib/ai/prompts/page-planner'
@@ -43,6 +44,11 @@ export interface GeneratePageOptions {
         bg: string
         text: string
         tone?: string
+        fonts?: { heading: string; body: string }
+        radius?: { sm: number; md: number; lg: number }
+        spacing?: { sm: number; md: number; lg: number; gap: number }
+        shadows?: { sm: string; md: string }
+        fontSizes?: { h1: number; h2: number; body: number }
     }
     siblingPages?: Array<{ name: string; description: string }>
     onProgress?: (partialHtml: string) => void
@@ -60,6 +66,42 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
 
     const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-flash'
 
+    // Build themeContext from variable table if not explicitly provided
+    const sgState = useStyleGuideStore.getState()
+    const table = sgState.variableTable
+    const mode = sgState.themeMode
+    const themeContext = options.themeContext || (Object.keys(table).length > 0 ? {
+        primary: table['accent']?.[mode] || '#2563eb',
+        secondary: table['bg/secondary']?.[mode] || '#f5f5f5',
+        accent: table['accent']?.[mode] || '#10b981',
+        bg: table['bg/primary']?.[mode] || '#ffffff',
+        text: table['text/primary']?.[mode] || '#111827',
+        fonts: table['font/heading'] ? {
+            heading: table['font/heading'][mode],
+            body: table['font/body']?.[mode] || table['font/heading'][mode],
+        } : undefined,
+        radius: table['radius/sm'] ? {
+            sm: parseInt(table['radius/sm'][mode]) || 4,
+            md: parseInt(table['radius/md'][mode]) || 8,
+            lg: parseInt(table['radius/lg'][mode]) || 16,
+        } : undefined,
+        spacing: table['spacing/sm'] ? {
+            sm: parseInt(table['spacing/sm'][mode]) || 16,
+            md: parseInt(table['spacing/md'][mode]) || 24,
+            lg: parseInt(table['spacing/lg'][mode]) || 48,
+            gap: parseInt(table['spacing/gap'][mode]) || 16,
+        } : undefined,
+        shadows: table['shadow/sm'] ? {
+            sm: table['shadow/sm'][mode],
+            md: table['shadow/md'][mode],
+        } : undefined,
+        fontSizes: table['fontSize/h1'] ? {
+            h1: parseInt(table['fontSize/h1'][mode]) || 48,
+            h2: parseInt(table['fontSize/h2'][mode]) || 32,
+            body: parseInt(table['fontSize/body'][mode]) || 16,
+        } : undefined,
+    } : undefined)
+
     const response = await fetch('/api/ai/generate-html', {
         method: 'POST',
         headers: {
@@ -72,7 +114,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
             projectDescription: options.projectDescription,
             industry: options.industry,
             productType: options.productType ?? 'web',
-            themeContext: options.themeContext,
+            themeContext,
             siblingPages: options.siblingPages,
             model: modelKey,
         }),
@@ -150,8 +192,11 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     // Strip markdown fences if AI wrapped the output
     html = stripMarkdownFences(html)
 
-    // Parse HTML → ScytleNode tree
-    return parseHtmlToNodes(html, options.pageName)
+    // Parse HTML → ScytleNode tree (with single-pass ref assignment)
+    return parseHtmlToNodes(html, options.pageName, {
+        variableTable: sgState.variableTable,
+        themeMode: sgState.themeMode,
+    })
 }
 
 /** Remove ```html ... ``` fencing that models sometimes output */

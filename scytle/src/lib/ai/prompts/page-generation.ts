@@ -30,6 +30,12 @@ export interface PageGenerationContext {
         bg: string
         text: string
         tone?: string
+        // Extended theme values for ref matching
+        fonts?: { heading: string; body: string }
+        radius?: { sm: number; md: number; lg: number }
+        spacing?: { sm: number; md: number; lg: number; gap: number }
+        shadows?: { sm: string; md: string }
+        fontSizes?: { h1: number; h2: number; body: number }
     }
     siblingPages?: Array<{ name: string; description: string }>
 }
@@ -89,8 +95,8 @@ export function buildPageGenerationPrompt(ctx: PageGenerationContext): string {
 
     // ── Root wrapper rules ──────────────────────────────────
     const rootWrapper = isApp
-        ? `THE VERY FIRST LINE OF OUTPUT must be: <div class="flex flex-col w-[390px] min-h-[844px] bg-white mx-auto overflow-hidden rounded-[2rem] shadow-2xl">
-This is MANDATORY — the root div MUST have w-[390px] min-h-[844px]. This simulates a phone screen. The content must feel native — like a real mobile app, NOT a shrunk website. The last line of output must be </div> closing this root.`
+        ? `THE VERY FIRST LINE OF OUTPUT must be: <div class="flex flex-col w-97.5 min-h-211 bg-white mx-auto overflow-hidden rounded-[2rem] shadow-2xl">
+    This is MANDATORY — the root div MUST have w-97.5 min-h-211. This simulates a phone screen. The content must feel native — like a real mobile app, NOT a shrunk website. The last line of output must be </div> closing this root.`
         : `Wrap everything in a single root <div class="flex flex-col w-full">. The root MUST have flex flex-col.`
 
     // ── Navigation context (multi-page) ─────────────────────
@@ -132,6 +138,45 @@ WEB DESIGN CONTEXT:
 - Inner content: max-w-7xl mx-auto to constrain width.
 - For dashboards/apps: use sidebar (w-64) + main content layout with flex flex-row.
 - For marketing pages: stack sections vertically with alternating backgrounds.`
+
+    // Build extended theme rules from themeContext
+    const themeRules: string[] = []
+    const tc = ctx.themeContext
+    if (tc?.fonts) {
+        themeRules.push(`
+FONT FAMILY (use exactly these fonts):
+- Headings (h1-h6, nav brand): font-family: "${tc.fonts.heading}" — use style="font-family: '${tc.fonts.heading}', sans-serif" on heading elements.
+- Body text (p, span, button, label): font-family: "${tc.fonts.body}" — use style="font-family: '${tc.fonts.body}', sans-serif" on body text elements.`)
+    }
+    if (tc?.radius) {
+        themeRules.push(`
+BORDER RADIUS (use exactly these values):
+- Badges/tags/small elements: rounded-[${tc.radius.sm}px]
+- Buttons/inputs/cards: rounded-[${tc.radius.md}px]
+- Hero sections/larger containers: rounded-[${tc.radius.lg}px]`)
+    }
+    if (tc?.spacing) {
+        themeRules.push(`
+SPACING (use exactly these values for padding):
+- Small containers/badges: p-[${tc.spacing.sm}px]
+- Cards/medium containers: p-[${tc.spacing.md}px]
+- Sections/hero containers: p-[${tc.spacing.lg}px]
+- Gap between items: gap-[${tc.spacing.gap}px]`)
+    }
+    if (tc?.shadows) {
+        themeRules.push(`
+BOX SHADOW (use exactly these values):
+- Buttons/small elements: shadow-[${tc.shadows.sm}]
+- Cards/elevated containers: shadow-[${tc.shadows.md}]`)
+    }
+    if (tc?.fontSizes) {
+        themeRules.push(`
+FONT SIZES (use exactly these values):
+- h1: text-[${tc.fontSizes.h1}px]
+- h2: text-[${tc.fontSizes.h2}px]
+- Body text: text-[${tc.fontSizes.body}px]`)
+    }
+    const themeRulesStr = themeRules.length > 0 ? '\n' + themeRules.join('\n') : ''
 
     return `You are a world-class UI/UX designer at a premium agency like Pentagram or ueno. You create stunning, production-quality interfaces that feel hand-crafted — not generic AI output.
 
@@ -183,6 +228,7 @@ COLOR PALETTE (use these colors throughout):
 - Use opacity variants for subtle backgrounds: e.g., bg-[${colors.primary}]/10 for light tints.
 - For dark sections: use bg-[${colors.text}] with text-white.
 - For muted text: use text-[${colors.text}]/60
+${themeRulesStr}
 
 CONTENT RICHNESS (MANDATORY — never use lorem ipsum or placeholder text):
 - Use realistic, specific content that matches the product being designed.

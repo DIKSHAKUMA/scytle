@@ -3,6 +3,8 @@ import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
 import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
+import { useThemeResolver } from '@/lib/theme/theme-context'
+import { resolveColor, resolveFont, resolveNumber } from '@/lib/theme/theme-resolver'
 
 // ============================================================
 // Props
@@ -30,18 +32,33 @@ export const TextRenderer = memo(function TextRenderer({
     const isEditing = editingNodeId === node.id
     const editRef = useRef<HTMLElement>(null)
 
+    // ── Theme resolver ─────────────────────────────────────────
+    const themeCtx = useThemeResolver()
+
+    // ── Resolve theme refs (before font loading effect) ──────
+    const resolvedFontFamily = node.fontFamilyRef && themeCtx
+        ? resolveFont(node.fontFamilyRef, node.fontFamily, themeCtx.table, themeCtx.mode)
+        : node.fontFamily
+    const resolvedFontSize = node.fontSizeRef && themeCtx
+        ? resolveNumber(node.fontSizeRef, node.fontSize, themeCtx.table, themeCtx.mode)
+        : node.fontSize
+    const resolvedColor = node.colorRef && themeCtx
+        ? resolveColor(node.colorRef, node.color, themeCtx.table, themeCtx.mode)
+        : node.color
+
     // ── Google Font loading ────────────────────────────────────
     // Load the font on mount and whenever fontFamily changes.
     // The tick counter forces a re-render once the font finishes loading,
     // so the browser repaints the text in the correct typeface.
     const [, setFontTick] = useState(0)
     useEffect(() => {
-        if (!isFontLoaded(node.fontFamily)) {
-            loadFont(node.fontFamily).then(() => {
+        const fontToLoad = resolvedFontFamily
+        if (!isFontLoaded(fontToLoad)) {
+            loadFont(fontToLoad).then(() => {
                 setFontTick((t) => t + 1)
             })
         }
-    }, [node.fontFamily])
+    }, [resolvedFontFamily])
 
     // Focus + select all when entering edit mode
     useEffect(() => {
@@ -80,7 +97,7 @@ export const TextRenderer = memo(function TextRenderer({
     }, [commitEdit])
 
     // ── Styles ────────────────────────────────────────────────
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx)
 
     // ── Line height (unit-aware) ───────────────────────────────────────────────
     // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.
@@ -138,17 +155,17 @@ export const TextRenderer = memo(function TextRenderer({
         ...vAlignStyle,
         ...listStyleCSS,
         // Typography core
-        fontFamily: `"${node.fontFamily}", sans-serif`,
+        fontFamily: `"${resolvedFontFamily}", sans-serif`,
         fontWeight: node.fontWeight,
         fontStyle: node.fontStyle === 'italic' ? 'italic' : undefined,
-        fontSize: `calc(${node.fontSize}px * var(--z, 1))`,
+        fontSize: `calc(${resolvedFontSize}px * var(--z, 1))`,
         lineHeight: lineHeightCSS,
         letterSpacing: letterSpacingCSS,
         textAlign: node.textAlign as CSSProperties['textAlign'],
         textTransform: textTransformCSS,
         fontVariantCaps: isSmallCaps ? 'small-caps' : undefined,
         textDecoration: node.textDecoration !== 'none' ? node.textDecoration : undefined,
-        color: node.color,
+        color: resolvedColor,
         // Paragraph indent — CSS text-indent applies to first line of each paragraph
         textIndent: node.paragraphIndent ? `calc(${node.paragraphIndent}px * var(--z, 1))` : undefined,
         // Hanging punctuation (CSS, limited browser support but gracefully degrades)

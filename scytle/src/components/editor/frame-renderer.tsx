@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import type { FrameNode } from '@/types/canvas'
 import { computeBaseStyles, computeFrameLayoutStyles } from './render-utils'
 import { NodeRenderer } from './node-renderer'
+import { useThemeResolver } from '@/lib/theme/theme-context'
 
 // ============================================================
 // Props
@@ -24,10 +25,12 @@ export const FrameRenderer = memo(function FrameRenderer({
     parentDirection,
     parentLayoutMode,
 }: FrameRendererProps) {
+    const themeCtx = useThemeResolver()
+
     // Merge base styles (position, sizing, visuals) with frame layout styles
     const style: CSSProperties = {
-        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode),
-        ...computeFrameLayoutStyles(node),
+        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx),
+        ...computeFrameLayoutStyles(node, themeCtx),
     }
 
     // Freeform (mode: 'none') frames need a positioning context for absolute children

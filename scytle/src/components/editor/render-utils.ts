@@ -10,6 +10,8 @@ import type {
     Padding,
 } from '@/types/canvas'
 import { blendModeToCSS, hexOpacityToRgba, normaliseHex } from '@/lib/color-utils'
+import type { ThemeResolverCtx } from '@/lib/theme/theme-context'
+import { resolveColor, resolveNumber, resolveShadow, resolvePadding as resolvePaddingRef } from '@/lib/theme/theme-resolver'
 
 // ============================================================
 // CSS Value Mappings
@@ -47,13 +49,17 @@ function hexToRgba(hex: string, opacity: number): string {
  *  Supports multiple fills, per-fill opacity, and visibility.
  *  First fill in array = topmost visual layer (CSS background shorthand
  *  renders first background on top). */
-function computeBackground(fills: Fill[]): CSSProperties {
+function computeBackground(fills: Fill[], themeCtx?: ThemeResolverCtx | null): CSSProperties {
     const visible = fills.filter((f) => f.visible !== false)
     if (visible.length === 0) return {}
 
     // Single solid fill fast path — no layering needed
     if (visible.length === 1 && visible[0].type === 'solid') {
-        return { backgroundColor: hexToRgba(visible[0].color, visible[0].opacity ?? 1) }
+        const fill = visible[0]
+        const color = fill.colorRef && themeCtx
+            ? resolveColor(fill.colorRef, fill.color, themeCtx.table, themeCtx.mode)
+            : fill.color
+        return { backgroundColor: hexToRgba(color, fill.opacity ?? 1) }
     }
 
     const images: string[] = []
@@ -67,7 +73,10 @@ function computeBackground(fills: Fill[]): CSSProperties {
             case 'solid': {
                 // Express as degenerate gradient so it works in backgroundImage
                 // (plain colors are not valid backgroundImage values in multi-layer context)
-                const color = hexToRgba(fill.color, opacity)
+                const resolved = fill.colorRef && themeCtx
+                    ? resolveColor(fill.colorRef, fill.color, themeCtx.table, themeCtx.mode)
+                    : fill.color
+                const color = hexToRgba(resolved, opacity)
                 images.push(`linear-gradient(${color}, ${color})`)
                 sizes.push('100% 100%')
                 positions.push('0 0')
@@ -167,13 +176,16 @@ function computeImageFillFilter(fill: ImageFill): string | undefined {
 }
 
 /** Build CSS box-shadow from shadows array, scaled via CSS custom property */
-function computeBoxShadow(shadows: Shadow[]): string | undefined {
+function computeBoxShadow(shadows: Shadow[], themeCtx?: ThemeResolverCtx | null): string | undefined {
     const visible = shadows.filter((s) => s.visible !== false)
     if (visible.length === 0) return undefined
     return visible
         .map((s) => {
             const inset = s.type === 'inner' ? 'inset ' : ''
-            return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${s.color}`
+            const color = s.colorRef && themeCtx
+                ? resolveColor(s.colorRef, s.color, themeCtx.table, themeCtx.mode)
+                : s.color
+            return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${color}`
         })
         .join(', ')
 }
@@ -181,12 +193,15 @@ function computeBoxShadow(shadows: Shadow[]): string | undefined {
 /** Build box-shadow string from a solid border with inside/center/outside position support.
  *  Uses box-shadow exclusively so it never affects layout (unlike CSS border).
  *  Only applicable for solid borders — dashed/dotted fall back to CSS border. */
-function computeBorderAsShadow(border: Border): string | undefined {
+function computeBorderAsShadow(border: Border, themeCtx?: ThemeResolverCtx | null): string | undefined {
     if (border.visible === false) return undefined
     if (border.style !== 'solid' || border.width === 0) return undefined
     const { width, position = 'inside' } = border
+    const rawColor = border.colorRef && themeCtx
+        ? resolveColor(border.colorRef, border.color, themeCtx.table, themeCtx.mode)
+        : border.color
     // Always use rgba — avoids rendering quirks with raw hex in box-shadow at opacity=1
-    const color = hexOpacityToRgba(normaliseHex(border.color), border.opacity ?? 1)
+    const color = hexOpacityToRgba(normaliseHex(rawColor), border.opacity ?? 1)
     const w = `calc(${width}px * var(--z, 1))`
     if (position === 'inside') {
         return `inset 0 0 0 ${w} ${color}`
@@ -203,10 +218,13 @@ function computeBorderAsShadow(border: Border): string | undefined {
 /** Build border/outline CSS for non-solid styles (dashed/dotted).
  *  CSS `outline` is used for center/outside positions since `border` only supports inside
  *  (box-sizing: border-box shrinks content area). Outline is drawn outside the layout box. */
-function computeBorder(border?: Border): CSSProperties {
+function computeBorder(border?: Border, themeCtx?: ThemeResolverCtx | null): CSSProperties {
     if (!border || border.visible === false || border.style === 'solid') return {}
+    const rawColor = border.colorRef && themeCtx
+        ? resolveColor(border.colorRef, border.color, themeCtx.table, themeCtx.mode)
+        : border.color
     // Always use rgba for consistency
-    const color = hexOpacityToRgba(normaliseHex(border.color), border.opacity ?? 1)
+    const color = hexOpacityToRgba(normaliseHex(rawColor), border.opacity ?? 1)
     const w = `calc(${border.width}px * var(--z, 1))`
     const position = border.position ?? 'inside'
 
@@ -234,9 +252,12 @@ function computeBorder(border?: Border): CSSProperties {
 }
 
 /** Build border-radius CSS, scaled via CSS custom property */
-function computeBorderRadius(br: BorderRadius): CSSProperties {
+function computeBorderRadius(br: BorderRadius, brRef?: string, themeCtx?: ThemeResolverCtx | null): CSSProperties {
     if (typeof br === 'number') {
-        return br > 0 ? { borderRadius: `calc(${br}px * var(--z, 1))` } : {}
+        const resolved = brRef && themeCtx
+            ? resolveNumber(brRef, br, themeCtx.table, themeCtx.mode)
+            : br
+        return resolved > 0 ? { borderRadius: `calc(${resolved}px * var(--z, 1))` } : {}
     }
     return {
         borderTopLeftRadius: `calc(${br.topLeft}px * var(--z, 1))`,
@@ -247,10 +268,13 @@ function computeBorderRadius(br: BorderRadius): CSSProperties {
 }
 
 /** Build padding CSS from Padding object, scaled via CSS custom property */
-function computePadding(p: Padding): CSSProperties {
-    if (p.top === 0 && p.right === 0 && p.bottom === 0 && p.left === 0) return {}
+function computePadding(p: Padding, pRef?: string, themeCtx?: ThemeResolverCtx | null): CSSProperties {
+    const resolved = pRef && themeCtx
+        ? resolvePaddingRef(pRef, p, themeCtx.table, themeCtx.mode)
+        : p
+    if (resolved.top === 0 && resolved.right === 0 && resolved.bottom === 0 && resolved.left === 0) return {}
     return {
-        padding: `calc(${p.top}px * var(--z, 1)) calc(${p.right}px * var(--z, 1)) calc(${p.bottom}px * var(--z, 1)) calc(${p.left}px * var(--z, 1))`,
+        padding: `calc(${resolved.top}px * var(--z, 1)) calc(${resolved.right}px * var(--z, 1)) calc(${resolved.bottom}px * var(--z, 1)) calc(${resolved.left}px * var(--z, 1))`,
     }
 }
 
@@ -271,7 +295,8 @@ export function computeBaseStyles(
     node: ScytleNode,
     isTopLevel: boolean,
     parentDir?: 'row' | 'column',
-    parentLayoutMode?: 'flex' | 'grid' | 'none'
+    parentLayoutMode?: 'flex' | 'grid' | 'none',
+    themeCtx?: ThemeResolverCtx | null,
 ): CSSProperties {
     const s: CSSProperties = { boxSizing: 'border-box' }
 
@@ -355,17 +380,17 @@ export function computeBaseStyles(
     if (transforms.length > 0) s.transform = transforms.join(' ')
 
     // ── Visual properties ─────────────────────────────────────
-    Object.assign(s, computeBackground(node.fills))
-    Object.assign(s, computeBorder(node.border))      // handles dashed/dotted only
-    Object.assign(s, computeBorderRadius(node.borderRadius))
+    Object.assign(s, computeBackground(node.fills, themeCtx))
+    Object.assign(s, computeBorder(node.border, themeCtx))      // handles dashed/dotted only
+    Object.assign(s, computeBorderRadius(node.borderRadius, node.borderRadiusRef, themeCtx))
 
     // ── Box shadow — merge stroke + drop/inner shadows ────────
     // Must be ONE declaration: a second s.boxShadow assignment would silently overwrite.
     // Solid border stroke uses box-shadow for layout-safe inside/center/outside positioning.
     const shadowParts: string[] = []
-    const borderShadow = node.border ? computeBorderAsShadow(node.border) : undefined
+    const borderShadow = node.border ? computeBorderAsShadow(node.border, themeCtx) : undefined
     if (borderShadow) shadowParts.push(borderShadow)
-    const nodeShadow = computeBoxShadow(node.shadows)
+    const nodeShadow = computeBoxShadow(node.shadows, themeCtx)
     if (nodeShadow) shadowParts.push(nodeShadow)
     if (shadowParts.length > 0) s.boxShadow = shadowParts.join(', ')
 
@@ -400,13 +425,18 @@ export function computeBaseStyles(
  * Note: Does NOT set position — that's handled by computeBaseStyles
  * and the frame renderer for mode:'none' positioning context.
  */
-export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
+export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolverCtx | null): CSSProperties {
     const s: CSSProperties = {}
 
     if (node.layout.mode === 'flex') {
         s.display = 'flex'
         s.flexDirection = node.layout.direction ?? 'column'
-        if (node.layout.gap != null) s.gap = `calc(${node.layout.gap}px * var(--z, 1))`
+        if (node.layout.gap != null) {
+            const resolvedGap = node.layout.gapRef && themeCtx
+                ? resolveNumber(node.layout.gapRef, node.layout.gap, themeCtx.table, themeCtx.mode)
+                : node.layout.gap
+            s.gap = `calc(${resolvedGap}px * var(--z, 1))`
+        }
         if (node.layout.justify)
             s.justifyContent = JUSTIFY_MAP[node.layout.justify] ?? node.layout.justify
         if (node.layout.align)
@@ -429,8 +459,18 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
         // Grid gap: use specific columnGap/rowGap if set, otherwise fall back to generic gap
         const gridColGap = node.layout.columnGap ?? node.layout.gap
         const gridRowGap = node.layout.rowGap ?? node.layout.gap
-        if (gridColGap != null) s.columnGap = `calc(${gridColGap}px * var(--z, 1))`
-        if (gridRowGap != null) s.rowGap = `calc(${gridRowGap}px * var(--z, 1))`
+        if (gridColGap != null) {
+            const resolvedColGap = node.layout.gapRef && themeCtx
+                ? resolveNumber(node.layout.gapRef, gridColGap, themeCtx.table, themeCtx.mode)
+                : gridColGap
+            s.columnGap = `calc(${resolvedColGap}px * var(--z, 1))`
+        }
+        if (gridRowGap != null) {
+            const resolvedRowGap = node.layout.gapRef && themeCtx
+                ? resolveNumber(node.layout.gapRef, gridRowGap, themeCtx.table, themeCtx.mode)
+                : gridRowGap
+            s.rowGap = `calc(${resolvedRowGap}px * var(--z, 1))`
+        }
     }
     // mode: 'none' → no display override; position context handled by renderer
 
@@ -460,7 +500,7 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
     }
 
     // Padding
-    Object.assign(s, computePadding(node.padding))
+    Object.assign(s, computePadding(node.padding, node.paddingRef, themeCtx))
 
     // Overflow
     if (node.overflow === 'hidden') s.overflow = 'hidden'

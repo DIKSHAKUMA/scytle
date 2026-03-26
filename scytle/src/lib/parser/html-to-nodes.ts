@@ -9,6 +9,7 @@ import { parseClasses, parseInlineStyles, type ParsedStyles } from './class-pars
 import { resolveColor } from './color-map'
 import { PAGE_WIDTH, estimateTextHeight, estimateContainerHeight, estimateContainerWidth } from './size-utils'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
+import { buildLinkMaps, normalizeHex, normalizeShadow, type LinkMaps, type VariableTable, type ThemeMode } from '@/lib/theme/variable-table'
 
 // ---- Element Classification ----
 
@@ -40,11 +41,20 @@ const SECTION_TAG_NAMES: Record<string, string> = {
  * The AI is expected to output a `<div>` root with `<section>` children.
  * The root div becomes the page frame, its sections become children.
  */
-export function parseHtmlToNodes(html: string, pageName: string = 'Page', options?: { rootWidth?: number }): FrameNode {
+export function parseHtmlToNodes(html: string, pageName: string = 'Page', options?: {
+    rootWidth?: number
+    variableTable?: VariableTable
+    themeMode?: ThemeMode
+}): FrameNode {
     const sanitized = sanitizeHtml(html)
     const parser = new DOMParser()
     const doc = parser.parseFromString(sanitized, 'text/html')
     const body = doc.body
+
+    // Build link maps for single-pass ref assignment
+    const lm = options?.variableTable && options?.themeMode
+        ? buildLinkMaps(options.variableTable, options.themeMode)
+        : undefined
 
     // Find root element — typically the AI's wrapper <div>
     const root = body.firstElementChild || body
@@ -70,9 +80,9 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page', option
         : (isInlineRoot ? null : computeWidth(rootStyles, defaultWidth))
 
     // Walk children of the root element
-    const children = walkChildren(root, rootWidth || defaultWidth, effectiveColor)
+    const children = walkChildren(root, rootWidth || defaultWidth, effectiveColor, lm)
 
-    const fills = buildFills(rootStyles)
+    const fills = buildFills(rootStyles, lm)
     let layoutMode = resolveLayoutMode(rootStyles)
     let direction: 'row' | 'column' = rootStyles.flexDirection
 
@@ -91,6 +101,12 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page', option
     // Keep root width fixed when a concrete width was inferred.
     const horizontalSizing = rootWidth ? 'fixed' : 'hug'
 
+    // Assign refs on root frame properties
+    const rootGap = rootStyles.gap || undefined
+    const rootBorderRadius = rootStyles.borderRadiusPerCorner || rootStyles.borderRadius
+    const rootBorder = buildBorder(rootStyles, lm)
+    const rootShadows = rootStyles.shadows.map(s => ({ ...s }))
+
     return createFrame({
         name: pageName,
         width: rootWidth || estimateContainerWidth(children, rootStyles.padding, rootStyles.gap, direction),
@@ -103,21 +119,25 @@ export function parseHtmlToNodes(html: string, pageName: string = 'Page', option
         sizing: { horizontal: horizontalSizing, vertical: rootStyles.minHeight ? 'fixed' : 'hug' },
         layout: {
             mode: layoutMode,
-            direction, // Respect parsed direction instead of forcing column
+            direction,
             justify: rootStyles.justifyContent,
             align: rootStyles.alignItems,
             wrap: rootStyles.flexWrap || undefined,
-            gap: rootStyles.gap || undefined,
+            gap: rootGap,
+            ...(rootGap && lm ? { gapRef: matchSpacing(rootGap, lm) } : {}),
             columns: layoutMode === 'grid' && rootStyles.gridColumns > 1
                 ? rootStyles.gridColumns
                 : undefined,
         },
         padding: rootStyles.padding,
+        ...(lm ? { paddingRef: matchSpacing(Math.max(rootStyles.padding.top, rootStyles.padding.right, rootStyles.padding.bottom, rootStyles.padding.left), lm) } : {}),
         fills,
-        border: buildBorder(rootStyles),
+        border: rootBorder,
         overflow: rootStyles.overflow === 'auto' ? 'hidden' : rootStyles.overflow,
-        borderRadius: rootStyles.borderRadiusPerCorner || rootStyles.borderRadius,
-        shadows: rootStyles.shadows.map(s => ({ ...s })),
+        borderRadius: rootBorderRadius,
+        ...(lm && typeof rootBorderRadius === 'number' ? { borderRadiusRef: matchRadius(rootBorderRadius, lm) } : {}),
+        shadows: rootShadows,
+        ...(lm && rootShadows.length > 0 ? { shadowRef: matchShadow(rootShadows, lm) } : {}),
         children,
     })
 }
@@ -128,6 +148,7 @@ function walkElement(
     el: Element,
     parentWidth: number,
     inheritedColor: string,
+    lm?: LinkMaps,
 ): ScytleNode | null {
     const tag = el.tagName.toLowerCase()
 
@@ -162,22 +183,22 @@ function walkElement(
 
     // h1-h6, p, label → always TextNode
     if (TEXT_ONLY_ELEMENTS.has(tag)) {
-        return buildTextNode(el, tag, styles, effectiveColor, parentWidth)
+        return buildTextNode(el, tag, styles, effectiveColor, parentWidth, lm)
     }
 
     // <button> or button-like <a> → FrameNode with TextNode child
     if (tag === 'button' || (tag === 'a' && isButtonLike(styles))) {
-        return buildButtonNode(el, tag, styles, effectiveColor, parentWidth)
+        return buildButtonNode(el, tag, styles, effectiveColor, parentWidth, lm)
     }
 
     // Form inputs → placeholder frame
     if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        return buildInputNode(el, tag, styles, effectiveColor, parentWidth)
+        return buildInputNode(el, tag, styles, effectiveColor, parentWidth, lm)
     }
 
     // <li> with only text AND no visual styling → TextNode
     if (tag === 'li' && hasOnlyInlineContent(el) && !hasVisualStyling(styles)) {
-        return buildTextNode(el, 'li', styles, effectiveColor, parentWidth)
+        return buildTextNode(el, 'li', styles, effectiveColor, parentWidth, lm)
     }
 
     // Check if element has visual styling that requires it to be a FrameNode
@@ -196,22 +217,23 @@ function walkElement(
     // 1. Explicit flex/grid layout
     // 2. Visual styling (bg, padding, borders, etc.) - these become FrameNode with TextNode child
     if (!isLayoutContainer && !hasVisuals && hasOnlyInlineContent(el) && el.textContent?.trim()) {
-        return buildTextNode(el, tag, styles, effectiveColor, parentWidth)
+        return buildTextNode(el, tag, styles, effectiveColor, parentWidth, lm)
     }
 
     // Container → FrameNode with recursive children
     // For styled inline elements with text, this will create Frame containing Text
-    return buildContainerNode(el, tag, styles, effectiveColor, parentWidth)
+    return buildContainerNode(el, tag, styles, effectiveColor, parentWidth, lm)
 }
 
 function walkChildren(
     parent: Element,
     parentWidth: number,
     inheritedColor: string,
+    lm?: LinkMaps,
 ): ScytleNode[] {
     const nodes: ScytleNode[] = []
     for (const child of Array.from(parent.children)) {
-        const node = walkElement(child, parentWidth, inheritedColor)
+        const node = walkElement(child, parentWidth, inheritedColor, lm)
         if (node) nodes.push(node)
     }
     return nodes
@@ -674,6 +696,7 @@ function buildTextNode(
     styles: ParsedStyles,
     effectiveColor: string,
     parentWidth: number,
+    lm?: LinkMaps,
 ): TextNode {
     const text = getTextContent(el)
     const htmlTag = HTML_TAG_MAP[tag]
@@ -764,6 +787,11 @@ function buildTextNode(
         textTransform: styles.textTransform,
         textDecoration: styles.textDecoration,
         color: effectiveColor,
+        ...(lm ? {
+            colorRef: matchColor(effectiveColor, lm),
+            fontFamilyRef: matchFont(styles.fontFamily, lm),
+            fontSizeRef: matchFontSize(styles.fontSize, lm),
+        } : {}),
         width: sizing.horizontal === 'hug' ? estimateInlineTextWidth(text, styles.fontSize) : width,
         height: estimateTextHeight(text, styles.fontSize, width, lineHeightMultiplier),
         sizing,
@@ -779,14 +807,15 @@ function buildButtonNode(
     styles: ParsedStyles,
     effectiveColor: string,
     parentWidth: number,
+    lm?: LinkMaps,
 ): FrameNode {
     const text = getTextContent(el)
-    const fills = buildFills(styles)
+    const fills = buildFills(styles, lm)
 
     // Check if button has child elements (e.g., icon + text)
     if (el.children.length > 0 && !hasOnlyInlineContent(el)) {
         const childWidth = computeChildWidth(styles, parentWidth)
-        const children = walkChildren(el, childWidth, effectiveColor)
+        const children = walkChildren(el, childWidth, effectiveColor, lm)
         const buttonGap = 8
         const width = estimateContainerWidth(children, { left: styles.padding.left, right: styles.padding.right }, buttonGap, 'row')
         const height = estimateContainerHeight(children, { top: styles.padding.top, bottom: styles.padding.bottom }, buttonGap, 'row')
@@ -797,10 +826,13 @@ function buildButtonNode(
             sizing: { horizontal: 'hug', vertical: 'hug' },
             layout: { mode: 'flex', direction: 'row', align: 'center', justify: 'center', gap: buttonGap },
             padding: styles.padding,
+            ...(lm ? { paddingRef: matchSpacing(Math.max(styles.padding.top, styles.padding.right, styles.padding.bottom, styles.padding.left), lm) } : {}),
             fills,
             borderRadius: styles.borderRadiusPerCorner || styles.borderRadius,
-            border: buildBorder(styles),
+            ...(lm && typeof (styles.borderRadiusPerCorner || styles.borderRadius) === 'number' ? { borderRadiusRef: matchRadius(styles.borderRadiusPerCorner || styles.borderRadius, lm) } : {}),
+            border: buildBorder(styles, lm),
             shadows: styles.shadows.map(s => ({ ...s })),
+            ...(lm && styles.shadows.length > 0 ? { shadowRef: matchShadow(styles.shadows, lm) } : {}),
             opacity: styles.opacity,
             margin: styles.margin,
             children,
@@ -814,6 +846,10 @@ function buildButtonNode(
         fontSize: styles.fontSize,
         fontWeight: styles.fontWeight,
         color: effectiveColor,
+        ...(lm ? {
+            colorRef: matchColor(effectiveColor, lm),
+            fontSizeRef: matchFontSize(styles.fontSize, lm),
+        } : {}),
         textAlign: 'center',
         lineHeight: styles.lineHeight,
         sizing: { horizontal: 'hug', vertical: 'hug' },
@@ -832,10 +868,13 @@ function buildButtonNode(
         sizing: { horizontal: 'hug', vertical: 'hug' },
         layout: { mode: 'flex', direction: 'row', align: 'center', justify: 'center' },
         padding: styles.padding,
+        ...(lm ? { paddingRef: matchSpacing(Math.max(styles.padding.top, styles.padding.right, styles.padding.bottom, styles.padding.left), lm) } : {}),
         fills,
         borderRadius: styles.borderRadiusPerCorner || styles.borderRadius,
-        border: buildBorder(styles),
+        ...(lm && typeof (styles.borderRadiusPerCorner || styles.borderRadius) === 'number' ? { borderRadiusRef: matchRadius(styles.borderRadiusPerCorner || styles.borderRadius, lm) } : {}),
+        border: buildBorder(styles, lm),
         shadows: styles.shadows.map(s => ({ ...s })),
+        ...(lm && styles.shadows.length > 0 ? { shadowRef: matchShadow(styles.shadows, lm) } : {}),
         opacity: styles.opacity,
         margin: styles.margin,
         children: [textChild],
@@ -848,6 +887,7 @@ function buildInputNode(
     styles: ParsedStyles,
     effectiveColor: string,
     _parentWidth: number,
+    lm?: LinkMaps,
 ): FrameNode {
     const placeholder = el.getAttribute('placeholder') || ''
     const label = tag === 'select'
@@ -874,11 +914,12 @@ function buildInputNode(
         padding: styles.padding.top > 0
             ? styles.padding
             : { top: 8, right: 12, bottom: 8, left: 12 },
-        fills: buildFills(styles).length > 0
-            ? buildFills(styles)
+        fills: buildFills(styles, lm).length > 0
+            ? buildFills(styles, lm)
             : [{ type: 'solid', color: '#ffffff' }],
-        border: buildBorder(styles) || { color: '#d1d5db', width: 1, style: 'solid' },
+        border: buildBorder(styles, lm) || { color: '#d1d5db', width: 1, style: 'solid' },
         borderRadius: styles.borderRadius || 6,
+        ...(lm ? { borderRadiusRef: matchRadius(styles.borderRadius || 6, lm) } : {}),
         children: [textChild],
     })
 }
@@ -889,6 +930,7 @@ function buildContainerNode(
     styles: ParsedStyles,
     effectiveColor: string,
     parentWidth: number,
+    lm?: LinkMaps,
 ): FrameNode | null {
     const classList = getClassList(el)
     const containerWidth = computeWidth(styles, parentWidth)
@@ -939,7 +981,7 @@ function buildContainerNode(
         }
     }
 
-    let children = walkChildren(el, effectiveChildWidth, effectiveColor)
+    let children = walkChildren(el, effectiveChildWidth, effectiveColor, lm)
 
     // If container has only text content (no element children), create a TextNode child
     // This handles styled inline elements like <span class="bg-blue-500 text-white">Item A</span>
@@ -948,7 +990,7 @@ function buildContainerNode(
         if (textContent) {
             // Use THIS element's text color if specified, otherwise inherit
             const textColor = styles.textColor || effectiveColor
-            const textNode = buildTextNode(el, tag, styles, textColor, effectiveChildWidth)
+            const textNode = buildTextNode(el, tag, styles, textColor, effectiveChildWidth, lm)
             if (textNode) {
                 children = [textNode]
             }
@@ -961,7 +1003,7 @@ function buildContainerNode(
         styles.minHeight !== null || styles.height !== null
     if (children.length === 0 && !hasVisuals) return null
 
-    const fills = buildFills(styles)
+    const fills = buildFills(styles, lm)
 
     // === LAYOUT MODE DETECTION (Figma-aligned) ===
     // 1. Check explicit display property
@@ -1014,6 +1056,9 @@ function buildContainerNode(
     const absY = styles.positionTop ?? 0
     const isAbsolute = styles.position === 'absolute'
 
+    const containerBorderRadius = styles.borderRadiusPerCorner || styles.borderRadius
+    const containerShadows = styles.shadows.map(s => ({ ...s }))
+
     return createFrame({
         name: getContainerName(tag, el),
         positioning: isAbsolute ? 'absolute' : 'auto',
@@ -1033,16 +1078,20 @@ function buildContainerNode(
             align: styles.alignItems,
             wrap: styles.flexWrap || undefined,
             gap: effectiveGap || undefined,
+            ...(effectiveGap && lm ? { gapRef: matchSpacing(effectiveGap, lm) } : {}),
             columns: gridColumns,
             rows: gridRows,
             columnGap: isGrid ? effectiveColumnGap : undefined,
             rowGap: isGrid ? effectiveRowGap : undefined,
         },
         padding: effectivePadding,
+        ...(lm ? { paddingRef: matchSpacing(Math.max(effectivePadding.top, effectivePadding.right, effectivePadding.bottom, effectivePadding.left), lm) } : {}),
         fills,
-        border: buildBorder(styles),
-        borderRadius: styles.borderRadiusPerCorner || styles.borderRadius,
-        shadows: styles.shadows.map(s => ({ ...s })),
+        border: buildBorder(styles, lm),
+        borderRadius: containerBorderRadius,
+        ...(lm && typeof containerBorderRadius === 'number' ? { borderRadiusRef: matchRadius(containerBorderRadius, lm) } : {}),
+        shadows: containerShadows,
+        ...(lm && containerShadows.length > 0 ? { shadowRef: matchShadow(containerShadows, lm) } : {}),
         opacity: styles.opacity,
         overflow: styles.overflow === 'auto' ? 'hidden' : styles.overflow,
         // === Phase 4: Min/max constraints ===
@@ -1228,21 +1277,31 @@ function inferFlexFromClasses(classList: string[]): { isInferred: boolean; direc
     return { isInferred: true, direction: hasCol ? 'column' : 'row' }
 }
 
-function buildFills(styles: ParsedStyles): Fill[] {
+function buildFills(styles: ParsedStyles, lm?: LinkMaps): Fill[] {
     if (styles.gradient) return [{ type: 'gradient', gradient: styles.gradient }]
     if (styles.bgColor && styles.bgColor !== 'transparent') {
-        return [{ type: 'solid', color: styles.bgColor }]
+        const fill: Fill = { type: 'solid', color: styles.bgColor }
+        if (lm) {
+            const ref = matchColor(styles.bgColor, lm)
+            if (ref) (fill as { colorRef?: string }).colorRef = ref
+        }
+        return [fill]
     }
     return []
 }
 
-function buildBorder(styles: ParsedStyles): Border | undefined {
+function buildBorder(styles: ParsedStyles, lm?: LinkMaps): Border | undefined {
     if (styles.borderWidth <= 0 || styles.borderStyle === 'none') return undefined
-    return {
+    const border: Border = {
         color: styles.borderColor,
         width: styles.borderWidth,
         style: styles.borderStyle,
     }
+    if (lm) {
+        const ref = matchColor(styles.borderColor, lm)
+        if (ref) (border as { colorRef?: string }).colorRef = ref
+    }
+    return border
 }
 
 function computeWidth(styles: ParsedStyles, parentWidth: number): number {
@@ -1279,4 +1338,45 @@ function getContainerName(tag: string, el: Element): string {
     }
 
     return SECTION_TAG_NAMES[tag] || 'Container'
+}
+
+// ═══════════════════════════════════════════════════
+// Theme Ref Matching Helpers — single-pass linker
+// ═══════════════════════════════════════════════════
+
+/** Match a hex color to a variable key via the color link map */
+function matchColor(hex: string, lm: LinkMaps): string | undefined {
+    return lm.colorMap.get(normalizeHex(hex))
+}
+
+/** Match a font family name to a variable key via the font link map */
+function matchFont(family: string, lm: LinkMaps): string | undefined {
+    // Extract the first font name and normalize
+    const clean = family.replace(/['"]/g, '').split(',')[0].trim().toLowerCase()
+    return lm.fontMap.get(clean)
+}
+
+/** Match a font size (number) to a variable key via the fontSize link map */
+function matchFontSize(size: number, lm: LinkMaps): string | undefined {
+    return lm.fontSizeMap.get(String(size))
+}
+
+/** Match a border radius (number) to a variable key via the radius link map */
+function matchRadius(r: number | { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }, lm: LinkMaps): string | undefined {
+    if (typeof r !== 'number') return undefined
+    return lm.radiusMap.get(String(r))
+}
+
+/** Match a spacing/padding/gap value to a variable key via the spacing link map */
+function matchSpacing(value: number, lm: LinkMaps): string | undefined {
+    if (value <= 0) return undefined
+    return lm.spacingMap.get(String(value))
+}
+
+/** Match shadow array to a variable key by normalizing the first shadow string */
+function matchShadow(shadows: Array<{ x: number; y: number; blur: number; spread: number; color: string }>, lm: LinkMaps): string | undefined {
+    if (shadows.length === 0) return undefined
+    const s = shadows[0]
+    const shadowStr = `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${s.color}`
+    return lm.shadowMap.get(normalizeShadow(shadowStr))
 }

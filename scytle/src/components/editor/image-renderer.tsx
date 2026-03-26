@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import { ImageIcon } from 'lucide-react'
 import type { ImageNode } from '@/types/canvas'
 import { computeBaseStyles } from './render-utils'
+import { useThemeResolver } from '@/lib/theme/theme-context'
 
 // ============================================================
 // Props
@@ -24,7 +25,8 @@ export const ImageRenderer = memo(function ImageRenderer({
     parentDirection,
     parentLayoutMode,
 }: ImageRendererProps) {
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
+    const themeCtx = useThemeResolver()
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx)
 
     // ── Placeholder ───────────────────────────────────────────
     if (node.isPlaceholder || !node.src) {

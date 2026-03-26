@@ -129,32 +129,32 @@ export function conceptToVariableTable(concept: Concept): VariableTable {
     }
 
     return {
-        'bg/primary':     { light: light.bgPrimary,     dark: dark.bgPrimary },
-        'bg/secondary':   { light: light.bgSecondary,   dark: dark.bgSecondary },
-        'text/primary':   { light: light.textPrimary,   dark: dark.textPrimary },
+        'bg/primary': { light: light.bgPrimary, dark: dark.bgPrimary },
+        'bg/secondary': { light: light.bgSecondary, dark: dark.bgSecondary },
+        'text/primary': { light: light.textPrimary, dark: dark.textPrimary },
         'text/secondary': { light: light.textSecondary, dark: dark.textSecondary },
-        'accent':         { light: light.accent,        dark: dark.accent },
-        'text/on-accent': { light: light.textOnAccent,  dark: dark.textOnAccent },
-        'border':         { light: light.border,        dark: dark.border },
+        'accent': { light: light.accent, dark: dark.accent },
+        'text/on-accent': { light: light.textOnAccent, dark: dark.textOnAccent },
+        'border': { light: light.border, dark: dark.border },
 
         'font/heading': { light: headingFont, dark: headingFont },
-        'font/body':    { light: bodyFont,    dark: bodyFont },
+        'font/body': { light: bodyFont, dark: bodyFont },
 
         'radius/sm': { light: radius.sm, dark: radius.sm },
         'radius/md': { light: radius.md, dark: radius.md },
         'radius/lg': { light: radius.lg, dark: radius.lg },
 
-        'spacing/sm':  { light: '16', dark: '16' },
-        'spacing/md':  { light: '24', dark: '24' },
-        'spacing/lg':  { light: '48', dark: '48' },
+        'spacing/sm': { light: '16', dark: '16' },
+        'spacing/md': { light: '24', dark: '24' },
+        'spacing/lg': { light: '48', dark: '48' },
         'spacing/gap': { light: '16', dark: '16' },
 
         'shadow/sm': { light: lightShadows.sm, dark: darkShadows.sm },
         'shadow/md': { light: lightShadows.md, dark: darkShadows.md },
 
-        'fontSize/h1':   { light: fontSizes.h1,   dark: fontSizes.h1 },
-        'fontSize/h2':   { light: fontSizes.h2,   dark: fontSizes.h2 },
-        'fontSize/body': { light: fontSizes.body,  dark: fontSizes.body },
+        'fontSize/h1': { light: fontSizes.h1, dark: fontSizes.h1 },
+        'fontSize/h2': { light: fontSizes.h2, dark: fontSizes.h2 },
+        'fontSize/body': { light: fontSizes.body, dark: fontSizes.body },
     }
 }
 
@@ -201,12 +201,12 @@ export function buildLinkMaps(vars: VariableTable, mode: ThemeMode): LinkMaps {
 
     for (const [name, val] of Object.entries(vars)) {
         const v = val[mode]
-        if (name.startsWith('font/'))        maps.fontMap.set(v.toLowerCase(), name)
-        else if (name.startsWith('radius/'))  maps.radiusMap.set(v, name)
+        if (name.startsWith('font/')) maps.fontMap.set(v.toLowerCase(), name)
+        else if (name.startsWith('radius/')) maps.radiusMap.set(v, name)
         else if (name.startsWith('spacing/')) maps.spacingMap.set(v, name)
-        else if (name.startsWith('shadow/'))  maps.shadowMap.set(normalizeShadow(v), name)
+        else if (name.startsWith('shadow/')) maps.shadowMap.set(normalizeShadow(v), name)
         else if (name.startsWith('fontSize/')) maps.fontSizeMap.set(v, name)
-        else                                  maps.colorMap.set(normalizeHex(v), name)
+        else maps.colorMap.set(normalizeHex(v), name)
     }
 
     return maps
