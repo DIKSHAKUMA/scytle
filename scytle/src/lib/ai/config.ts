@@ -31,7 +31,7 @@ export const AI_CONFIG = {
     modelMaxTokens: modelMaxTokensMap,
 
     // Default model for generation
-    defaultModel: 'gemini-pro' as AIModel,
+    defaultModel: 'gemini-flash' as AIModel,
 
     // Generation settings
     generation: {

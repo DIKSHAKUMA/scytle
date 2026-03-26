@@ -120,7 +120,19 @@ export const useProjectStore = create<ProjectState>()(
                 })
 
                 if (!response.ok) {
-                    throw new Error('Failed to create project')
+                    let backendError = 'Failed to create project'
+                    try {
+                        const payload = await response.json()
+                        if (payload?.error) {
+                            backendError = payload.details
+                                ? `${payload.error}: ${payload.details}`
+                                : payload.error
+                        }
+                    } catch {
+                        // Ignore non-JSON error payloads
+                    }
+
+                    throw new Error(backendError)
                 }
 
                 const result = await response.json()

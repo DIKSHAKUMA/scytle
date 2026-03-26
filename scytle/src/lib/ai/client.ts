@@ -84,7 +84,7 @@ export async function generate(
     history: ChatMessage[] = [],
     options: GenerateOptions = {}
 ): Promise<string> {
-    const modelKey = options.model ?? ('gemini-pro' as AIModel)
+    const modelKey = options.model ?? ('gemini-flash' as AIModel)
     const modelsToTry: AIModel[] = [modelKey, ...(MODEL_FALLBACK_CHAIN[modelKey] ?? []) as AIModel[]]
     const systemInstruction = resolveSystemPrompt(options.systemPrompt)
 
@@ -150,7 +150,7 @@ export async function* generateStream(
     history: ChatMessage[] = [],
     options: GenerateOptions = {}
 ): AsyncGenerator<StreamChunk> {
-    const modelKey = options.model ?? ('gemini-pro' as AIModel)
+    const modelKey = options.model ?? ('gemini-flash' as AIModel)
     const modelsToTry: AIModel[] = [modelKey, ...(MODEL_FALLBACK_CHAIN[modelKey] ?? []) as AIModel[]]
     const systemInstruction = resolveSystemPrompt(options.systemPrompt)
 

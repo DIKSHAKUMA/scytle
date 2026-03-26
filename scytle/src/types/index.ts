@@ -100,7 +100,7 @@ export const ProjectSchema = z.object({
     description: z.string().max(500).optional(),
     status: ProjectStatusSchema.default('draft'),
     productType: ProductTypeSchema.optional().default('web'),
-    aiModel: AiModelSchema.optional().default('gemini-pro'),
+    aiModel: AiModelSchema.optional().default('gemini-flash'),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     sitemapData: z.array(SitemapPageSchema).nullable().optional(),

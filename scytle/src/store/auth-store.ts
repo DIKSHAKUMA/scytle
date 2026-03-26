@@ -60,13 +60,26 @@ export const useAuthStore = create<AuthState>()(
                 console.log('🔐 Login result:', result.success ? 'Success' : 'Failed', result.error || '')
 
                 if (result.success) {
-                    // Don't fetch user here - just set authenticated and let redirect happen
-                    // The destination page will fetch user data
+                    const user = await getUser()
+
+                    if (!user) {
+                        const sessionError = 'Login succeeded, but session is unavailable. Please allow cookies for cloud.appwrite.io and try again.'
+                        console.error('❌ Session check failed right after login')
+                        set(state => {
+                            state.user = null
+                            state.isAuthenticated = false
+                            state.isLoading = false
+                            state.error = sessionError
+                        })
+                        return false
+                    }
+
                     set(state => {
+                        state.user = user
                         state.isAuthenticated = true
                         state.isLoading = false
                     })
-                    console.log('🔐 Set isAuthenticated = true, isLoading = false')
+                    console.log('🔐 Session verified after login')
                     return true
                 }
 

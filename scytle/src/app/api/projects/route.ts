@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
             description: doc.description,
             status: doc.status,
             productType: productType || 'web',
-            aiModel: aiModel || 'gemini-pro',
+            aiModel: aiModel || 'gemini-flash',
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
         }

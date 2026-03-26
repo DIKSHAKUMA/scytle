@@ -6,6 +6,22 @@ import { useUnifiedStore } from './unified-store'
 import { useSitemapStore } from './sitemap-store'
 import { useProjectStore } from './project-store'
 
+export interface RefineNodeContext {
+    projectId: string
+    nodeId: string
+    nodeHtml: string
+    nodeName?: string
+    prompt: string
+    contextNodes?: Array<{ id: string; name?: string; type?: string; htmlSnippet: string }>
+    model?: string
+}
+
+export interface RefineNodeResult {
+    html: string
+    summary: string
+    nodeId: string
+}
+
 interface ChatState {
     // State
     messages: Message[]
@@ -17,6 +33,8 @@ interface ChatState {
 
     // Actions
     sendMessage: (content: string, projectId: string, selectedNodeId?: string | null, canvasNodes?: any[], model?: string) => Promise<void>
+    /** Surgical node refinement — calls /api/ai/refine-node, returns parsed result or null on failure */
+    refineNode: (ctx: RefineNodeContext) => Promise<RefineNodeResult | null>
     generateSitemap: (projectId: string, description: string) => Promise<void>
     loadHistory: (projectId: string) => Promise<void>
     addMessage: (role: MessageRole, content: string) => void
@@ -167,6 +185,76 @@ export const useChatStore = create<ChatState>()(
                     state.isStreaming = false
                     state.abortController = null
                 })
+            }
+        },
+
+        // Surgical node refinement — calls the clean /api/ai/refine-node endpoint
+        refineNode: async (ctx: RefineNodeContext): Promise<RefineNodeResult | null> => {
+            const { projectId, nodeId, nodeHtml, nodeName, prompt, contextNodes, model } = ctx
+
+            // Show the user's message immediately
+            set(state => {
+                state.messages.push({
+                    role: 'user',
+                    content: prompt,
+                    timestamp: new Date().toISOString(),
+                })
+                state.isTyping = true
+                state.error = null
+            })
+
+            try {
+                const jwt = await createJWT()
+                if (!jwt) throw new Error('Not authenticated')
+
+                const response = await fetch('/api/ai/refine-node', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${jwt.jwt}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ projectId, nodeId, nodeHtml, nodeName, prompt, contextNodes, model }),
+                })
+
+                const data = await response.json()
+
+                if (!response.ok || !data.html) {
+                    const errorMsg = data.error || 'Refinement failed. Please try again.'
+                    set(state => {
+                        state.messages.push({
+                            role: 'assistant',
+                            content: `❌ ${errorMsg}`,
+                            timestamp: new Date().toISOString(),
+                        })
+                        state.isTyping = false
+                        state.error = errorMsg
+                    })
+                    return null
+                }
+
+                const summary = data.summary || 'Changes applied.'
+                set(state => {
+                    state.messages.push({
+                        role: 'assistant',
+                        content: `✅ ${summary}`,
+                        timestamp: new Date().toISOString(),
+                    })
+                    state.isTyping = false
+                })
+
+                return { html: data.html, summary, nodeId: data.nodeId ?? nodeId }
+            } catch (error) {
+                const msg = error instanceof Error ? error.message : 'Refinement failed'
+                set(state => {
+                    state.messages.push({
+                        role: 'assistant',
+                        content: `❌ ${msg}`,
+                        timestamp: new Date().toISOString(),
+                    })
+                    state.isTyping = false
+                    state.error = msg
+                })
+                return null
             }
         },
 

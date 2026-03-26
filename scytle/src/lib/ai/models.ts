@@ -112,7 +112,7 @@ export function getModelById(modelId: string): ModelDefinition | undefined {
 
 /** Get default model */
 export function getDefaultModel(): ModelDefinition {
-    return MODEL_REGISTRY.find(m => m.key === 'gemini-pro') ?? MODEL_REGISTRY[0]
+    return MODEL_REGISTRY.find(m => m.key === 'gemini-flash') ?? MODEL_REGISTRY[0]
 }
 
 /** Check if model requires global location */
