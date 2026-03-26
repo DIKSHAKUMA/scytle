@@ -58,6 +58,7 @@ import {
 } from '@/lib/designs/v2/tokens/font-pairs'
 
 import { generateId } from '@/lib/utils'
+import { conceptToVariableTable, type VariableTable, type ThemeMode } from '@/lib/theme/variable-table'
 
 // ============================================
 // Store State Interface
@@ -76,6 +77,10 @@ interface StyleGuideState {
     // ---- Computed (derived from data) ----
     /** Memoized CSS custom property map for the active concept */
     computedCSS: CSSTokenMap
+    /** Flat variable table for canvas renderer ref resolution */
+    variableTable: VariableTable
+    /** Current theme mode (mirrors active concept's colors.mode) */
+    themeMode: ThemeMode
 
     // ---- Actions: Data Lifecycle ----
 
@@ -179,6 +184,19 @@ function recompute(data: StyleGuideData): CSSTokenMap {
     return computeTokenCSS(concept)
 }
 
+/** Recompute variable table from the active concept */
+function recomputeVariableTable(data: StyleGuideData): VariableTable {
+    const concept = data.concepts.find(c => c.id === data.activeConceptId)
+    if (!concept) return {}
+    return conceptToVariableTable(concept)
+}
+
+/** Get the theme mode from the active concept */
+function getThemeModeFromData(data: StyleGuideData): ThemeMode {
+    const concept = data.concepts.find(c => c.id === data.activeConceptId)
+    return concept?.colors.mode ?? 'light'
+}
+
 /** Get a random item from an array */
 function randomFrom<T>(arr: readonly T[]): T {
     return arr[Math.floor(Math.random() * arr.length)]
@@ -249,6 +267,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                 activePaletteId: null,
                 activeFontPairId: null,
                 computedCSS: recompute(initialData),
+                variableTable: recomputeVariableTable(initialData),
+                themeMode: getThemeModeFromData(initialData),
 
                 // ============================================
                 // Data Lifecycle
@@ -257,6 +277,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                 loadData: (data) => set((state) => {
                     state.data = data
                     state.computedCSS = recompute(data)
+                    state.variableTable = recomputeVariableTable(data)
+                    state.themeMode = getThemeModeFromData(data)
                 }),
 
                 resetToDefaults: () => set((state) => {
@@ -265,6 +287,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     state.activePaletteId = null
                     state.activeFontPairId = null
                     state.computedCSS = recompute(fresh)
+                    state.variableTable = recomputeVariableTable(fresh)
+                    state.themeMode = getThemeModeFromData(fresh)
                 }),
 
                 exportData: () => {
@@ -286,6 +310,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!exists) return
                     state.data.activeConceptId = conceptId
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 createConcept: (name) => {
@@ -303,6 +329,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         state.data.concepts.push(clone)
                         state.data.activeConceptId = newId
                         state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                     })
                     return newId
                 },
@@ -335,6 +363,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (state.data.activeConceptId === conceptId) {
                         state.data.activeConceptId = state.data.concepts[0].id
                         state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                     }
                 }),
 
@@ -363,6 +393,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         borderMuted: isLight ? '#1f1d1a' : '#f3f4f6',
                     }
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setMode: (mode) => set((state) => {
@@ -382,6 +414,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         borderMuted: isGoingDark ? '#1f1d1a' : '#f3f4f6',
                     }
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 applyPalette: (palette) => set((state) => {
@@ -391,6 +425,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     concept.colors.accents = palette.accents.map(a => ({ ...a }))
                     state.activePaletteId = palette.id
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 shuffleColors: () => {
@@ -408,6 +444,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!accent) return
                     Object.assign(accent, updates)
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 addAccent: (name, hex) => set((state) => {
@@ -421,6 +459,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         isMain: false,
                     })
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 removeAccent: (accentId) => set((state) => {
@@ -436,6 +476,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         concept.colors.accents[0].isMain = true
                     }
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setMainAccent: (accentId) => set((state) => {
@@ -445,6 +487,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                         a.isMain = a.id === accentId
                     }
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 // ============================================
@@ -462,6 +506,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     loadGoogleFonts(pair, concept.typography.headingWeight, concept.typography.bodyWeight)
 
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 shuffleTypography: () => {
@@ -477,6 +523,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.headingFont = font
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setBodyFont: (font) => set((state) => {
@@ -484,6 +532,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.bodyFont = font
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setHeadingWeight: (weight) => set((state) => {
@@ -491,6 +541,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.headingWeight = weight
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setBodyWeight: (weight) => set((state) => {
@@ -498,6 +550,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.bodyWeight = weight
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setSizeScale: (scale) => set((state) => {
@@ -505,6 +559,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.sizeScale = scale
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setLetterSpacingStyle: (style) => set((state) => {
@@ -512,6 +568,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.typography.letterSpacingStyle = style
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 // ============================================
@@ -523,6 +581,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.ui.buttonStyle = style
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setButtonRadius: (radius) => set((state) => {
@@ -530,6 +590,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.ui.buttonRadius = radius
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setCardStyle: (style) => set((state) => {
@@ -537,6 +599,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.ui.cardStyle = style
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setCardRadius: (radius) => set((state) => {
@@ -544,6 +608,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.ui.cardRadius = radius
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 setImageRadius: (radius) => set((state) => {
@@ -551,6 +617,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     if (!concept) return
                     concept.ui.imageRadius = radius
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 shuffleUI: () => set((state) => {
@@ -561,6 +629,8 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     concept.ui.cardStyle = randomFrom(CARD_STYLES)
                     concept.ui.cardRadius = randomFrom(RADIUS_PRESETS)
                     state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
                 }),
 
                 // ============================================
