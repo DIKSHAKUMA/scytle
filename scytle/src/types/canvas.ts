@@ -33,6 +33,8 @@ export const SolidFillSchema = z.object({
     blendMode: BlendModeSchema.optional(),            // defaults to 'NORMAL'
     /** Theme variable ref (e.g. 'bg/primary', 'accent') — resolved at render time */
     colorRef: z.string().optional(),
+    /** User detached this fill from theme — relinkNodes will skip it */
+    detached: z.boolean().optional(),
 })
 
 export const GradientStopSchema = z.object({
@@ -96,6 +98,8 @@ export const ShadowSchema = z.object({
     visible: z.boolean().optional(),
     /** Theme variable ref for shadow color (e.g. 'accent') */
     colorRef: z.string().optional(),
+    /** User detached this shadow from theme — relinkNodes will skip it */
+    detached: z.boolean().optional(),
 })
 
 export const BorderSchema = z.object({
@@ -110,6 +114,8 @@ export const BorderSchema = z.object({
     visible: z.boolean().optional(),
     /** Theme variable ref for border color (e.g. 'border') */
     colorRef: z.string().optional(),
+    /** User detached this border from theme — relinkNodes will skip it */
+    detached: z.boolean().optional(),
 })
 
 export const SizingSchema = z.object({
@@ -133,6 +139,8 @@ export const LayoutSchema = z.object({
     gap: z.number().optional(),
     /** Theme variable ref for gap (e.g. 'spacing/gap') */
     gapRef: z.string().optional(),
+    /** User detached gap from theme — relinkNodes will skip it */
+    gapDetached: z.boolean().optional(),
     columns: z.union([z.number(), z.string()]).optional(),
     rows: z.union([z.number(), z.string()]).optional(),
     columnGap: z.number().optional(),
@@ -350,10 +358,16 @@ export interface BaseNodeProperties {
     // === THEME VARIABLE REFS ===
     /** Theme ref for borderRadius (e.g. 'radius/md') */
     borderRadiusRef?: string
+    /** User detached borderRadius from theme */
+    borderRadiusDetached?: boolean
     /** Theme ref for padding (e.g. 'spacing/md') — scales all sides proportionally */
     paddingRef?: string
+    /** User detached padding from theme */
+    paddingDetached?: boolean
     /** Theme ref for the whole shadow set (e.g. 'shadow/md') */
     shadowRef?: string
+    /** User detached shadow from theme */
+    shadowDetached?: boolean
 
     // === SPACING (for HTML/CSS compatibility) ===
     /** Margin (CSS spacing outside element borders) - preserved from HTML parsing */
@@ -423,10 +437,20 @@ export interface TextNode extends BaseNodeProperties {
     color: string
     /** Theme ref for text color (e.g. 'text/primary') */
     colorRef?: string
+    /** User detached text color from theme */
+    colorDetached?: boolean
     /** Theme ref for font family (e.g. 'font/heading') */
     fontFamilyRef?: string
+    /** User detached font family from theme */
+    fontFamilyDetached?: boolean
     /** Theme ref for font size (e.g. 'fontSize/h1') */
     fontSizeRef?: string
+    /** User detached font size from theme */
+    fontSizeDetached?: boolean
+    /** Theme ref for font weight (e.g. 'fontWeight/heading') */
+    fontWeightRef?: string
+    /** User detached font weight from theme */
+    fontWeightDetached?: boolean
     htmlTag?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'a' | 'li'
     /** Vertical trim mode (Figma "leading trim"). 'cap-height' trims line-box to cap-height + baseline. */
     leadingTrim?: 'none' | 'cap-height'

@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 import { generateId } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
+import { useThemeTable, resolveDisplayColor, isThemeLinked } from './use-theme-resolved'
+import { ThemeLinkBadge } from './theme-link-badge'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import {
@@ -81,10 +83,10 @@ const BLEND_MODE_LABELS: Record<string, string> = {
     LUMINOSITY: 'Luminosity',
 }
 
-/** Get the swatch background style for a fill */
-function fillSwatchStyle(fill: Fill): React.CSSProperties {
+/** Get the swatch background style for a fill, using an optional resolved color */
+function fillSwatchStyle(fill: Fill, resolvedColor?: string): React.CSSProperties {
     if (fill.type === 'solid') {
-        const hex = normaliseHex(fill.color)
+        const hex = normaliseHex(resolvedColor ?? fill.color)
         const opacity = fill.opacity ?? 1
         return { backgroundColor: hexOpacityToRgba(hex, opacity) }
     }
@@ -118,6 +120,12 @@ interface FillRowProps {
 function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
+
+    // Theme resolution for solid fills
+    const { table, mode } = useThemeTable()
+    const resolvedColor = fill.type === 'solid'
+        ? resolveDisplayColor(fill.colorRef, fill.color, fill.detached, table, mode)
+        : undefined
 
     const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: fillId })
     const style: React.CSSProperties = {
@@ -166,7 +174,7 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                     pickerOpen && 'ring-1 ring-primary/40',
                     !isVisible && 'opacity-40',
                 )}
-                style={fillSwatchStyle(fill)}
+                style={fillSwatchStyle(fill, resolvedColor)}
                 onClick={handleSwatchClick}
                 title="Edit fill"
             >
@@ -176,6 +184,11 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                         style={{ background: 'repeating-conic-gradient(#aaa 0% 25%, #fff 0% 50%) 0 0 / 6px 6px' }} />
                 )}
             </button>
+
+            {/* Theme link indicator */}
+            {fill.type === 'solid' && (
+                <ThemeLinkBadge isLinked={isThemeLinked(fill.colorRef, fill.detached)} variableName={fill.colorRef} />
+            )}
 
             {/* Fill type label + blend mode */}
             <span
@@ -255,8 +268,17 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
 
             {/* ColorPicker portal */}
             <ColorPicker
-                fill={fill}
-                onChange={(updated) => onUpdate(updated)}
+                fill={fill.type === 'solid' && resolvedColor
+                    ? { ...fill, color: resolvedColor }
+                    : fill}
+                onChange={(updated) => {
+                    // Auto-detach from theme when user edits a theme-linked color
+                    if (updated.type === 'solid' && fill.type === 'solid' && isThemeLinked(fill.colorRef, fill.detached)) {
+                        onUpdate({ ...updated, colorRef: undefined, detached: true })
+                    } else {
+                        onUpdate(updated)
+                    }
+                }}
                 anchorEl={swatchRef.current}
                 open={pickerOpen}
                 onClose={() => { setPickerOpen(false); onPickerOpenChange(false) }}

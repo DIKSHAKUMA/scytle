@@ -4,6 +4,7 @@ import { devtools } from 'zustand/middleware'
 import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
+import { relinkNodes } from '@/lib/theme/relink-nodes'
 
 // ============================================================
 // History constants
@@ -1876,3 +1877,41 @@ export const useEditorStore = create<EditorState>()(
         { name: 'editor-store' }
     )
 )
+
+// ============================================================
+// Theme → Canvas Sync: relink all nodes when theme changes
+// ============================================================
+
+if (typeof window !== 'undefined') {
+    // Lazy import to avoid circular dependency at module load time
+    let _sgStoreLoaded = false
+    const initThemeSync = () => {
+        if (_sgStoreLoaded) return
+        _sgStoreLoaded = true
+
+        // Dynamic import breaks the circular dep chain
+        import('@/store/style-guide-store').then(({ useStyleGuideStore }) => {
+            let prevTable = useStyleGuideStore.getState().variableTable
+            let prevMode = useStyleGuideStore.getState().themeMode
+
+            useStyleGuideStore.subscribe((state) => {
+                const { variableTable, themeMode } = state
+                // Only relink when table or mode actually changed
+                if (variableTable === prevTable && themeMode === prevMode) return
+                prevTable = variableTable
+                prevMode = themeMode
+
+                const editorState = useEditorStore.getState()
+                if (editorState.nodes.length === 0) return
+
+                // Relink all nodes with the new theme
+                useEditorStore.setState((draft) => {
+                    relinkNodes(draft.nodes, variableTable, themeMode)
+                })
+            })
+        })
+    }
+
+    // Init after a tick to ensure all stores are created
+    setTimeout(initThemeSync, 0)
+}

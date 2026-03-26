@@ -7,6 +7,8 @@ import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
+import { useThemeTable, resolveDisplayColor, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
+import { ThemeLinkBadge } from './theme-link-badge'
 import { useEditorStore } from '@/store/editor-store'
 
 interface SectionProps {
@@ -41,21 +43,32 @@ function RadiusCornerIcon({ size = 12 }: { size?: number }) {
 export function AppearanceSection({ node, onUpdate }: SectionProps) {
     const radius = node.borderRadius
 
+    // Theme resolution for border radius
+    const { table, mode } = useThemeTable()
     const isUniformRadius = typeof radius === 'number'
     const [perCorner, setPerCorner] = useState(!isUniformRadius)
-    const uniformRadius = typeof radius === 'number' ? radius : radius.topLeft
+    const rawUniformRadius = typeof radius === 'number' ? radius : radius.topLeft
+    const uniformRadius = isUniformRadius
+        ? resolveDisplayNumber(node.borderRadiusRef, rawUniformRadius, node.borderRadiusDetached, table, mode)
+        : rawUniformRadius
 
     const updateRadius = (
         value: number | Partial<Record<'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft', number>>
     ) => {
         if (typeof value === 'number') {
-            onUpdate({ borderRadius: value })
+            // Auto-detach border radius from theme on user edit
+            if (isThemeLinked(node.borderRadiusRef, node.borderRadiusDetached)) {
+                onUpdate({ borderRadius: value, borderRadiusRef: undefined, borderRadiusDetached: true })
+            } else {
+                onUpdate({ borderRadius: value })
+            }
         } else {
             const current =
                 typeof radius === 'number'
                     ? { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius }
                     : radius
-            onUpdate({ borderRadius: { ...current, ...value } })
+            // Per-corner always detaches
+            onUpdate({ borderRadius: { ...current, ...value }, borderRadiusRef: undefined, borderRadiusDetached: true })
         }
     }
 
@@ -225,19 +238,29 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
 
-    const fill = borderToFill(border)
+    // Theme resolution for border color
+    const { table, mode } = useThemeTable()
+    const resolvedColor = resolveDisplayColor(border.colorRef, border.color, border.detached, table, mode)
+
+    const fill = borderToFill({ ...border, color: resolvedColor })
     const isVisible = border.visible !== false
     const opacity = border.opacity ?? 1
-    const hex = normaliseHex(border.color).replace('#', '').toUpperCase()
+    const hex = normaliseHex(resolvedColor).replace('#', '').toUpperCase()
 
     const handlePickerChange = useCallback((updated: Fill) => {
         if (updated.type === 'solid') {
-            onUpdate({
+            const partial: Partial<Border> & { colorRef?: undefined; detached?: boolean } = {
                 color: normaliseHex(updated.color),
                 opacity: updated.opacity ?? 1,
-            })
+            }
+            // Auto-detach from theme on user edit
+            if (isThemeLinked(border.colorRef, border.detached)) {
+                partial.colorRef = undefined
+                partial.detached = true
+            }
+            onUpdate(partial)
         }
-    }, [onUpdate])
+    }, [onUpdate, border.colorRef, border.detached])
 
     return (
         <div
@@ -256,10 +279,13 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
                     pickerOpen && 'ring-1 ring-primary/40',
                     !isVisible && 'opacity-40',
                 )}
-                style={{ backgroundColor: hexOpacityToRgba(normaliseHex(border.color), opacity) }}
+                style={{ backgroundColor: hexOpacityToRgba(normaliseHex(resolvedColor), opacity) }}
                 onClick={() => setPickerOpen(true)}
                 title="Edit stroke color"
             />
+
+            {/* Theme link indicator */}
+            <ThemeLinkBadge isLinked={isThemeLinked(border.colorRef, border.detached)} variableName={border.colorRef} />
 
             {/* Hex display — clickable to open picker */}
             <span

@@ -32,6 +32,8 @@ export const VARIABLE_KEYS = [
     'accent', 'text/on-accent', 'border',
     // Fonts (2)
     'font/heading', 'font/body',
+    // Font weights (2)
+    'fontWeight/heading', 'fontWeight/body',
     // Radius (3)
     'radius/sm', 'radius/md', 'radius/lg',
     // Spacing (4)
@@ -139,6 +141,9 @@ export function conceptToVariableTable(concept: Concept): VariableTable {
 
         'font/heading': { light: headingFont, dark: headingFont },
         'font/body': { light: bodyFont, dark: bodyFont },
+
+        'fontWeight/heading': { light: String(typography.headingWeight), dark: String(typography.headingWeight) },
+        'fontWeight/body': { light: String(typography.bodyWeight), dark: String(typography.bodyWeight) },
 
         'radius/sm': { light: radius.sm, dark: radius.sm },
         'radius/md': { light: radius.md, dark: radius.md },

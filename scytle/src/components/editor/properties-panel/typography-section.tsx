@@ -20,6 +20,8 @@ import { FontSizeCombobox } from './typography/font-size-combobox'
 import { LineHeightInput } from './typography/line-height-input'
 import { LetterSpacingInput } from './typography/letter-spacing-input'
 import { ColorPicker } from './color-picker'
+import { useThemeTable, resolveDisplayColor, resolveDisplayFont, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
+import { ThemeLinkBadge } from './theme-link-badge'
 import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
 
 // ── Custom inline SVG icons ────────────────────────────────────────────────────
@@ -132,6 +134,13 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const [stylePickerOpen, setStylePickerOpen] = useState(false)
     const [colorPickerOpen, setColorPickerOpen] = useState(false)
 
+    // Theme resolution — show resolved values in the Design tab
+    const { table, mode } = useThemeTable()
+    const displayFontFamily = resolveDisplayFont(node.fontFamilyRef, node.fontFamily, node.fontFamilyDetached, table, mode)
+    const displayFontSize = resolveDisplayNumber(node.fontSizeRef, node.fontSize, node.fontSizeDetached, table, mode)
+    const displayColor = resolveDisplayColor(node.colorRef, node.color, node.colorDetached, table, mode)
+    const displayFontWeight = resolveDisplayNumber(node.fontWeightRef, node.fontWeight, node.fontWeightDetached, table, mode)
+
     // Font picker state from store
     const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
     const fontPickerNodeId = useEditorStore((s) => s.fontPickerNodeId)
@@ -148,7 +157,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
     const handleFontSelect = useCallback((family: string) => {
         savedFontRef.current = null
-        onUpdate({ fontFamily: family })
+        // Auto-detach font family from theme on user edit
+        onUpdate({ fontFamily: family, fontFamilyRef: undefined, fontFamilyDetached: true })
     }, [onUpdate])
 
     const handleFontPreview = useCallback((family: string | null) => {
@@ -198,7 +208,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const handleStyleSelect = useCallback((styleName: string) => {
         savedStyleRef.current = null
         const { fontWeight, fontStyle } = parseFontStyleName(styleName)
-        onUpdate({ fontStyleName: styleName, fontWeight, fontStyle })
+        // Auto-detach font weight from theme on user edit
+        onUpdate({ fontStyleName: styleName, fontWeight, fontStyle, fontWeightRef: undefined, fontWeightDetached: true })
     }, [onUpdate])
 
     const handleStylePickerClose = useCallback(() => {
@@ -249,12 +260,15 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             }
         >
             {/* ── Row 1: Font family ─────────────────────────────────── */}
-            <div ref={fontTriggerRef}>
-                <FontFamilyTrigger value={node.fontFamily} nodeId={node.id} />
+            <div className="flex items-center gap-0.5">
+                <ThemeLinkBadge isLinked={isThemeLinked(node.fontFamilyRef, node.fontFamilyDetached)} variableName={node.fontFamilyRef} />
+                <div ref={fontTriggerRef} className="flex-1">
+                    <FontFamilyTrigger value={displayFontFamily} nodeId={node.id} />
+                </div>
             </div>
             {showFontPicker && (
                 <FontFamilyPicker
-                    currentFamily={node.fontFamily}
+                    currentFamily={displayFontFamily}
                     anchorEl={fontTriggerRef.current}
                     onSelect={handleFontSelect}
                     onPreview={handleFontPreview}
@@ -289,10 +303,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     />
                 )}
                 <FontSizeCombobox
-                    value={node.fontSize}
+                    value={displayFontSize}
                     onChange={(v) => {
                         savedFontSizeRef.current = null
-                        onUpdate({ fontSize: v })
+                        // Auto-detach font size from theme on user edit
+                        onUpdate({ fontSize: v, fontSizeRef: undefined, fontSizeDetached: true })
                     }}
                     onPreview={handleFontSizePreview}
                     className="w-[4.5rem]"
@@ -331,22 +346,31 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
             {/* ── Color ──────────────────────────────────────────────── */}
             <div className="flex items-center gap-1.5">
+                <ThemeLinkBadge isLinked={isThemeLinked(node.colorRef, node.colorDetached)} variableName={node.colorRef} />
                 <button
                     ref={colorSwatchRef}
                     className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer
                         shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
-                    style={{ backgroundColor: node.color }}
+                    style={{ backgroundColor: displayColor }}
                     onClick={() => setColorPickerOpen((v) => !v)}
                     title="Pick color"
                 />
                 <span className="text-[11px] font-mono text-foreground/80 uppercase tracking-wide">
-                    {normaliseHex(node.color)}
+                    {normaliseHex(displayColor)}
                 </span>
             </div>
             <ColorPicker
-                fill={{ type: 'solid', color: normaliseHex(node.color), opacity: 1 }}
+                fill={{ type: 'solid', color: normaliseHex(displayColor), opacity: 1 }}
                 onChange={(fill) => {
-                    if (fill.type === 'solid') onUpdate({ color: `#${normaliseHex(fill.color)}` })
+                    if (fill.type === 'solid') {
+                        // Auto-detach text color from theme on user edit
+                        const updates: Record<string, unknown> = { color: `#${normaliseHex(fill.color)}` }
+                        if (isThemeLinked(node.colorRef, node.colorDetached)) {
+                            updates.colorRef = undefined
+                            updates.colorDetached = true
+                        }
+                        onUpdate(updates)
+                    }
                 }}
                 anchorEl={colorSwatchRef.current}
                 open={colorPickerOpen}

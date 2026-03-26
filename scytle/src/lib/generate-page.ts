@@ -8,6 +8,7 @@ import { createJWT } from '@/lib/appwrite'
 import { parseHtmlToNodes } from '@/lib/parser'
 import type { FrameNode } from '@/types/canvas'
 import { useStyleGuideStore } from '@/store'
+import { relinkNodes } from '@/lib/theme/relink-nodes'
 
 import type { ProductType } from '@/types'
 import type { PagePlan } from '@/lib/ai/prompts/page-planner'
@@ -70,6 +71,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     const sgState = useStyleGuideStore.getState()
     const table = sgState.variableTable
     const mode = sgState.themeMode
+
     const themeContext = options.themeContext || (Object.keys(table).length > 0 ? {
         primary: table['accent']?.[mode] || '#2563eb',
         secondary: table['bg/secondary']?.[mode] || '#f5f5f5',
@@ -193,10 +195,15 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     html = stripMarkdownFences(html)
 
     // Parse HTML → ScytleNode tree (with single-pass ref assignment)
-    return parseHtmlToNodes(html, options.pageName, {
+    const frame = parseHtmlToNodes(html, options.pageName, {
         variableTable: sgState.variableTable,
         themeMode: sgState.themeMode,
     })
+
+    // Semantic relink: assign refs to any nodes that exact-matching missed
+    relinkNodes(frame.children, sgState.variableTable, sgState.themeMode)
+
+    return frame
 }
 
 /** Remove ```html ... ``` fencing that models sometimes output */

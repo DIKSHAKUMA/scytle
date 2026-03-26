@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { useThemeTable, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
 import { useEditorStore } from '@/store/editor-store'
 
 // ── Figma-style flow radio group ─────────────────────────────
@@ -582,10 +583,23 @@ function GapInput({
     const isSpaceBetween = layout.justify === 'between'
     const isGrid = layout.mode === 'grid'
 
+    // Theme resolution for gap
+    const { table, mode } = useThemeTable()
+    const resolvedGap = resolveDisplayNumber(layout.gapRef, layout.gap ?? 0, layout.gapDetached, table, mode)
+
+    // Wrap onChange to auto-detach gap from theme
+    const handleGapChange = useCallback((partial: Partial<Layout>) => {
+        if (isThemeLinked(layout.gapRef, layout.gapDetached)) {
+            onChange({ ...partial, gapRef: undefined, gapDetached: true })
+        } else {
+            onChange(partial)
+        }
+    }, [onChange, layout.gapRef, layout.gapDetached])
+
     // All hooks called unconditionally (React rules of hooks)
-    const gapScrub = useScrub(layout.gap ?? 0, (v) => onChange({ gap: v }))
-    const colGapScrub = useScrub(layout.columnGap ?? layout.gap ?? 0, (v) => onChange({ columnGap: v }))
-    const rowGapScrub = useScrub(layout.rowGap ?? layout.gap ?? 0, (v) => onChange({ rowGap: v }))
+    const gapScrub = useScrub(resolvedGap, (v) => handleGapChange({ gap: v }))
+    const colGapScrub = useScrub(layout.columnGap ?? resolvedGap, (v) => handleGapChange({ columnGap: v }))
+    const rowGapScrub = useScrub(layout.rowGap ?? resolvedGap, (v) => handleGapChange({ rowGap: v }))
 
     if (isGrid) {
         return (
@@ -595,8 +609,8 @@ function GapInput({
                         <HorizontalGapIcon />
                     </span>
                     <NumberInput
-                        value={layout.columnGap ?? layout.gap ?? 0}
-                        onChange={(v) => onChange({ columnGap: v })}
+                        value={layout.columnGap ?? resolvedGap}
+                        onChange={(v) => handleGapChange({ columnGap: v })}
                         min={0}
                         step={1}
                         className="flex-1"
@@ -607,8 +621,8 @@ function GapInput({
                         <VerticalGapIcon />
                     </span>
                     <NumberInput
-                        value={layout.rowGap ?? layout.gap ?? 0}
-                        onChange={(v) => onChange({ rowGap: v })}
+                        value={layout.rowGap ?? resolvedGap}
+                        onChange={(v) => handleGapChange({ rowGap: v })}
                         min={0}
                         step={1}
                         className="flex-1"
@@ -630,8 +644,8 @@ function GapInput({
                 </span>
             ) : (
                 <NumberInput
-                    value={layout.gap ?? 0}
-                    onChange={(v) => onChange({ gap: v })}
+                    value={resolvedGap}
+                    onChange={(v) => handleGapChange({ gap: v })}
                     min={0}
                     step={1}
                     className="flex-1"

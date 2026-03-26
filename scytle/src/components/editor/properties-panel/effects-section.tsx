@@ -7,6 +7,8 @@ import { Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
+import { useThemeTable, resolveDisplayColor, isThemeLinked } from './use-theme-resolved'
+import { ThemeLinkBadge } from './theme-link-badge'
 import { useEditorStore } from '@/store/editor-store'
 
 // ─────────────────────────────────────────────────────────────
@@ -72,6 +74,10 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
     const [pickerOpen, setPickerOpen] = useState(false)
     const [expanded, setExpanded] = useState(false)
 
+    // Theme resolution for shadow color
+    // shadow.color is rgba string, but shadow.colorRef resolves to hex from variable table
+    // We resolve the ref to get the theme hex, then use shadow's existing rgba for display when not linked
+    const { table, mode } = useThemeTable()
     const fill = shadowColorToFill(shadow.color)
     const isVisible = shadow.visible !== false
     const opacity = fill.opacity ?? 1
@@ -79,9 +85,17 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
 
     const handlePickerChange = useCallback((updated: Fill) => {
         if (updated.type === 'solid') {
-            onUpdate({ color: fillToShadowColor(updated) })
+            const partial: Partial<Shadow> & { colorRef?: undefined; detached?: boolean } = {
+                color: fillToShadowColor(updated),
+            }
+            // Auto-detach from theme on user edit
+            if (isThemeLinked(shadow.colorRef, shadow.detached)) {
+                partial.colorRef = undefined
+                partial.detached = true
+            }
+            onUpdate(partial)
         }
-    }, [onUpdate])
+    }, [onUpdate, shadow.colorRef, shadow.detached])
 
     return (
         <>
@@ -118,6 +132,9 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                     onClick={() => setPickerOpen(true)}
                     title="Edit shadow color"
                 />
+
+                {/* Theme link indicator */}
+                <ThemeLinkBadge isLinked={isThemeLinked(shadow.colorRef, shadow.detached)} variableName={shadow.colorRef} />
 
                 {/* Hex */}
                 <span

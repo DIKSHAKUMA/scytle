@@ -421,8 +421,21 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                 applyPalette: (palette) => set((state) => {
                     const concept = state.data.concepts.find(c => c.id === state.data.activeConceptId)
                     if (!concept) return
+
                     concept.colors.neutralBase = palette.neutralBase
                     concept.colors.accents = palette.accents.map(a => ({ ...a }))
+
+                    // Update bg/text/border based on current mode
+                    const isLight = concept.colors.mode === 'light'
+                    concept.colors.bgPrimary = isLight ? '#ffffff' : '#0c0a05'
+                    concept.colors.bgSecondary = isLight ? '#f9fafb' : '#1a1917'
+                    concept.colors.textPrimary = isLight ? '#111827' : '#ffffff'
+                    concept.colors.textSecondary = isLight ? '#6b7280' : '#a1a1aa'
+                    concept.colors.textMuted = isLight ? '#9ca3af' : '#71717a'
+                    concept.colors.textOnAccent = '#ffffff'
+                    concept.colors.border = isLight ? '#e5e7eb' : '#2d2b26'
+                    concept.colors.borderMuted = isLight ? '#f3f4f6' : '#1f1d1a'
+
                     state.activePaletteId = palette.id
                     state.computedCSS = recompute(state.data)
                     state.variableTable = recomputeVariableTable(state.data)

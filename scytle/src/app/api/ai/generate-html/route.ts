@@ -32,6 +32,31 @@ const GenerateHtmlSchema = z.object({
         bg: z.string(),
         text: z.string(),
         tone: z.string().optional(),
+        // Extended theme values for ref matching
+        fonts: z.object({
+            heading: z.string(),
+            body: z.string(),
+        }).optional(),
+        radius: z.object({
+            sm: z.number(),
+            md: z.number(),
+            lg: z.number(),
+        }).optional(),
+        spacing: z.object({
+            sm: z.number(),
+            md: z.number(),
+            lg: z.number(),
+            gap: z.number(),
+        }).optional(),
+        shadows: z.object({
+            sm: z.string(),
+            md: z.string(),
+        }).optional(),
+        fontSizes: z.object({
+            h1: z.number(),
+            h2: z.number(),
+            body: z.number(),
+        }).optional(),
     }).optional(),
     siblingPages: z.array(z.object({
         name: z.string(),

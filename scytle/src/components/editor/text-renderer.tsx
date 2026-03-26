@@ -45,6 +45,9 @@ export const TextRenderer = memo(function TextRenderer({
     const resolvedColor = node.colorRef && themeCtx
         ? resolveColor(node.colorRef, node.color, themeCtx.table, themeCtx.mode)
         : node.color
+    const resolvedFontWeight = node.fontWeightRef && themeCtx
+        ? resolveNumber(node.fontWeightRef, node.fontWeight, themeCtx.table, themeCtx.mode)
+        : node.fontWeight
 
     // ── Google Font loading ────────────────────────────────────
     // Load the font on mount and whenever fontFamily changes.
@@ -156,7 +159,7 @@ export const TextRenderer = memo(function TextRenderer({
         ...listStyleCSS,
         // Typography core
         fontFamily: `"${resolvedFontFamily}", sans-serif`,
-        fontWeight: node.fontWeight,
+        fontWeight: resolvedFontWeight,
         fontStyle: node.fontStyle === 'italic' ? 'italic' : undefined,
         fontSize: `calc(${resolvedFontSize}px * var(--z, 1))`,
         lineHeight: lineHeightCSS,

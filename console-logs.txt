@@ -1,0 +1,185 @@
+Total messages: 183 (Errors: 0, Warnings: 0)
+
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #E67E22 → #e67e22 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #FDFBF7 → #fdfbf7 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Page "Order Online" replaced skeleton on canvas @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Page 3/4 generated: "Order Online" @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 9pbqfegt, text: BREW & BEAN, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 9pbqfegt, text: BREW & BEAN, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: z506p0qq, text: Home, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: z506p0qq, text: Home, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yr7l9x39, text: Menu, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yr7l9x39, text: Menu, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: w4t4rds2, text: Order Online, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: w4t4rds2, text: Order Online, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: q1zph257, text: About & Community, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: q1zph257, text: About & Community, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 83vee2rr, text: Order Your Favorites, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 83vee2rr, text: Order Your Favorites, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: fy5pdv8a, text: Pickup, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: fy5pdv8a, text: Pickup, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uud3brod, text: Oat Milk Latte, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uud3brod, text: Oat Milk Latte, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8tj6vmox, text: Creamy oat milk with double es, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8tj6vmox, text: Creamy oat milk with double es, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8ksq7lly, text: $5.50, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8ksq7lly, text: $5.50, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1bh3mo6e, text: Almond Croissant, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1bh3mo6e, text: Almond Croissant, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: dncjwyvd, text: Buttery pastry with almond cre, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: dncjwyvd, text: Buttery pastry with almond cre, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yovsghzn, text: $4.25, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yovsghzn, text: $4.25, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: zqnk4o8n, text: Avocado Toast, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: zqnk4o8n, text: Avocado Toast, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: qf8dh4t6, text: Sourdough with radish and micr, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: qf8dh4t6, text: Sourdough with radish and micr, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: um1egrqa, text: $9.00, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: um1egrqa, text: $9.00, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 7y59zwqt, text: Cold Brew, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 7y59zwqt, text: Cold Brew, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1qkg5kve, text: 18-hour steeped single-origin , colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1qkg5kve, text: 18-hour steeped single-origin , colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: jj82v2m0, text: $4.75, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: jj82v2m0, text: $4.75, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: qtpvvo2q, text: Current Cart, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: qtpvvo2q, text: Current Cart, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: dep7jeuk, text: Oat Milk Latte, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: dep7jeuk, text: Oat Milk Latte, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: nq54617r, text: x1, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: nq54617r, text: x1, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ozbhhzqk, text: $5.50, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ozbhhzqk, text: $5.50, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uhbgort6, text: Almond Croissant, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uhbgort6, text: Almond Croissant, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: co7wdioh, text: x2, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: co7wdioh, text: x2, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yhuqhvb6, text: $8.50, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: yhuqhvb6, text: $8.50, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: k0xk74gk, text: Subtotal, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: k0xk74gk, text: Subtotal, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: x0se8kbh, text: $14.00, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: x0se8kbh, text: $14.00, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 5jcxm735, text: Taxes, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 5jcxm735, text: Taxes, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: lyjuonte, text: $1.12, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: lyjuonte, text: $1.12, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: co3hg8lg, text: Total, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: co3hg8lg, text: Total, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8oqikg8l, text: $15.12, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 8oqikg8l, text: $15.12, colorRef: text/on-accent, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: cgbeu3tm, text: Proceed to Payment, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: cgbeu3tm, text: Proceed to Payment, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 generatePage: Variable table state {tableKeys: Array(21), mode: light, textPrimary: Object, bgPrimary: Object, accent: Object} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 generatePage: themeContext being sent to AI {primary: #6F4E37, secondary: #D2B48C, accent: #E67E22, bg: #FDFBF7, text: #2C2C2C} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Received 6374 chars of HTML for "About & Community" @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Parser Link Maps: {colorMapSize: 6, fontMapSize: 2, colorMapEntries: Array(5), fontMapEntries: Array(2)} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #D2B48C → #d2b48c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #E67E22 → #e67e22 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #E67E22 → #e67e22 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #E67E22 → #e67e22 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #6F4E37 → #6f4e37 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #FDFBF7 → #fdfbf7 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #2C2C2C → #2c2c2c @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 Color not matched: #FDFBF7 → #fdfbf7 @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Page "About & Community" replaced skeleton on canvas @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Page 4/4 generated: "About & Community" @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: f9hgqf0c, text: ROAST & RITUAL, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: f9hgqf0c, text: ROAST & RITUAL, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 7f6erogu, text: Home, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 7f6erogu, text: Home, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: u9yl0gzv, text: Menu, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: u9yl0gzv, text: Menu, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: szvo2kmq, text: Order Online, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: szvo2kmq, text: Order Online, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: zxldft7n, text: About & Community, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: zxldft7n, text: About & Community, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ep48fsva, text: From Seed to Soul, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ep48fsva, text: From Seed to Soul, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: k7hzbrpk, text: Founded in 2012, Roast & Ritua, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: k7hzbrpk, text: Founded in 2012, Roast & Ritua, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 4e9ak72k, text: Our Farmers, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 4e9ak72k, text: Our Farmers, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: apfh2wrc, text: Mateo Silva, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: apfh2wrc, text: Mateo Silva, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: jcd6gybn, text: Huila, Colombia, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: jcd6gybn, text: Huila, Colombia, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: fe9gjl09, text: Third-generation coffee farmer, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: fe9gjl09, text: Third-generation coffee farmer, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ituowmbt, text: Elena Rossi, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ituowmbt, text: Elena Rossi, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ps9dow42, text: Sidamo, Ethiopia, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: ps9dow42, text: Sidamo, Ethiopia, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: h6zxgi4i, text: Leading the cooperative of wom, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: h6zxgi4i, text: Leading the cooperative of wom, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: bgh2rgmc, text: James Okonkwo, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: bgh2rgmc, text: James Okonkwo, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: seqkzfn5, text: Mt. Kenya Region, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: seqkzfn5, text: Mt. Kenya Region, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: sl3nivbw, text: Pioneer in organic volcanic-so, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: sl3nivbw, text: Pioneer in organic volcanic-so, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: pc3whzoh, text: Community Events, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: pc3whzoh, text: Community Events, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: nfi7oody, text: Join us for weekly workshops, , colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: nfi7oody, text: Join us for weekly workshops, , colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: a6pt9uxn, text: MAR 14, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: a6pt9uxn, text: MAR 14, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: v7xl9wre, text: Latte Art Basics, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: v7xl9wre, text: Latte Art Basics, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: leloak27, text: RSVP, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: leloak27, text: RSVP, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uy1zvpwh, text: MAR 21, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: uy1zvpwh, text: MAR 21, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: invwjkmq, text: Ethiopian Coffee Tasting, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: invwjkmq, text: Ethiopian Coffee Tasting, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: rt369mxs, text: APR 02, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: rt369mxs, text: APR 02, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: fontSize/body} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: atkyjo00, text: Home Brewing Masterclass, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: atkyjo00, text: Home Brewing Masterclass, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: i6u0s56a, text: RSVP, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: i6u0s56a, text: RSVP, colorRef: text/on-accent, fontFamilyRef: undefined, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: o508ip61, text: Can't make these dates? Subscr, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: o508ip61, text: Can't make these dates? Subscr, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: v0r59b41, text: ROAST & RITUAL, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: v0r59b41, text: ROAST & RITUAL, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: tnlblgzz, text: © 2026 Crafted in Portland., colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: tnlblgzz, text: © 2026 Crafted in Portland., colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 0q6tuqfj, text: Visit, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 0q6tuqfj, text: Visit, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: wwvmuyym, text: 123 Artisan Row, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: wwvmuyym, text: 123 Artisan Row, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: wq8hvca5, text: Portland, OR 97209, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: wq8hvca5, text: Portland, OR 97209, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1i5na4fw, text: Hours, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: 1i5na4fw, text: Hours, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: e0z8cvd8, text: Mon-Fri: 7am - 6pm, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: e0z8cvd8, text: Mon-Fri: 7am - 6pm, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: x0sw7xo1, text: Sat-Sun: 8am - 7pm, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] 🎨 TextRenderer refs: {nodeId: x0sw7xo1, text: Sat-Sun: 8am - 7pm, colorRef: undefined, fontFamilyRef: font/body, fontSizeRef: undefined} @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
+[LOG] ✅ Project generated: 4 pages @ http://localhost:3000/_next/static/chunks/e5e44_next_dist_04497c05._.js:2297
