@@ -244,12 +244,13 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
     /** Resolve which node ID to select given entry context.
      *  Implements Figma-like click-through:
-     *  - First click selects top-level parent
-     *  - Second click on same spot selects the direct child
-     *  - Once at a child level, clicking siblings selects them directly
+     *  - First click selects top-level parent (or direct child of entered frame)
+     *  - Second click on same spot drills one level deeper into the selected frame
+     *  - Siblings at the same level are selectable directly
+     *  - Cmd/Ctrl+Click deep-selects the deepest node under cursor
      */
     const resolveClickTarget = useCallback(
-        (targetEl: HTMLElement): string | null => {
+        (targetEl: HTMLElement, deepSelect = false): string | null => {
             const state = useEditorStore.getState()
 
             // Collect all node IDs from target up to viewport (deepest first)
@@ -263,13 +264,51 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             if (nodeIds.length === 0) return null
 
-            // If drilled into a frame, select nearest child of that frame
+            // ── Deep select (Cmd/Ctrl+Click): pick the deepest node ──
+            if (deepSelect) {
+                return nodeIds[0]
+            }
+
+            // ── If drilled into a frame, scope to its children ───────
             if (state.enteredFrameId) {
                 const enteredFrame = findNodeById(state.nodes, state.enteredFrameId)
                 if (enteredFrame && enteredFrame.type === 'frame') {
                     const directChildIds = new Set(
                         enteredFrame.children.map((c) => c.id)
                     )
+
+                    // If currently selected child is a frame and it's in the click path,
+                    // drill one level deeper into it
+                    if (state.selectedIds.length === 1) {
+                        const selectedId = state.selectedIds[0]
+                        if (directChildIds.has(selectedId) && nodeIds.includes(selectedId)) {
+                            const selectedNode = findNodeById(state.nodes, selectedId)
+                            if (selectedNode && selectedNode.type === 'frame' && selectedNode.children.length > 0) {
+                                const childIds = new Set(selectedNode.children.map(c => c.id))
+                                for (const id of nodeIds) {
+                                    if (childIds.has(id)) return id
+                                }
+                            }
+                        }
+
+                        // Sibling selection: if a child is selected, clicking another child selects directly
+                        if (directChildIds.has(selectedId)) {
+                            for (const id of nodeIds) {
+                                if (directChildIds.has(id)) return id
+                            }
+                        }
+
+                        // Already deeper than entered frame — check sibling selection at current depth
+                        const selectedParent = findParentOfNode(state.nodes, selectedId)
+                        if (selectedParent?.parent) {
+                            const siblingIds = new Set(selectedParent.parent.children.map(c => c.id))
+                            for (const id of nodeIds) {
+                                if (siblingIds.has(id)) return id
+                            }
+                        }
+                    }
+
+                    // Default: select the nearest direct child of entered frame
                     for (const id of nodeIds) {
                         if (directChildIds.has(id)) return id
                     }
@@ -277,7 +316,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 }
             }
 
-            // Find the top-level node in the click path
+            // ── Find the top-level node in the click path ────────────
             const topLevelIds = new Set(state.nodes.map((n) => n.id))
             let topLevelId: string | null = null
             for (let i = nodeIds.length - 1; i >= 0; i--) {
@@ -292,10 +331,22 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             if (state.selectedIds.length === 1) {
                 const selectedId = state.selectedIds[0]
 
+                // ── Progressive drill-down ────────────────────────────
+                // If the currently selected node is in the click path AND is a
+                // frame, drill one level deeper into its direct child
+                if (nodeIds.includes(selectedId)) {
+                    const selectedNode = findNodeById(state.nodes, selectedId)
+                    if (selectedNode && selectedNode.type === 'frame' && selectedNode.children.length > 0) {
+                        const childIds = new Set(selectedNode.children.map(c => c.id))
+                        for (const id of nodeIds) {
+                            if (childIds.has(id)) return id
+                        }
+                    }
+                }
+
                 // ── Sibling selection ─────────────────────────────────
                 // If a child node is currently selected, clicking another
-                // child of the SAME parent selects it directly (no need
-                // to first go back to parent).
+                // child of the SAME parent selects it directly
                 if (selectedId !== topLevelId || !topLevelIds.has(selectedId)) {
                     const selectedParent = findParentOfNode(state.nodes, selectedId)
                     if (selectedParent?.parent) {
@@ -304,20 +355,6 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                         )
                         for (const id of nodeIds) {
                             if (siblingIds.has(id)) return id
-                        }
-                    }
-                }
-
-                // ── Click-through ────────────────────────────────────
-                // Top-level node already selected → drill into direct child
-                if (selectedId === topLevelId && nodeIds.length > 1) {
-                    const selectedNode = findNodeById(state.nodes, topLevelId)
-                    if (selectedNode && selectedNode.type === 'frame') {
-                        const childIds = new Set(
-                            selectedNode.children.map((c) => c.id)
-                        )
-                        for (const id of nodeIds) {
-                            if (childIds.has(id)) return id
                         }
                     }
                 }
@@ -426,7 +463,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     return
                 }
 
-                const nodeId = resolveClickTarget(target)
+                // Cmd/Ctrl+Click → deep select (bypass all parent frames)
+                const isDeepSelect = (e.metaKey || e.ctrlKey) && !e.shiftKey
+                const nodeId = resolveClickTarget(target, isDeepSelect)
 
                 if (nodeId) {
                     const currentState = useEditorStore.getState()
@@ -516,9 +555,10 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     return
                 }
 
-                // Double-click frame → drill in
+                // Double-click frame → drill in and select first child
                 if (node && node.type === 'frame' && node.children.length > 0) {
                     state.enterFrame(selectedId)
+                    state.selectNode(node.children[0].id)
                     return
                 }
             }
@@ -557,6 +597,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 state.enterVectorEditMode(nodeId)
             } else if (node && node.type === 'frame' && node.children.length > 0) {
                 state.enterFrame(nodeId)
+                state.selectNode(node.children[0].id)
             }
         },
         [activeTool, resolveClickTarget, handlePenPointerDown]
