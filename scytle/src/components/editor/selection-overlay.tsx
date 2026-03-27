@@ -484,127 +484,51 @@ function PaddingHatchRects({
         <>
             {/* Top padding */}
             {pt > 0 && shouldShowSide(direction, 'top') && (
-                <>
-                    <div style={{
-                        position: 'absolute',
-                        left: rect.x,
-                        top: rect.y,
-                        width: rect.width,
-                        height: pt,
-                        background: BLUE_HATCH,
-                        borderBottom: '1px solid rgba(59, 130, 246, 0.3)',
-                    }} />
-                    {pt > 10 && (
-                        <div style={{
-                            position: 'absolute',
-                            left: rect.x + rect.width / 2,
-                            top: rect.y + pt / 2,
-                            transform: 'translate(-50%, -50%)',
-                            fontSize: 9,
-                            color: BLUE_LABEL,
-                            fontWeight: 600,
-                            fontFamily: 'system-ui',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            padding: '1px 4px',
-                            borderRadius: 2,
-                        }}>
-                            {padding.top}
-                        </div>
-                    )}
-                </>
+                <div style={{
+                    position: 'absolute',
+                    left: rect.x,
+                    top: rect.y,
+                    width: rect.width,
+                    height: pt,
+                    background: BLUE_HATCH,
+                    borderBottom: '1px solid rgba(59, 130, 246, 0.3)',
+                }} />
             )}
             {/* Bottom padding */}
             {pb > 0 && shouldShowSide(direction, 'bottom') && (
-                <>
-                    <div style={{
-                        position: 'absolute',
-                        left: rect.x,
-                        top: rect.y + rect.height - pb,
-                        width: rect.width,
-                        height: pb,
-                        background: BLUE_HATCH,
-                        borderTop: '1px solid rgba(59, 130, 246, 0.3)',
-                    }} />
-                    {pb > 10 && (
-                        <div style={{
-                            position: 'absolute',
-                            left: rect.x + rect.width / 2,
-                            top: rect.y + rect.height - pb / 2,
-                            transform: 'translate(-50%, -50%)',
-                            fontSize: 9,
-                            color: BLUE_LABEL,
-                            fontWeight: 600,
-                            fontFamily: 'system-ui',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            padding: '1px 4px',
-                            borderRadius: 2,
-                        }}>
-                            {padding.bottom}
-                        </div>
-                    )}
-                </>
+                <div style={{
+                    position: 'absolute',
+                    left: rect.x,
+                    top: rect.y + rect.height - pb,
+                    width: rect.width,
+                    height: pb,
+                    background: BLUE_HATCH,
+                    borderTop: '1px solid rgba(59, 130, 246, 0.3)',
+                }} />
             )}
             {/* Left padding */}
             {pl > 0 && shouldShowSide(direction, 'left') && (
-                <>
-                    <div style={{
-                        position: 'absolute',
-                        left: rect.x,
-                        top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
-                        width: pl,
-                        height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
-                        background: BLUE_HATCH,
-                        borderRight: '1px solid rgba(59, 130, 246, 0.3)',
-                    }} />
-                    {pl > 10 && (
-                        <div style={{
-                            position: 'absolute',
-                            left: rect.x + pl / 2,
-                            top: rect.y + rect.height / 2,
-                            transform: 'translate(-50%, -50%)',
-                            fontSize: 9,
-                            color: BLUE_LABEL,
-                            fontWeight: 600,
-                            fontFamily: 'system-ui',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            padding: '1px 4px',
-                            borderRadius: 2,
-                        }}>
-                            {padding.left}
-                        </div>
-                    )}
-                </>
+                <div style={{
+                    position: 'absolute',
+                    left: rect.x,
+                    top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
+                    width: pl,
+                    height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
+                    background: BLUE_HATCH,
+                    borderRight: '1px solid rgba(59, 130, 246, 0.3)',
+                }} />
             )}
             {/* Right padding */}
             {pr > 0 && shouldShowSide(direction, 'right') && (
-                <>
-                    <div style={{
-                        position: 'absolute',
-                        left: rect.x + rect.width - pr,
-                        top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
-                        width: pr,
-                        height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
-                        background: BLUE_HATCH,
-                        borderLeft: '1px solid rgba(59, 130, 246, 0.3)',
-                    }} />
-                    {pr > 10 && (
-                        <div style={{
-                            position: 'absolute',
-                            left: rect.x + rect.width - pr / 2,
-                            top: rect.y + rect.height / 2,
-                            transform: 'translate(-50%, -50%)',
-                            fontSize: 9,
-                            color: BLUE_LABEL,
-                            fontWeight: 600,
-                            fontFamily: 'system-ui',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            padding: '1px 4px',
-                            borderRadius: 2,
-                        }}>
-                            {padding.right}
-                        </div>
-                    )}
-                </>
+                <div style={{
+                    position: 'absolute',
+                    left: rect.x + rect.width - pr,
+                    top: rect.y + (shouldShowSide(direction, 'top') ? pt : 0),
+                    width: pr,
+                    height: rect.height - (shouldShowSide(direction, 'top') ? pt : 0) - (shouldShowSide(direction, 'bottom') ? pb : 0),
+                    background: BLUE_HATCH,
+                    borderLeft: '1px solid rgba(59, 130, 246, 0.3)',
+                }} />
             )}
         </>
     )
@@ -651,6 +575,7 @@ export function CanvasPaddingZones({
 
     const [rect, setRect] = useState<ScreenRect | null>(null)
     const [hoveredSide, setHoveredSide] = useState<PaddingSide | null>(null)
+    const [handleHoveredSide, setHandleHoveredSide] = useState<PaddingSide | null>(null)
     const [inlineInput, setInlineInput] = useState<{
         side: PaddingSide
         x: number
@@ -659,6 +584,7 @@ export function CanvasPaddingZones({
     } | null>(null)
     const rafRef = useRef<number>(0)
     const [dragCursor, setDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
+    const dragCursorRaf = useRef<number>(0)
     const dragRef = useRef<{
         side: PaddingSide
         startValue: number
@@ -826,13 +752,17 @@ export function CanvasPaddingZones({
 
             updateNode(frameId, { padding: currentPadding })
 
-            // Track cursor position for drag tooltip
+            // Track cursor position for drag tooltip (throttled via RAF)
             const viewportRect = viewportRef.current?.getBoundingClientRect()
             if (viewportRect) {
-                setDragCursor({
+                cancelAnimationFrame(dragCursorRaf.current)
+                const cursorData = {
                     x: ev.clientX - viewportRect.left,
                     y: ev.clientY - viewportRect.top,
                     value: newValue,
+                }
+                dragCursorRaf.current = requestAnimationFrame(() => {
+                    setDragCursor(cursorData)
                 })
             }
         }
@@ -850,6 +780,7 @@ export function CanvasPaddingZones({
                 endBatch()
                 setPaddingOverlay(null)
                 setHoveredSide(null)
+                cancelAnimationFrame(dragCursorRaf.current)
                 setDragCursor(null)
             } else {
                 // Was a click — open inline input at center handle position
@@ -1012,6 +943,7 @@ export function CanvasPaddingZones({
             {zones.map(({ side }) => {
                 const handle = getCenterHandle(side)
                 const isHovered = hoveredSide === side
+                const isOnHandle = handleHoveredSide === side
                 const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
                 const showHandle = paddingPx[side] >= 4
                 const isHorizontalSide = side === 'left' || side === 'right'
@@ -1038,8 +970,14 @@ export function CanvasPaddingZones({
                                 alignItems: 'center',
                                 justifyContent: 'center',
                             }}
-                            onMouseEnter={() => handleMouseEnter(side)}
-                            onMouseLeave={() => handleMouseLeave(side)}
+                            onMouseEnter={() => {
+                                handleMouseEnter(side)
+                                setHandleHoveredSide(side)
+                            }}
+                            onMouseLeave={() => {
+                                handleMouseLeave(side)
+                                setHandleHoveredSide(null)
+                            }}
                             onPointerDown={(e) => handlePointerDown(side, e)}
                         >
                             {/* Visual line indicator */}
@@ -1054,30 +992,53 @@ export function CanvasPaddingZones({
                             />
                         </div>
 
-                        {/* Value badge — shown when this side is hovered (not dragging) */}
-                        {isHovered && !dragCursor && !inlineInput && (
+                        {/* Figma-style dark tooltip with icon — shown on center handle hover only */}
+                        {isOnHandle && !dragCursor && !inlineInput && (
                             <div
                                 className="pointer-events-none"
                                 style={{
                                     position: 'absolute',
                                     left: handle.x,
                                     top: handle.y,
-                                    transform: side === 'left' ? 'translate(-100%, -50%) translate(-6px, 0)' :
-                                               side === 'right' ? 'translate(0%, -50%) translate(6px, 0)' :
-                                               side === 'top' ? 'translate(-50%, -100%) translate(0, -6px)' :
-                                               'translate(-50%, 0%) translate(0, 6px)',
-                                    fontSize: 10,
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    fontFamily: 'system-ui',
-                                    background: '#3b82f6',
-                                    padding: '1px 5px',
-                                    borderRadius: 3,
-                                    zIndex: 1005,
+                                    transform: side === 'left' ? 'translate(-100%, -50%) translate(-8px, 0)' :
+                                               side === 'right' ? 'translate(0%, -50%) translate(8px, 0)' :
+                                               side === 'top' ? 'translate(-50%, -100%) translate(0, -8px)' :
+                                               'translate(-50%, 0%) translate(0, 8px)',
+                                    zIndex: 2000,
                                     whiteSpace: 'nowrap',
                                 }}
                             >
-                                {framePadding[side]}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#1e1e2e',
+                                    padding: '3px 8px',
+                                    borderRadius: 4,
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                }}>
+                                    <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                                        {isHorizontalSide ? (
+                                            <>
+                                                <line x1="1" y1="0" x2="1" y2="10" stroke="#3b82f6" strokeWidth="1.5" />
+                                                <rect x="3" y="1" width="6" height="8" rx="1" stroke="#3b82f6" strokeWidth="1" fill="none" />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <line x1="0" y1="1" x2="10" y2="1" stroke="#3b82f6" strokeWidth="1.5" />
+                                                <rect x="1" y="3" width="8" height="6" rx="1" stroke="#3b82f6" strokeWidth="1" fill="none" />
+                                            </>
+                                        )}
+                                    </svg>
+                                    <span style={{
+                                        color: '#3b82f6',
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        fontFamily: 'system-ui',
+                                    }}>
+                                        {framePadding[side]}
+                                    </span>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1278,8 +1239,10 @@ export function CanvasGapZones({
     const [frameRect, setFrameRect] = useState<ScreenRect | null>(null)
     const [isAnyHovered, setIsAnyHovered] = useState(false)
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+    const [handleHoveredIndex, setHandleHoveredIndex] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [gapDragCursor, setGapDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
+    const gapDragCursorRaf = useRef<number>(0)
     const [inlineInput, setInlineInput] = useState<{
         x: number
         y: number
@@ -1539,13 +1502,17 @@ export function CanvasGapZones({
             if (!currentNode || currentNode.type !== 'frame') return
             updateNode(frameId, { layout: { ...currentNode.layout, gap: newGap } })
 
-            // Track cursor position for drag tooltip
+            // Track cursor position for drag tooltip (throttled via RAF)
             const viewportRect = viewportRef.current?.getBoundingClientRect()
             if (viewportRect) {
-                setGapDragCursor({
+                cancelAnimationFrame(gapDragCursorRaf.current)
+                const cursorData = {
                     x: ev.clientX - viewportRect.left,
                     y: ev.clientY - viewportRect.top,
                     value: newGap,
+                }
+                gapDragCursorRaf.current = requestAnimationFrame(() => {
+                    setGapDragCursor(cursorData)
                 })
             }
         }
@@ -1560,6 +1527,7 @@ export function CanvasGapZones({
             if (dragging) {
                 dragRef.current = null
                 setIsDragging(false)
+                cancelAnimationFrame(gapDragCursorRaf.current)
                 setGapDragCursor(null)
                 endBatch()
                 // RAF loop will automatically sync zones on next frame
@@ -1668,9 +1636,11 @@ export function CanvasGapZones({
                             onMouseEnter={() => {
                                 if (dragRef.current) return
                                 setHoveredIndex(zone.index)
+                                setHandleHoveredIndex(zone.index)
                                 setIsAnyHovered(true)
                             }}
                             onMouseLeave={() => {
+                                setHandleHoveredIndex(null)
                                 if (!dragRef.current) {
                                     setTimeout(() => {
                                         setHoveredIndex((prev) => {
@@ -1719,27 +1689,44 @@ export function CanvasGapZones({
                             />
                         )}
 
-                        {/* Pink badge showing gap value — only on the HOVERED gap, not during drag */}
-                        {isThisHovered && isAnyHovered && !inlineInput && !gapDragCursor && (
+                        {/* Dark tooltip with icon — shown on center handle hover only */}
+                        {handleHoveredIndex === zone.index && !gapDragCursor && !inlineInput && (
                             <div
                                 className="pointer-events-none"
                                 style={{
                                     position: 'absolute',
-                                    left: isColumn ? zone.x + zone.width : zone.x + zone.width / 2,
-                                    top: isColumn ? zone.y : zone.y,
-                                    transform: isColumn ? 'translate(-100%, -100%)' : 'translate(-50%, -100%)',
-                                    fontSize: 10,
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    fontFamily: 'system-ui',
-                                    background: '#ec4899',
-                                    padding: '1px 5px',
-                                    borderRadius: 3,
-                                    zIndex: 1004,
+                                    left: centerX,
+                                    top: centerY,
+                                    transform: isColumn
+                                        ? 'translate(8px, -50%)'
+                                        : 'translate(-50%, -100%) translate(0, -8px)',
+                                    zIndex: 2000,
                                     whiteSpace: 'nowrap',
                                 }}
                             >
-                                {frameGap}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#1e1e2e',
+                                    padding: '3px 8px',
+                                    borderRadius: 4,
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                }}>
+                                    <svg width={12} height={10} viewBox="0 0 12 10" fill="none">
+                                        <rect x="0" y="1" width="4" height="8" rx="1" stroke="#ec4899" strokeWidth="1" fill="none" />
+                                        <rect x="8" y="1" width="4" height="8" rx="1" stroke="#ec4899" strokeWidth="1" fill="none" />
+                                        <line x1="5" y1="5" x2="7" y2="5" stroke="#ec4899" strokeWidth="1" />
+                                    </svg>
+                                    <span style={{
+                                        color: '#ec4899',
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        fontFamily: 'system-ui',
+                                    }}>
+                                        {frameGap}
+                                    </span>
+                                </div>
                             </div>
                         )}
 
