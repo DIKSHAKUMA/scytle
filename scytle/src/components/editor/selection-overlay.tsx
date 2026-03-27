@@ -957,27 +957,46 @@ export function CanvasPaddingZones({
 
     return (
         <>
-            {/* Visual-only padding zones — pointer-events:none so resize handles
-                at edges/corners remain accessible. Only shown when hovered. */}
-            {zones.map(({ side, style }) => {
-                const isHovered = hoveredSide === side
-                if (!isHovered) return null
+            {/* Hover-detection padding zones — pointer-events:auto at z:999
+                (below resize handles at z:1000) so they detect hover everywhere
+                EXCEPT where resize handles are. No onPointerDown — clicks pass
+                through to resize handles or canvas underneath. Shows the blue
+                hatch pattern when the cursor enters the padding area. */}
+            {zones.map(({ side, style }) => (
+                <div
+                    key={`hover-${side}`}
+                    style={{
+                        position: 'absolute',
+                        ...style,
+                        zIndex: 999,
+                        pointerEvents: 'auto',
+                        cursor: 'default',
+                    }}
+                    onMouseEnter={() => handleMouseEnter(side)}
+                    onMouseLeave={() => handleMouseLeave(side)}
+                />
+            ))}
+
+            {/* Visual hatch overlay — shown on hovered side, pointer-events:none */}
+            {hoveredSide && (() => {
+                const zone = zones.find(z => z.side === hoveredSide)
+                if (!zone) return null
                 return (
                     <div
-                        key={`visual-${side}`}
+                        key={`visual-${hoveredSide}`}
                         className="pointer-events-none"
                         style={{
                             position: 'absolute',
-                            ...style,
+                            ...zone.style,
                             zIndex: 998,
                         }}
                     />
                 )
-            })}
+            })()}
 
             {/* Interactive center handles — ONLY these small areas accept
-                pointer events. This prevents the entire padding strip from
-                blocking resize handles at the frame edges/corners. */}
+                pointer-down for drag. Positioned at z:1003 above resize handles
+                so they always win at the center of the edge. */}
             {zones.map(({ side }) => {
                 const handle = getCenterHandle(side)
                 const isHovered = hoveredSide === side
@@ -1513,8 +1532,43 @@ export function CanvasGapZones({
 
                 return (
                     <div key={zone.index}>
+                        {/* Hover-detection zone — full gap area at z:999
+                            (below resize handles at z:1000). Detects hover to
+                            show pink hatch but has NO onPointerDown — clicks/drags
+                            pass through to child nodes or canvas underneath. */}
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: zone.x,
+                                top: zone.y,
+                                width: zone.width,
+                                height: zone.height,
+                                zIndex: 999,
+                                pointerEvents: 'auto',
+                                cursor: 'default',
+                            }}
+                            onMouseEnter={() => {
+                                if (dragRef.current) return
+                                setHoveredIndex(zone.index)
+                                setIsAnyHovered(true)
+                            }}
+                            onMouseLeave={() => {
+                                if (!dragRef.current) {
+                                    setTimeout(() => {
+                                        setHoveredIndex((prev) => {
+                                            if (prev === zone.index) {
+                                                setIsAnyHovered(false)
+                                                return null
+                                            }
+                                            return prev
+                                        })
+                                    }, 50)
+                                }
+                            }}
+                        />
+
                         {/* Interactive center handle — ONLY this small area accepts
-                            pointer events so child selection/resize is not blocked */}
+                            pointer-down for drag at z:1003 */}
                         <div
                             style={{
                                 position: 'absolute',
