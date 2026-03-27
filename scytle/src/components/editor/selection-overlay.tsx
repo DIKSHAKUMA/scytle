@@ -628,7 +628,11 @@ const OPPOSITE_SIDE: Record<PaddingSide, PaddingSide> = {
 // Center handle: small perpendicular line in the middle of each padding zone
 const CENTER_HANDLE_LENGTH = 16
 const CENTER_HANDLE_THICKNESS = 2
-const CENTER_HANDLE_HIT_AREA = 12 // click/drag target area around handle
+// Hit area around center handle — ONLY this area is interactive.
+// The rest of the padding zone is pointer-events:none so resize handles
+// remain accessible at edges/corners (fixes accidental padding drag).
+const CENTER_HANDLE_HIT_WIDTH = 16  // along the edge (perpendicular to drag)
+const CENTER_HANDLE_HIT_DEPTH = 12  // into the padding (parallel to drag)
 
 export function CanvasPaddingZones({
     viewportRef,
@@ -953,48 +957,61 @@ export function CanvasPaddingZones({
 
     return (
         <>
-            {/* Interactive hover + drag zones — entire padding area is draggable */}
-            {zones.map(({ side, style }) => (
-                <div
-                    key={side}
-                    style={{
-                        position: 'absolute',
-                        ...style,
-                        zIndex: 1002,
-                        cursor: (side === 'left' || side === 'right') ? 'ew-resize' : 'ns-resize',
-                        pointerEvents: 'auto',
-                    }}
-                    onMouseEnter={() => handleMouseEnter(side)}
-                    onMouseLeave={() => handleMouseLeave(side)}
-                    onPointerDown={(e) => handlePointerDown(side, e)}
-                />
-            ))}
+            {/* Visual-only padding zones — pointer-events:none so resize handles
+                at edges/corners remain accessible. Only shown when hovered. */}
+            {zones.map(({ side, style }) => {
+                const isHovered = hoveredSide === side
+                if (!isHovered) return null
+                return (
+                    <div
+                        key={`visual-${side}`}
+                        className="pointer-events-none"
+                        style={{
+                            position: 'absolute',
+                            ...style,
+                            zIndex: 998,
+                        }}
+                    />
+                )
+            })}
 
-            {/* Center handles — visual indicator only, pointer-events-none */}
+            {/* Interactive center handles — ONLY these small areas accept
+                pointer events. This prevents the entire padding strip from
+                blocking resize handles at the frame edges/corners. */}
             {zones.map(({ side }) => {
                 const handle = getCenterHandle(side)
                 const isHovered = hoveredSide === side
                 const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
                 const showHandle = paddingPx[side] >= 4
+                const isHorizontalSide = side === 'left' || side === 'right'
 
                 if (!showHandle) return null
+
+                // Hit area: wider along the edge, narrower into the padding
+                const hitW = isHorizontalSide ? CENTER_HANDLE_HIT_DEPTH : CENTER_HANDLE_HIT_WIDTH
+                const hitH = isHorizontalSide ? CENTER_HANDLE_HIT_WIDTH : CENTER_HANDLE_HIT_DEPTH
 
                 return (
                     <div
                         key={`handle-${side}`}
-                        className="pointer-events-none"
                         style={{
                             position: 'absolute',
-                            left: handle.x - CENTER_HANDLE_HIT_AREA / 2,
-                            top: handle.y - CENTER_HANDLE_HIT_AREA / 2,
-                            width: CENTER_HANDLE_HIT_AREA,
-                            height: CENTER_HANDLE_HIT_AREA,
+                            left: handle.x - hitW / 2,
+                            top: handle.y - hitH / 2,
+                            width: hitW,
+                            height: hitH,
                             zIndex: 1003,
+                            cursor: isHorizontalSide ? 'ew-resize' : 'ns-resize',
+                            pointerEvents: 'auto',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                         }}
+                        onMouseEnter={() => handleMouseEnter(side)}
+                        onMouseLeave={() => handleMouseLeave(side)}
+                        onPointerDown={(e) => handlePointerDown(side, e)}
                     >
+                        {/* Visual line indicator */}
                         <div
                             style={{
                                 width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
@@ -1489,16 +1506,22 @@ export function CanvasGapZones({
                 const centerX = zone.x + zone.width / 2
                 const centerY = zone.y + zone.height / 2
 
+                // Hit area: small zone centered on the gap's midpoint
+                // wider along the gap direction, narrower perpendicular
+                const hitW = isColumn ? CENTER_HANDLE_HIT_WIDTH : CENTER_HANDLE_HIT_DEPTH
+                const hitH = isColumn ? CENTER_HANDLE_HIT_DEPTH : CENTER_HANDLE_HIT_WIDTH
+
                 return (
                     <div key={zone.index}>
-                        {/* Hover + drag zone — entire gap area is interactive */}
+                        {/* Interactive center handle — ONLY this small area accepts
+                            pointer events so child selection/resize is not blocked */}
                         <div
                             style={{
                                 position: 'absolute',
-                                left: zone.x,
-                                top: zone.y,
-                                width: zone.width,
-                                height: zone.height,
+                                left: centerX - hitW / 2,
+                                top: centerY - hitH / 2,
+                                width: hitW,
+                                height: hitH,
                                 zIndex: 1003,
                                 cursor: isColumn ? 'ns-resize' : 'ew-resize',
                                 pointerEvents: 'auto',
@@ -1587,10 +1610,10 @@ export function CanvasGapZones({
                                 className="pointer-events-none"
                                 style={{
                                     position: 'absolute',
-                                    left: centerX - CENTER_HANDLE_HIT_AREA / 2,
-                                    top: centerY - CENTER_HANDLE_HIT_AREA / 2,
-                                    width: CENTER_HANDLE_HIT_AREA,
-                                    height: CENTER_HANDLE_HIT_AREA,
+                                    left: centerX - CENTER_HANDLE_HIT_WIDTH / 2,
+                                    top: centerY - CENTER_HANDLE_HIT_WIDTH / 2,
+                                    width: CENTER_HANDLE_HIT_WIDTH,
+                                    height: CENTER_HANDLE_HIT_WIDTH,
                                     zIndex: 1004,
                                     display: 'flex',
                                     alignItems: 'center',
