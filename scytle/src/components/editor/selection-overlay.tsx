@@ -1031,7 +1031,7 @@ export function CanvasPaddingZones({
                                         )}
                                     </svg>
                                     <span style={{
-                                        color: '#3b82f6',
+                                        color: '#ffffff',
                                         fontSize: 11,
                                         fontWeight: 600,
                                         fontFamily: 'system-ui',
@@ -1719,7 +1719,7 @@ export function CanvasGapZones({
                                         <line x1="5" y1="5" x2="7" y2="5" stroke="#ec4899" strokeWidth="1" />
                                     </svg>
                                     <span style={{
-                                        color: '#ec4899',
+                                        color: '#ffffff',
                                         fontSize: 11,
                                         fontWeight: 600,
                                         fontFamily: 'system-ui',
