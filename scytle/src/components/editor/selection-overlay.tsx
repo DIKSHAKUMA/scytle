@@ -658,6 +658,7 @@ export function CanvasPaddingZones({
         value: number
     } | null>(null)
     const rafRef = useRef<number>(0)
+    const [dragCursor, setDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
     const dragRef = useRef<{
         side: PaddingSide
         startValue: number
@@ -824,6 +825,16 @@ export function CanvasPaddingZones({
             }
 
             updateNode(frameId, { padding: currentPadding })
+
+            // Track cursor position for drag tooltip
+            const viewportRect = viewportRef.current?.getBoundingClientRect()
+            if (viewportRect) {
+                setDragCursor({
+                    x: ev.clientX - viewportRect.left,
+                    y: ev.clientY - viewportRect.top,
+                    value: newValue,
+                })
+            }
         }
 
         const handleUp = (ev: PointerEvent) => {
@@ -839,6 +850,7 @@ export function CanvasPaddingZones({
                 endBatch()
                 setPaddingOverlay(null)
                 setHoveredSide(null)
+                setDragCursor(null)
             } else {
                 // Was a click — open inline input at center handle position
                 const currentPad = framePaddingRef.current
@@ -1011,38 +1023,99 @@ export function CanvasPaddingZones({
                 const hitH = isHorizontalSide ? CENTER_HANDLE_HIT_WIDTH : CENTER_HANDLE_HIT_DEPTH
 
                 return (
-                    <div
-                        key={`handle-${side}`}
-                        style={{
-                            position: 'absolute',
-                            left: handle.x - hitW / 2,
-                            top: handle.y - hitH / 2,
-                            width: hitW,
-                            height: hitH,
-                            zIndex: 1003,
-                            cursor: isHorizontalSide ? 'ew-resize' : 'ns-resize',
-                            pointerEvents: 'auto',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                        onMouseEnter={() => handleMouseEnter(side)}
-                        onMouseLeave={() => handleMouseLeave(side)}
-                        onPointerDown={(e) => handlePointerDown(side, e)}
-                    >
-                        {/* Visual line indicator */}
+                    <div key={`handle-${side}`}>
                         <div
                             style={{
-                                width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
-                                height: handle.isVertical ? CENTER_HANDLE_LENGTH : CENTER_HANDLE_THICKNESS,
-                                backgroundColor: isHovered ? '#3b82f6' : 'rgba(59, 130, 246, 0.5)',
-                                borderRadius: 1,
-                                transition: 'background-color 0.1s',
+                                position: 'absolute',
+                                left: handle.x - hitW / 2,
+                                top: handle.y - hitH / 2,
+                                width: hitW,
+                                height: hitH,
+                                zIndex: 1003,
+                                cursor: isHorizontalSide ? 'ew-resize' : 'ns-resize',
+                                pointerEvents: 'auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
                             }}
-                        />
+                            onMouseEnter={() => handleMouseEnter(side)}
+                            onMouseLeave={() => handleMouseLeave(side)}
+                            onPointerDown={(e) => handlePointerDown(side, e)}
+                        >
+                            {/* Visual line indicator */}
+                            <div
+                                style={{
+                                    width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
+                                    height: handle.isVertical ? CENTER_HANDLE_LENGTH : CENTER_HANDLE_THICKNESS,
+                                    backgroundColor: isHovered ? '#3b82f6' : 'rgba(59, 130, 246, 0.5)',
+                                    borderRadius: 1,
+                                    transition: 'background-color 0.1s',
+                                }}
+                            />
+                        </div>
+
+                        {/* Value badge — shown when this side is hovered (not dragging) */}
+                        {isHovered && !dragCursor && !inlineInput && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: handle.x,
+                                    top: handle.y,
+                                    transform: side === 'left' ? 'translate(-100%, -50%) translate(-6px, 0)' :
+                                               side === 'right' ? 'translate(0%, -50%) translate(6px, 0)' :
+                                               side === 'top' ? 'translate(-50%, -100%) translate(0, -6px)' :
+                                               'translate(-50%, 0%) translate(0, 6px)',
+                                    fontSize: 10,
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    fontFamily: 'system-ui',
+                                    background: '#3b82f6',
+                                    padding: '1px 5px',
+                                    borderRadius: 3,
+                                    zIndex: 1005,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {framePadding[side]}
+                            </div>
+                        )}
                     </div>
                 )
             })}
+
+            {/* Drag cursor tooltip — dark floating badge following cursor during drag */}
+            {dragCursor && (
+                <div
+                    className="pointer-events-none"
+                    style={{
+                        position: 'absolute',
+                        left: dragCursor.x,
+                        top: dragCursor.y,
+                        transform: 'translate(-50%, -100%) translate(0, -12px)',
+                        zIndex: 2000,
+                    }}
+                >
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            background: '#1e1e2e',
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        }}
+                    >
+                        <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                            <rect x="1" y="1" width="8" height="8" rx="1" stroke="#3b82f6" strokeWidth="1.5" fill="none" />
+                        </svg>
+                        <span style={{ color: '#e0e0e0', fontSize: 11, fontWeight: 600, fontFamily: 'system-ui' }}>
+                            {dragCursor.value}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {/* Inline value input */}
             {inlineInput && (
@@ -1206,6 +1279,7 @@ export function CanvasGapZones({
     const [isAnyHovered, setIsAnyHovered] = useState(false)
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
+    const [gapDragCursor, setGapDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
     const [inlineInput, setInlineInput] = useState<{
         x: number
         y: number
@@ -1464,6 +1538,16 @@ export function CanvasGapZones({
             const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
             if (!currentNode || currentNode.type !== 'frame') return
             updateNode(frameId, { layout: { ...currentNode.layout, gap: newGap } })
+
+            // Track cursor position for drag tooltip
+            const viewportRect = viewportRef.current?.getBoundingClientRect()
+            if (viewportRect) {
+                setGapDragCursor({
+                    x: ev.clientX - viewportRect.left,
+                    y: ev.clientY - viewportRect.top,
+                    value: newGap,
+                })
+            }
         }
 
         const handleUp = (ev: PointerEvent) => {
@@ -1476,6 +1560,7 @@ export function CanvasGapZones({
             if (dragging) {
                 dragRef.current = null
                 setIsDragging(false)
+                setGapDragCursor(null)
                 endBatch()
                 // RAF loop will automatically sync zones on next frame
                 setHoveredIndex(null)
@@ -1634,8 +1719,8 @@ export function CanvasGapZones({
                             />
                         )}
 
-                        {/* Pink badge showing gap value — only on the HOVERED gap */}
-                        {isThisHovered && isAnyHovered && !inlineInput && (
+                        {/* Pink badge showing gap value — only on the HOVERED gap, not during drag */}
+                        {isThisHovered && isAnyHovered && !inlineInput && !gapDragCursor && (
                             <div
                                 className="pointer-events-none"
                                 style={{
@@ -1698,6 +1783,41 @@ export function CanvasGapZones({
                     onSubmit={handleInlineSubmit}
                     onClose={() => setInlineInput(null)}
                 />
+            )}
+
+            {/* Gap drag cursor tooltip — dark floating badge following cursor during drag */}
+            {gapDragCursor && (
+                <div
+                    className="pointer-events-none"
+                    style={{
+                        position: 'absolute',
+                        left: gapDragCursor.x,
+                        top: gapDragCursor.y,
+                        transform: 'translate(-50%, -100%) translate(0, -12px)',
+                        zIndex: 2000,
+                    }}
+                >
+                    <div
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            background: '#1e1e2e',
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        }}
+                    >
+                        <svg width={12} height={10} viewBox="0 0 12 10" fill="none">
+                            <rect x="0" y="1" width="4" height="8" rx="1" stroke="#ec4899" strokeWidth="1" fill="none" />
+                            <rect x="8" y="1" width="4" height="8" rx="1" stroke="#ec4899" strokeWidth="1" fill="none" />
+                            <line x1="5" y1="5" x2="7" y2="5" stroke="#ec4899" strokeWidth="1" />
+                        </svg>
+                        <span style={{ color: '#e0e0e0', fontSize: 11, fontWeight: 600, fontFamily: 'system-ui' }}>
+                            {gapDragCursor.value}
+                        </span>
+                    </div>
+                </div>
             )}
         </>
     )
