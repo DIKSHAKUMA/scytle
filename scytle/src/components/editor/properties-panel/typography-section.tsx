@@ -22,6 +22,7 @@ import { LetterSpacingInput } from './typography/letter-spacing-input'
 import { ColorPicker } from './color-picker'
 import { useThemeTable, resolveDisplayColor, resolveDisplayFont, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
 import { ThemeLinkBadge } from './theme-link-badge'
+import { VariablePicker } from './variable-picker'
 import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
 
 // ── Custom inline SVG icons ────────────────────────────────────────────────────
@@ -131,8 +132,12 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const settingsBtnRef = useRef<HTMLButtonElement>(null)
     const styleTriggerRef = useRef<HTMLButtonElement>(null)
     const colorSwatchRef = useRef<HTMLButtonElement>(null)
+    const fontBadgeRef = useRef<HTMLSpanElement>(null)
+    const colorBadgeRef = useRef<HTMLSpanElement>(null)
     const [stylePickerOpen, setStylePickerOpen] = useState(false)
     const [colorPickerOpen, setColorPickerOpen] = useState(false)
+    const [fontVarPickerOpen, setFontVarPickerOpen] = useState(false)
+    const [colorVarPickerOpen, setColorVarPickerOpen] = useState(false)
 
     // Theme resolution — show resolved values in the Design tab
     const { table, mode } = useThemeTable()
@@ -261,7 +266,23 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
         >
             {/* ── Row 1: Font family ─────────────────────────────────── */}
             <div className="flex items-center gap-0.5">
-                <ThemeLinkBadge isLinked={isThemeLinked(node.fontFamilyRef, node.fontFamilyDetached)} variableName={node.fontFamilyRef} />
+                <span ref={fontBadgeRef}>
+                    <ThemeLinkBadge
+                        isLinked={isThemeLinked(node.fontFamilyRef, node.fontFamilyDetached)}
+                        variableName={node.fontFamilyRef}
+                        showUnlinked
+                        onClick={() => setFontVarPickerOpen(v => !v)}
+                    />
+                </span>
+                <VariablePicker
+                    open={fontVarPickerOpen}
+                    anchorEl={fontBadgeRef.current}
+                    scope="text.fontFamily"
+                    currentRef={node.fontFamilyRef}
+                    onBind={(key) => onUpdate({ fontFamilyRef: key, fontFamilyDetached: false })}
+                    onDetach={() => onUpdate({ fontFamilyRef: undefined, fontFamilyDetached: true })}
+                    onClose={() => setFontVarPickerOpen(false)}
+                />
                 <div ref={fontTriggerRef} className="flex-1">
                     <FontFamilyTrigger value={displayFontFamily} nodeId={node.id} />
                 </div>
@@ -346,7 +367,23 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
             {/* ── Color ──────────────────────────────────────────────── */}
             <div className="flex items-center gap-1.5">
-                <ThemeLinkBadge isLinked={isThemeLinked(node.colorRef, node.colorDetached)} variableName={node.colorRef} />
+                <span ref={colorBadgeRef}>
+                    <ThemeLinkBadge
+                        isLinked={isThemeLinked(node.colorRef, node.colorDetached)}
+                        variableName={node.colorRef}
+                        showUnlinked
+                        onClick={() => setColorVarPickerOpen(v => !v)}
+                    />
+                </span>
+                <VariablePicker
+                    open={colorVarPickerOpen}
+                    anchorEl={colorBadgeRef.current}
+                    scope="text.color"
+                    currentRef={node.colorRef}
+                    onBind={(key) => onUpdate({ colorRef: key, colorDetached: false })}
+                    onDetach={() => onUpdate({ colorRef: undefined, colorDetached: true })}
+                    onClose={() => setColorVarPickerOpen(false)}
+                />
                 <button
                     ref={colorSwatchRef}
                     className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer

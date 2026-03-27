@@ -5,6 +5,7 @@ import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 import { relinkNodes } from '@/lib/theme/relink-nodes'
+import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
 // ============================================================
 // History constants
@@ -144,6 +145,10 @@ interface EditorState {
     /** Whether the Type Settings floating overlay is open */
     typeSettingsOpen: boolean
 
+    // Variables panel overlay ----------------------------------------
+    /** Whether the Variables panel overlay is open */
+    variablesPanelOpen: boolean
+
     // Vector / Pen editing ----------------------------------------
     /** ID of the VectorNode currently in edit mode (null when not in vector edit) */
     vectorEditNodeId: string | null
@@ -190,6 +195,10 @@ interface EditorState {
     openTypeSettings: () => void
     closeTypeSettings: () => void
 
+    // Variables panel overlay actions --------------------------------
+    openVariablesPanel: () => void
+    closeVariablesPanel: () => void
+
     // Selection actions ---------------------------------------
     selectNode: (id: string, addToSelection?: boolean) => void
     deselectAll: () => void
@@ -223,6 +232,9 @@ interface EditorState {
     redo: () => void
     beginBatch: () => void
     endBatch: () => void
+
+    // Theme relink (called by theme sync subscription) ----------
+    _relinkTheme: (table: VariableTable, mode: ThemeMode) => void
 
     // Z-order actions -----------------------------------------
     bringForward: (id: string) => void
@@ -316,6 +328,7 @@ export const useEditorStore = create<EditorState>()(
             fontPickerOpen: false,
             fontPickerNodeId: null,
             typeSettingsOpen: false,
+            variablesPanelOpen: false,
             vectorEditNodeId: null,
             vectorEditTool: 'move' as VectorEditTool,
             selectedVertexIndices: [] as number[],
@@ -575,6 +588,26 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'closeTypeSettings'
+                ),
+
+            // Variables panel overlay ───────────────────────────────────
+
+            openVariablesPanel: () =>
+                set(
+                    (state) => {
+                        state.variablesPanelOpen = true
+                    },
+                    false,
+                    'openVariablesPanel'
+                ),
+
+            closeVariablesPanel: () =>
+                set(
+                    (state) => {
+                        state.variablesPanelOpen = false
+                    },
+                    false,
+                    'closeVariablesPanel'
                 ),
 
             // Canvas settings --------------------------------------
@@ -873,6 +906,17 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'endBatch'
+                ),
+
+            _relinkTheme: (table, mode) =>
+                set(
+                    (state) => {
+                        if (state.nodes.length === 0) return
+                        _snap(state)
+                        relinkNodes(state.nodes, table, mode)
+                    },
+                    false,
+                    'relinkTheme'
                 ),
 
             // ── Z-order actions ───────────────────────────────────
@@ -1901,13 +1945,8 @@ if (typeof window !== 'undefined') {
                 prevTable = variableTable
                 prevMode = themeMode
 
-                const editorState = useEditorStore.getState()
-                if (editorState.nodes.length === 0) return
-
-                // Relink all nodes with the new theme
-                useEditorStore.setState((draft) => {
-                    relinkNodes(draft.nodes, variableTable, themeMode)
-                })
+                // Relink all nodes with the new theme (with undo support)
+                useEditorStore.getState()._relinkTheme(variableTable, themeMode)
             })
         })
     }

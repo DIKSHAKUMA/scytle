@@ -1001,9 +1001,9 @@ export function CanvasPaddingZones({
                                     left: handle.x,
                                     top: handle.y,
                                     transform: side === 'left' ? 'translate(-100%, -50%) translate(-8px, 0)' :
-                                               side === 'right' ? 'translate(0%, -50%) translate(8px, 0)' :
-                                               side === 'top' ? 'translate(-50%, -100%) translate(0, -8px)' :
-                                               'translate(-50%, 0%) translate(0, 8px)',
+                                        side === 'right' ? 'translate(0%, -50%) translate(8px, 0)' :
+                                            side === 'top' ? 'translate(-50%, -100%) translate(0, -8px)' :
+                                                'translate(-50%, 0%) translate(0, 8px)',
                                     zIndex: 2000,
                                     whiteSpace: 'nowrap',
                                 }}

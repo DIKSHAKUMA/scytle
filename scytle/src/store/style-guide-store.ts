@@ -159,6 +159,11 @@ interface StyleGuideState {
     /** Shuffle all UI styling (random button+card style+radius) */
     shuffleUI: () => void
 
+    // ---- Actions: Variable Table Direct Edits ----
+
+    /** Update a single variable value for a specific mode. Maps back to concept properties. */
+    updateVariableValue: (key: string, mode: 'light' | 'dark', value: string) => void
+
     // ---- Actions: Section Scheme Overrides ----
 
     /** Set a section's color scheme override */
@@ -641,6 +646,60 @@ export const useStyleGuideStore = create<StyleGuideState>()(
                     concept.ui.buttonRadius = randomFrom(RADIUS_PRESETS)
                     concept.ui.cardStyle = randomFrom(CARD_STYLES)
                     concept.ui.cardRadius = randomFrom(RADIUS_PRESETS)
+                    state.computedCSS = recompute(state.data)
+                    state.variableTable = recomputeVariableTable(state.data)
+                    state.themeMode = getThemeModeFromData(state.data)
+                }),
+
+                // ============================================
+                // Variable Table Direct Edits
+                // ============================================
+
+                updateVariableValue: (key, mode, value) => set((state) => {
+                    const concept = state.data.concepts.find(c => c.id === state.data.activeConceptId)
+                    if (!concept) return
+
+                    const isCurrentMode = concept.colors.mode === mode
+
+                    // Map variable key → concept property
+                    // Only update if the variable maps to the current mode's concept values
+                    // (cross-mode values are derived defaults — the concept only stores one mode)
+                    if (isCurrentMode) {
+                        switch (key) {
+                            case 'bg/primary':     concept.colors.bgPrimary = value; break
+                            case 'bg/secondary':   concept.colors.bgSecondary = value; break
+                            case 'text/primary':   concept.colors.textPrimary = value; break
+                            case 'text/secondary': concept.colors.textSecondary = value; break
+                            case 'text/on-accent': concept.colors.textOnAccent = value; break
+                            case 'border':         concept.colors.border = value; break
+                            case 'accent': {
+                                const main = concept.colors.accents.find(a => a.isMain)
+                                if (main) main.hex = value
+                                break
+                            }
+                            case 'font/heading':      concept.typography.headingFont = `'${value}', sans-serif`; break
+                            case 'font/body':         concept.typography.bodyFont = `'${value}', sans-serif`; break
+                            case 'fontWeight/heading': {
+                                const w = parseInt(value, 10)
+                                if ([400, 500, 600, 700, 800].includes(w)) {
+                                    concept.typography.headingWeight = w as 400 | 500 | 600 | 700 | 800
+                                }
+                                break
+                            }
+                            case 'fontWeight/body': {
+                                const w = parseInt(value, 10)
+                                if ([300, 400, 500].includes(w)) {
+                                    concept.typography.bodyWeight = w as 300 | 400 | 500
+                                }
+                                break
+                            }
+                            // Radius, spacing, fontSize, shadows — these are derived from concept settings
+                            // and not directly editable at the variable level in v1.
+                            // They could be supported later by adding concept-level overrides.
+                            default: break
+                        }
+                    }
+
                     state.computedCSS = recompute(state.data)
                     state.variableTable = recomputeVariableTable(state.data)
                     state.themeMode = getThemeModeFromData(state.data)

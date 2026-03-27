@@ -8,6 +8,7 @@ import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
 import { useThemeTable, resolveDisplayColor, isThemeLinked } from './use-theme-resolved'
 import { ThemeLinkBadge } from './theme-link-badge'
+import { VariablePicker } from './variable-picker'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import {
@@ -119,7 +120,9 @@ interface FillRowProps {
 
 function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
+    const badgeRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
+    const [varPickerOpen, setVarPickerOpen] = useState(false)
 
     // Theme resolution for solid fills
     const { table, mode } = useThemeTable()
@@ -185,9 +188,27 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                 )}
             </button>
 
-            {/* Theme link indicator */}
+            {/* Theme link indicator + Variable picker */}
             {fill.type === 'solid' && (
-                <ThemeLinkBadge isLinked={isThemeLinked(fill.colorRef, fill.detached)} variableName={fill.colorRef} />
+                <>
+                    <span ref={badgeRef as React.RefObject<HTMLSpanElement>}>
+                        <ThemeLinkBadge
+                            isLinked={isThemeLinked(fill.colorRef, fill.detached)}
+                            variableName={fill.colorRef}
+                            showUnlinked
+                            onClick={() => setVarPickerOpen(v => !v)}
+                        />
+                    </span>
+                    <VariablePicker
+                        open={varPickerOpen}
+                        anchorEl={badgeRef.current}
+                        scope="fill.color"
+                        currentRef={fill.colorRef}
+                        onBind={(key) => onUpdate({ ...fill, colorRef: key, detached: false })}
+                        onDetach={() => onUpdate({ ...fill, colorRef: undefined, detached: true })}
+                        onClose={() => setVarPickerOpen(false)}
+                    />
+                </>
             )}
 
             {/* Fill type label + blend mode */}

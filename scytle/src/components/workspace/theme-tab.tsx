@@ -4,10 +4,12 @@ import { useState, useCallback } from 'react'
 import { Moon, Sun, Shuffle, Plus, Trash2, Copy, ChevronDown, Type, Palette, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStyleGuideStore } from '@/store'
+import { useEditorStore } from '@/store/editor-store'
 import { COLOR_PALETTES, type ColorPalette, PALETTE_CATEGORIES } from '@/lib/designs/v2/tokens/palettes'
 import { FONT_PAIRS, type FontPair, loadGoogleFonts } from '@/lib/designs/v2/tokens/font-pairs'
 import type { RadiusPreset, ButtonStyle, CardStyle } from '@/lib/designs/v2/tokens'
 import { Separator } from '@/components/ui/separator'
+import { VariablesPanel } from '@/components/editor/properties-panel/variables-panel'
 
 // ════════════════════════════════════════════════════════════
 // Section wrapper
@@ -538,6 +540,41 @@ function ThemeUIStyling() {
 }
 
 // ════════════════════════════════════════════════════════════
+// Variables Section — button to open the draggable overlay
+// ════════════════════════════════════════════════════════════
+
+function ThemeVariables() {
+    const variablesPanelOpen = useEditorStore(s => s.variablesPanelOpen)
+    const openVariablesPanel = useEditorStore(s => s.openVariablesPanel)
+    const closeVariablesPanel = useEditorStore(s => s.closeVariablesPanel)
+
+    return (
+        <Section title="Variables">
+            <button
+                onClick={() => variablesPanelOpen ? closeVariablesPanel() : openVariablesPanel()}
+                className={cn(
+                    'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[11px] transition-colors border',
+                    variablesPanelOpen
+                        ? 'bg-primary/10 border-primary/20 text-primary'
+                        : 'bg-muted/20 border-border/30 hover:bg-muted/40 text-muted-foreground hover:text-foreground',
+                )}
+            >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
+                    <path d="M3 4H11M3 7H11M3 10H8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                <span className="flex-1 text-left">
+                    {variablesPanelOpen ? 'Variables panel open' : '4 collections · 24 variables'}
+                </span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-current opacity-50">
+                    <path d="M1 1L5 5L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </button>
+            {variablesPanelOpen && <VariablesPanel />}
+        </Section>
+    )
+}
+
+// ════════════════════════════════════════════════════════════
 // Theme Tab (composed)
 // ════════════════════════════════════════════════════════════
 
@@ -546,13 +583,13 @@ export function ThemeTab() {
         <div className="h-full overflow-y-auto px-3 py-3 space-y-4">
             <ConceptSwitcher />
             <Separator />
-            <ThemePresets />
-            <Separator />
             <ThemeColors />
             <Separator />
             <ThemeTypography />
             <Separator />
             <ThemeUIStyling />
+            <Separator />
+            <ThemeVariables />
         </div>
     )
 }

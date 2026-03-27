@@ -9,6 +9,7 @@ import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
 import { useThemeTable, resolveDisplayColor, isThemeLinked } from './use-theme-resolved'
 import { ThemeLinkBadge } from './theme-link-badge'
+import { VariablePicker } from './variable-picker'
 import { useEditorStore } from '@/store/editor-store'
 
 // ─────────────────────────────────────────────────────────────
@@ -71,7 +72,9 @@ interface ShadowRowProps {
 
 function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
+    const badgeRef = useRef<HTMLSpanElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
+    const [varPickerOpen, setVarPickerOpen] = useState(false)
     const [expanded, setExpanded] = useState(false)
 
     // Theme resolution for shadow color
@@ -133,8 +136,28 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                     title="Edit shadow color"
                 />
 
-                {/* Theme link indicator */}
-                <ThemeLinkBadge isLinked={isThemeLinked(shadow.colorRef, shadow.detached)} variableName={shadow.colorRef} />
+                {/* Theme link indicator + Variable picker */}
+                <span ref={badgeRef}>
+                    <ThemeLinkBadge
+                        isLinked={isThemeLinked(shadow.colorRef, shadow.detached)}
+                        variableName={shadow.colorRef}
+                        showUnlinked
+                        onClick={() => setVarPickerOpen(v => !v)}
+                    />
+                </span>
+                <VariablePicker
+                    open={varPickerOpen}
+                    anchorEl={badgeRef.current}
+                    scope="shadow.color"
+                    currentRef={shadow.colorRef}
+                    onBind={(key) => {
+                        onUpdate({ colorRef: key, detached: false })
+                    }}
+                    onDetach={() => {
+                        onUpdate({ colorRef: undefined, detached: true })
+                    }}
+                    onClose={() => setVarPickerOpen(false)}
+                />
 
                 {/* Hex */}
                 <span

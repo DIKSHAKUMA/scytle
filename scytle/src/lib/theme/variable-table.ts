@@ -218,3 +218,228 @@ export function buildLinkMaps(vars: VariableTable, mode: ThemeMode): LinkMaps {
 }
 
 export { normalizeHex, normalizeShadow }
+
+// ═══════════════════════════════════════════════════
+// Variable Collections — Organizational layer
+// ═══════════════════════════════════════════════════
+
+/**
+ * A VariableCollection groups related variables together.
+ * Inspired by Figma's collections, but purely organisational —
+ * it doesn't change how refs or resolution work.
+ */
+export interface VariableCollection {
+    id: string
+    name: string
+    icon: string               // lucide icon name for UI display
+    groups: VariableGroup[]
+}
+
+/**
+ * A VariableGroup is a sub-section within a collection.
+ * e.g. the "Colors" collection has "Backgrounds", "Text", "Accent", "Border" groups.
+ */
+export interface VariableGroup {
+    id: string
+    name: string
+    variableKeys: VariableKey[]
+}
+
+/**
+ * What kind of value a variable holds — used by the UI to render
+ * the right editor (color swatch vs number input vs text input).
+ */
+export type VariableValueType = 'color' | 'number' | 'font' | 'shadow'
+
+/**
+ * Metadata for a single variable key.
+ */
+export interface VariableMeta {
+    key: VariableKey
+    displayName: string
+    valueType: VariableValueType
+}
+
+// ── Variable metadata registry ──────────────────────
+
+const VARIABLE_META: Record<VariableKey, { displayName: string; valueType: VariableValueType }> = {
+    // Colors
+    'bg/primary':       { displayName: 'Background Primary',   valueType: 'color' },
+    'bg/secondary':     { displayName: 'Background Secondary', valueType: 'color' },
+    'text/primary':     { displayName: 'Text Primary',         valueType: 'color' },
+    'text/secondary':   { displayName: 'Text Secondary',       valueType: 'color' },
+    'accent':           { displayName: 'Accent',               valueType: 'color' },
+    'text/on-accent':   { displayName: 'Text on Accent',       valueType: 'color' },
+    'border':           { displayName: 'Border',               valueType: 'color' },
+    // Fonts
+    'font/heading':     { displayName: 'Heading Font',         valueType: 'font' },
+    'font/body':        { displayName: 'Body Font',            valueType: 'font' },
+    // Font weights
+    'fontWeight/heading': { displayName: 'Heading Weight',     valueType: 'number' },
+    'fontWeight/body':    { displayName: 'Body Weight',        valueType: 'number' },
+    // Radius
+    'radius/sm':        { displayName: 'Small',                valueType: 'number' },
+    'radius/md':        { displayName: 'Medium',               valueType: 'number' },
+    'radius/lg':        { displayName: 'Large',                valueType: 'number' },
+    // Spacing
+    'spacing/sm':       { displayName: 'Small',                valueType: 'number' },
+    'spacing/md':       { displayName: 'Medium',               valueType: 'number' },
+    'spacing/lg':       { displayName: 'Large',                valueType: 'number' },
+    'spacing/gap':      { displayName: 'Gap',                  valueType: 'number' },
+    // Shadows
+    'shadow/sm':        { displayName: 'Small',                valueType: 'shadow' },
+    'shadow/md':        { displayName: 'Medium',               valueType: 'shadow' },
+    // Font sizes
+    'fontSize/h1':      { displayName: 'Heading 1',            valueType: 'number' },
+    'fontSize/h2':      { displayName: 'Heading 2',            valueType: 'number' },
+    'fontSize/body':    { displayName: 'Body',                 valueType: 'number' },
+}
+
+/**
+ * Pre-defined collections that organize the 24 standard variable keys.
+ * The structure mirrors how Relume organizes their design system
+ * (Primitives → Color Schemes → Typography → Spacing).
+ */
+export const STANDARD_COLLECTIONS: VariableCollection[] = [
+    {
+        id: 'colors',
+        name: 'Colors',
+        icon: 'Palette',
+        groups: [
+            {
+                id: 'backgrounds',
+                name: 'Backgrounds',
+                variableKeys: ['bg/primary', 'bg/secondary'],
+            },
+            {
+                id: 'text-colors',
+                name: 'Text',
+                variableKeys: ['text/primary', 'text/secondary'],
+            },
+            {
+                id: 'accent',
+                name: 'Accent',
+                variableKeys: ['accent', 'text/on-accent'],
+            },
+            {
+                id: 'border',
+                name: 'Border',
+                variableKeys: ['border'],
+            },
+        ],
+    },
+    {
+        id: 'typography',
+        name: 'Typography',
+        icon: 'Type',
+        groups: [
+            {
+                id: 'font-families',
+                name: 'Font Families',
+                variableKeys: ['font/heading', 'font/body'],
+            },
+            {
+                id: 'font-weights',
+                name: 'Font Weights',
+                variableKeys: ['fontWeight/heading', 'fontWeight/body'],
+            },
+            {
+                id: 'font-sizes',
+                name: 'Font Sizes',
+                variableKeys: ['fontSize/h1', 'fontSize/h2', 'fontSize/body'],
+            },
+        ],
+    },
+    {
+        id: 'spacing',
+        name: 'Spacing',
+        icon: 'Ruler',
+        groups: [
+            {
+                id: 'spacing-values',
+                name: 'Spacing',
+                variableKeys: ['spacing/sm', 'spacing/md', 'spacing/lg', 'spacing/gap'],
+            },
+            {
+                id: 'radius',
+                name: 'Radius',
+                variableKeys: ['radius/sm', 'radius/md', 'radius/lg'],
+            },
+        ],
+    },
+    {
+        id: 'effects',
+        name: 'Effects',
+        icon: 'Layers',
+        groups: [
+            {
+                id: 'shadows',
+                name: 'Shadows',
+                variableKeys: ['shadow/sm', 'shadow/md'],
+            },
+        ],
+    },
+]
+
+// ── Helpers ──────────────────────────────────────────
+
+/**
+ * Get the display name for a variable key.
+ * e.g. 'bg/primary' → 'Background Primary'
+ */
+export function getVariableDisplayName(key: VariableKey): string {
+    return VARIABLE_META[key]?.displayName ?? key
+}
+
+/**
+ * Get the value type of a variable (color, number, font, shadow).
+ */
+export function getVariableValueType(key: VariableKey): VariableValueType {
+    return VARIABLE_META[key]?.valueType ?? 'number'
+}
+
+/**
+ * Get the full metadata for a variable key.
+ */
+export function getVariableMeta(key: VariableKey): VariableMeta {
+    const meta = VARIABLE_META[key]
+    return { key, displayName: meta.displayName, valueType: meta.valueType }
+}
+
+/**
+ * Find which collection and group a variable key belongs to.
+ */
+export function getCollectionForKey(key: string): { collection: string; group: string } | null {
+    for (const collection of STANDARD_COLLECTIONS) {
+        for (const group of collection.groups) {
+            if ((group.variableKeys as readonly string[]).includes(key)) {
+                return { collection: collection.name, group: group.name }
+            }
+        }
+    }
+    return null
+}
+
+/**
+ * Scoping map — controls which variables appear in the picker
+ * for each property type. Like Figma's VariableScope.
+ */
+export const VARIABLE_SCOPES: Record<string, VariableKey[]> = {
+    'fill.color':       ['bg/primary', 'bg/secondary', 'accent', 'text/primary', 'text/secondary', 'text/on-accent', 'border'],
+    'text.color':       ['text/primary', 'text/secondary', 'text/on-accent', 'accent'],
+    'text.fontFamily':  ['font/heading', 'font/body'],
+    'text.fontSize':    ['fontSize/h1', 'fontSize/h2', 'fontSize/body'],
+    'text.fontWeight':  ['fontWeight/heading', 'fontWeight/body'],
+    'shadow.color':     ['accent', 'text/primary', 'border'],
+    'borderRadius':     ['radius/sm', 'radius/md', 'radius/lg'],
+    'padding':          ['spacing/sm', 'spacing/md', 'spacing/lg'],
+    'gap':              ['spacing/gap', 'spacing/sm', 'spacing/md', 'spacing/lg'],
+}
+
+/**
+ * Get the scoped variable keys for a property type.
+ * Returns all variable keys if no specific scope is defined.
+ */
+export function getScopedVariables(propertyType: string): VariableKey[] {
+    return VARIABLE_SCOPES[propertyType] ?? (VARIABLE_KEYS as unknown as VariableKey[])
+}
