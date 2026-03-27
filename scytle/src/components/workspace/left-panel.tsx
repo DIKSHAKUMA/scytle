@@ -106,8 +106,13 @@ export function LeftPanel() {
                 </div>
 
                 {/* ── Tab content ── */}
-                <div className="flex-1 min-h-0 overflow-hidden">
-                    {activeTab === 'Files' ? <FilesTab /> : <ChatTab />}
+                <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <div className={cn('absolute inset-0', activeTab !== 'Files' && 'hidden')}>
+                        <FilesTab />
+                    </div>
+                    <div className={cn('absolute inset-0', activeTab !== 'Chat' && 'hidden')}>
+                        <ChatTab />
+                    </div>
                 </div>
             </div>
 

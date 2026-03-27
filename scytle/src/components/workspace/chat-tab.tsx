@@ -58,6 +58,7 @@ export function ChatTab() {
     const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
     const [isRefining, setIsRefining] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const historyLoaded = useRef(false)
 
@@ -82,6 +83,23 @@ export function ChatTab() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isTyping, isRefining])
+
+    // Auto-scroll to bottom when chat tab becomes visible (tab switch)
+    useEffect(() => {
+        const container = containerRef.current
+        if (!container) return
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+                }
+            },
+            { threshold: 0.1 }
+        )
+        observer.observe(container)
+        return () => observer.disconnect()
+    }, [])
 
     // ── Refine mode: apply the clean JSON result from /api/ai/refine-node ─
     const handleRefine = useCallback(async () => {
@@ -229,7 +247,7 @@ export function ChatTab() {
         : ['Add a hero section', 'Add a testimonials section', 'Generate a landing page']
 
     return (
-        <div className="flex flex-col h-full">
+        <div ref={containerRef} className="flex flex-col h-full">
             {/* ── Messages area ── */}
             <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {messages.length === 0 && !isTyping && !isRefining && (

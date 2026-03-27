@@ -340,9 +340,20 @@ export const useChatStore = create<ChatState>()(
 
         // Load conversation history
         loadHistory: async (projectId: string) => {
+            const current = get()
+            // If we already have messages for this project, skip re-fetching
+            if (current.currentProjectId === projectId && current.messages.length > 0) {
+                return
+            }
+
+            const isSwitchingProject = current.currentProjectId !== projectId
+
             set(state => {
                 state.currentProjectId = projectId
-                state.messages = []
+                // Only clear messages when switching to a different project
+                if (isSwitchingProject) {
+                    state.messages = []
+                }
                 state.error = null
             })
 
