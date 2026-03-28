@@ -50,6 +50,15 @@ function frameToHtml(node: FrameNode, indent: number): string {
     const tag = inferSemanticTag(node)
     const classes = buildFrameClasses(node)
 
+    // If this is a frame with an image fill and no children, emit <img>
+    const imageFill = node.fills.find(f => f.type === 'image' && f.src)
+    if (imageFill && imageFill.src && node.children.length === 0) {
+        const src = escapeAttr(imageFill.src)
+        const alt = escapeAttr(node.name || 'Image')
+        const imgClasses = [classes, 'object-cover'].filter(Boolean).join(' ')
+        return `${pad}<img src="${src}" alt="${alt}" class="${imgClasses}" />`
+    }
+
     // If this is a button-like frame, emit <button>
     if (isButtonLikeFrame(node)) {
         const textChild = node.children[0] as TextNode

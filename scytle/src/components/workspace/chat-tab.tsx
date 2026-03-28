@@ -11,8 +11,45 @@ import { nodeToHtml } from '@/lib/export'
 import { ModelSelector } from '@/components/model-selector'
 import { getDefaultModel } from '@/lib/ai/models'
 import type { ScytleNode } from '@/types/canvas'
+import type { Fill } from '@/types/canvas'
 
 // ── Helpers ────────────────────────────────────────────────
+
+/** Recursively collect all image sources from a node tree (ImageNode.src + FrameNode image fills) */
+function collectImageSources(node: ScytleNode): string[] {
+    const sources: string[] = []
+    if (node.type === 'image' && node.src) {
+        sources.push(node.src)
+    } else if (node.type === 'frame') {
+        const imgFill = node.fills.find((f: Fill) => f.type === 'image' && 'src' in f && f.src)
+        if (imgFill && imgFill.type === 'image' && imgFill.src) {
+            sources.push(imgFill.src)
+        }
+        for (const child of node.children) {
+            sources.push(...collectImageSources(child))
+        }
+    }
+    return sources
+}
+
+/** Restore image sources in a new node tree from the original sources list (in-order matching) */
+function restoreImageSources(node: ScytleNode, sources: string[], index: { i: number }): void {
+    if (index.i >= sources.length) return
+
+    if (node.type === 'image' && node.src) {
+        node.src = sources[index.i] || node.src
+        index.i++
+    } else if (node.type === 'frame') {
+        const imgFill = node.fills.find((f: Fill) => f.type === 'image' && 'src' in f)
+        if (imgFill && imgFill.type === 'image') {
+            imgFill.src = sources[index.i] || imgFill.src
+            index.i++
+        }
+        for (const child of node.children) {
+            restoreImageSources(child, sources, index)
+        }
+    }
+}
 
 /** Returns [{ id, name }] from leaf → root so we can render chips root→leaf */
 function getSelectionAncestors(
@@ -146,6 +183,13 @@ export function ChatTab() {
                 newNode.width = selectedNode.width
                 newNode.height = selectedNode.height
                 newNode.id = selectedNode.id
+
+                // Restore image sources from original node tree (safety net)
+                const originalImages = collectImageSources(selectedNode)
+                if (originalImages.length > 0) {
+                    restoreImageSources(newNode, originalImages, { i: 0 })
+                }
+
                 replaceNode(selectedNode.id, newNode)
                 console.log('🤖 refine-node applied to:', selectedNode.id)
             } catch (e) {

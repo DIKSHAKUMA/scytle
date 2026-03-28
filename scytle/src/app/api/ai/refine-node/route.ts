@@ -64,33 +64,56 @@ export async function POST(request: NextRequest) {
               ).join('\n')}\n`
             : ''
 
+        // Extract image inventory from the input HTML for the AI to reference
+        const imgRegex = /<img\s+[^>]*src="([^"]*)"[^>]*alt="([^"]*)"[^>]*\/?>/gi
+        const images: Array<{ src: string; alt: string }> = []
+        let imgMatch
+        while ((imgMatch = imgRegex.exec(nodeHtml)) !== null) {
+            images.push({ src: imgMatch[1], alt: imgMatch[2] })
+        }
+        const imageInventory = images.length > 0
+            ? `\nIMAGE INVENTORY — These MUST appear in your output with IDENTICAL src and alt:\n${images.map((img, i) =>
+                `  ${i + 1}. src="${img.src}" alt="${img.alt}"`
+              ).join('\n')}\n`
+            : ''
+
         const systemPrompt = `You are Scytle, an elite frontend design agent performing a SURGICAL EDIT on a single UI component.
 
 CRITICAL RULES — FOLLOW EXACTLY:
+
+CONTENT PRESERVATION (NON-NEGOTIABLE):
 1. You MUST preserve ALL existing text content, headings, paragraphs, bullet points, and copy EXACTLY as-is. Do NOT invent, add, or remove any text content.
-2. You MUST preserve ALL images (keep the same <img> tags with the same src and alt attributes).
-3. You MUST preserve the same HTML structure and hierarchy. Do NOT add new sections, cards, or content blocks that don't exist in the original.
-4. ONLY modify visual/styling properties: colors, backgrounds, borders, shadows, spacing, typography styles (font-size, font-weight, color), and Tailwind CSS classes.
-5. Output COMPLETE HTML — never truncate or use placeholders like "<!-- rest -->".
+2. You MUST preserve EVERY <img> tag with its EXACT same src and alt attributes. Never change, remove, or replace any image URL. Never substitute real URLs with placeholder URLs.
+3. You MUST preserve ALL links (<a> tags) with their exact href attributes.
+
+WHAT YOU CAN MODIFY:
+4. Tailwind CSS classes on any element — colors, backgrounds, borders, shadows, spacing, typography styles, layout classes (grid-cols, flex-direction, gap, etc.), sizing, positioning.
+5. You may restructure layout (e.g., change grid columns, flex direction, element ordering) IF the user's request requires it.
 6. Use only Tailwind CSS utility classes. No arbitrary CSS or inline styles.
-7. The output HTML must be a MODIFIED version of the input HTML — same structure, same content, different styling.
+
+WHAT YOU MUST NOT DO:
+7. Do NOT add new HTML elements, sections, or content blocks that don't exist in the original.
+8. Do NOT remove any existing HTML elements.
+9. Do NOT replace real image URLs with placeholder URLs or vice versa.
+10. Do NOT truncate output or use placeholders like "<!-- rest -->".
+11. Output COMPLETE HTML — every element from the input must appear in the output.
 
 TARGET NODE:
 - ID: ${nodeId}
 - Name: ${nodeName || 'Unnamed'}
 - Current HTML:
 ${nodeHtml}
-${contextSection}
+${imageInventory}${contextSection}
 YOUR RESPONSE FORMAT:
 You MUST respond with valid JSON only. No markdown code fences, no extra text.
 {
   "html": "<div class='...'>...the same content with updated styling...</div>",
-  "summary": "Brief 1-sentence description of what styling changed"
+  "summary": "Brief 1-sentence description of what changed"
 }`
 
         const userMessage = `User request: "${prompt}"
 
-Apply ONLY this change to the node above. Keep all text content, images, and structure identical — only change the styling/classes as needed to fulfill the request. Respond with JSON only.`
+Apply this change to the node above. Preserve all text content and all images (same src and alt). You may modify Tailwind classes and layout structure as needed. Respond with JSON only.`
 
         console.log(`🤖 Refining node "${nodeName || nodeId}" [model: ${model || 'gemini-flash'}, htmlLen: ${nodeHtml.length}]`)
 
