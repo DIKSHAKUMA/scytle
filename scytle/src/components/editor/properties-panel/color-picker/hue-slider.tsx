@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 interface HueSliderProps {
@@ -12,19 +12,36 @@ interface HueSliderProps {
 /** Rainbow hue slider — matches Figma's hue bar exactly */
 export function HueSlider({ value, onChange, className }: HueSliderProps) {
     const trackRef = useRef<HTMLDivElement>(null)
+    const thumbRef = useRef<HTMLDivElement>(null)
     const onChangeRef = useRef(onChange)
     onChangeRef.current = onChange
+    const isDragging = useRef(false)
+
+    const positionThumb = useCallback((hue: number) => {
+        const el = thumbRef.current
+        if (!el) return
+        el.style.left = `${(hue / 360) * 100}%`
+        el.style.backgroundColor = `hsl(${hue}, 100%, 50%)`
+    }, [])
+
+    useEffect(() => {
+        if (isDragging.current) return
+        positionThumb(value)
+    }, [value, positionThumb])
 
     const getHueFromEvent = useCallback((clientX: number) => {
         const el = trackRef.current
         if (!el) return
         const rect = el.getBoundingClientRect()
         const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-        onChangeRef.current(Math.round(x * 360))
-    }, [])
+        const hue = Math.round(x * 360)
+        positionThumb(hue)
+        onChangeRef.current(hue)
+    }, [positionThumb])
 
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         e.preventDefault()
+        isDragging.current = true
         getHueFromEvent(e.clientX)
 
         const onMove = (ev: PointerEvent) => {
@@ -32,6 +49,7 @@ export function HueSlider({ value, onChange, className }: HueSliderProps) {
             getHueFromEvent(ev.clientX)
         }
         const onUp = () => {
+            isDragging.current = false
             document.removeEventListener('pointermove', onMove, true)
             document.removeEventListener('pointerup', onUp, true)
             document.removeEventListener('pointercancel', onUp, true)
@@ -40,8 +58,6 @@ export function HueSlider({ value, onChange, className }: HueSliderProps) {
         document.addEventListener('pointerup', onUp, true)
         document.addEventListener('pointercancel', onUp, true)
     }, [getHueFromEvent])
-
-    const thumbX = (value / 360) * 100  // 0-100%
 
     return (
         <div
@@ -55,13 +71,12 @@ export function HueSlider({ value, onChange, className }: HueSliderProps) {
             }}
             onPointerDown={handlePointerDown}
         >
-            {/* Thumb */}
+            {/* Thumb — positioned only via ref */}
             <div
+                ref={thumbRef}
                 className="absolute top-1/2 w-3 h-3 rounded-full pointer-events-none"
                 style={{
-                    left: `${thumbX}%`,
                     transform: 'translate(-50%, -50%)',
-                    backgroundColor: `hsl(${value}, 100%, 50%)`,
                     boxShadow: '0 0 0 2px white, 0 0 0 3px rgba(0,0,0,0.25)',
                 }}
             />

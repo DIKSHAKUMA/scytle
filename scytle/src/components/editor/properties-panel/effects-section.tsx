@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useMemo, memo } from 'react'
 import type { ScytleNode, Shadow, Fill, SolidFill } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
 import { Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
@@ -44,10 +44,10 @@ function fillToShadowColor(fill: Fill): string {
     if (fill.type === 'solid') {
         const hex = normaliseHex(fill.color)
         const opacity = fill.opacity ?? 1
-        if (opacity >= 1) return hex
-        const r = parseInt(hex.slice(1, 3), 16)
-        const g = parseInt(hex.slice(3, 5), 16)
-        const b = parseInt(hex.slice(5, 7), 16)
+        if (opacity >= 1) return `#${hex}`
+        const r = parseInt(hex.slice(0, 2), 16)
+        const g = parseInt(hex.slice(2, 4), 16)
+        const b = parseInt(hex.slice(4, 6), 16)
         return `rgba(${r},${g},${b},${opacity})`
     }
     return '#000000'
@@ -65,12 +65,13 @@ const SHADOW_TYPE_OPTIONS = [
 
 interface ShadowRowProps {
     shadow: Shadow
-    onUpdate: (partial: Partial<Shadow>) => void
-    onRemove: () => void
+    index: number
+    onUpdate: (index: number, partial: Partial<Shadow>) => void
+    onRemove: (index: number) => void
     documentColors: string[]
 }
 
-function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProps) {
+const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, documentColors }: ShadowRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const badgeRef = useRef<HTMLSpanElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
@@ -81,7 +82,8 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
     // shadow.color is rgba string, but shadow.colorRef resolves to hex from variable table
     // We resolve the ref to get the theme hex, then use shadow's existing rgba for display when not linked
     const { table, mode } = useThemeTable()
-    const fill = shadowColorToFill(shadow.color)
+    // Memoize fill so ColorPicker doesn't get a new object reference every render
+    const fill = useMemo(() => shadowColorToFill(shadow.color), [shadow.color])
     const isVisible = shadow.visible !== false
     const opacity = fill.opacity ?? 1
     const hex = fill.color.toUpperCase()
@@ -91,14 +93,9 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
             const partial: Partial<Shadow> & { colorRef?: undefined; detached?: boolean } = {
                 color: fillToShadowColor(updated),
             }
-            // Auto-detach from theme on user edit
-            if (isThemeLinked(shadow.colorRef, shadow.detached)) {
-                partial.colorRef = undefined
-                partial.detached = true
-            }
-            onUpdate(partial)
+            onUpdate(index, partial)
         }
-    }, [onUpdate, shadow.colorRef, shadow.detached])
+    }, [index, onUpdate])
 
     return (
         <>
@@ -106,7 +103,7 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
             <div
                 className={cn(
                     'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1',
-                    'transition-colors',
+                    !pickerOpen && 'transition-colors',
                     pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
                 )}
             >
@@ -126,7 +123,8 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                 <button
                     ref={swatchRef}
                     className={cn(
-                        'w-5 h-5 rounded-sm border shrink-0 transition-all',
+                        'w-5 h-5 rounded-sm border shrink-0',
+                        !pickerOpen && 'transition-all',
                         'border-border/40 hover:border-border/80',
                         pickerOpen && 'ring-1 ring-primary/40',
                         !isVisible && 'opacity-40',
@@ -151,10 +149,10 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                     scope="shadow.color"
                     currentRef={shadow.colorRef}
                     onBind={(key) => {
-                        onUpdate({ colorRef: key, detached: false })
+                        onUpdate(index, { colorRef: key, detached: false })
                     }}
                     onDetach={() => {
-                        onUpdate({ colorRef: undefined, detached: true })
+                        onUpdate(index, { colorRef: undefined, detached: true })
                     }}
                     onClose={() => setVarPickerOpen(false)}
                 />
@@ -189,7 +187,7 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                     )}
                     onChange={(e) => {
                         const n = parseInt(e.target.value, 10)
-                        if (!isNaN(n)) onUpdate({ color: fillToShadowColor({ ...fill, opacity: Math.max(0, Math.min(100, n)) / 100 }) })
+                        if (!isNaN(n)) onUpdate(index, { color: fillToShadowColor({ ...fill, opacity: Math.max(0, Math.min(100, n)) / 100 }) })
                     }}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -198,7 +196,7 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                             e.preventDefault()
                             const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
                             const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
-                            onUpdate({ color: fillToShadowColor({ ...fill, opacity: newVal / 100 }) })
+                            onUpdate(index, { color: fillToShadowColor({ ...fill, opacity: newVal / 100 }) })
                         }
                     }}
                     onFocus={(e) => e.target.select()}
@@ -214,7 +212,7 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                             ? 'text-muted-foreground/40 hover:text-foreground hover:bg-muted/50'
                             : 'text-muted-foreground/25 hover:text-muted-foreground',
                     )}
-                    onClick={() => onUpdate({ visible: !isVisible })}
+                    onClick={() => onUpdate(index, { visible: !isVisible })}
                     title={isVisible ? 'Hide effect' : 'Show effect'}
                 >
                     {isVisible ? <Eye size={11} /> : <EyeOff size={11} />}
@@ -226,7 +224,7 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                         'w-5 h-5 flex items-center justify-center rounded-sm transition-all shrink-0',
                         'text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10',
                     )}
-                    onClick={onRemove}
+                    onClick={() => onRemove(index)}
                     title="Remove effect"
                 >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -252,21 +250,21 @@ function ShadowRow({ shadow, onUpdate, onRemove, documentColors }: ShadowRowProp
                     <SelectInput
                         value={shadow.type}
                         options={SHADOW_TYPE_OPTIONS}
-                        onChange={(v) => onUpdate({ type: v as Shadow['type'] })}
+                        onChange={(v) => onUpdate(index, { type: v as Shadow['type'] })}
                     />
                     <div className="grid grid-cols-2 gap-x-2">
-                        <NumberInput label="X" value={shadow.x} onChange={(v) => onUpdate({ x: v })} step={1} labelWidth="w-4" />
-                        <NumberInput label="Y" value={shadow.y} onChange={(v) => onUpdate({ y: v })} step={1} labelWidth="w-4" />
+                        <NumberInput label="X" value={shadow.x} onChange={(v) => onUpdate(index, { x: v })} step={1} labelWidth="w-4" />
+                        <NumberInput label="Y" value={shadow.y} onChange={(v) => onUpdate(index, { y: v })} step={1} labelWidth="w-4" />
                     </div>
                     <div className="grid grid-cols-2 gap-x-2">
-                        <NumberInput label="Bl" value={shadow.blur} onChange={(v) => onUpdate({ blur: v })} min={0} step={1} labelWidth="w-4" />
-                        <NumberInput label="Sp" value={shadow.spread} onChange={(v) => onUpdate({ spread: v })} step={1} labelWidth="w-4" />
+                        <NumberInput label="Bl" value={shadow.blur} onChange={(v) => onUpdate(index, { blur: v })} min={0} step={1} labelWidth="w-4" />
+                        <NumberInput label="Sp" value={shadow.spread} onChange={(v) => onUpdate(index, { spread: v })} step={1} labelWidth="w-4" />
                     </div>
                 </div>
             )}
         </>
     )
-}
+})
 
 // ─────────────────────────────────────────────────────────────
 // EffectsSection
@@ -279,28 +277,37 @@ interface EffectsSectionProps {
 
 export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
     const allNodes = useEditorStore((s) => s.nodes)
-    const documentColors = collectDocumentColors(allNodes)
+    const documentColors = useMemo(() => collectDocumentColors(allNodes), [allNodes])
     const shadows = node.shadows
+
+    // Use refs so updateShadow/removeShadow callbacks stay stable across renders.
+    // Without this, every shadow change invalidates the callbacks, which creates
+    // new inline closures in the .map(), defeating React.memo on ShadowRow and
+    // causing re-render storms during high-frequency drag operations.
+    const shadowsRef = useRef(shadows)
+    shadowsRef.current = shadows
+    const onUpdateRef = useRef(onUpdate)
+    onUpdateRef.current = onUpdate
 
     const updateShadow = useCallback(
         (index: number, partial: Partial<Shadow>) => {
-            onUpdate({ shadows: shadows.map((s, i) => i === index ? { ...s, ...partial } : s) })
+            onUpdateRef.current({ shadows: shadowsRef.current.map((s, i) => i === index ? { ...s, ...partial } : s) })
         },
-        [shadows, onUpdate]
+        []
     )
 
     const addShadow = useCallback(() => {
-        onUpdate({
+        onUpdateRef.current({
             shadows: [
                 { type: 'drop', color: 'rgba(0,0,0,0.25)', x: 0, y: 4, blur: 4, spread: 0, visible: true },
-                ...shadows,
+                ...shadowsRef.current,
             ],
         })
-    }, [shadows, onUpdate])
+    }, [])
 
     const removeShadow = useCallback(
-        (index: number) => onUpdate({ shadows: shadows.filter((_, i) => i !== index) }),
-        [shadows, onUpdate]
+        (index: number) => onUpdateRef.current({ shadows: shadowsRef.current.filter((_, i) => i !== index) }),
+        []
     )
 
     return (
@@ -327,8 +334,9 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
                         <ShadowRow
                             key={i}
                             shadow={shadow}
-                            onUpdate={(partial) => updateShadow(i, partial)}
-                            onRemove={() => removeShadow(i)}
+                            index={i}
+                            onUpdate={updateShadow}
+                            onRemove={removeShadow}
                             documentColors={documentColors}
                         />
                     ))}

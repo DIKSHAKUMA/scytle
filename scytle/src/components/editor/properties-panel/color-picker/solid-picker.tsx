@@ -47,9 +47,20 @@ export function SolidPicker({
     const latestRef = useRef({ h: stableHue, s: hsb.s, b: hsb.b, onHexChange })
     latestRef.current = { h: stableHue, s: hsb.s, b: hsb.b, onHexChange }
 
+    // RAF-throttled field change — prevents re-render storms during drag
+    const fieldRafId = useRef<number | null>(null)
+    const pendingField = useRef<{ s: number; b: number } | null>(null)
+
     const handleFieldChange = useCallback((s: number, b: number) => {
-        const { h, onHexChange: cb } = latestRef.current
-        cb(hsbToHex(h, s, b))
+        pendingField.current = { s, b }
+        if (fieldRafId.current !== null) return
+        fieldRafId.current = requestAnimationFrame(() => {
+            fieldRafId.current = null
+            const pf = pendingField.current
+            if (!pf) return
+            const { h, onHexChange: cb } = latestRef.current
+            cb(hsbToHex(h, pf.s, pf.b))
+        })
     }, [])
 
     const handleHueChange = useCallback((h: number) => {
