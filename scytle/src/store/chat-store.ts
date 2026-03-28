@@ -43,6 +43,8 @@ interface ChatState {
     setProjectId: (projectId: string) => void
     clearError: () => void
     stopGeneration: () => void
+    /** Internal: persist current messages to DB */
+    _persistMessages: (projectId: string) => Promise<void>
 }
 
 export const useChatStore = create<ChatState>()(
@@ -168,6 +170,9 @@ export const useChatStore = create<ChatState>()(
                     state.isStreaming = false
                     state.abortController = null
                 })
+
+                // Save full conversation to DB (async, fire-and-forget)
+                get()._persistMessages(projectId)
             } catch (error) {
                 // Ignore abort errors
                 if (error instanceof Error && error.name === 'AbortError') {
@@ -241,6 +246,9 @@ export const useChatStore = create<ChatState>()(
                     })
                     state.isTyping = false
                 })
+
+                // Persist conversation to DB
+                get()._persistMessages(projectId)
 
                 return { html: data.html, summary, nodeId: data.nodeId ?? nodeId }
             } catch (error) {
@@ -322,6 +330,9 @@ export const useChatStore = create<ChatState>()(
                         })
                         state.isTyping = false
                     })
+
+                    // Persist conversation to DB
+                    get()._persistMessages(projectId)
                 } else {
                     throw new Error('Invalid sitemap response')
                 }
@@ -441,6 +452,26 @@ export const useChatStore = create<ChatState>()(
                 state.isStreaming = false
                 state.abortController = null
             })
+        },
+
+        // Persist current messages to DB
+        _persistMessages: async (projectId: string) => {
+            try {
+                const jwt = await createJWT()
+                if (!jwt) return
+
+                const { messages } = get()
+                await fetch(`/api/projects/${projectId}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${jwt.jwt}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages }),
+                })
+            } catch (error) {
+                console.error('📦 Error persisting messages:', error)
+            }
         },
     }))
 )

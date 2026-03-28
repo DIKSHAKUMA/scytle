@@ -98,10 +98,10 @@ export async function POST(request: NextRequest) {
         }
 
         // 5. Create streaming response
-        // If the client sent canvas context, we inject it as a system prompt
-        // to turn the AI into a design agent capable of structured JSON actions.
+        // Always use the design chat prompt when canvasNodes are provided (even if empty).
+        // This enables the AI to generate design JSON actions for new page creation.
         let systemPrompt: string | undefined = 'default'
-        const hasCanvasContext = validation.data.canvasNodes && validation.data.canvasNodes.length > 0
+        const hasCanvasContext = validation.data.canvasNodes !== undefined
 
         if (hasCanvasContext) {
             const { buildDesignChatPrompt } = await import('@/lib/ai/prompts/chat-design')

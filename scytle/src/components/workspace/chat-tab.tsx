@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useParams } from 'next/navigation'
 import { Bot, Send, Square, Sparkles, Zap, Loader2, X } from 'lucide-react'
 import { useChatStore } from '@/store/chat-store'
 import { useProjectStore } from '@/store/project-store'
@@ -8,12 +9,20 @@ import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
 import { parseHtmlToNodes } from '@/lib/parser'
 import { nodeToHtml } from '@/lib/export'
+import { generatePage } from '@/lib/generate-page'
 import { ModelSelector } from '@/components/model-selector'
 import { getDefaultModel } from '@/lib/ai/models'
 import type { ScytleNode } from '@/types/canvas'
 import type { Fill } from '@/types/canvas'
 
 // ── Helpers ────────────────────────────────────────────────
+
+/** Detect if a message is asking to create/generate a full page design */
+const PAGE_GENERATION_PATTERN = /\b(create|design|generate|build|make)\b.*\b(page|landing|website|site|homepage|portfolio|dashboard|storefront|blog|layout)\b/i
+
+function isPageGenerationRequest(message: string): boolean {
+    return PAGE_GENERATION_PATTERN.test(message)
+}
 
 /** Recursively collect all image sources from a node tree (ImageNode.src + FrameNode image fills) */
 function collectImageSources(node: ScytleNode): string[] {
@@ -73,7 +82,10 @@ function getSelectionAncestors(
 }
 
 export function ChatTab() {
-    const projectId = useProjectStore((s) => s.currentProject?.projectId)
+    // Use URL params for immediate projectId (fast), fall back to project store (slower)
+    const params = useParams()
+    const storeProjectId = useProjectStore((s) => s.currentProject?.projectId)
+    const projectId = storeProjectId || (params?.id as string) || undefined
 
     const messages = useChatStore((s) => s.messages)
     const isTyping = useChatStore((s) => s.isTyping)
@@ -81,6 +93,7 @@ export function ChatTab() {
     const error = useChatStore((s) => s.error)
     const sendMessage = useChatStore((s) => s.sendMessage)
     const refineNode = useChatStore((s) => s.refineNode)
+    const addMessage = useChatStore((s) => s.addMessage)
     const loadHistory = useChatStore((s) => s.loadHistory)
     const stopGeneration = useChatStore((s) => s.stopGeneration)
     const clearError = useChatStore((s) => s.clearError)
@@ -107,12 +120,14 @@ export function ChatTab() {
     const selectedNodeName = selectedNode?.name ?? ''
 
     const isbusy = isStreaming || isTyping || isRefining
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
     // Load chat history on mount
     useEffect(() => {
         if (projectId && !historyLoaded.current) {
             historyLoaded.current = true
-            loadHistory(projectId)
+            setIsLoadingHistory(true)
+            loadHistory(projectId).finally(() => setIsLoadingHistory(false))
         }
     }, [projectId, loadHistory])
 
@@ -199,14 +214,65 @@ export function ChatTab() {
     }, [input, projectId, isbusy, selectedNode, nodes, refineNode, selectedModel, replaceNode])
 
     // ── Conversational mode: streaming chat when no node is selected ──────
-    const handleChat = useCallback(() => {
+    const handleChat = useCallback(async () => {
         if (!input.trim() || !projectId || isbusy) return
 
         const messageContent = input.trim()
+        setInput('')
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
+        // Route full-page design requests to the generatePage() pipeline
+        // for production-quality output (rich prompts, thinking mode, real images)
+        if (isPageGenerationRequest(messageContent) && !hasSelection) {
+            addMessage('user', messageContent)
+            addMessage('assistant', 'Generating your design... This may take a moment.')
+            setIsRefining(true)
+
+            try {
+                const projectName = useProjectStore.getState().currentProject?.name
+                const projectDesc = useProjectStore.getState().currentProject?.description
+
+                const frame = await generatePage({
+                    pageName: messageContent.substring(0, 60),
+                    pageDescription: messageContent,
+                    projectDescription: projectDesc || projectName || undefined,
+                    model: selectedModel,
+                })
+
+                // Position the new frame next to existing nodes
+                const existingNodes = useEditorStore.getState().nodes
+                if (existingNodes.length > 0) {
+                    const maxX = Math.max(...existingNodes.map(n => n.x + n.width))
+                    frame.x = maxX + 100
+                } else {
+                    frame.x = 0
+                }
+                frame.y = 0
+
+                addNode(frame)
+
+                // Update the assistant message with success
+                useChatStore.getState().updateLastMessage(
+                    `Done! I've created "${frame.name}" on your canvas. You can select it to refine further.`
+                )
+
+                // Persist conversation
+                useChatStore.getState()._persistMessages(projectId)
+            } catch (err) {
+                useChatStore.getState().updateLastMessage(
+                    `Failed to generate the design: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`
+                )
+            } finally {
+                setIsRefining(false)
+            }
+            return
+        }
+
+        // Default: streaming chat with canvas context
         const simplifiedNodes = nodes.map(n => ({
             id: n.id,
             type: n.type,
-            parentId: n.type === 'frame' ? undefined : undefined, // parentId not on ScytleNode directly
+            parentId: n.type === 'frame' ? undefined : undefined,
             html: nodeToHtml(n).substring(0, 500),
         }))
 
@@ -217,9 +283,7 @@ export function ChatTab() {
             simplifiedNodes,
             selectedModel
         )
-        setInput('')
-        if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    }, [input, projectId, isbusy, selectedIds, nodes, sendMessage, selectedModel])
+    }, [input, projectId, isbusy, hasSelection, selectedIds, nodes, sendMessage, addMessage, addNode, selectedModel])
 
     const handleSend = useCallback(() => {
         if (hasSelection) handleRefine()
@@ -229,11 +293,26 @@ export function ChatTab() {
     // ── Execute JSON Design Actions from streaming conversational responses ─
     // Only active in conversational mode (no selection). The AI may return a
     // JSON block describing addNode/deleteNode/replaceNode actions.
+    // Track executed message count to avoid re-executing on history load.
+    const executedUpTo = useRef(0)
+
+    // On history load, mark all existing messages as already-executed
+    useEffect(() => {
+        if (messages.length > 0 && executedUpTo.current === 0) {
+            executedUpTo.current = messages.length
+        }
+    }, [messages.length])
+
     useEffect(() => {
         if (messages.length === 0 || isStreaming) return
+        // Only execute actions from NEW messages (not loaded history)
+        if (messages.length <= executedUpTo.current) return
 
         const lastMessage = messages[messages.length - 1]
         if (lastMessage.role !== 'assistant') return
+
+        // Mark as executed
+        executedUpTo.current = messages.length
 
         const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/)
         if (!jsonMatch) return
@@ -294,7 +373,14 @@ export function ChatTab() {
         <div ref={containerRef} className="flex flex-col h-full">
             {/* ── Messages area ── */}
             <div className="flex-1 overflow-y-auto px-3 py-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                {messages.length === 0 && !isTyping && !isRefining && (
+                {isLoadingHistory && messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+                        <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+                        <p className="text-xs text-muted-foreground">Loading chat history...</p>
+                    </div>
+                )}
+
+                {!isLoadingHistory && messages.length === 0 && !isTyping && !isRefining && (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
                         <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
                             <Sparkles className="w-5 h-5 text-accent" />
