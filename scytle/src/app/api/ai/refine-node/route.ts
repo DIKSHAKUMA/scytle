@@ -17,6 +17,10 @@ const RefineNodeSchema = z.object({
         htmlSnippet: z.string(),
     })).optional(),
     model: z.string().optional(),
+    images: z.array(z.object({
+        mimeType: z.string(),
+        data: z.string(),
+    })).max(5).optional(),
 })
 
 /**
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
         }
 
         const { projectId, nodeId, nodeHtml, nodeName, prompt, contextNodes, model } = validation.data
+        const referenceImages = validation.data.images
 
         // 3. Verify project ownership
         const { databases } = createAdminClient()
@@ -77,7 +82,18 @@ export async function POST(request: NextRequest) {
               ).join('\n')}\n`
             : ''
 
+        const imageRefInstructions = referenceImages && referenceImages.length > 0
+            ? `\nREFERENCE IMAGE(S) PROVIDED:
+The user has attached ${referenceImages.length} reference image(s). Analyze the visual design and apply to the target node:
+- Match the color palette (extract hex values from the image)
+- Replicate layout structure, spacing, and proportions
+- Match typography sizing and weight hierarchy
+- Reproduce border-radius, shadows, and visual effects
+- Use Tailwind CSS classes for pixel-perfect similarity to the reference\n`
+            : ''
+
         const systemPrompt = `You are Scytle, an elite frontend design agent performing a SURGICAL EDIT on a single UI component.
+${imageRefInstructions}
 
 CRITICAL RULES — FOLLOW EXACTLY:
 
@@ -115,15 +131,18 @@ You MUST respond with valid JSON only. No markdown code fences, no extra text.
 
 Apply this change to the node above. Preserve all text content and all images (same src and alt). You may modify Tailwind classes and layout structure as needed. Respond with JSON only.`
 
-        console.log(`🤖 Refining node "${nodeName || nodeId}" [model: ${model || 'gemini-flash'}, htmlLen: ${nodeHtml.length}]`)
+        // Force vision-capable model when reference images are attached
+        const resolvedModel = (referenceImages && referenceImages.length > 0) ? 'gemini-pro' : (model || 'gemini-flash')
+        console.log(`🤖 Refining node "${nodeName || nodeId}" [model: ${resolvedModel}, htmlLen: ${nodeHtml.length}]`)
 
         // 5. Generate (non-streaming for clean JSON response)
         // Low temperature for faithful, predictable edits
         const aiResponse = await generate(userMessage, [], {
-            model: (model || 'gemini-flash') as AIModel,
+            model: resolvedModel as AIModel,
             systemPrompt,
             temperature: 0.3,
             maxTokens: 16384,
+            images: referenceImages,
         })
 
         // 6. Parse the JSON response

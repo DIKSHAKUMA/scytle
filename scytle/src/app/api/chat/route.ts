@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
         }
 
         const { message, projectId, model } = validation.data
+        const images = validation.data.images
 
         // 3. Verify user owns the project
         const { databases } = createAdminClient()
@@ -107,13 +108,23 @@ export async function POST(request: NextRequest) {
             const { buildDesignChatPrompt } = await import('@/lib/ai/prompts/chat-design')
             systemPrompt = buildDesignChatPrompt({
                 canvasNodes: validation.data.canvasNodes || [],
-                selectedNodeId: validation.data.selectedNodeId
+                selectedNodeId: validation.data.selectedNodeId,
+                hasImages: images && images.length > 0,
+                imageCount: images?.length ?? 0,
             })
         }
 
+        // Force vision-capable model when images are attached
+        const hasImages = images && images.length > 0
+        const resolvedModel = hasImages ? 'gemini-pro' : (model || 'gemini-flash')
+        if (hasImages && model && model !== 'gemini-pro') {
+            console.log(`🖼️ Images attached — upgrading model from ${model} to gemini-pro (vision required)`)
+        }
+
         const stream = createStreamResponse(message, conversationHistory, {
-            model: model || 'gemini-flash',
-            systemPrompt: systemPrompt
+            model: resolvedModel,
+            systemPrompt: systemPrompt,
+            images,
         })
 
         // 6. Save user message to conversation (async, don't await)

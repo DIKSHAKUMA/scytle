@@ -16,6 +16,8 @@ export interface GenerateOptions {
     thinking?: boolean
     /** Thinking budget in tokens (default: 2048) */
     thinkingBudget?: number
+    /** Base64-encoded images to include as multimodal input */
+    images?: Array<{ mimeType: string; data: string }>
 }
 
 export interface StreamChunk {
@@ -92,7 +94,14 @@ export async function generate(
         .slice(-AI_CONFIG.context.maxHistoryMessages)
         .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
 
-    contents.push({ role: 'user', parts: [{ text: message }] })
+    // Build user message parts (text + optional images)
+    const userParts: any[] = [{ text: message }]
+    if (options.images && options.images.length > 0) {
+        for (const img of options.images) {
+            userParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
+        }
+    }
+    contents.push({ role: 'user', parts: userParts })
 
     for (const currentModelKey of modelsToTry) {
         const actualModelName = AI_CONFIG.models[currentModelKey]
@@ -158,7 +167,14 @@ export async function* generateStream(
         .slice(-AI_CONFIG.context.maxHistoryMessages)
         .map(msg => ({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.content }] }))
 
-    contents.push({ role: 'user', parts: [{ text: message }] })
+    // Build user message parts (text + optional images)
+    const userParts: any[] = [{ text: message }]
+    if (options.images && options.images.length > 0) {
+        for (const img of options.images) {
+            userParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } })
+        }
+    }
+    contents.push({ role: 'user', parts: userParts })
 
     for (const currentModelKey of modelsToTry) {
         const actualModelName = AI_CONFIG.models[currentModelKey]

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Bot, Send, Square, Sparkles, Zap, Loader2, X } from 'lucide-react'
+import { Bot, Send, Square, Sparkles, Zap, Loader2, X, ImagePlus } from 'lucide-react'
 import { useChatStore } from '@/store/chat-store'
 import { useProjectStore } from '@/store/project-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -12,6 +12,8 @@ import { nodeToHtml } from '@/lib/export'
 import { generatePage } from '@/lib/generate-page'
 import { ModelSelector } from '@/components/model-selector'
 import { getDefaultModel } from '@/lib/ai/models'
+import { processImageFile } from '@/lib/image-utils'
+import type { ImageAttachment } from '@/types'
 import type { ScytleNode } from '@/types/canvas'
 import type { Fill } from '@/types/canvas'
 
@@ -107,9 +109,12 @@ export function ChatTab() {
     const [input, setInput] = useState('')
     const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
     const [isRefining, setIsRefining] = useState(false)
+    const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([])
+    const [messageImages, setMessageImages] = useState<Map<number, string[]>>(new Map())
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const historyLoaded = useRef(false)
 
     // Build selection context — list of ancestor chips (root→leaf)
@@ -155,12 +160,23 @@ export function ChatTab() {
 
     // ── Refine mode: apply the clean JSON result from /api/ai/refine-node ─
     const handleRefine = useCallback(async () => {
-        if (!input.trim() || !projectId || isbusy || !selectedNode) return
+        if ((!input.trim() && attachedImages.length === 0) || !projectId || isbusy || !selectedNode) return
 
-        const prompt = input.trim()
+        const prompt = input.trim() || 'Replicate this design'
+        const imagesToSend = [...attachedImages]
         setInput('')
+        setAttachedImages([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
         setIsRefining(true)
+
+        // Track images for display in the message
+        if (imagesToSend.length > 0) {
+            setMessageImages(prev => {
+                const next = new Map(prev)
+                next.set(messages.length, imagesToSend.map(img => img.dataUrl))
+                return next
+            })
+        }
 
         // Serialize the selected node to HTML so the AI can see exactly what it looks like
         const selectedNodeHtml = nodeToHtml(selectedNode)
@@ -184,6 +200,7 @@ export function ChatTab() {
             prompt,
             contextNodes,
             model: selectedModel,
+            images: imagesToSend.length > 0 ? imagesToSend : undefined,
         })
 
         setIsRefining(false)
@@ -211,19 +228,31 @@ export function ChatTab() {
                 console.error('❌ Failed to parse refined HTML:', e)
             }
         }
-    }, [input, projectId, isbusy, selectedNode, nodes, refineNode, selectedModel, replaceNode])
+    }, [input, projectId, isbusy, selectedNode, nodes, refineNode, selectedModel, replaceNode, attachedImages, messages.length])
 
     // ── Conversational mode: streaming chat when no node is selected ──────
     const handleChat = useCallback(async () => {
-        if (!input.trim() || !projectId || isbusy) return
+        if ((!input.trim() && attachedImages.length === 0) || !projectId || isbusy) return
 
-        const messageContent = input.trim()
+        const messageContent = input.trim() || 'Replicate this design'
+        const imagesToSend = [...attachedImages]
         setInput('')
+        setAttachedImages([])
         if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
+        // Track images for display in the message
+        if (imagesToSend.length > 0) {
+            setMessageImages(prev => {
+                const next = new Map(prev)
+                next.set(messages.length, imagesToSend.map(img => img.dataUrl))
+                return next
+            })
+        }
 
         // Route full-page design requests to the generatePage() pipeline
         // for production-quality output (rich prompts, thinking mode, real images)
-        if (isPageGenerationRequest(messageContent) && !hasSelection) {
+        // Skip this if images are attached — let the streaming chat handle image references
+        if (isPageGenerationRequest(messageContent) && !hasSelection && imagesToSend.length === 0) {
             addMessage('user', messageContent)
             addMessage('assistant', 'Generating your design... This may take a moment.')
             setIsRefining(true)
@@ -281,9 +310,10 @@ export function ChatTab() {
             projectId,
             selectedIds.length > 0 ? selectedIds[0] : null,
             simplifiedNodes,
-            selectedModel
+            selectedModel,
+            imagesToSend.length > 0 ? imagesToSend : undefined
         )
-    }, [input, projectId, isbusy, hasSelection, selectedIds, nodes, sendMessage, addMessage, addNode, selectedModel])
+    }, [input, projectId, isbusy, hasSelection, selectedIds, nodes, sendMessage, addMessage, addNode, selectedModel, attachedImages, messages.length])
 
     const handleSend = useCallback(() => {
         if (hasSelection) handleRefine()
@@ -332,10 +362,18 @@ export function ChatTab() {
                         newNode.x = oldNode.x
                         newNode.y = oldNode.y
                         newNode.id = oldNode.id
+                        replaceNode(actionData.targetNodeId, newNode)
+                    } else {
+                        // Target not found — add as new top-level node
+                        addNode(newNode)
                     }
-                    replaceNode(actionData.targetNodeId, newNode)
-                } else if (actionData.action === 'addNode' && actionData.targetNodeId) {
-                    addNode(newNode, actionData.targetNodeId)
+                } else if (actionData.action === 'addNode') {
+                    // 'root' or missing targetNodeId means top-level; otherwise find parent
+                    const parentId = actionData.targetNodeId && actionData.targetNodeId !== 'root'
+                        ? actionData.targetNodeId
+                        : undefined
+                    const parentExists = parentId ? !!findNodeById(nodes as ScytleNode[], parentId) : true
+                    addNode(newNode, parentExists ? parentId : undefined)
                 }
             } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
                 deleteNode(actionData.targetNodeId)
@@ -359,6 +397,51 @@ export function ChatTab() {
         el.style.height = 'auto'
         el.style.height = Math.min(el.scrollHeight, 120) + 'px'
     }
+
+    // ── Image attachment handlers ──────────────────────────────
+    const addImages = useCallback(async (files: FileList | File[]) => {
+        const fileArray = Array.from(files).slice(0, 5 - attachedImages.length)
+        const processed = await Promise.all(
+            fileArray.map(f => processImageFile(f).catch(() => null))
+        )
+        const valid = processed.filter(Boolean) as ImageAttachment[]
+        if (valid.length > 0) {
+            setAttachedImages(prev => [...prev, ...valid].slice(0, 5))
+        }
+    }, [attachedImages.length])
+
+    const removeImage = useCallback((id: string) => {
+        setAttachedImages(prev => prev.filter(img => img.id !== id))
+    }, [])
+
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) addImages(e.target.files)
+        e.target.value = ''
+    }, [addImages])
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+    }, [])
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+        if (files.length > 0) addImages(files)
+    }, [addImages])
+
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+        const items = Array.from(e.clipboardData.items)
+        const imageFiles = items
+            .filter(item => item.type.startsWith('image/'))
+            .map(item => item.getAsFile())
+            .filter(Boolean) as File[]
+        if (imageFiles.length > 0) {
+            e.preventDefault()
+            addImages(imageFiles)
+        }
+    }, [addImages])
 
     // Strip JSON code blocks from assistant messages for cleaner display
     const renderMessageContent = (content: string) =>
@@ -423,6 +506,19 @@ export function ChatTab() {
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
+                                {/* Inline images for user messages (session-only) */}
+                                {msg.role === 'user' && messageImages.get(i) && (
+                                    <div className="flex gap-1 mb-1.5 flex-wrap">
+                                        {messageImages.get(i)!.map((url, imgIdx) => (
+                                            <img
+                                                key={imgIdx}
+                                                src={url}
+                                                alt={`Reference ${imgIdx + 1}`}
+                                                className="w-16 h-16 rounded-md object-cover border border-border/30"
+                                            />
+                                        ))}
+                                    </div>
+                                )}
                                 <p className="text-xs text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">
                                     {displayContent}
                                     {msg.role === 'assistant' && isStreaming && i === messages.length - 1 && (
@@ -470,7 +566,21 @@ export function ChatTab() {
 
             {/* ── Input area ── */}
             <div className="p-2 border-t border-border/40 shrink-0 space-y-1.5">
-                <div className="flex flex-col rounded-lg bg-muted/40 border border-border/40 focus-within:border-accent/40 transition-colors">
+                <div
+                    className="flex flex-col rounded-lg bg-muted/40 border border-border/40 focus-within:border-accent/40 transition-colors"
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                >
+
+                    {/* Hidden file input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileSelect}
+                    />
 
                     {/* Context chips — shown INSIDE the input box when a node is selected */}
                     {hasSelection && (
@@ -500,25 +610,53 @@ export function ChatTab() {
                         </div>
                     )}
 
+                    {/* Image preview strip */}
+                    {attachedImages.length > 0 && (
+                        <div className="flex gap-1.5 px-2 pt-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                            {attachedImages.map(img => (
+                                <div key={img.id} className="relative shrink-0 w-14 h-14 rounded-md overflow-hidden border border-border/40 group">
+                                    <img src={img.dataUrl} alt="" className="w-full h-full object-cover" />
+                                    <button
+                                        onClick={() => removeImage(img.id)}
+                                        className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X className="w-2.5 h-2.5 text-white" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     <textarea
                         ref={textareaRef}
                         value={input}
                         onChange={handleTextareaChange}
                         onKeyDown={handleKeyDown}
+                        onPaste={handlePaste}
                         placeholder={hasSelection
                             ? `Describe changes to "${selectedNodeName}"…`
-                            : 'Ask AI anything…'}
+                            : attachedImages.length > 0 ? 'Describe what to create from this reference…' : 'Ask AI anything…'}
                         className="w-full bg-transparent text-xs placeholder:text-muted-foreground/50 outline-none resize-none px-3 pt-2 pb-1 min-h-[32px] max-h-[120px]"
                         rows={1}
                         disabled={!projectId || isbusy}
                     />
 
                     <div className="flex items-center justify-between px-2 pb-1.5">
-                        <ModelSelector
-                            value={selectedModel}
-                            onChange={setSelectedModel}
-                            compact
-                        />
+                        <div className="flex items-center gap-1">
+                            <ModelSelector
+                                value={selectedModel}
+                                onChange={setSelectedModel}
+                                compact
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={!projectId || isbusy || attachedImages.length >= 5}
+                                className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="Attach image (or paste / drag & drop)"
+                            >
+                                <ImagePlus className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                         {isStreaming ? (
                             <button
                                 onClick={stopGeneration}
@@ -530,7 +668,7 @@ export function ChatTab() {
                         ) : (
                             <button
                                 onClick={handleSend}
-                                disabled={!input.trim() || !projectId || isbusy}
+                                disabled={(!input.trim() && attachedImages.length === 0) || !projectId || isbusy}
                                 className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground/50 hover:text-accent hover:bg-accent/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                                 {isRefining

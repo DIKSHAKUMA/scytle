@@ -257,7 +257,19 @@ export const ChatMessageSchema = z.object({
     selectedNodeId: z.string().nullable().optional(),
     canvasNodes: z.array(z.any()).optional(), // Will contain subset of ScytleNode fields
     model: z.string().optional(), // AI model key (e.g., 'gemini-pro', 'gemini-flash')
+    images: z.array(z.object({
+        mimeType: z.string(),
+        data: z.string(),
+    })).max(5).optional(),
 })
+
+// Image attachment (client-side only, not persisted to DB)
+export interface ImageAttachment {
+    id: string
+    file: File
+    dataUrl: string
+    mimeType: string
+}
 
 // ============================================
 // TypeScript Types (derived from Zod schemas)
