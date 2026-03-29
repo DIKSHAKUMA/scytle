@@ -12,7 +12,7 @@ import { nodeToHtml } from '@/lib/export'
 import { generatePage } from '@/lib/generate-page'
 import { ModelSelector } from '@/components/model-selector'
 import { getDefaultModel } from '@/lib/ai/models'
-import { processImageFile } from '@/lib/image-utils'
+import { processImageFile, extractBase64Data } from '@/lib/image-utils'
 import type { ImageAttachment } from '@/types'
 import type { ScytleNode } from '@/types/canvas'
 import type { Fill } from '@/types/canvas'
@@ -251,7 +251,6 @@ export function ChatTab() {
 
         // Route full-page design requests to the generatePage() pipeline
         // for production-quality output (rich prompts, thinking mode, real images)
-        // Skip this if images are attached — let the streaming chat handle image references
         if (isPageGenerationRequest(messageContent) && !hasSelection && imagesToSend.length === 0) {
             addMessage('user', messageContent)
             addMessage('assistant', 'Generating your design... This may take a moment.')
@@ -290,6 +289,98 @@ export function ChatTab() {
             } catch (err) {
                 useChatStore.getState().updateLastMessage(
                     `Failed to generate the design: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`
+                )
+            } finally {
+                setIsRefining(false)
+            }
+            return
+        }
+
+        // ── Two-step image reference pipeline ─────────────────────
+        // Step 1: gemini-pro (vision) analyzes the image → design spec
+        // Step 2: generatePage (gemini-flash) builds HTML from that spec
+        if (imagesToSend.length > 0 && !hasSelection) {
+            addMessage('user', messageContent)
+            addMessage('assistant', 'Analyzing your reference image...')
+            setIsRefining(true)
+
+            try {
+                const jwt = await (await import('@/lib/appwrite')).createJWT()
+                if (!jwt) throw new Error('Not authenticated')
+
+                const imagePayload = imagesToSend.map(img => extractBase64Data(img.dataUrl))
+
+                // Step 1: Analyze image with gemini-pro (vision)
+                const analysisRes = await fetch('/api/ai/analyze-image', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${jwt.jwt}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        projectId,
+                        images: imagePayload,
+                        userPrompt: messageContent !== 'Replicate this design' ? messageContent : undefined,
+                    }),
+                })
+
+                if (!analysisRes.ok) {
+                    const errData = await analysisRes.json().catch(() => ({}))
+                    throw new Error(errData.error || 'Failed to analyze image')
+                }
+
+                const analysis = await analysisRes.json()
+
+                // Step 2: Feed analysis into the proven generatePage pipeline
+                useChatStore.getState().updateLastMessage('Generating design from your reference...')
+
+                const projectName = useProjectStore.getState().currentProject?.name
+                const projectDesc = useProjectStore.getState().currentProject?.description
+
+                // Build a rich description from the analysis
+                const sectionsDesc = analysis.sections?.length
+                    ? `\n\nSections to include (in order):\n${analysis.sections.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
+                    : ''
+                const styleDesc = analysis.style
+                    ? `\n\nVisual style: ${analysis.style.tone || 'modern'} theme, ${analysis.style.borderRadius || 'rounded'} corners, ${analysis.style.spacing || 'normal'} spacing. Typography: ${analysis.style.typography || 'clean and modern'}.`
+                    : ''
+                const userNote = messageContent !== 'Replicate this design' ? `\n\nUser's additional instructions: ${messageContent}` : ''
+
+                const pageDescription = `${analysis.description}${sectionsDesc}${styleDesc}${userNote}`
+
+                const frame = await generatePage({
+                    pageName: 'Reference Design',
+                    pageDescription,
+                    projectDescription: projectDesc || projectName || undefined,
+                    model: selectedModel,
+                    themeContext: analysis.theme ? {
+                        primary: analysis.theme.primary || '#2563eb',
+                        secondary: analysis.theme.secondary || '#1e40af',
+                        accent: analysis.theme.accent || '#10b981',
+                        bg: analysis.theme.bg || '#ffffff',
+                        text: analysis.theme.text || '#111827',
+                    } : undefined,
+                })
+
+                // Position the new frame
+                const existingNodes = useEditorStore.getState().nodes
+                if (existingNodes.length > 0) {
+                    const maxX = Math.max(...existingNodes.map(n => n.x + n.width))
+                    frame.x = maxX + 100
+                } else {
+                    frame.x = 0
+                }
+                frame.y = 0
+
+                addNode(frame)
+
+                useChatStore.getState().updateLastMessage(
+                    `Done! I've created a design based on your reference image. You can select it to refine further.`
+                )
+                useChatStore.getState()._persistMessages(projectId)
+            } catch (err) {
+                useChatStore.getState().updateLastMessage(
+                    `Failed to generate from reference: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`
                 )
             } finally {
                 setIsRefining(false)
