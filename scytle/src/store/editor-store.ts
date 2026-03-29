@@ -261,9 +261,11 @@ interface EditorState {
     _projectId: string | null
     /** Whether nodes have EVER been added for this project (prevents re-generation after delete-all) */
     hasEverHadNodes: boolean
-    /** Initialize editor for a specific project — loads state from localStorage */
+    /** Initialize editor for a specific project — loads from localStorage, then server */
     initForProject: (projectId: string) => void
-    /** Save current state to project-specific localStorage */
+    /** Async: load canvas state from server if localStorage is empty */
+    loadCanvasFromServer: (projectId: string) => Promise<void>
+    /** Save current state to project-specific localStorage + async server sync */
     saveProjectState: () => void
     /** Set multiple selected IDs at once (for marquee selection) */
     setSelectedIds: (ids: string[]) => void
@@ -1427,6 +1429,82 @@ export const useEditorStore = create<EditorState>()(
                 try { localStorage.removeItem('scytle-editor-state') } catch { /* ignore */ }
             },
 
+            // Async load from server — called when localStorage is empty
+            loadCanvasFromServer: async (projectId: string) => {
+                try {
+                    const { createJWT } = await import('@/lib/appwrite')
+                    const jwt = await createJWT()
+                    if (!jwt) {
+                        console.warn('📦 Canvas load skipped: no JWT')
+                        return
+                    }
+
+                    console.log(`📦 Loading canvas from server for project ${projectId}...`)
+                    const response = await fetch(`/api/projects/${projectId}/canvas`, {
+                        headers: { 'Authorization': `Bearer ${jwt.jwt}` },
+                    })
+
+                    if (!response.ok) {
+                        console.error(`📦 Canvas load failed: ${response.status} ${response.statusText}`)
+                        return
+                    }
+
+                    const data = await response.json()
+                    if (!data.canvasState) {
+                        console.log('📦 No canvas state on server (first time)')
+                        return
+                    }
+
+                    const loaded = data.canvasState
+
+                    // Migrate from old single-canvas format to pages format
+                    let pages: EditorPage[]
+                    let activePageId: string
+                    if (loaded?.pages && Array.isArray(loaded.pages)) {
+                        pages = loaded.pages
+                        activePageId = loaded.activePageId ?? pages[0]?.id ?? ''
+                    } else {
+                        const page = createEditorPage('Page 1')
+                        page.nodes = loaded?.nodes ?? []
+                        page.canvasColor = loaded?.canvasColor ?? '#F5F5F5'
+                        page.zoom = loaded?.zoom ?? 1
+                        page.panX = loaded?.panX ?? 0
+                        page.panY = loaded?.panY ?? 0
+                        pages = [page]
+                        activePageId = page.id
+                    }
+
+                    const activePage = pages.find((p) => p.id === activePageId) ?? pages[0]
+
+                    set(
+                        (draft) => {
+                            draft.pages = pages
+                            draft.activePageId = activePage.id
+                            draft.nodes = activePage.nodes
+                            draft.canvasColor = activePage.canvasColor
+                            draft.zoom = activePage.zoom
+                            draft.panX = activePage.panX
+                            draft.panY = activePage.panY
+                            draft.hasEverHadNodes = loaded?.hasEverHadNodes ?? activePage.nodes.length > 0
+                        },
+                        false,
+                        'loadCanvasFromServer'
+                    )
+
+                    // Also cache to localStorage for next visit
+                    try {
+                        localStorage.setItem(
+                            `scytle-editor-${projectId}`,
+                            JSON.stringify({ pages, activePageId, hasEverHadNodes: loaded?.hasEverHadNodes ?? activePage.nodes.length > 0 })
+                        )
+                    } catch { /* quota */ }
+
+                    console.log(`📦 Canvas loaded from server for project ${projectId}`)
+                } catch (error) {
+                    console.error('📦 Error loading canvas from server:', error)
+                }
+            },
+
             saveProjectState: () => {
                 const state = get()
                 if (!state._projectId) return
@@ -1443,12 +1521,39 @@ export const useEditorStore = create<EditorState>()(
                     activePageId: state.activePageId,
                     hasEverHadNodes: state.hasEverHadNodes,
                 }
+
+                // 1. Save to localStorage (instant)
                 try {
                     localStorage.setItem(
                         `scytle-editor-${state._projectId}`,
                         JSON.stringify(data)
                     )
                 } catch { /* quota exceeded */ }
+
+                // 2. Async save to server (fire-and-forget, with error logging)
+                const projectId = state._projectId
+                import('@/lib/appwrite').then(({ createJWT }) => {
+                    createJWT().then(jwt => {
+                        if (!jwt) {
+                            console.warn('📦 Canvas save skipped: no JWT')
+                            return
+                        }
+                        fetch(`/api/projects/${projectId}/canvas`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${jwt.jwt}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data),
+                        }).then(res => {
+                            if (!res.ok) {
+                                console.error(`📦 Canvas save failed: ${res.status} ${res.statusText}`)
+                            }
+                        }).catch(err => {
+                            console.error('📦 Canvas save network error:', err)
+                        })
+                    }).catch(() => {})
+                }).catch(() => {})
             },
 
             setSelectedIds: (ids) =>

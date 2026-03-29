@@ -43,6 +43,7 @@ function ProjectEditor() {
     const hasEverHadNodes = useEditorStore((s) => s.hasEverHadNodes)
 
     const [authChecked, setAuthChecked] = useState(false)
+    const [canvasLoaded, setCanvasLoaded] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [genError, setGenError] = useState<string | null>(null)
     const [genPhase, setGenPhase] = useState<string>('Planning...')
@@ -295,10 +296,13 @@ function ProjectEditor() {
     // Auto-trigger generation ONLY on first visit when:
     // - Project is ready and has a description
     // - Canvas is empty AND nodes have NEVER existed for this project
+    // - Canvas loading from server is complete (canvasLoaded)
+    // - Server load didn't find any data (serverHadData = false)
     // This prevents re-triggering after the user deletes all screens
     useEffect(() => {
         if (
             projectReady &&
+            canvasLoaded &&
             !hasNodes &&
             !hasEverHadNodes &&
             currentProject?.description &&
@@ -306,18 +310,43 @@ function ProjectEditor() {
             !projectLoading &&
             !isGenerating
         ) {
+            // Double-check the store directly to prevent race condition
+            // where Zustand state hasn't propagated to React selectors yet
+            const storeState = useEditorStore.getState()
+            if (storeState.hasEverHadNodes || storeState.nodes.length > 0) {
+                console.log('📦 Skipping auto-gen: store has data (React selectors lagging)')
+                return
+            }
+
             if (hasRefImages) {
                 handleReferenceGenerate()
             } else {
                 handleGenerate()
             }
         }
-    }, [projectReady, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate, handleReferenceGenerate, hasRefImages])
+    }, [projectReady, canvasLoaded, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate, handleReferenceGenerate, hasRefImages])
 
-    // Initialize editor state for this project (per-project persistence)
+    // Step 1: Initialize editor state from localStorage (sync, no auth needed)
     useEffect(() => {
-        useEditorStore.getState().initForProject(projectId)
+        const store = useEditorStore.getState()
+        store.initForProject(projectId)
     }, [projectId])
+
+    // Step 2: Once auth is confirmed, try loading from server if localStorage was empty
+    useEffect(() => {
+        if (!authChecked) return
+
+        const stateAfterInit = useEditorStore.getState()
+        if (stateAfterInit.nodes.length === 0 && !stateAfterInit.hasEverHadNodes) {
+            // No local data — fetch from server (needs auth)
+            useEditorStore.getState().loadCanvasFromServer(projectId).finally(() => {
+                setCanvasLoaded(true)
+            })
+        } else {
+            // Local data found — no need for server fetch
+            setCanvasLoaded(true)
+        }
+    }, [projectId, authChecked])
 
     // Auto-save project state on changes (debounced)
     useEffect(() => {
