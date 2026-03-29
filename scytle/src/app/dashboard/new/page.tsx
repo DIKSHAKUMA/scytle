@@ -5,18 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
     ArrowUp, Sparkles, ArrowLeft, Zap, Globe, Smartphone,
-    Paperclip, Check, ChevronDown, X, Image as ImageIcon,
-    FileText, Loader2
+    Paperclip, X, Image as ImageIcon,
+    Loader2
 } from 'lucide-react'
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ModelSelector } from '@/components/model-selector'
 import { useProjectStore } from '@/store'
 import { getDefaultModel } from '@/lib/ai/models'
+import { processImageFile, extractBase64Data } from '@/lib/image-utils'
+import type { ImageAttachment } from '@/types'
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
@@ -62,12 +58,12 @@ export default function NewProjectPage() {
     const [input, setInput] = useState('')
     const [productType, setProductType] = useState<'web' | 'app'>('web')
     const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
-    const [attachments, setAttachments] = useState<string[]>([])
-    const [showAttachMenu, setShowAttachMenu] = useState(false)
+    const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
+    const [generatingStatus, setGeneratingStatus] = useState('')
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const attachMenuRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Auto-focus
     useEffect(() => {
@@ -82,41 +78,98 @@ export default function NewProjectPage() {
         el.style.height = `${Math.min(el.scrollHeight, 200)}px`
     }, [input])
 
-    // Close attach menu on outside click
-    useEffect(() => {
-        if (!showAttachMenu) return
-        const handler = (e: MouseEvent) => {
-            if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) {
-                setShowAttachMenu(false)
-            }
+    // ── Image attachment handlers ──────────────────────────────
+    const addImages = useCallback(async (files: FileList | File[]) => {
+        const fileArray = Array.from(files).slice(0, 5 - attachedImages.length)
+        const processed = await Promise.all(
+            fileArray.map(f => processImageFile(f).catch(() => null))
+        )
+        const valid = processed.filter(Boolean) as ImageAttachment[]
+        if (valid.length > 0) {
+            setAttachedImages(prev => [...prev, ...valid].slice(0, 5))
         }
-        document.addEventListener('mousedown', handler)
-        return () => document.removeEventListener('mousedown', handler)
-    }, [showAttachMenu])
+    }, [attachedImages.length])
+
+    const removeImage = useCallback((id: string) => {
+        setAttachedImages(prev => prev.filter(img => img.id !== id))
+    }, [])
+
+    const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) addImages(e.target.files)
+        e.target.value = ''
+    }, [addImages])
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+        if (files.length > 0) addImages(files)
+    }, [addImages])
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+    }, [])
+
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+        const items = Array.from(e.clipboardData.items)
+        const imageFiles = items
+            .filter(item => item.type.startsWith('image/'))
+            .map(item => item.getAsFile())
+            .filter(Boolean) as File[]
+        if (imageFiles.length > 0) {
+            e.preventDefault()
+            addImages(imageFiles)
+        }
+    }, [addImages])
 
     const handleSubmit = useCallback(async () => {
         const trimmed = input.trim()
-        if (!trimmed || isLoading || isGenerating) return
+        const hasImages = attachedImages.length > 0
+        if ((!trimmed && !hasImages) || isLoading || isGenerating) return
 
         setIsGenerating(true)
-        const name = deriveProjectName(trimmed)
+        const description = trimmed || 'Replicate this design'
+        const name = trimmed ? deriveProjectName(trimmed) : 'Reference Design'
+
+        // Create the project first
         const project = await createProject({
             name: name || 'Untitled Project',
-            description: trimmed,
+            description,
             productType,
             aiModel: selectedModel as 'gemini-pro' | 'gemini-flash',
         })
 
         if (project) {
+            // If images are attached, store them in sessionStorage for the project page to pick up
+            if (hasImages) {
+                const imagePayload = attachedImages.map(img => extractBase64Data(img.dataUrl))
+                try {
+                    sessionStorage.setItem(
+                        `scytle-ref-images-${project.projectId}`,
+                        JSON.stringify({
+                            images: imagePayload,
+                            userPrompt: trimmed || undefined,
+                            model: selectedModel,
+                        })
+                    )
+                } catch {
+                    // sessionStorage might be full for large images, continue without
+                    console.warn('⚠️ Could not store reference images in sessionStorage')
+                }
+            }
+
             const params = new URLSearchParams()
             if (productType !== 'web') params.set('type', productType)
             if (selectedModel !== 'gemini-pro') params.set('model', selectedModel)
+            if (hasImages) params.set('ref', '1')
             const qs = params.toString()
             router.push(`/project/${project.projectId}${qs ? `?${qs}` : ''}`)
         } else {
             setIsGenerating(false)
+            setGeneratingStatus('')
         }
-    }, [input, isLoading, isGenerating, createProject, router, productType, selectedModel])
+    }, [input, isLoading, isGenerating, createProject, router, productType, selectedModel, attachedImages])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -188,29 +241,43 @@ export default function NewProjectPage() {
                     </div>
 
                     {/* Main Input — subtle focus: shadow lift only, no border change, no outline */}
-                    <div className="relative rounded-2xl border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus-within:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.08)] transition-shadow duration-200">
+                    <div
+                        className="relative rounded-2xl border border-border/50 bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] focus-within:shadow-[0_2px_12px_-2px_rgba(0,0,0,0.08)] transition-shadow duration-200"
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                    >
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            multiple
+                            className="hidden"
+                            onChange={handleFileSelect}
+                        />
+
                         <textarea
                             ref={textareaRef}
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={PLACEHOLDERS[productType]}
+                            onPaste={handlePaste}
+                            placeholder={attachedImages.length > 0 ? 'Describe what to create from this reference (optional)...' : PLACEHOLDERS[productType]}
                             rows={1}
                             className="w-full resize-none bg-transparent px-5 pt-4 pb-16 text-base placeholder:text-muted-foreground/40 focus:outline-none focus-visible:outline-none focus:ring-0 min-h-14 max-h-[200px]"
                         />
 
-                        {/* Attachments preview */}
-                        {attachments.length > 0 && (
+                        {/* Image preview strip */}
+                        {attachedImages.length > 0 && (
                             <div className="px-5 pb-2 flex flex-wrap gap-2">
-                                {attachments.map((name, i) => (
-                                    <div key={`${name}-${i}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/50 text-xs text-muted-foreground border border-border/30">
-                                        <ImageIcon className="w-3 h-3" />
-                                        {name}
+                                {attachedImages.map(img => (
+                                    <div key={img.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border/40 group">
+                                        <img src={img.dataUrl} alt="" className="w-full h-full object-cover" />
                                         <button
-                                            onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                                            className="hover:text-foreground transition-colors"
+                                            onClick={() => removeImage(img.id)}
+                                            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
-                                            <X className="w-3 h-3" />
+                                            <X className="w-3 h-3 text-white" />
                                         </button>
                                     </div>
                                 ))}
@@ -232,31 +299,14 @@ export default function NewProjectPage() {
                                 <div className="w-px h-4 bg-border/50 mx-1" />
                                 
                                 {/* Attach */}
-                                <div className="relative" ref={attachMenuRef}>
-                                    <button
-                                        onClick={() => setShowAttachMenu(!showAttachMenu)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                                    >
-                                        <Paperclip className="w-3.5 h-3.5" />
-                                        Attach
-                                    </button>
-                                    {showAttachMenu && (
-                                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-popover border border-border/50 rounded-xl shadow-lg p-1.5 z-10">
-                                            <button
-                                                onClick={() => { setAttachments(prev => [...prev, 'screenshot.png']); setShowAttachMenu(false) }}
-                                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                                            >
-                                                <ImageIcon className="w-4 h-4" /> Reference Image
-                                            </button>
-                                            <button
-                                                onClick={() => { setAttachments(prev => [...prev, 'requirements.pdf']); setShowAttachMenu(false) }}
-                                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                                            >
-                                                <FileText className="w-4 h-4" /> Document
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={attachedImages.length >= 5}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    <ImageIcon className="w-3.5 h-3.5" />
+                                    {attachedImages.length > 0 ? `${attachedImages.length}/5` : 'Reference'}
+                                </button>
 
                             </div>
 
@@ -265,13 +315,13 @@ export default function NewProjectPage() {
                             {/* Generate button */}
                             <button
                                 onClick={handleSubmit}
-                                disabled={!input.trim() || isGenerating}
+                                disabled={(!input.trim() && attachedImages.length === 0) || isGenerating}
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90 transition-all duration-150 active:scale-[0.97]"
                             >
                                 {isGenerating ? (
                                     <>
                                         <Loader2 className="w-4 h-4 animate-spin" />
-                                        Creating...
+                                        {generatingStatus || 'Creating...'}
                                     </>
                                 ) : (
                                     <>

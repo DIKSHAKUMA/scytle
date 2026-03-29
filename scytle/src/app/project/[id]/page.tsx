@@ -7,8 +7,9 @@ import { useEditorStore } from '@/store/editor-store'
 import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
 import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
 import { Loader2, Sparkles } from 'lucide-react'
-import { generateProject } from '@/lib/generate-page'
+import { generateProject, generatePage } from '@/lib/generate-page'
 import { createSkeletonFrame } from '@/components/workspace/skeleton-frame'
+import { createJWT } from '@/lib/appwrite'
 import type { ProductType, AiModel } from '@/types'
 
 export default function ProjectEditorPage() {
@@ -32,6 +33,7 @@ function ProjectEditor() {
     // Read productType and model from URL search params (set during project creation)
     const urlProductType = (searchParams.get('type') as ProductType) || undefined
     const urlModel = (searchParams.get('model') as AiModel) || undefined
+    const hasRefImages = searchParams.get('ref') === '1'
 
     const { setUser } = useAuthStore()
     const { currentProject, fetchProject, isLoading: projectLoading } = useProjectStore()
@@ -176,6 +178,120 @@ function ProjectEditor() {
         }
     }, [currentProject, isGenerating, urlProductType, urlModel])
 
+    // Reference image generation: two-step pipeline
+    // Step 1: gemini-pro analyzes the image → design spec
+    // Step 2: generatePage (gemini-flash) builds HTML from that spec
+    const handleReferenceGenerate = useCallback(async () => {
+        if (!currentProject || isGenerating) return
+
+        // Retrieve images from sessionStorage
+        const storageKey = `scytle-ref-images-${projectId}`
+        const raw = sessionStorage.getItem(storageKey)
+        if (!raw) {
+            console.warn('⚠️ No reference images found in sessionStorage, falling back to normal generation')
+            handleGenerate()
+            return
+        }
+        sessionStorage.removeItem(storageKey)
+
+        let refData: { images: Array<{ mimeType: string; data: string }>; userPrompt?: string; model?: string }
+        try {
+            refData = JSON.parse(raw)
+        } catch {
+            handleGenerate()
+            return
+        }
+
+        setIsGenerating(true)
+        setGenError(null)
+        setGenPhase('Analyzing reference image...')
+
+        // Place a skeleton frame immediately
+        const skeleton = createSkeletonFrame('Reference Design')
+        skeleton.x = 0
+        skeleton.y = 0
+        useEditorStore.getState().addNode(skeleton)
+        zoomToFitAll()
+
+        try {
+            const jwt = await createJWT()
+            if (!jwt) throw new Error('Not authenticated')
+
+            // Step 1: Analyze image with gemini-pro (vision)
+            const analysisRes = await fetch('/api/ai/analyze-image', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${jwt.jwt}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    projectId,
+                    images: refData.images,
+                    userPrompt: refData.userPrompt,
+                }),
+            })
+
+            if (!analysisRes.ok) {
+                const errData = await analysisRes.json().catch(() => ({}))
+                throw new Error(errData.error || 'Failed to analyze reference image')
+            }
+
+            const analysis = await analysisRes.json()
+
+            // Step 2: Generate HTML via the proven pipeline
+            setGenPhase('Generating design from reference...')
+
+            const sectionsDesc = analysis.sections?.length
+                ? `\n\nSections to include (in order):\n${analysis.sections.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
+                : ''
+            const styleDesc = analysis.style
+                ? `\n\nVisual style: ${analysis.style.tone || 'modern'} theme, ${analysis.style.borderRadius || 'rounded'} corners, ${analysis.style.spacing || 'normal'} spacing. Typography: ${analysis.style.typography || 'clean and modern'}.`
+                : ''
+            const userNote = refData.userPrompt ? `\n\nUser's additional instructions: ${refData.userPrompt}` : ''
+
+            const pageDescription = `${analysis.description}${sectionsDesc}${styleDesc}${userNote}`
+
+            const model = refData.model || urlModel || currentProject.aiModel || 'gemini-flash'
+            const productType = urlProductType ?? currentProject.productType ?? 'web'
+
+            const frame = await generatePage({
+                pageName: 'Reference Design',
+                pageDescription,
+                projectDescription: currentProject.description || currentProject.name,
+                productType,
+                model,
+                themeContext: analysis.theme ? {
+                    primary: analysis.theme.primary || '#2563eb',
+                    secondary: analysis.theme.secondary || '#1e40af',
+                    accent: analysis.theme.accent || '#10b981',
+                    bg: analysis.theme.bg || '#ffffff',
+                    text: analysis.theme.text || '#111827',
+                } : undefined,
+            })
+
+            // Replace skeleton with real frame
+            frame.x = skeleton.x
+            frame.y = skeleton.y
+            frame.name = 'Reference Design'
+            useEditorStore.getState().replaceNode(skeleton.id, frame)
+            zoomToFitAll()
+
+            console.log(`✅ Reference design generated from image`)
+        } catch (error) {
+            console.error('❌ Reference generation failed:', error)
+            setGenError(error instanceof Error ? error.message : 'Generation failed')
+            // Clean up skeleton
+            const store = useEditorStore.getState()
+            if (store.nodes.some(n => n.id === skeleton.id)) {
+                store.deleteNode(skeleton.id)
+            }
+        } finally {
+            setIsGenerating(false)
+            setGenPhase('')
+            setGenProgress(null)
+        }
+    }, [currentProject, isGenerating, projectId, urlProductType, urlModel, zoomToFitAll, handleGenerate])
+
     // Auto-trigger generation ONLY on first visit when:
     // - Project is ready and has a description
     // - Canvas is empty AND nodes have NEVER existed for this project
@@ -190,9 +306,13 @@ function ProjectEditor() {
             !projectLoading &&
             !isGenerating
         ) {
-            handleGenerate()
+            if (hasRefImages) {
+                handleReferenceGenerate()
+            } else {
+                handleGenerate()
+            }
         }
-    }, [projectReady, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate])
+    }, [projectReady, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate, handleReferenceGenerate, hasRefImages])
 
     // Initialize editor state for this project (per-project persistence)
     useEffect(() => {
