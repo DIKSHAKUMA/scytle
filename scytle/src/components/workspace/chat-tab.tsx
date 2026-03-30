@@ -7,13 +7,14 @@ import { useChatStore } from '@/store/chat-store'
 import { useProjectStore } from '@/store/project-store'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
-import { parseHtmlToNodes } from '@/lib/parser'
+import { parseHtmlToNodesViaIframe } from '@/lib/parser'
 import { nodeToHtml } from '@/lib/export'
 import { generatePage } from '@/lib/generate-page'
 import { ModelSelector } from '@/components/model-selector'
 import { getDefaultModel } from '@/lib/ai/models'
 import { processImageFile, extractBase64Data } from '@/lib/image-utils'
 import type { ImageAttachment } from '@/types'
+import { useStyleGuideStore } from '@/store'
 import type { ScytleNode } from '@/types/canvas'
 import type { Fill } from '@/types/canvas'
 
@@ -207,7 +208,12 @@ export function ChatTab() {
 
         if (result?.html) {
             try {
-                const parsed = parseHtmlToNodes(result.html, selectedNode.name)
+                const sgState = useStyleGuideStore.getState()
+                const parsed = await parseHtmlToNodesViaIframe(result.html, selectedNode.name, {
+                    rootWidth: selectedNode.width,
+                    variableTable: sgState.variableTable,
+                    themeMode: sgState.themeMode,
+                })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 // Preserve position, dimensions & id from the original node
                 newNode.x = selectedNode.x
@@ -438,41 +444,49 @@ export function ChatTab() {
         const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/)
         if (!jsonMatch) return
 
-        try {
-            const actionData = JSON.parse(jsonMatch[1])
+            // Async IIFE: parseHtmlToNodesViaIframe is async
+            ; (async () => {
+                try {
+                    const actionData = JSON.parse(jsonMatch[1])
 
-            if (actionData.html) {
-                const parsed = parseHtmlToNodes(actionData.html, 'AI Section')
-                const newNode: ScytleNode = parsed.children.length === 1
-                    ? parsed.children[0]
-                    : parsed
+                    if (actionData.html) {
+                        const sgState = useStyleGuideStore.getState()
+                        const parsed = await parseHtmlToNodesViaIframe(actionData.html, 'AI Section', {
+                            variableTable: sgState.variableTable,
+                            themeMode: sgState.themeMode,
+                        })
+                        const newNode: ScytleNode = parsed.children.length === 1
+                            ? parsed.children[0]
+                            : parsed
 
-                if (actionData.action === 'replaceNode' && actionData.targetNodeId) {
-                    const oldNode = findNodeById(nodes as ScytleNode[], actionData.targetNodeId)
-                    if (oldNode) {
-                        newNode.x = oldNode.x
-                        newNode.y = oldNode.y
-                        newNode.id = oldNode.id
-                        replaceNode(actionData.targetNodeId, newNode)
-                    } else {
-                        // Target not found — add as new top-level node
-                        addNode(newNode)
+                        if (actionData.action === 'replaceNode' && actionData.targetNodeId) {
+                            const oldNode = findNodeById(nodes as ScytleNode[], actionData.targetNodeId)
+                            if (oldNode) {
+                                newNode.x = oldNode.x
+                                newNode.y = oldNode.y
+                                newNode.id = oldNode.id
+                                replaceNode(actionData.targetNodeId, newNode)
+                            } else {
+                                // Target not found — add as new top-level node
+                                addNode(newNode)
+                            }
+                        } else if (actionData.action === 'addNode') {
+                            // 'root' or missing targetNodeId means top-level; otherwise find parent
+                            const parentId = actionData.targetNodeId && actionData.targetNodeId !== 'root'
+                                ? actionData.targetNodeId
+                                : undefined
+                            const parentExists = parentId ? !!findNodeById(nodes as ScytleNode[], parentId) : true
+                            addNode(newNode, parentExists ? parentId : undefined)
+                        } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
+                            deleteNode(actionData.targetNodeId)
+                        }
                     }
-                } else if (actionData.action === 'addNode') {
-                    // 'root' or missing targetNodeId means top-level; otherwise find parent
-                    const parentId = actionData.targetNodeId && actionData.targetNodeId !== 'root'
-                        ? actionData.targetNodeId
-                        : undefined
-                    const parentExists = parentId ? !!findNodeById(nodes as ScytleNode[], parentId) : true
-                    addNode(newNode, parentExists ? parentId : undefined)
-                }
-            } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
-                deleteNode(actionData.targetNodeId)
-            }
-        } catch {
-            // Parsing failure is non-fatal; user sees the AI text response
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+                } catch (e) {
+                        // Parsing failure is non-fatal; user sees the AI text response
+                        console.warn('[ChatTab] Parse error:', e)
+                    }
+                })()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages, isStreaming])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -679,11 +693,10 @@ export function ChatTab() {
                             {ancestors.map((a, idx) => (
                                 <span
                                     key={a.id}
-                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                        idx === ancestors.length - 1
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${idx === ancestors.length - 1
                                             ? 'bg-accent/15 text-accent border border-accent/30'
                                             : 'bg-muted/60 text-muted-foreground border border-border/40'
-                                    }`}
+                                        }`}
                                 >
                                     {a.name}
                                     {/* Allow dismissing the leaf selection */}

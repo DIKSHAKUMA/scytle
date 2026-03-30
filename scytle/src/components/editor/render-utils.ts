@@ -279,6 +279,16 @@ function computePadding(p: Padding, pRef?: string, themeCtx?: ThemeResolverCtx |
 }
 
 // ============================================================
+// Constraint-Based Positioning (Ignore Auto Layout)
+// ============================================================
+
+// Constraints (left/right/center/leftRight/scale, top/bottom/center/topBottom/scale)
+// define how a child repositions/resizes when its PARENT is resized.
+// They do NOT affect the child's current position — that's always stored
+// in node.x / node.y. Constraints are purely declarative metadata until
+// parent-resize logic is implemented. The node always renders at (x, y).
+
+// ============================================================
 // Composite Style Builders
 // ============================================================
 
@@ -303,25 +313,32 @@ export function computeBaseStyles(
     // ── Position ──────────────────────────────────────────────
     // Absolute positioning when: top-level, explicit absolute, or child of freeform frame.
     // Top-level nodes include pan offset (--px/--py); nested absolute children position
-    // relative to their parent’s content box so only zoom scaling is applied.
+    // relative to their parent's content box so only zoom scaling is applied.
     const isFreeformChild = parentLayoutMode === 'none'
+    const isAbsoluteInAutoLayout = node.positioning === 'absolute' && parentLayoutMode != null && parentLayoutMode !== 'none'
     if (isTopLevel || node.positioning === 'absolute' || isFreeformChild) {
         s.position = 'absolute'
         if (isTopLevel) {
             s.left = `calc(${node.x}px * var(--z, 1) + var(--px, 0) * 1px)`
             s.top = `calc(${node.y}px * var(--z, 1) + var(--py, 0) * 1px)`
         } else {
+            // All absolute children (freeform, explicit, or ignoring auto layout)
+            // position at their stored x/y. Constraints are metadata for parent-resize only.
             s.left = `calc(${node.x}px * var(--z, 1))`
             s.top = `calc(${node.y}px * var(--z, 1))`
         }
     }
 
     // ── Sizing ────────────────────────────────────────────────
+    // Absolute-positioned children in auto layout use fixed sizing (not flex)
     // Horizontal
     if (node.sizing.horizontal === 'fixed') {
         s.width = `calc(${node.width}px * var(--z, 1))`
     } else if (node.sizing.horizontal === 'fill') {
-        if (parentDir === 'row') {
+        if (isAbsoluteInAutoLayout) {
+            // Absolute children can't use flex sizing — fall back to fixed width
+            s.width = `calc(${node.width}px * var(--z, 1))`
+        } else if (parentDir === 'row') {
             // Main axis in row → flex grow
             s.flex = '1 1 0%'
             s.minWidth = 0
@@ -338,7 +355,10 @@ export function computeBaseStyles(
     if (node.sizing.vertical === 'fixed') {
         s.height = `calc(${node.height}px * var(--z, 1))`
     } else if (node.sizing.vertical === 'fill') {
-        if (parentDir === 'column') {
+        if (isAbsoluteInAutoLayout) {
+            // Absolute children can't use flex sizing — fall back to fixed height
+            s.height = `calc(${node.height}px * var(--z, 1))`
+        } else if (parentDir === 'column') {
             // Main axis in column → flex grow
             // (may override flex set by horizontal fill — intentional: vertical takes precedence in column)
             s.flex = '1 1 0%'
@@ -410,9 +430,21 @@ export function computeBaseStyles(
     // ── Margin ───────────────────────────────────────────────
     if (node.margin) {
         const { top, right, bottom, left } = node.margin
-        if (top || right || bottom || left) {
-            s.margin = `calc(${top}px * var(--z, 1)) calc(${right}px * var(--z, 1)) calc(${bottom}px * var(--z, 1)) calc(${left}px * var(--z, 1))`
+        const am = node.autoMargin
+        if (top || right || bottom || left || am) {
+            const mt = am?.top ? 'auto' : `calc(${top}px * var(--z, 1))`
+            const mr = am?.right ? 'auto' : `calc(${right}px * var(--z, 1))`
+            const mb = am?.bottom ? 'auto' : `calc(${bottom}px * var(--z, 1))`
+            const ml = am?.left ? 'auto' : `calc(${left}px * var(--z, 1))`
+            s.margin = `${mt} ${mr} ${mb} ${ml}`
         }
+    } else if (node.autoMargin) {
+        const am = node.autoMargin
+        const mt = am.top ? 'auto' : '0'
+        const mr = am.right ? 'auto' : '0'
+        const mb = am.bottom ? 'auto' : '0'
+        const ml = am.left ? 'auto' : '0'
+        s.margin = `${mt} ${mr} ${mb} ${ml}`
     }
 
     return s
@@ -497,6 +529,11 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
         s.gridColumn = node.gridColumnSpan === -1
             ? '1 / -1'
             : `span ${node.gridColumnSpan}`
+    }
+    if (node.gridRowSpan != null) {
+        s.gridRow = node.gridRowSpan === -1
+            ? '1 / -1'
+            : `span ${node.gridRowSpan}`
     }
 
     // Padding

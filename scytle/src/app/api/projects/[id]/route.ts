@@ -53,6 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             updatedAt: doc.updatedAt,
             sitemapData,
             wireframeData: doc.wireframeData || null,
+            canvasData: doc.canvasData || null,
         }
 
         return NextResponse.json({ project })
@@ -102,8 +103,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
-        // Extract wireframeData separately - it may not exist in Appwrite yet
-        const { wireframeData, ...updateData } = validation.data
+        // Extract wireframeData and canvasData separately - they may not exist in Appwrite yet
+        const { wireframeData, canvasData, ...updateData } = validation.data
 
         // Build the update payload with only fields that exist in Appwrite
         const updatePayload: Record<string, unknown> = {
@@ -122,6 +123,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             }
         }
 
+        // Only include canvasData if the attribute exists in Appwrite
+        // To enable: Add 'canvasData' string attribute (size: 1000000) to projects collection in Appwrite console
+        if (canvasData !== undefined) {
+            updatePayload.canvasData = canvasData
+        }
+
         // Update project
         let doc
         try {
@@ -132,11 +139,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
                 updatePayload
             )
         } catch (error: unknown) {
-            // If wireframeData causes the error, retry without it
-            if (error instanceof Error && error.message?.includes('wireframeData')) {
-                console.warn('⚠️ wireframeData attribute not in Appwrite schema - saving without it')
-                console.warn('   To enable: Add "wireframeData" (string, optional) to projects collection')
+            // If wireframeData or canvasData causes the error, retry without them
+            if (error instanceof Error && (error.message?.includes('wireframeData') || error.message?.includes('canvasData'))) {
+                console.warn('⚠️ wireframeData/canvasData attribute not in Appwrite schema - saving without it')
                 delete updatePayload.wireframeData
+                delete updatePayload.canvasData
                 doc = await databases.updateDocument(
                     DATABASE_ID,
                     COLLECTIONS.PROJECTS,

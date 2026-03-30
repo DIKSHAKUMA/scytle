@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useEditorStore } from '@/store/editor-store'
 import type { CanvasTool } from '@/types/canvas'
@@ -16,6 +17,7 @@ import {
     Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ShareDialog } from '@/components/share/share-dialog'
 
 // ────────────────────────────────────────────────────────────
 // Tool definitions (same order as Figma: Move, Hand, Frame, Text)
@@ -39,13 +41,15 @@ const TOOLS: {
 
 interface TopBarProps {
     projectName: string
+    projectId: string
 }
 
-export function TopBar({ projectName }: TopBarProps) {
+export function TopBar({ projectName, projectId }: TopBarProps) {
     const activeTool = useEditorStore((s) => s.activeTool)
     const setActiveTool = useEditorStore((s) => s.setActiveTool)
     const canUndo = useEditorStore((s) => s._past.length > 0)
     const canRedo = useEditorStore((s) => s._future.length > 0)
+    const [shareOpen, setShareOpen] = useState(false)
 
     return (
         <header className="flex items-center h-12 px-3 bg-card border-b border-border/60 shrink-0 select-none">
@@ -119,7 +123,10 @@ export function TopBar({ projectName }: TopBarProps) {
 
             {/* ── Right: Actions ── */}
             <div className="flex items-center gap-1.5">
-                <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+                <button
+                    onClick={() => setShareOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                >
                     <Share2 className="w-3.5 h-3.5" />
                     Share
                 </button>
@@ -132,6 +139,13 @@ export function TopBar({ projectName }: TopBarProps) {
                     Export
                 </button>
             </div>
+
+            {/* Share Dialog */}
+            <ShareDialog
+                open={shareOpen}
+                onOpenChange={setShareOpen}
+                projectId={projectId}
+            />
         </header>
     )
 }

@@ -5,10 +5,9 @@
 // ============================================================
 
 import { createJWT } from '@/lib/appwrite'
-import { parseHtmlToNodes } from '@/lib/parser'
+import { parseHtmlToNodesViaIframe } from '@/lib/parser'
 import type { FrameNode } from '@/types/canvas'
 import { useStyleGuideStore } from '@/store'
-import { relinkNodes } from '@/lib/theme/relink-nodes'
 
 import type { ProductType } from '@/types'
 import type { PagePlan } from '@/lib/ai/prompts/page-planner'
@@ -194,14 +193,14 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     // Strip markdown fences if AI wrapped the output
     html = stripMarkdownFences(html)
 
-    // Parse HTML → ScytleNode tree (with single-pass ref assignment)
-    const frame = parseHtmlToNodes(html, options.pageName, {
+    // Parse HTML → ScytleNode tree via hidden iframe (real browser layout)
+    // relinkNodes is called INSIDE parseHtmlToNodesViaIframe — no separate call needed
+    const frame = await parseHtmlToNodesViaIframe(html, options.pageName, {
+        rootWidth: 1440,
         variableTable: sgState.variableTable,
         themeMode: sgState.themeMode,
+        fonts: extractFontFamilies(html, sgState),
     })
-
-    // Semantic relink: assign refs to any nodes that exact-matching missed
-    relinkNodes(frame.children, sgState.variableTable, sgState.themeMode)
 
     return frame
 }
@@ -212,6 +211,45 @@ function stripMarkdownFences(html: string): string {
     const fenceMatch = trimmed.match(/^```(?:html)?\s*\n([\s\S]*?)```\s*$/)
     if (fenceMatch) return fenceMatch[1].trim()
     return trimmed
+}
+
+/**
+ * Extract Google Font families from HTML and the active style guide.
+ * These are loaded in the iframe before measuring to ensure accurate text metrics.
+ */
+function extractFontFamilies(
+    html: string,
+    sgState: { variableTable: Record<string, { light: string; dark: string }>; themeMode: 'light' | 'dark' },
+): string[] {
+    const families = new Set<string>()
+
+    // From Tailwind arbitrary font-[] classes
+    const fontClasses = html.match(/font-\[([^\]]+)\]/g)
+    if (fontClasses) {
+        for (const fc of fontClasses) {
+            const family = fc.slice(6, -1).replace(/_/g, ' ').replace(/['"]/g, '')
+            if (family) families.add(family)
+        }
+    }
+
+    // From inline style font-family
+    const inlineFont = html.match(/font-family:\s*['"]?([^;'"]+)/gi)
+    if (inlineFont) {
+        for (const match of inlineFont) {
+            const family = match.replace(/font-family:\s*/i, '').split(',')[0].trim().replace(/['"]/g, '')
+            if (family) families.add(family)
+        }
+    }
+
+    // From the active style guide (always load these)
+    const table = sgState.variableTable
+    const mode = sgState.themeMode
+    if (table['font/heading']?.[mode]) families.add(table['font/heading'][mode])
+    if (table['font/body']?.[mode]) families.add(table['font/body'][mode])
+
+    // Filter out system fonts that don't need loading
+    const systemFonts = new Set(['Inter', 'sans-serif', 'serif', 'monospace', 'mono', 'system-ui', 'Arial', 'Helvetica'])
+    return Array.from(families).filter(f => !systemFonts.has(f))
 }
 
 // ── Multi-Page Project Generation ────────────────────────────

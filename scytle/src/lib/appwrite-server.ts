@@ -63,6 +63,7 @@ export const COLLECTIONS = {
     STYLE_GUIDES: 'style_guides',
     RESEARCH_DATA: 'research_data',
     AI_CONVERSATIONS: 'ai_conversations',
+    SHARES: 'shares',
 } as const
 
 /**

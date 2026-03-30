@@ -122,6 +122,7 @@ export const UpdateProjectSchema = z.object({
     aiModel: AiModelSchema.optional(),
     sitemapData: z.string().optional(), // JSON stringified sitemap pages
     wireframeData: z.string().optional(), // JSON stringified wireframe pages
+    canvasData: z.string().optional(), // JSON stringified canvas editor state (pages + nodes)
 })
 
 // Page

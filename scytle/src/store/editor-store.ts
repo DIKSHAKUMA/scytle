@@ -82,6 +82,35 @@ export interface PenDrawingState {
 }
 
 // ============================================================
+// Server sync — debounced, fire-and-forget
+// ============================================================
+
+let _serverSyncTimer: ReturnType<typeof setTimeout> | null = null
+
+async function _syncCanvasToServer(projectId: string, data: unknown) {
+    // Debounce: only sync after 5s of inactivity
+    if (_serverSyncTimer) clearTimeout(_serverSyncTimer)
+    _serverSyncTimer = setTimeout(async () => {
+        try {
+            const { createJWT } = await import('@/lib/appwrite')
+            const jwt = await createJWT()
+            if (!jwt?.jwt) return
+
+            await fetch(`/api/projects/${projectId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${jwt.jwt}`,
+                },
+                body: JSON.stringify({ canvasData: JSON.stringify(data) }),
+            })
+        } catch {
+            // Silent fail — localStorage is the primary store
+        }
+    }, 5000)
+}
+
+// ============================================================
 // State Interface
 // ============================================================
 
@@ -1528,7 +1557,7 @@ export const useEditorStore = create<EditorState>()(
                         `scytle-editor-${state._projectId}`,
                         JSON.stringify(data)
                     )
-                } catch { /* quota exceeded */ }
+                } catch (_e) { /* quota exceeded */ }
 
                 // 2. Async save to server (fire-and-forget, with error logging)
                 const projectId = state._projectId

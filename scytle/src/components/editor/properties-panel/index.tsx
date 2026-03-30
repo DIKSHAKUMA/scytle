@@ -91,6 +91,14 @@ export function PropertiesPanel() {
         return result.parent.layout.mode !== 'none'
     }, [nodes, node])
 
+    // Whether node is inside an auto-layout parent (regardless of its own positioning)
+    const isInAutoLayoutParent = useMemo(() => {
+        if (!node) return false
+        const result = findParentOfNode(nodes, node.id)
+        if (!result || !result.parent) return false
+        return result.parent.layout.mode !== 'none'
+    }, [nodes, node])
+
     // Stable update callback
     const onUpdate = useCallback(
         (updates: Record<string, unknown>) => {
@@ -174,7 +182,7 @@ export function PropertiesPanel() {
 
             {/* Property sections — Figma order */}
 
-            <PositionSection node={node} onUpdate={onUpdate} isAutoLayout={isAutoLayout} />
+            <PositionSection node={node} onUpdate={onUpdate} isAutoLayout={isAutoLayout} isInAutoLayoutParent={isInAutoLayoutParent} />
             <MarginSection node={node} onUpdate={onUpdate} />
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}

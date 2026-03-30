@@ -34,9 +34,14 @@ export const FrameRenderer = memo(function FrameRenderer({
     }
 
     // Freeform (mode: 'none') frames need a positioning context for absolute children
-    // but only if they aren't already absolutely positioned themselves
-    if (node.layout.mode === 'none' && style.position !== 'absolute') {
-        style.position = 'relative'
+    // but only if they aren't already absolutely positioned themselves.
+    // Flex/grid frames also need position:relative if they contain absolute children,
+    // otherwise those children position relative to a distant ancestor instead of their parent.
+    if (style.position !== 'absolute') {
+        const hasAbsoluteChild = node.children.some(c => c.positioning === 'absolute')
+        if (node.layout.mode === 'none' || hasAbsoluteChild) {
+            style.position = 'relative'
+        }
     }
 
     // Determine child flex direction for passing to children

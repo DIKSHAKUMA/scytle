@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import dynamic from 'next/dynamic'
-import { parseHtmlToNodes } from '@/lib/parser/html-to-nodes'
+import { parseHtmlToNodesViaIframe } from '@/lib/parser/iframe-parser'
 import { NodeRenderer } from '@/components/editor'
 import { findNodeById } from '@/types/canvas'
 import type { FrameNode, ScytleNode } from '@/types/canvas'
@@ -20,502 +20,63 @@ const INTER_FONT_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@100;
 // ============================================================
 
 const PRESETS: Record<string, string> = {
-  'Margin Spacing': `<div class="flex flex-col gap-2 p-4 bg-gray-50">
-  <div class="m-4 p-4 bg-blue-100 rounded-lg">
-    <p class="text-sm text-blue-800">m-4 (16px all sides)</p>
-  </div>
-  <div class="mx-8 my-2 p-4 bg-green-100 rounded-lg">
-    <p class="text-sm text-green-800">mx-8 my-2 (32px horizontal, 8px vertical)</p>
-  </div>
-  <div class="mt-6 mb-2 ml-12 p-4 bg-purple-100 rounded-lg">
-    <p class="text-sm text-purple-800">mt-6 mb-2 ml-12 (asymmetric)</p>
-  </div>
-  <div class="flex flex-row gap-2">
-    <div class="flex-1 mr-4 p-3 bg-red-100 rounded">
-      <p class="text-xs text-red-800">flex-1 mr-4</p>
-    </div>
-    <div class="flex-1 ml-4 p-3 bg-orange-100 rounded">
-      <p class="text-xs text-orange-800">flex-1 ml-4</p>
-    </div>
-  </div>
-</div>`,
-
-  'Grid Col-Span': `<div class="grid grid-cols-4 gap-4 p-6 bg-white">
-  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
-  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
-  <div class="col-span-2 p-4 bg-indigo-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
-  <div class="col-span-3 p-4 bg-purple-200 rounded-lg text-center text-sm font-medium">col-span-3</div>
-  <div class="p-4 bg-blue-100 rounded-lg text-center text-sm font-medium">1 col</div>
-  <div class="col-span-full p-4 bg-pink-200 rounded-lg text-center text-sm font-medium">col-span-full (entire row)</div>
-  <div class="col-span-2 p-4 bg-rose-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
-  <div class="col-span-2 p-4 bg-rose-200 rounded-lg text-center text-sm font-medium">col-span-2</div>
-</div>`,
-
-  'Section No Padding': `<div class="bg-white">
-  <section class="bg-gray-900 text-white">
-    <h2 class="text-2xl font-bold">Section with NO padding classes</h2>
-    <p class="text-gray-300 mt-2">Should have zero padding, not hardcoded 64/80px</p>
-  </section>
-  <section class="p-8 bg-blue-50">
-    <h2 class="text-2xl font-bold text-blue-900">Section with p-8</h2>
-    <p class="text-blue-700 mt-2">Should have exactly 32px padding all sides</p>
-  </section>
-  <section class="px-4 py-12 bg-green-50">
-    <h2 class="text-2xl font-bold text-green-900">Section with px-4 py-12</h2>
-    <p class="text-green-700 mt-2">16px horizontal, 48px vertical</p>
-  </section>
-</div>`,
-
-  'Flex Mixed Widths': `<div class="flex flex-row gap-4 p-6 bg-gray-50">
-  <div class="w-1/4 p-4 bg-blue-100 rounded-lg shrink-0">
-    <p class="text-sm font-medium">w-1/4 (fixed 25%)</p>
-    <p class="text-xs text-gray-500 mt-1">shrink-0</p>
-  </div>
-  <div class="flex-1 p-4 bg-green-100 rounded-lg">
-    <p class="text-sm font-medium">flex-1 (grows)</p>
-    <p class="text-xs text-gray-500 mt-1">Takes remaining space</p>
-  </div>
-  <div class="w-48 p-4 bg-purple-100 rounded-lg shrink-0">
-    <p class="text-sm font-medium">w-48 (192px fixed)</p>
-    <p class="text-xs text-gray-500 mt-1">shrink-0</p>
-  </div>
-</div>`,
-
-  'Typography & Line Height': `<div class="flex flex-col gap-6 p-8 bg-white">
-  <div>
-    <p class="text-xs text-gray-400 mb-1">text-xs (12px / leading 16px)</p>
-    <p class="text-xs">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.</p>
-  </div>
-  <div>
-    <p class="text-xs text-gray-400 mb-1">text-base (16px / leading 24px)</p>
-    <p class="text-base">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs.</p>
-  </div>
-  <div>
-    <p class="text-xs text-gray-400 mb-1">text-2xl (24px / leading 32px)</p>
-    <p class="text-2xl font-bold">The quick brown fox jumps over the lazy dog.</p>
-  </div>
-  <div>
-    <p class="text-xs text-gray-400 mb-1">text-base leading-tight (1.25x)</p>
-    <p class="text-base leading-tight">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump.</p>
-  </div>
-  <div>
-    <p class="text-xs text-gray-400 mb-1">text-base leading-loose (2x)</p>
-    <p class="text-base leading-loose">The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump.</p>
-  </div>
-</div>`,
-
-  'Nested Complex Layout': `<div class="flex flex-col bg-white">
-  <nav class="flex items-center justify-between px-6 py-4 bg-white shadow">
-    <div class="text-xl font-bold text-blue-600">Brand</div>
-    <div class="flex items-center gap-6">
-      <a class="text-sm text-gray-600">Products</a>
-      <a class="text-sm text-gray-600">Pricing</a>
-      <a class="text-sm text-gray-600">About</a>
-      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">Sign Up</button>
-    </div>
-  </nav>
-  <section class="flex flex-col items-center py-16 px-8 bg-linear-to-br from-blue-600 to-purple-700 text-white">
-    <h1 class="text-4xl font-bold mb-4 text-center">Build Something Amazing</h1>
-    <p class="text-lg text-center max-w-2xl mb-8 opacity-90">The all-in-one platform for teams.</p>
-    <div class="flex gap-4">
-      <button class="px-6 py-3 bg-white text-blue-600 rounded-full font-semibold text-sm">Get Started Free</button>
-      <button class="px-6 py-3 border-2 border-white rounded-full font-semibold text-sm">Watch Demo</button>
-    </div>
-  </section>
-  <section class="py-16 px-8">
-    <h2 class="text-2xl font-bold text-center mb-12">Features</h2>
-    <div class="grid grid-cols-3 gap-8">
-      <div class="p-6 bg-gray-50 rounded-xl">
-        <div class="w-10 h-10 bg-blue-100 rounded-lg mb-4"></div>
-        <h3 class="text-lg font-semibold mb-2">Lightning Fast</h3>
-        <p class="text-sm text-gray-600">Built for speed with optimized rendering.</p>
-      </div>
-      <div class="p-6 bg-gray-50 rounded-xl">
-        <div class="w-10 h-10 bg-green-100 rounded-lg mb-4"></div>
-        <h3 class="text-lg font-semibold mb-2">Team Ready</h3>
-        <p class="text-sm text-gray-600">Real-time collaboration built-in.</p>
-      </div>
-      <div class="p-6 bg-gray-50 rounded-xl">
-        <div class="w-10 h-10 bg-purple-100 rounded-lg mb-4"></div>
-        <h3 class="text-lg font-semibold mb-2">AI Powered</h3>
-        <p class="text-sm text-gray-600">Smart suggestions save hours.</p>
-      </div>
-    </div>
-  </section>
-  <footer class="flex items-center justify-between px-8 py-6 bg-gray-900 text-white">
-    <p class="text-sm text-gray-400">2026 Brand Inc.</p>
-    <div class="flex gap-6">
-      <a class="text-sm text-gray-400">Privacy</a>
-      <a class="text-sm text-gray-400">Terms</a>
-    </div>
-  </footer>
-</div>`,
-
-  'Card Grid + Margins': `<div class="p-8 bg-gray-100">
-  <h2 class="text-2xl font-bold mb-6">Popular Products</h2>
-  <div class="grid grid-cols-3 gap-6">
-    <div class="bg-white rounded-xl shadow-md overflow-hidden">
-      <div class="h-40 bg-linear-to-br from-blue-400 to-blue-600"></div>
-      <div class="p-5">
-        <h3 class="font-semibold text-lg mb-1">Product One</h3>
-        <p class="text-sm text-gray-500 mb-3">A fantastic product with great features.</p>
-        <div class="flex items-center justify-between">
-          <span class="text-lg font-bold text-blue-600">$49</span>
-          <button class="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg">Buy Now</button>
-        </div>
-      </div>
-    </div>
-    <div class="bg-white rounded-xl shadow-md overflow-hidden">
-      <div class="h-40 bg-linear-to-br from-green-400 to-green-600"></div>
-      <div class="p-5">
-        <h3 class="font-semibold text-lg mb-1">Product Two</h3>
-        <p class="text-sm text-gray-500 mb-3">Another amazing product for your needs.</p>
-        <div class="flex items-center justify-between">
-          <span class="text-lg font-bold text-green-600">$79</span>
-          <button class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg">Buy Now</button>
-        </div>
-      </div>
-    </div>
-    <div class="bg-white rounded-xl shadow-md overflow-hidden">
-      <div class="h-40 bg-linear-to-br from-purple-400 to-purple-600"></div>
-      <div class="p-5">
-        <h3 class="font-semibold text-lg mb-1">Product Three</h3>
-        <p class="text-sm text-gray-500 mb-3">Premium product with exclusive features.</p>
-        <div class="flex items-center justify-between">
-          <span class="text-lg font-bold text-purple-600">$99</span>
-          <button class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg">Buy Now</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>`,
-
-  'Full Landing Page': `<div class="flex flex-col w-full bg-white">
-  <!-- Navbar -->
-  <nav class="flex items-center justify-between px-8 py-4 bg-white border-b border-gray-100">
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 bg-blue-600 rounded-lg"></div>
-      <span class="text-lg font-bold text-gray-900">Acme Inc</span>
-    </div>
-    <div class="flex items-center gap-8">
-      <a class="text-sm font-medium text-gray-600">Products</a>
-      <a class="text-sm font-medium text-gray-600">Solutions</a>
-      <a class="text-sm font-medium text-gray-600">Pricing</a>
-      <a class="text-sm font-medium text-gray-600">Resources</a>
-      <a class="text-sm font-medium text-gray-600">Contact</a>
-    </div>
-    <div class="flex items-center gap-3">
-      <button class="px-4 py-2 text-sm font-medium text-gray-700">Log in</button>
-      <button class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">Start Free Trial</button>
-    </div>
-  </nav>
-
-  <!-- Hero Section -->
-  <section class="flex flex-col items-center px-8 py-24 bg-linear-to-br from-slate-50 to-blue-50">
-    <div class="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full mb-6">
-      <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-      <span class="text-xs font-medium text-blue-700">Now with AI-powered analytics</span>
-    </div>
-    <h1 class="text-5xl font-bold text-gray-900 text-center mb-6">Build products that<br/>customers love</h1>
-    <p class="text-lg text-gray-500 text-center mb-8">The modern platform for product teams to ship faster, measure impact, and iterate with confidence.</p>
-    <div class="flex items-center gap-4 mb-12">
-      <button class="px-6 py-3 bg-blue-600 text-white text-sm font-semibold rounded-lg">Get Started Free</button>
-      <button class="flex items-center gap-2 px-6 py-3 border border-gray-300 text-sm font-semibold text-gray-700 rounded-lg">
-        <div class="w-4 h-4 bg-gray-400 rounded-full"></div>
-        Watch Demo
-      </button>
-    </div>
-    <div class="w-full bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-      <div class="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <div class="w-3 h-3 bg-red-400 rounded-full"></div>
-        <div class="w-3 h-3 bg-yellow-400 rounded-full"></div>
-        <div class="w-3 h-3 bg-green-400 rounded-full"></div>
-        <span class="text-xs text-gray-400 ml-2">dashboard.acme.com</span>
-      </div>
-      <img src="https://placehold.co/1200x600/f8fafc/94a3b8?text=Dashboard+Preview" alt="Dashboard" class="w-full" />
-    </div>
-  </section>
-
-  <!-- Logos Section -->
-  <section class="flex flex-col items-center px-8 py-16 bg-gray-50">
-    <p class="text-sm font-medium text-gray-400 mb-8">TRUSTED BY 10,000+ COMPANIES WORLDWIDE</p>
-    <div class="flex items-center gap-12">
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-      <div class="w-28 h-8 bg-gray-200 rounded"></div>
-    </div>
-  </section>
-
-  <!-- Features Grid -->
-  <section class="flex flex-col items-center px-8 py-24">
-    <span class="text-sm font-semibold text-blue-600 mb-2">FEATURES</span>
-    <h2 class="text-3xl font-bold text-gray-900 text-center mb-4">Everything you need to ship faster</h2>
-    <p class="text-lg text-gray-500 text-center mb-16">Powerful tools designed for modern product teams</p>
-    <div class="grid grid-cols-3 gap-8 w-full">
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-blue-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-blue-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Real-time Analytics</h3>
-        <p class="text-sm text-gray-500">Track user behavior and product metrics in real-time with our powerful analytics dashboard.</p>
-      </div>
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-emerald-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-emerald-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Team Collaboration</h3>
-        <p class="text-sm text-gray-500">Work together seamlessly with real-time editing, comments, and shared workspaces.</p>
-      </div>
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-violet-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-violet-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Smart Automation</h3>
-        <p class="text-sm text-gray-500">Automate repetitive tasks and workflows with AI-powered automation tools.</p>
-      </div>
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-amber-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-amber-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Advanced Security</h3>
-        <p class="text-sm text-gray-500">Enterprise-grade security with SOC 2 compliance, SSO, and granular permissions.</p>
-      </div>
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-rose-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-rose-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">API & Integrations</h3>
-        <p class="text-sm text-gray-500">Connect with 200+ tools including Slack, Jira, GitHub, and Figma.</p>
-      </div>
-      <div class="flex flex-col p-8 bg-white border border-gray-200 rounded-2xl">
-        <div class="w-12 h-12 bg-sky-100 rounded-xl mb-6 flex items-center justify-center">
-          <div class="w-6 h-6 bg-sky-600 rounded"></div>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">Custom Reports</h3>
-        <p class="text-sm text-gray-500">Build custom dashboards and reports with our drag-and-drop report builder.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Stats Section -->
-  <section class="flex items-center justify-center gap-16 px-8 py-20 bg-gray-900">
-    <div class="flex flex-col items-center">
-      <span class="text-4xl font-bold text-white">10K+</span>
-      <span class="text-sm text-gray-400">Active Companies</span>
-    </div>
-    <div class="w-px h-16 bg-gray-700"></div>
-    <div class="flex flex-col items-center">
-      <span class="text-4xl font-bold text-white">2M+</span>
-      <span class="text-sm text-gray-400">Events Tracked Daily</span>
-    </div>
-    <div class="w-px h-16 bg-gray-700"></div>
-    <div class="flex flex-col items-center">
-      <span class="text-4xl font-bold text-white">99.9%</span>
-      <span class="text-sm text-gray-400">Uptime SLA</span>
-    </div>
-    <div class="w-px h-16 bg-gray-700"></div>
-    <div class="flex flex-col items-center">
-      <span class="text-4xl font-bold text-white">150+</span>
-      <span class="text-sm text-gray-400">Countries Served</span>
-    </div>
-  </section>
-
-  <!-- Testimonials -->
-  <section class="flex flex-col items-center px-8 py-24">
-    <span class="text-sm font-semibold text-blue-600 mb-2">TESTIMONIALS</span>
-    <h2 class="text-3xl font-bold text-gray-900 text-center mb-16">Loved by product teams everywhere</h2>
-    <div class="grid grid-cols-3 gap-8 w-full">
-      <div class="flex flex-col p-8 bg-gray-50 rounded-2xl">
-        <p class="text-sm text-gray-600 mb-6">&ldquo;This platform completely transformed how we ship products. Our velocity increased 3x in the first month.&rdquo;</p>
-        <div class="flex items-center gap-3">
-          <img src="https://placehold.co/40x40/3b82f6/ffffff?text=JD" alt="Avatar" class="w-10 h-10 rounded-full" />
-          <div class="flex flex-col">
-            <span class="text-sm font-semibold text-gray-900">Jane Doe</span>
-            <span class="text-xs text-gray-500">VP Product at TechCorp</span>
-          </div>
-        </div>
-      </div>
-      <div class="flex flex-col p-8 bg-gray-50 rounded-2xl">
-        <p class="text-sm text-gray-600 mb-6">&ldquo;The analytics are incredible. We finally understand what our users actually need and can prioritize accordingly.&rdquo;</p>
-        <div class="flex items-center gap-3">
-          <img src="https://placehold.co/40x40/10b981/ffffff?text=MS" alt="Avatar" class="w-10 h-10 rounded-full" />
-          <div class="flex flex-col">
-            <span class="text-sm font-semibold text-gray-900">Mike Smith</span>
-            <span class="text-xs text-gray-500">CTO at StartupXYZ</span>
-          </div>
-        </div>
-      </div>
-      <div class="flex flex-col p-8 bg-gray-50 rounded-2xl">
-        <p class="text-sm text-gray-600 mb-6">&ldquo;Best-in-class integrations. It fits perfectly into our existing workflow without any friction at all.&rdquo;</p>
-        <div class="flex items-center gap-3">
-          <img src="https://placehold.co/40x40/8b5cf6/ffffff?text=AJ" alt="Avatar" class="w-10 h-10 rounded-full" />
-          <div class="flex flex-col">
-            <span class="text-sm font-semibold text-gray-900">Alicia Johnson</span>
-            <span class="text-xs text-gray-500">Engineering Lead at DevCo</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Pricing Section -->
-  <section class="flex flex-col items-center px-8 py-24 bg-gray-50">
-    <span class="text-sm font-semibold text-blue-600 mb-2">PRICING</span>
-    <h2 class="text-3xl font-bold text-gray-900 text-center mb-4">Simple, transparent pricing</h2>
-    <p class="text-lg text-gray-500 text-center mb-16">No hidden fees. Cancel anytime.</p>
-    <div class="grid grid-cols-3 gap-8 w-full">
-      <div class="flex flex-col p-8 bg-white rounded-2xl border border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900 mb-1">Starter</h3>
-        <p class="text-sm text-gray-500 mb-6">For small teams getting started</p>
-        <div class="flex items-baseline gap-1 mb-6">
-          <span class="text-4xl font-bold text-gray-900">$29</span>
-          <span class="text-sm text-gray-500">/month</span>
-        </div>
-        <div class="flex flex-col gap-3 mb-8">
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Up to 5 team members</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">10,000 events/mo</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Basic analytics</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Email support</span></div>
-        </div>
-        <button class="w-full py-3 border border-gray-300 text-sm font-semibold text-gray-700 rounded-lg">Get Started</button>
-      </div>
-      <div class="flex flex-col p-8 bg-blue-600 rounded-2xl border-2 border-blue-600 relative">
-        <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-500 text-white text-xs font-semibold rounded-full">MOST POPULAR</div>
-        <h3 class="text-lg font-semibold text-white mb-1">Pro</h3>
-        <p class="text-sm text-blue-200 mb-6">For growing product teams</p>
-        <div class="flex items-baseline gap-1 mb-6">
-          <span class="text-4xl font-bold text-white">$79</span>
-          <span class="text-sm text-blue-200">/month</span>
-        </div>
-        <div class="flex flex-col gap-3 mb-8">
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded-full"></div><span class="text-sm text-blue-100">Up to 20 team members</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded-full"></div><span class="text-sm text-blue-100">100,000 events/mo</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded-full"></div><span class="text-sm text-blue-100">Advanced analytics</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded-full"></div><span class="text-sm text-blue-100">Priority support</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded-full"></div><span class="text-sm text-blue-100">Custom integrations</span></div>
-        </div>
-        <button class="w-full py-3 bg-white text-sm font-semibold text-blue-600 rounded-lg">Get Started</button>
-      </div>
-      <div class="flex flex-col p-8 bg-white rounded-2xl border border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900 mb-1">Enterprise</h3>
-        <p class="text-sm text-gray-500 mb-6">For large organizations</p>
-        <div class="flex items-baseline gap-1 mb-6">
-          <span class="text-4xl font-bold text-gray-900">Custom</span>
-        </div>
-        <div class="flex flex-col gap-3 mb-8">
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Unlimited team members</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Unlimited events</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Custom analytics</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">Dedicated support</span></div>
-          <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-100 rounded-full"></div><span class="text-sm text-gray-600">SSO & SAML</span></div>
-        </div>
-        <button class="w-full py-3 border border-gray-300 text-sm font-semibold text-gray-700 rounded-lg">Contact Sales</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA Section -->
-  <section class="flex flex-col items-center px-8 py-24 bg-blue-600">
-    <h2 class="text-3xl font-bold text-white text-center mb-4">Ready to get started?</h2>
-    <p class="text-lg text-blue-100 text-center mb-8">Join 10,000+ teams already building better products.</p>
-    <div class="flex items-center gap-4">
-      <button class="px-8 py-3 bg-white text-blue-600 text-sm font-semibold rounded-lg">Start Free Trial</button>
-      <button class="px-8 py-3 border-2 border-white text-white text-sm font-semibold rounded-lg">Talk to Sales</button>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="flex flex-col px-8 py-16 bg-gray-900">
-    <div class="grid grid-cols-4 gap-8 mb-12">
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 bg-blue-600 rounded-lg"></div>
-          <span class="text-lg font-bold text-white">Acme Inc</span>
-        </div>
-        <p class="text-sm text-gray-400">Building the future of product development, one team at a time.</p>
-      </div>
-      <div class="flex flex-col gap-3">
-        <span class="text-sm font-semibold text-white">Product</span>
-        <a class="text-sm text-gray-400">Features</a>
-        <a class="text-sm text-gray-400">Pricing</a>
-        <a class="text-sm text-gray-400">Changelog</a>
-        <a class="text-sm text-gray-400">Roadmap</a>
-      </div>
-      <div class="flex flex-col gap-3">
-        <span class="text-sm font-semibold text-white">Company</span>
-        <a class="text-sm text-gray-400">About</a>
-        <a class="text-sm text-gray-400">Blog</a>
-        <a class="text-sm text-gray-400">Careers</a>
-        <a class="text-sm text-gray-400">Contact</a>
-      </div>
-      <div class="flex flex-col gap-3">
-        <span class="text-sm font-semibold text-white">Legal</span>
-        <a class="text-sm text-gray-400">Privacy Policy</a>
-        <a class="text-sm text-gray-400">Terms of Service</a>
-        <a class="text-sm text-gray-400">Cookie Policy</a>
-      </div>
-    </div>
-    <div class="flex items-center justify-between pt-8 border-t border-gray-800">
-      <p class="text-sm text-gray-500">2026 Acme Inc. All rights reserved.</p>
-      <div class="flex items-center gap-4">
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-      </div>
-    </div>
-  </footer>
-</div>`,
-
-  'Dashboard Layout': `<div class="flex flex-row h-150 bg-gray-100">
+  // ── 1. Dashboard with sidebar, header row, grid stats, absolute badge ──
+  'Dashboard + Absolute': `<div class="flex flex-row h-[600px] bg-gray-100">
   <aside class="w-56 bg-gray-900 text-white flex flex-col shrink-0">
     <div class="px-5 py-4 text-lg font-bold border-b border-gray-700">Dashboard</div>
     <nav class="flex flex-col gap-1 p-3">
-      <a class="px-3 py-2 bg-blue-600 rounded-lg text-sm">Overview</a>
-      <a class="px-3 py-2 text-gray-300 text-sm">Analytics</a>
-      <a class="px-3 py-2 text-gray-300 text-sm">Projects</a>
-      <a class="px-3 py-2 text-gray-300 text-sm">Settings</a>
+      <a class="px-3 py-2 bg-blue-600 rounded-lg text-sm font-medium">Overview</a>
+      <a class="px-3 py-2 text-gray-300 text-sm hover:bg-gray-800 rounded-lg">Analytics</a>
+      <a class="px-3 py-2 text-gray-300 text-sm hover:bg-gray-800 rounded-lg">Projects</a>
+      <a class="px-3 py-2 text-gray-300 text-sm hover:bg-gray-800 rounded-lg">Settings</a>
     </nav>
+    <div class="mt-auto p-4 border-t border-gray-700">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-blue-500 rounded-full"></div>
+        <div class="flex flex-col">
+          <span class="text-xs font-medium">John Doe</span>
+          <span class="text-[10px] text-gray-400">Admin</span>
+        </div>
+      </div>
+    </div>
   </aside>
   <main class="flex-1 flex flex-col p-6 gap-6 overflow-hidden">
     <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold">Overview</h1>
-      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg">New Project</button>
+      <h1 class="text-2xl font-bold text-gray-900">Overview</h1>
+      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium">New Project</button>
     </div>
     <div class="grid grid-cols-3 gap-4">
-      <div class="p-5 bg-white rounded-xl shadow-sm">
-        <p class="text-sm text-gray-500 mb-1">Total Revenue</p>
-        <p class="text-2xl font-bold">$45,231</p>
+      <div class="relative p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div class="absolute -top-2 -right-2 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
+        <p class="text-sm text-gray-500 mb-1">Revenue</p>
+        <p class="text-2xl font-bold text-gray-900">$45,231</p>
         <p class="text-xs text-green-600 mt-1">+20.1% from last month</p>
       </div>
-      <div class="p-5 bg-white rounded-xl shadow-sm">
+      <div class="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
         <p class="text-sm text-gray-500 mb-1">Active Users</p>
-        <p class="text-2xl font-bold">2,350</p>
+        <p class="text-2xl font-bold text-gray-900">2,350</p>
         <p class="text-xs text-green-600 mt-1">+180 new this week</p>
       </div>
-      <div class="p-5 bg-white rounded-xl shadow-sm">
+      <div class="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
         <p class="text-sm text-gray-500 mb-1">Projects</p>
-        <p class="text-2xl font-bold">12</p>
+        <p class="text-2xl font-bold text-gray-900">12</p>
         <p class="text-xs text-gray-400 mt-1">3 in progress</p>
       </div>
     </div>
-    <div class="flex-1 bg-white rounded-xl shadow-sm p-5">
-      <h3 class="font-semibold mb-4">Recent Activity</h3>
+    <div class="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-5 overflow-hidden">
+      <h3 class="font-semibold text-gray-900 mb-4">Recent Activity</h3>
       <div class="flex flex-col gap-3">
         <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
           <div class="w-8 h-8 bg-blue-100 rounded-full shrink-0"></div>
           <div class="flex-1">
-            <p class="text-sm font-medium">New project created</p>
+            <p class="text-sm font-medium text-gray-900">New project created</p>
             <p class="text-xs text-gray-400">2 hours ago</p>
           </div>
         </div>
-        <div class="flex items-center gap-3 pb-3 border-b border-gray-100">
+        <div class="flex items-center gap-3">
           <div class="w-8 h-8 bg-green-100 rounded-full shrink-0"></div>
           <div class="flex-1">
-            <p class="text-sm font-medium">Design review completed</p>
+            <p class="text-sm font-medium text-gray-900">Design review completed</p>
             <p class="text-xs text-gray-400">5 hours ago</p>
           </div>
         </div>
@@ -523,9 +84,449 @@ const PRESETS: Record<string, string> = {
     </div>
   </main>
 </div>`,
+
+  // ── 2. Complex grid with col-span, row-span, nested flex ──
+  'Grid + Spans + Nested Flex': `<div class="grid grid-cols-4 gap-4 p-6 bg-gray-50">
+  <div class="col-span-2 row-span-2 relative bg-linear-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white overflow-hidden">
+    <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+    <h2 class="text-xl font-bold mb-2">Featured Project</h2>
+    <p class="text-sm text-blue-100 mb-4">A complex layout with overlapping elements and gradients.</p>
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-white/20 rounded-full"></div>
+      <div class="flex flex-col">
+        <span class="text-sm font-semibold">Team Alpha</span>
+        <span class="text-xs text-blue-200">12 members</span>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <button class="px-3 py-1.5 bg-white text-blue-600 text-xs font-semibold rounded-lg">View Details</button>
+      <button class="px-3 py-1.5 bg-white/20 text-white text-xs font-semibold rounded-lg border border-white/30">Share</button>
+    </div>
+  </div>
+  <div class="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+        <div class="w-4 h-4 bg-emerald-500 rounded"></div>
+      </div>
+      <span class="text-sm font-semibold text-gray-900">Sales</span>
+    </div>
+    <p class="text-2xl font-bold text-gray-900">$12.4k</p>
+    <p class="text-xs text-emerald-600 mt-1">+8.2%</p>
+  </div>
+  <div class="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-8 h-8 bg-violet-100 rounded-lg flex items-center justify-center">
+        <div class="w-4 h-4 bg-violet-500 rounded"></div>
+      </div>
+      <span class="text-sm font-semibold text-gray-900">Users</span>
+    </div>
+    <p class="text-2xl font-bold text-gray-900">8,491</p>
+    <p class="text-xs text-violet-600 mt-1">+23.1%</p>
+  </div>
+  <div class="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs text-gray-500">Progress</span>
+      <span class="text-xs font-medium text-gray-700">73%</span>
+    </div>
+    <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div class="w-3/4 h-full bg-blue-500 rounded-full"></div>
+    </div>
+  </div>
+  <div class="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs text-gray-500">Completion</span>
+      <span class="text-xs font-medium text-gray-700">45%</span>
+    </div>
+    <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div class="w-5/12 h-full bg-amber-500 rounded-full"></div>
+    </div>
+  </div>
+  <div class="col-span-4 p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-gray-900">Team Members</h3>
+      <button class="text-xs text-blue-600 font-medium">View All</button>
+    </div>
+    <div class="flex items-center gap-4 mt-3">
+      <div class="flex -space-x-2">
+        <div class="w-8 h-8 bg-blue-400 rounded-full border-2 border-white"></div>
+        <div class="w-8 h-8 bg-green-400 rounded-full border-2 border-white"></div>
+        <div class="w-8 h-8 bg-purple-400 rounded-full border-2 border-white"></div>
+        <div class="w-8 h-8 bg-orange-400 rounded-full border-2 border-white"></div>
+        <div class="w-8 h-8 bg-gray-300 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold text-gray-600">+5</div>
+      </div>
+      <span class="text-xs text-gray-500">9 people working on this project</span>
+    </div>
+  </div>
+</div>`,
+
+  // ── 3. Card grid with shadows, gradients, buttons, icons ──
+  'Cards + Effects': `<div class="p-8 bg-gray-50">
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h2 class="text-2xl font-bold text-gray-900">Popular Products</h2>
+      <p class="text-sm text-gray-500 mt-1">Browse our best sellers</p>
+    </div>
+    <button class="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg font-medium">View All</button>
+  </div>
+  <div class="grid grid-cols-3 gap-6">
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+      <div class="h-44 bg-linear-to-br from-blue-400 to-blue-600 relative">
+        <div class="absolute top-3 left-3 px-2 py-0.5 bg-white/90 rounded-full text-[10px] font-semibold text-blue-600">NEW</div>
+      </div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg text-gray-900 mb-1">Product One</h3>
+        <p class="text-sm text-gray-500 mb-4">A fantastic product with great features and excellent reviews.</p>
+        <div class="flex items-center justify-between">
+          <span class="text-xl font-bold text-blue-600">$49</span>
+          <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium">Buy Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+      <div class="h-44 bg-linear-to-br from-green-400 to-emerald-600 relative">
+        <div class="absolute top-3 left-3 px-2 py-0.5 bg-white/90 rounded-full text-[10px] font-semibold text-emerald-600">POPULAR</div>
+      </div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg text-gray-900 mb-1">Product Two</h3>
+        <p class="text-sm text-gray-500 mb-4">Another amazing product for your needs with premium quality.</p>
+        <div class="flex items-center justify-between">
+          <span class="text-xl font-bold text-emerald-600">$79</span>
+          <button class="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg font-medium">Buy Now</button>
+        </div>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
+      <div class="h-44 bg-linear-to-br from-purple-400 to-violet-600 relative">
+        <div class="absolute top-3 left-3 px-2 py-0.5 bg-white/90 rounded-full text-[10px] font-semibold text-violet-600">SALE</div>
+      </div>
+      <div class="p-5">
+        <h3 class="font-semibold text-lg text-gray-900 mb-1">Product Three</h3>
+        <p class="text-sm text-gray-500 mb-4">Premium product with exclusive features and lifetime updates.</p>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-400 line-through">$129</span>
+            <span class="text-xl font-bold text-violet-600">$99</span>
+          </div>
+          <button class="px-4 py-2 bg-violet-600 text-white text-sm rounded-lg font-medium">Buy Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`,
+
+  // ── 4. Flex mixed widths: fixed, grow, percentage ──
+  'Flex Sizing Stress': `<div class="flex flex-col gap-6 p-6 bg-white">
+  <h2 class="text-lg font-bold text-gray-900">Flex Sizing Patterns</h2>
+
+  <div class="flex flex-col gap-1">
+    <p class="text-xs text-gray-400 font-medium">ROW: fixed(25%) + grow(flex-1) + fixed(192px)</p>
+    <div class="flex flex-row gap-3">
+      <div class="w-1/4 p-3 bg-blue-50 border border-blue-200 rounded-lg shrink-0">
+        <p class="text-xs font-medium text-blue-700">w-1/4</p>
+      </div>
+      <div class="flex-1 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <p class="text-xs font-medium text-green-700">flex-1 (grows)</p>
+      </div>
+      <div class="w-48 p-3 bg-purple-50 border border-purple-200 rounded-lg shrink-0">
+        <p class="text-xs font-medium text-purple-700">w-48 (192px)</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <p class="text-xs text-gray-400 font-medium">ROW: 3 equal grow + hug button</p>
+    <div class="flex flex-row gap-3 items-center">
+      <div class="flex-1 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p class="text-xs font-medium text-amber-700">flex-1</p>
+      </div>
+      <div class="flex-1 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p class="text-xs font-medium text-amber-700">flex-1</p>
+      </div>
+      <div class="flex-1 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p class="text-xs font-medium text-amber-700">flex-1</p>
+      </div>
+      <button class="px-4 py-2 bg-gray-900 text-white text-xs rounded-lg shrink-0 font-medium">Action</button>
+    </div>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <p class="text-xs text-gray-400 font-medium">ROW: justify-between with hug children</p>
+    <div class="flex flex-row justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded-lg">
+      <span class="text-sm font-semibold text-gray-900">Title Text</span>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-400">Status:</span>
+        <span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">Active</span>
+      </div>
+      <button class="px-3 py-1 bg-blue-600 text-white text-xs rounded-md font-medium">Edit</button>
+    </div>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <p class="text-xs text-gray-400 font-medium">COLUMN: stretch (default) vs center vs start</p>
+    <div class="flex flex-row gap-3">
+      <div class="flex-1 flex flex-col gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
+        <p class="text-xs text-rose-500 font-medium">items-stretch (default)</p>
+        <div class="p-2 bg-rose-100 rounded text-xs text-rose-700">fills width</div>
+        <button class="py-1 bg-rose-500 text-white text-xs rounded">full-width btn</button>
+      </div>
+      <div class="flex-1 flex flex-col gap-2 items-center p-3 bg-sky-50 border border-sky-200 rounded-lg">
+        <p class="text-xs text-sky-500 font-medium">items-center</p>
+        <div class="p-2 bg-sky-100 rounded text-xs text-sky-700">hugs content</div>
+        <button class="px-4 py-1 bg-sky-500 text-white text-xs rounded">hug btn</button>
+      </div>
+      <div class="flex-1 flex flex-col gap-2 items-start p-3 bg-teal-50 border border-teal-200 rounded-lg">
+        <p class="text-xs text-teal-500 font-medium">items-start</p>
+        <div class="p-2 bg-teal-100 rounded text-xs text-teal-700">hugs left</div>
+        <button class="px-4 py-1 bg-teal-500 text-white text-xs rounded">hug btn</button>
+      </div>
+    </div>
+  </div>
+</div>`,
+
+  // ── 5. SVG icons + absolute positioned badges + overlapping elements ──
+  'Icons + Badges + Overlap': `<div class="p-8 bg-white">
+  <h2 class="text-xl font-bold text-gray-900 mb-6">Notification Center</h2>
+  <div class="flex flex-col gap-3">
+    <div class="flex items-start gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+      <div class="relative shrink-0">
+        <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+        </div>
+        <div class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
+          <span class="text-[8px] text-white font-bold">3</span>
+        </div>
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-semibold text-gray-900">New Messages</h4>
+          <span class="text-[10px] text-gray-400">2 min ago</span>
+        </div>
+        <p class="text-xs text-gray-600 mt-1">You have 3 unread messages from your team members.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-4 p-4 bg-green-50 rounded-xl border border-green-100">
+      <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-semibold text-gray-900">Task Completed</h4>
+          <span class="text-[10px] text-gray-400">1 hour ago</span>
+        </div>
+        <p class="text-xs text-gray-600 mt-1">Project milestone "UI Review" has been completed successfully.</p>
+      </div>
+    </div>
+    <div class="flex items-start gap-4 p-4 bg-amber-50 rounded-xl border border-amber-100">
+      <div class="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center justify-between">
+          <h4 class="text-sm font-semibold text-gray-900">Storage Warning</h4>
+          <span class="text-[10px] text-gray-400">3 hours ago</span>
+        </div>
+        <p class="text-xs text-gray-600 mt-1">You're using 85% of your storage. Consider upgrading your plan.</p>
+        <div class="flex gap-2 mt-2">
+          <button class="px-3 py-1 bg-amber-500 text-white text-xs rounded-md font-medium">Upgrade</button>
+          <button class="px-3 py-1 bg-white text-gray-600 text-xs rounded-md border border-gray-200 font-medium">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`,
+
+  // ── 6. Pricing table — complex nested flex+grid, badges, borders ──
+  'Pricing Table': `<div class="flex flex-col items-center px-8 py-16 bg-gray-50">
+  <h2 class="text-3xl font-bold text-gray-900 text-center mb-2">Simple Pricing</h2>
+  <p class="text-lg text-gray-500 text-center mb-12">No hidden fees. Cancel anytime.</p>
+  <div class="grid grid-cols-3 gap-6 w-full max-w-4xl">
+    <div class="flex flex-col p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+      <h3 class="text-lg font-semibold text-gray-900 mb-1">Starter</h3>
+      <p class="text-sm text-gray-500 mb-4">For individuals</p>
+      <div class="flex items-baseline gap-1 mb-6">
+        <span class="text-4xl font-bold text-gray-900">$9</span>
+        <span class="text-sm text-gray-500">/month</span>
+      </div>
+      <div class="flex flex-col gap-2.5 mb-6">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">5 projects</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">1GB storage</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">Email support</span>
+        </div>
+      </div>
+      <button class="mt-auto w-full py-2.5 border border-gray-300 text-sm font-semibold text-gray-700 rounded-lg">Get Started</button>
+    </div>
+    <div class="flex flex-col p-6 bg-blue-600 rounded-2xl shadow-xl relative">
+      <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-blue-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wider">Most Popular</div>
+      <h3 class="text-lg font-semibold text-white mb-1">Pro</h3>
+      <p class="text-sm text-blue-200 mb-4">For teams</p>
+      <div class="flex items-baseline gap-1 mb-6">
+        <span class="text-4xl font-bold text-white">$29</span>
+        <span class="text-sm text-blue-200">/month</span>
+      </div>
+      <div class="flex flex-col gap-2.5 mb-6">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-blue-400 rounded-full shrink-0"></div>
+          <span class="text-sm text-blue-100">Unlimited projects</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-blue-400 rounded-full shrink-0"></div>
+          <span class="text-sm text-blue-100">50GB storage</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-blue-400 rounded-full shrink-0"></div>
+          <span class="text-sm text-blue-100">Priority support</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-blue-400 rounded-full shrink-0"></div>
+          <span class="text-sm text-blue-100">Advanced analytics</span>
+        </div>
+      </div>
+      <button class="mt-auto w-full py-2.5 bg-white text-sm font-semibold text-blue-600 rounded-lg">Get Started</button>
+    </div>
+    <div class="flex flex-col p-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
+      <h3 class="text-lg font-semibold text-gray-900 mb-1">Enterprise</h3>
+      <p class="text-sm text-gray-500 mb-4">For organizations</p>
+      <div class="flex items-baseline gap-1 mb-6">
+        <span class="text-4xl font-bold text-gray-900">$99</span>
+        <span class="text-sm text-gray-500">/month</span>
+      </div>
+      <div class="flex flex-col gap-2.5 mb-6">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">Everything in Pro</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">500GB storage</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">SSO & SAML</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 bg-green-100 rounded-full shrink-0"></div>
+          <span class="text-sm text-gray-600">Dedicated support</span>
+        </div>
+      </div>
+      <button class="mt-auto w-full py-2.5 border border-gray-300 text-sm font-semibold text-gray-700 rounded-lg">Contact Sales</button>
+    </div>
+  </div>
+</div>`,
+
+  // ── 7. Hero with overlapping layers, gradients, absolute elements ──
+  'Hero + Overlapping Layers': `<div class="relative overflow-hidden bg-gray-900">
+  <div class="absolute inset-0 bg-linear-to-br from-blue-600/20 to-purple-600/20"></div>
+  <div class="absolute top-20 -left-20 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl"></div>
+  <div class="absolute bottom-10 -right-20 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
+  <nav class="relative flex items-center justify-between px-8 py-5">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 bg-blue-500 rounded-lg"></div>
+      <span class="text-lg font-bold text-white">Nebula</span>
+    </div>
+    <div class="flex items-center gap-6">
+      <a class="text-sm text-gray-300 font-medium">Features</a>
+      <a class="text-sm text-gray-300 font-medium">Pricing</a>
+      <a class="text-sm text-gray-300 font-medium">Docs</a>
+      <button class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg font-medium">Get Started</button>
+    </div>
+  </nav>
+  <section class="relative flex flex-col items-center px-8 pt-20 pb-32">
+    <div class="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full mb-6 border border-white/10">
+      <div class="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+      <span class="text-xs text-gray-300 font-medium">Now in public beta</span>
+    </div>
+    <h1 class="text-5xl font-bold text-white text-center mb-6 leading-tight">Build the future<br/>with intelligent design</h1>
+    <p class="text-lg text-gray-400 text-center mb-10 max-w-xl">The next generation platform for design engineers. Ship faster, collaborate better, iterate with confidence.</p>
+    <div class="flex items-center gap-4">
+      <button class="px-6 py-3 bg-blue-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-blue-600/25">Start Building Free</button>
+      <button class="flex items-center gap-2 px-6 py-3 bg-white/10 text-white font-semibold text-sm rounded-xl border border-white/20">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        Watch Demo
+      </button>
+    </div>
+  </section>
+</div>`,
+
+  // ── 8. Data table with alternating rows, badges, inline actions ──
+  'Data Table': `<div class="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-lg font-semibold text-gray-900">Recent Orders</h3>
+    <div class="flex items-center gap-2">
+      <button class="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-lg font-medium">Filter</button>
+      <button class="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg font-medium">Export</button>
+    </div>
+  </div>
+  <div class="flex flex-col">
+    <div class="flex items-center gap-4 py-2.5 px-3 bg-gray-50 rounded-t-lg border-b border-gray-100">
+      <span class="w-24 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Order ID</span>
+      <span class="flex-1 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Customer</span>
+      <span class="w-20 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Amount</span>
+      <span class="w-20 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Status</span>
+      <span class="w-16 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Action</span>
+    </div>
+    <div class="flex items-center gap-4 py-3 px-3 border-b border-gray-50">
+      <span class="w-24 text-xs font-medium text-gray-900">#ORD-001</span>
+      <div class="flex-1 flex items-center gap-2">
+        <div class="w-6 h-6 bg-blue-100 rounded-full shrink-0"></div>
+        <span class="text-xs text-gray-700">Alice Johnson</span>
+      </div>
+      <span class="w-20 text-xs font-semibold text-gray-900">$234.50</span>
+      <span class="w-20"><span class="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded-full">Delivered</span></span>
+      <span class="w-16"><button class="text-xs text-blue-600 font-medium">View</button></span>
+    </div>
+    <div class="flex items-center gap-4 py-3 px-3 bg-gray-50/50 border-b border-gray-50">
+      <span class="w-24 text-xs font-medium text-gray-900">#ORD-002</span>
+      <div class="flex-1 flex items-center gap-2">
+        <div class="w-6 h-6 bg-purple-100 rounded-full shrink-0"></div>
+        <span class="text-xs text-gray-700">Bob Smith</span>
+      </div>
+      <span class="w-20 text-xs font-semibold text-gray-900">$89.00</span>
+      <span class="w-20"><span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded-full">Pending</span></span>
+      <span class="w-16"><button class="text-xs text-blue-600 font-medium">View</button></span>
+    </div>
+    <div class="flex items-center gap-4 py-3 px-3 border-b border-gray-50">
+      <span class="w-24 text-xs font-medium text-gray-900">#ORD-003</span>
+      <div class="flex-1 flex items-center gap-2">
+        <div class="w-6 h-6 bg-green-100 rounded-full shrink-0"></div>
+        <span class="text-xs text-gray-700">Carol Davis</span>
+      </div>
+      <span class="w-20 text-xs font-semibold text-gray-900">$567.80</span>
+      <span class="w-20"><span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-medium rounded-full">Shipped</span></span>
+      <span class="w-16"><button class="text-xs text-blue-600 font-medium">View</button></span>
+    </div>
+    <div class="flex items-center gap-4 py-3 px-3 bg-gray-50/50">
+      <span class="w-24 text-xs font-medium text-gray-900">#ORD-004</span>
+      <div class="flex-1 flex items-center gap-2">
+        <div class="w-6 h-6 bg-red-100 rounded-full shrink-0"></div>
+        <span class="text-xs text-gray-700">Dan Wilson</span>
+      </div>
+      <span class="w-20 text-xs font-semibold text-gray-900">$45.00</span>
+      <span class="w-20"><span class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-medium rounded-full">Cancelled</span></span>
+      <span class="w-16"><button class="text-xs text-blue-600 font-medium">View</button></span>
+    </div>
+  </div>
+</div>`,
 }
 
-const DEFAULT_HTML = PRESETS['Full Landing Page']
+const DEFAULT_HTML = PRESETS['Dashboard + Absolute']
+
 
 // ============================================================
 // Resize Handle Hook
@@ -753,12 +754,7 @@ function BrowserPreviewOverlay({
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="${INTER_FONT_URL}" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <script>
-    tailwind.config = {
-      theme: { extend: { fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] } } }
-    }
-  <\/script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"><\/script>
   <style>body { margin: 0; font-family: 'Inter', sans-serif; overflow: hidden; }</style>
 </head>
 <body>${html}</body>
@@ -1077,6 +1073,8 @@ export default function ParserDebugStudio() {
   const [savedTests, setSavedTests] = useState<SavedTest[]>([])
   const [testName, setTestName] = useState('')
   const [showBrowserPreview, setShowBrowserPreview] = useState(true)
+  const useIframeParser = true
+  const [isParsing, setIsParsing] = useState(false)
   const [parseWidth, setParseWidth] = useState(1280)
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null)
 
@@ -1099,14 +1097,25 @@ export default function ParserDebugStudio() {
 
   // Parse HTML whenever source or width changes
   useEffect(() => {
-    try {
-      const root = parseHtmlToNodes(html, 'Test', { rootWidth: parseWidth })
-      setParsedRoot(root)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Parse error')
-      setParsedRoot(null)
-    }
+    setIsParsing(true)
+    let cancelled = false
+    parseHtmlToNodesViaIframe(html, 'Test', { rootWidth: parseWidth })
+      .then(root => {
+        if (!cancelled) {
+          setParsedRoot(root)
+          setError(null)
+        }
+      })
+      .catch(e => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Parse error')
+          setParsedRoot(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsParsing(false)
+      })
+    return () => { cancelled = true }
   }, [html, parseWidth])
 
   // Resolve inspected node from tree
@@ -1176,6 +1185,8 @@ export default function ParserDebugStudio() {
             {showBrowserPreview ? <Eye size={12} /> : <EyeOff size={12} />}
             Preview
           </button>
+
+          {isParsing && <span className="text-xs text-blue-500 animate-pulse">Parsing...</span>}
         </div>
 
         <div className="flex items-center gap-2">

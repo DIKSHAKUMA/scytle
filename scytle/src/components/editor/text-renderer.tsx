@@ -183,7 +183,9 @@ export const TextRenderer = memo(function TextRenderer({
         wordBreak: node.autoResize === 'width-and-height' ? undefined : 'break-word',
         ...(node.autoResize === 'width-and-height' ? { width: 'auto', minWidth: 1 } : {}),
         ...(node.autoResize === 'height' ? { height: 'auto', minHeight: 1 } : {}),
-        margin: 0,
+        // Reset browser default margins on headings/paragraphs, but preserve
+        // auto margins and explicit margins already set by computeBaseStyles
+        ...(!baseStyle.margin ? { margin: 0 } : {}),
         // Editing overrides
         ...(isEditing ? { outline: 'none', cursor: 'text', caretColor: 'currentColor' } : {}),
         // Truncation mode (disabled during editing to allow text selection)

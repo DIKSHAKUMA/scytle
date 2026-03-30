@@ -240,8 +240,9 @@ export function useNodeDrag(
             // Determine drag mode:
             // - Top-level (no parent) → freeform
             // - Parent with layout.mode === 'none' → freeform (absolute children)
+            // - Node with positioning === 'absolute' (ignoring auto layout) → freeform
             // - Parent with layout.mode === 'flex' or 'grid' → reorder
-            const isReorder = !!parent && parent.layout.mode !== 'none'
+            const isReorder = !!parent && parent.layout.mode !== 'none' && node.positioning !== 'absolute'
 
             // Capture other selected nodes' starting positions (multi-select drag)
             const additionalNodes: { id: string; startX: number; startY: number }[] = []

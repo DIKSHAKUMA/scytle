@@ -436,7 +436,7 @@ function ProjectEditor() {
     return (
         <div className="h-screen flex flex-col overflow-hidden bg-background">
             {/* ── Top bar: back, project name, tools, undo/redo, actions ── */}
-            <TopBar projectName={currentProject?.name ?? 'Project'} />
+            <TopBar projectName={currentProject?.name ?? 'Project'} projectId={projectId} />
 
             {/* ── Main workspace area ── */}
             <div className="flex-1 flex min-h-0 overflow-hidden">

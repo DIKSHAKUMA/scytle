@@ -1,6 +1,6 @@
 'use client'
 
-import type { ScytleNode, FrameNode, Padding } from '@/types/canvas'
+import type { ScytleNode, FrameNode, Padding, LayoutConstraints } from '@/types/canvas'
 import { findParentOfNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { Section, NumberInput, IconButton, SelectInput } from './inputs'
@@ -17,12 +17,15 @@ import {
     Anchor,
 } from 'lucide-react'
 import { useCallback } from 'react'
+import { cn } from '@/lib/utils'
 
 interface PositionSectionProps {
     node: ScytleNode
     onUpdate: (updates: Record<string, unknown>) => void
     /** Whether this node is in an auto-layout container (position is auto) */
     isAutoLayout: boolean
+    /** Whether this node's parent uses auto layout (regardless of node's own positioning) */
+    isInAutoLayoutParent: boolean
 }
 
 /**
@@ -73,8 +76,214 @@ function getFrameContentBounds(frame: FrameNode) {
     }
 }
 
-export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectionProps) {
+/* ── Ignore Auto Layout Icon (Figma-style) ──────────────────── */
+
+function IgnoreAutoLayoutIcon({ size = 14 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Outer frame corners */}
+            <path d="M2 4V2h2M12 2h2v2M14 12v2h-2M4 14H2v-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Inner absolute-positioned element */}
+            <rect x="5" y="5" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 1.5" />
+        </svg>
+    )
+}
+
+/* ── Constraints Section ────────────────────────────────────── */
+
+const H_CONSTRAINT_OPTIONS = [
+    { value: 'left', label: 'Left' },
+    { value: 'right', label: 'Right' },
+    { value: 'center', label: 'Center' },
+    { value: 'leftRight', label: 'Left and right' },
+    { value: 'scale', label: 'Scale' },
+]
+
+const V_CONSTRAINT_OPTIONS = [
+    { value: 'top', label: 'Top' },
+    { value: 'bottom', label: 'Bottom' },
+    { value: 'center', label: 'Center' },
+    { value: 'topBottom', label: 'Top and bottom' },
+    { value: 'scale', label: 'Scale' },
+]
+
+interface ConstraintsSectionProps {
+    constraints: LayoutConstraints
+    onUpdate: (updates: Record<string, unknown>) => void
+}
+
+function ConstraintsSection({ constraints, onUpdate }: ConstraintsSectionProps) {
+    const updateConstraint = (partial: Partial<LayoutConstraints>) => {
+        onUpdate({ constraints: { ...constraints, ...partial } })
+    }
+
+    return (
+        <div className="flex items-center gap-2">
+            {/* Dropdowns — stacked vertically */}
+            <div className="flex-1 space-y-1">
+                {/* Horizontal constraint */}
+                <div className="flex items-center gap-1.5">
+                    <HConstraintIcon className="text-muted-foreground/60 shrink-0" />
+                    <SelectInput
+                        value={constraints.horizontal}
+                        options={H_CONSTRAINT_OPTIONS}
+                        onChange={(v) => updateConstraint({ horizontal: v as LayoutConstraints['horizontal'] })}
+                        className="flex-1"
+                    />
+                </div>
+                {/* Vertical constraint */}
+                <div className="flex items-center gap-1.5">
+                    <VConstraintIcon className="text-muted-foreground/60 shrink-0" />
+                    <SelectInput
+                        value={constraints.vertical}
+                        options={V_CONSTRAINT_OPTIONS}
+                        onChange={(v) => updateConstraint({ vertical: v as LayoutConstraints['vertical'] })}
+                        className="flex-1"
+                    />
+                </div>
+            </div>
+
+            {/* Interactive constraint visual */}
+            <ConstraintVisual
+                constraints={constraints}
+                onToggleH={(edge) => {
+                    const h = constraints.horizontal
+                    if (edge === 'left') {
+                        if (h === 'left') updateConstraint({ horizontal: 'right' })
+                        else if (h === 'leftRight') updateConstraint({ horizontal: 'right' })
+                        else if (h === 'right') updateConstraint({ horizontal: 'leftRight' })
+                        else updateConstraint({ horizontal: 'left' })
+                    } else {
+                        if (h === 'right') updateConstraint({ horizontal: 'left' })
+                        else if (h === 'leftRight') updateConstraint({ horizontal: 'left' })
+                        else if (h === 'left') updateConstraint({ horizontal: 'leftRight' })
+                        else updateConstraint({ horizontal: 'right' })
+                    }
+                }}
+                onToggleV={(edge) => {
+                    const v = constraints.vertical
+                    if (edge === 'top') {
+                        if (v === 'top') updateConstraint({ vertical: 'bottom' })
+                        else if (v === 'topBottom') updateConstraint({ vertical: 'bottom' })
+                        else if (v === 'bottom') updateConstraint({ vertical: 'topBottom' })
+                        else updateConstraint({ vertical: 'top' })
+                    } else {
+                        if (v === 'bottom') updateConstraint({ vertical: 'top' })
+                        else if (v === 'topBottom') updateConstraint({ vertical: 'top' })
+                        else if (v === 'top') updateConstraint({ vertical: 'topBottom' })
+                        else updateConstraint({ vertical: 'bottom' })
+                    }
+                }}
+            />
+        </div>
+    )
+}
+
+/* ── Constraint Icons ────────────────────────────────────────── */
+
+function HConstraintIcon({ className }: { className?: string }) {
+    return (
+        <svg width={11} height={11} viewBox="0 0 12 12" fill="none" className={className}>
+            <path d="M1 6h10M1 6l2-2M1 6l2 2M11 6l-2-2M11 6l-2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
+}
+
+function VConstraintIcon({ className }: { className?: string }) {
+    return (
+        <svg width={11} height={11} viewBox="0 0 12 12" fill="none" className={className}>
+            <path d="M6 1v10M6 1L4 3M6 1l2 2M6 11L4 9M6 11l2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
+}
+
+/* ── Constraint Visual Indicator ─────────────────────────────── */
+/* Figma-style: square with inner element + clickable edge lines */
+
+interface ConstraintVisualProps {
+    constraints: LayoutConstraints
+    onToggleH: (edge: 'left' | 'right') => void
+    onToggleV: (edge: 'top' | 'bottom') => void
+}
+
+function ConstraintVisual({ constraints, onToggleH, onToggleV }: ConstraintVisualProps) {
+    const h = constraints.horizontal
+    const v = constraints.vertical
+
+    const pinLeft = h === 'left' || h === 'leftRight'
+    const pinRight = h === 'right' || h === 'leftRight'
+    const pinTop = v === 'top' || v === 'topBottom'
+    const pinBottom = v === 'bottom' || v === 'topBottom'
+
+    const activeColor = '#3b82f6'
+    const inactiveColor = 'currentColor'
+    const inactiveOpacity = 0.2
+
+    return (
+        <div className="w-[42px] h-[42px] shrink-0 relative">
+            <svg width="42" height="42" viewBox="0 0 42 42" fill="none" className="text-muted-foreground">
+                {/* Outer frame */}
+                <rect x="1" y="1" width="40" height="40" rx="2" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+
+                {/* Inner element (centered) */}
+                <rect x="15" y="15" width="12" height="12" rx="1" stroke={activeColor} strokeWidth="1.2" fill={activeColor} fillOpacity="0.08" />
+
+                {/* Left line — clickable */}
+                <line x1="1" y1="21" x2="15" y2="21"
+                    stroke={pinLeft ? activeColor : inactiveColor}
+                    strokeWidth={pinLeft ? 1.5 : 1}
+                    strokeDasharray={pinLeft ? 'none' : '2 2'}
+                    opacity={pinLeft ? 1 : inactiveOpacity}
+                    className="cursor-pointer"
+                    onClick={() => onToggleH('left')}
+                />
+                {/* Right line — clickable */}
+                <line x1="27" y1="21" x2="41" y2="21"
+                    stroke={pinRight ? activeColor : inactiveColor}
+                    strokeWidth={pinRight ? 1.5 : 1}
+                    strokeDasharray={pinRight ? 'none' : '2 2'}
+                    opacity={pinRight ? 1 : inactiveOpacity}
+                    className="cursor-pointer"
+                    onClick={() => onToggleH('right')}
+                />
+                {/* Top line — clickable */}
+                <line x1="21" y1="1" x2="21" y2="15"
+                    stroke={pinTop ? activeColor : inactiveColor}
+                    strokeWidth={pinTop ? 1.5 : 1}
+                    strokeDasharray={pinTop ? 'none' : '2 2'}
+                    opacity={pinTop ? 1 : inactiveOpacity}
+                    className="cursor-pointer"
+                    onClick={() => onToggleV('top')}
+                />
+                {/* Bottom line — clickable */}
+                <line x1="21" y1="27" x2="21" y2="41"
+                    stroke={pinBottom ? activeColor : inactiveColor}
+                    strokeWidth={pinBottom ? 1.5 : 1}
+                    strokeDasharray={pinBottom ? 'none' : '2 2'}
+                    opacity={pinBottom ? 1 : inactiveOpacity}
+                    className="cursor-pointer"
+                    onClick={() => onToggleV('bottom')}
+                />
+            </svg>
+        </div>
+    )
+}
+
+/* ── Position Section ────────────────────────────────────────── */
+
+export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutParent }: PositionSectionProps) {
     const updateNode = useEditorStore((s) => s.updateNode)
+
+    const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
+
+    // Toggle handler for "Ignore auto layout"
+    const handleToggleIgnoreAutoLayout = useCallback(() => {
+        if (node.positioning === 'absolute') {
+            onUpdate({ positioning: 'auto' })
+        } else {
+            onUpdate({ positioning: 'absolute' })
+        }
+    }, [node.positioning, onUpdate])
 
     // ── Alignment handlers ───────────────────────────────────
     // When a parent frame is selected, alignment affects CHILDREN.
@@ -158,21 +367,40 @@ export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectio
         }
     }, [node, onUpdate, updateNode])
 
+    // "Ignore auto layout" toggle button — shown as action in section header
+    const ignoreAction = isInAutoLayoutParent ? (
+        <button
+            data-section-action
+            onClick={handleToggleIgnoreAutoLayout}
+            title="Ignore auto layout"
+            className={cn(
+                'flex items-center justify-center w-6 h-6 rounded transition-colors',
+                isIgnoringAutoLayout
+                    ? 'text-blue-500 bg-blue-500/10 hover:bg-blue-500/20'
+                    : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+            )}
+        >
+            <IgnoreAutoLayoutIcon size={14} />
+        </button>
+    ) : undefined
+
     return (
-        <Section title="Position">
-            {/* Positioning mode — auto vs absolute */}
-            <div className="flex items-center gap-1.5">
-                <Anchor size={11} className="text-muted-foreground/60 shrink-0" />
-                <SelectInput
-                    value={node.positioning}
-                    options={[
-                        { value: 'auto', label: 'Auto' },
-                        { value: 'absolute', label: 'Absolute' },
-                    ]}
-                    onChange={(v) => onUpdate({ positioning: v })}
-                    className="flex-1"
-                />
-            </div>
+        <Section title="Position" action={ignoreAction}>
+            {/* Positioning mode — auto vs absolute (hidden when in auto layout parent — toggle replaces it) */}
+            {!isInAutoLayoutParent && (
+                <div className="flex items-center gap-1.5">
+                    <Anchor size={11} className="text-muted-foreground/60 shrink-0" />
+                    <SelectInput
+                        value={node.positioning}
+                        options={[
+                            { value: 'auto', label: 'Auto' },
+                            { value: 'absolute', label: 'Absolute' },
+                        ]}
+                        onChange={(v) => onUpdate({ positioning: v })}
+                        className="flex-1"
+                    />
+                </div>
+            )}
 
             {/* Alignment buttons — Figma: 6-button grid */}
             <div className="flex items-center justify-between">
@@ -235,6 +463,14 @@ export function PositionSection({ node, onUpdate, isAutoLayout }: PositionSectio
                     disabled={isAutoLayout}
                 />
             </div>
+
+            {/* Constraints — shown when node is absolute-positioned in auto layout parent */}
+            {isIgnoringAutoLayout && (
+                <ConstraintsSection
+                    constraints={node.constraints}
+                    onUpdate={onUpdate}
+                />
+            )}
 
             {/* Rotation + Flip */}
             <div className="flex items-center gap-1.5">
