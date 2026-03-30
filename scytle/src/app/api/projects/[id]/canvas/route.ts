@@ -101,26 +101,36 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }
 
-        // 4. Write canvas JSON to Storage (delete old file first, then create new)
+        // 4. Write canvas JSON to Storage (delete old + create new, with retry for race conditions)
         const storage = new Storage(client)
         const fileId = canvasFileId(projectId)
         const canvasJson = JSON.stringify(body)
 
-        try {
-            // Delete existing file first (ignore if not found)
+        const MAX_RETRIES = 3
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
             try {
-                await storage.deleteFile(BUCKET_ID, fileId)
-            } catch {
-                // File doesn't exist yet — that's fine
-            }
+                // Delete existing file first (ignore if not found)
+                try {
+                    await storage.deleteFile(BUCKET_ID, fileId)
+                } catch {
+                    // File doesn't exist yet — that's fine
+                }
 
-            // Create new file with deterministic ID
-            // node-appwrite v21 accepts File objects
-            const file = new File([canvasJson], `canvas-${projectId}.json`, { type: 'application/json' })
-            await storage.createFile(BUCKET_ID, fileId, file)
-        } catch (error) {
-            console.error('📦 Error saving canvas to storage:', error)
-            return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+                // Create new file with deterministic ID
+                const file = new File([canvasJson], `canvas-${projectId}.json`, { type: 'application/json' })
+                await storage.createFile(BUCKET_ID, fileId, file)
+                break // Success — exit retry loop
+            } catch (error) {
+                const errMsg = error instanceof Error ? error.message : String(error)
+                // Conflict (409) or "already exists" → another save raced us, retry
+                if ((errMsg.includes('already exists') || errMsg.includes('409') || errMsg.includes('conflict')) && attempt < MAX_RETRIES - 1) {
+                    console.warn(`📦 Canvas save conflict (attempt ${attempt + 1}), retrying...`)
+                    await new Promise(r => setTimeout(r, 100 * (attempt + 1)))
+                    continue
+                }
+                console.error('📦 Error saving canvas to storage:', error)
+                return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+            }
         }
 
         return NextResponse.json({ success: true })
