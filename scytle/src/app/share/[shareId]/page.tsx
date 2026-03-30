@@ -1,7 +1,10 @@
 import type { Metadata } from 'next'
 import { createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
-import { Query } from 'node-appwrite'
+import { Query, Storage } from 'node-appwrite'
 import { ShareViewer } from './share-viewer'
+
+const BUCKET_ID = 'exports'
+const canvasFileId = (projectId: string) => `canvas_${projectId.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
 interface PageProps {
     params: Promise<{ shareId: string }>
@@ -9,7 +12,7 @@ interface PageProps {
 
 async function getShareData(shareId: string) {
     try {
-        const { databases } = createAdminClient()
+        const { databases, client } = createAdminClient()
 
         const result = await databases.listDocuments(DATABASE_ID, COLLECTIONS.SHARES, [
             Query.equal('shareId', shareId),
@@ -23,11 +26,23 @@ async function getShareData(shareId: string) {
 
         const project = await databases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, share.projectId)
 
+        // Load canvas data from Appwrite Storage (same approach as partner's /api/projects/[id]/canvas)
         let canvasData = null
-        if (project.canvasData) {
-            try {
-                canvasData = JSON.parse(project.canvasData)
-            } catch { /* ignore */ }
+        try {
+            const storage = new Storage(client)
+            const fileId = canvasFileId(share.projectId)
+            const fileData = await storage.getFileDownload(BUCKET_ID, fileId)
+
+            if (fileData && typeof fileData === 'object' && !ArrayBuffer.isView(fileData) && !(fileData instanceof ArrayBuffer)) {
+                canvasData = fileData
+            } else {
+                const jsonStr = typeof fileData === 'string'
+                    ? fileData
+                    : new TextDecoder().decode(fileData as ArrayBuffer)
+                canvasData = JSON.parse(jsonStr)
+            }
+        } catch {
+            // No canvas file yet — that's fine
         }
 
         return {

@@ -656,6 +656,34 @@ function buildSvgAsDataUri(
     clone.setAttribute('height', String(height))
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
 
+    // Resolve currentColor → actual computed color before serialization.
+    // In a data URI, there's no CSS cascade so currentColor would be black.
+    const computedColor = cs.color || 'rgb(0, 0, 0)'
+    const resolveCurrentColorInSvg = (node: Element) => {
+        for (const attr of ['fill', 'stroke', 'color', 'stop-color', 'flood-color']) {
+            const val = node.getAttribute(attr)
+            if (val === 'currentColor') {
+                node.setAttribute(attr, computedColor)
+            }
+        }
+        // Also check inline style
+        const style = node.getAttribute('style')
+        if (style && style.includes('currentColor')) {
+            node.setAttribute('style', style.replace(/currentColor/g, computedColor))
+        }
+        for (const child of node.children) {
+            resolveCurrentColorInSvg(child)
+        }
+    }
+    // Resolve on the root SVG element itself too
+    for (const attr of ['fill', 'stroke']) {
+        const val = clone.getAttribute(attr)
+        if (val === 'currentColor') {
+            clone.setAttribute(attr, computedColor)
+        }
+    }
+    resolveCurrentColorInSvg(clone)
+
     const svgString = new XMLSerializer().serializeToString(clone)
     const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
 
@@ -826,13 +854,18 @@ function rgbToHex(rgb: string): string {
         return '#' + [r, g, b].map(c => Math.min(255, Math.max(0, c)).toString(16).padStart(2, '0')).join('')
     }
 
-    // oklch(L C H) or oklch(L C H / alpha) — Tailwind v4 default color space
-    const oklchMatch = rgb.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/)
+    // oklch(L C H) or oklch(L% C H) or oklch(L C H / alpha) — Tailwind v4 default color space
+    // Tailwind v4 outputs L as a decimal (0-1) or percentage (0-100%), C as decimal, H as degrees
+    const oklchMatch = rgb.match(/oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)/)
     if (oklchMatch) {
+        // L can be 0-1 or 0-100% — normalize to 0-1
+        let L = parseFloat(oklchMatch[1])
+        const isPercent = oklchMatch[2] === '%'
+        if (isPercent) L = L / 100
         return oklchToHex(
-            parseFloat(oklchMatch[1]),
-            parseFloat(oklchMatch[2]),
+            L,
             parseFloat(oklchMatch[3]),
+            parseFloat(oklchMatch[4]),
         )
     }
 
@@ -1082,24 +1115,17 @@ function extractBorderRadius(cs: CSSStyleDeclaration): BorderRadius {
 function extractFills(cs: CSSStyleDeclaration): Fill[] {
     const fills: Fill[] = []
 
-    // Background color — check for transparent in all color formats
-    const bgColor = cs.backgroundColor
-    if (bgColor && !isTransparentColor(bgColor)) {
-        fills.push({
-            type: 'solid',
-            id: generateId(),
-            color: rgbToHex(bgColor),
-            opacity: rgbToOpacity(bgColor),
-            visible: true,
-        })
-    }
-
-    // Background image (gradients or URLs)
+    // Background image (gradients or URLs) — check first because when a gradient
+    // exists, backgroundColor is often a fallback and should NOT be layered on top.
     const bgImage = cs.backgroundImage
+    let hasGradientOrImage = false
     if (bgImage && bgImage !== 'none') {
         if (bgImage.includes('gradient')) {
             const gradientFill = parseGradientFromComputed(bgImage)
-            if (gradientFill) fills.push(gradientFill)
+            if (gradientFill) {
+                fills.push(gradientFill)
+                hasGradientOrImage = true
+            }
         } else if (bgImage.includes('url(')) {
             // Background image URL
             const urlMatch = bgImage.match(/url\(["']?(.*?)["']?\)/)
@@ -1112,8 +1138,23 @@ function extractFills(cs: CSSStyleDeclaration): Fill[] {
                     visible: true,
                     opacity: 1,
                 })
+                hasGradientOrImage = true
             }
         }
+    }
+
+    // Background color — only add if there's no gradient/image fill already.
+    // When a gradient exists, CSS backgroundColor is just a fallback layer behind it.
+    // Adding both would cause the solid color to obscure the gradient in the canvas.
+    const bgColor = cs.backgroundColor
+    if (!hasGradientOrImage && bgColor && !isTransparentColor(bgColor)) {
+        fills.push({
+            type: 'solid',
+            id: generateId(),
+            color: rgbToHex(bgColor),
+            opacity: rgbToOpacity(bgColor),
+            visible: true,
+        })
     }
 
     return fills
@@ -1413,6 +1454,10 @@ function inferContainerSizing(
     cs: CSSStyleDeclaration,
     win: Window,
 ): Sizing {
+    // Absolute/fixed elements shrink-wrap by default (CSS spec).
+    // They never fill like block elements do — they hug unless explicitly sized.
+    const isAbsoluteOrFixed = cs.position === 'absolute' || cs.position === 'fixed'
+
     const parentEl = el.parentElement
     const parentCs = parentEl ? win.getComputedStyle(parentEl) : null
     const parentIsFlexRow = parentCs?.display.includes('flex') &&
@@ -1478,7 +1523,8 @@ function inferContainerSizing(
         const isBlockLevel = cs.display === 'block' || cs.display === 'flex' ||
             cs.display === 'grid' || cs.display === 'list-item' ||
             cs.display === 'table'
-        horizontal = isBlockLevel ? 'fill' : 'hug'
+        // Absolute/fixed elements with width:auto shrink-wrap — never fill
+        horizontal = (isBlockLevel && !isAbsoluteOrFixed) ? 'fill' : 'hug'
     } else if (intent.width.endsWith('%')) {
         horizontal = isFullWidth(intent.width) ? 'fill' : 'fixed'
     } else if (intent.width.endsWith('px')) {
@@ -1560,11 +1606,26 @@ function inferTextSizing(
     const isBlock = cs.display === 'block'
     const isInline = cs.display === 'inline' || cs.display === 'inline-block'
 
-    // Check parent context — flex-row children should hug, not fill
-    if (el?.parentElement && win) {
-        const parentCs = win.getComputedStyle(el.parentElement)
-        const parentIsFlex = parentCs.display.includes('flex')
-        const parentIsRow = parentCs.flexDirection === 'row' || parentCs.flexDirection === 'row-reverse'
+    // Use display:none trick to detect explicit authored width/height
+    if (el && win) {
+        const intent = getComputedSizingIntent(el, win)
+
+        // Explicit pixel widths (e.g. w-24, w-20) → fixed horizontal
+        if (intent.width.endsWith('px')) {
+            const vertical = intent.height.endsWith('px') ? 'fixed' as const : 'hug' as const
+            return { horizontal: 'fixed', vertical }
+        }
+
+        // Check parent context — flex-row children should hug, not fill
+        const parentCs = el.parentElement ? win.getComputedStyle(el.parentElement) : null
+        const parentIsFlex = parentCs?.display.includes('flex')
+        const parentIsRow = parentCs?.flexDirection === 'row' || parentCs?.flexDirection === 'row-reverse'
+
+        // flex-1 / flex-grow in a row → fill
+        if (parentIsFlex && parentIsRow && parseFloat(cs.flexGrow) > 0) {
+            return { horizontal: 'fill', vertical: 'hug' }
+        }
+
         if (parentIsFlex && parentIsRow) {
             return { horizontal: 'hug', vertical: 'hug' }
         }
@@ -1648,10 +1709,16 @@ function isTextOnlyElement(el: HTMLElement, tag: string, win: Window): boolean {
     // If no children but has text content → text node
     if (el.children.length === 0) return !!el.textContent?.trim()
 
-    // Check if ALL children are inline
+    // Check if ALL children are inline AND have no visual properties.
+    // An inline child with bg/padding/border-radius (e.g. a status badge)
+    // must become a FrameNode child, not flattened text.
     for (const child of el.children) {
         const childCs = win.getComputedStyle(child)
         if (childCs.display !== 'inline' && childCs.display !== 'inline-block') {
+            return false
+        }
+        // Even inline children with visual styling need to be container nodes
+        if (hasVisualProperties(childCs)) {
             return false
         }
     }

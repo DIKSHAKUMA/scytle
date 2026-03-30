@@ -18,6 +18,7 @@ import { FillSection } from './fill-section'
 import { AppearanceSection, StrokeSection } from './border-section'
 import { TypographySection } from './typography-section'
 import { EffectsSection } from './effects-section'
+import { ExportSection } from './export-section'
 import { VectorSection } from './vector-section'
 import { ColorInput, SectionHeader } from './inputs'
 import { Frame, Type, ImageIcon, FileText, Pen } from 'lucide-react'
@@ -198,6 +199,9 @@ export function PropertiesPanel() {
             {!isVector && <FillSection node={node} onUpdate={onUpdate} />}
             {!isVector && <StrokeSection node={node} onUpdate={onUpdate} />}
             <EffectsSection node={node} onUpdate={onUpdate} />
+
+            {/* Export section — Figma: always at the very bottom */}
+            <ExportSection node={node} />
 
             {/* Bottom spacer to prevent scroll cutoff */}
             <div className="h-8 shrink-0" />

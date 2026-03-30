@@ -13,7 +13,6 @@ import {
     Undo2,
     Redo2,
     Share2,
-    Download,
     Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -121,7 +120,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 </div>
             </div>
 
-            {/* ── Right: Actions ── */}
+            {/* ── Right: Share ── */}
             <div className="flex items-center gap-1.5">
                 <button
                     onClick={() => setShareOpen(true)}
@@ -129,14 +128,6 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 >
                     <Share2 className="w-3.5 h-3.5" />
                     Share
-                </button>
-                <button
-                    disabled
-                    title="Export available after page generation"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-colors"
-                >
-                    <Download className="w-3.5 h-3.5" />
-                    Export
                 </button>
             </div>
 

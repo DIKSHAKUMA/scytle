@@ -7,6 +7,7 @@ import { findNodeById, findParentOfNode } from '@/types/canvas'
 import type { FrameNode } from '@/types/canvas'
 import { isDragActive } from './use-node-drag'
 import { isResizeActive } from './use-node-resize'
+import { quickExport } from '@/lib/export/export-node'
 
 // ============================================================
 // Centralized keyboard shortcut hub
@@ -43,6 +44,7 @@ import { isResizeActive } from './use-node-resize'
 // │ ⌘= / ⌘+              │ Zoom in                        │
 // │ ⌘-                    │ Zoom out                       │
 // │ ⌘0                    │ Reset zoom                     │
+// │ ⇧⌘E                   │ Quick export (PNG 1x)          │
 // └───────────────────────┴────────────────────────────────┘
 // ============================================================
 
@@ -94,6 +96,22 @@ export function useKeyboardShortcuts() {
 
             if (meta) {
                 switch (key) {
+                    // Quick Export (⇧⌘E) — export selected as PNG 1x
+                    case 'e':
+                        if (shift && store.selectedIds.length === 1) {
+                            e.preventDefault()
+                            const exportNode = findNodeById(store.nodes, store.selectedIds[0])
+                            if (exportNode) {
+                                quickExport(exportNode, {
+                                    id: 'quick',
+                                    format: 'PNG',
+                                    scale: 1,
+                                    suffix: '',
+                                }).catch(err => console.error('Export failed:', err))
+                            }
+                        }
+                        return
+
                     // Undo / Redo
                     case 'z':
                         e.preventDefault()

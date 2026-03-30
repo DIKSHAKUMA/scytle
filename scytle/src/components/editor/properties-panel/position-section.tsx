@@ -467,7 +467,7 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
             {/* Constraints — shown when node is absolute-positioned in auto layout parent */}
             {isIgnoringAutoLayout && (
                 <ConstraintsSection
-                    constraints={node.constraints}
+                    constraints={node.constraints ?? { horizontal: 'left', vertical: 'top' }}
                     onUpdate={onUpdate}
                 />
             )}

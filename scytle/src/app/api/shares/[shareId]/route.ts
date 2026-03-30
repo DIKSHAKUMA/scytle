@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Query } from 'node-appwrite'
+import { Query, Storage } from 'node-appwrite'
 import { createAdminClient, getUserFromJWT, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
+
+const BUCKET_ID = 'exports'
+const canvasFileId = (projectId: string) => `canvas_${projectId.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
 interface RouteParams {
     params: Promise<{ shareId: string }>
@@ -12,7 +15,8 @@ interface RouteParams {
 export async function GET(_request: NextRequest, { params }: RouteParams) {
     try {
         const { shareId } = await params
-        const { databases } = createAdminClient()
+        // Fetch the project data
+        const { databases, client } = createAdminClient()
 
         // Look up share by shareId field
         const result = await databases.listDocuments(DATABASE_ID, COLLECTIONS.SHARES, [
@@ -30,15 +34,26 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'private' }, { status: 403 })
         }
 
-        // Fetch the project data
+        // Fetch project metadata
         const project = await databases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, share.projectId)
 
-        // Parse canvasData if available
+        // Load canvas data from Appwrite Storage (same approach as /api/projects/[id]/canvas)
         let canvasData = null
-        if (project.canvasData) {
-            try {
-                canvasData = JSON.parse(project.canvasData)
-            } catch { /* corrupt — ignore */ }
+        try {
+            const storage = new Storage(client)
+            const fileId = canvasFileId(share.projectId)
+            const fileData = await storage.getFileDownload(BUCKET_ID, fileId)
+
+            if (fileData && typeof fileData === 'object' && !ArrayBuffer.isView(fileData) && !(fileData instanceof ArrayBuffer)) {
+                canvasData = fileData
+            } else {
+                const jsonStr = typeof fileData === 'string'
+                    ? fileData
+                    : new TextDecoder().decode(fileData as ArrayBuffer)
+                canvasData = JSON.parse(jsonStr)
+            }
+        } catch {
+            // No canvas file yet — that's fine
         }
 
         return NextResponse.json({

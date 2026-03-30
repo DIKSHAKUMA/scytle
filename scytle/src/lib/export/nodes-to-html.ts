@@ -4,7 +4,7 @@
 // ImageNode→<img>. Produces clean, semantic HTML+Tailwind.
 // ============================================================
 
-import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode, Fill } from '@/types/canvas'
+import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode, Fill, ImageFill } from '@/types/canvas'
 import { buildFrameClasses, buildTextClasses, buildImageClasses } from './class-builder'
 import { networkToSVGPath } from '@/lib/vector-utils'
 
@@ -51,8 +51,8 @@ function frameToHtml(node: FrameNode, indent: number): string {
     const classes = buildFrameClasses(node)
 
     // If this is a frame with an image fill and no children, emit <img>
-    const imageFill = node.fills.find(f => f.type === 'image' && f.src)
-    if (imageFill && imageFill.src && node.children.length === 0) {
+    const imageFill = node.fills.find((f): f is ImageFill => f.type === 'image' && 'src' in f && !!f.src)
+    if (imageFill && node.children.length === 0) {
         const src = escapeAttr(imageFill.src)
         const alt = escapeAttr(node.name || 'Image')
         const imgClasses = [classes, 'object-cover'].filter(Boolean).join(' ')

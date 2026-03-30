@@ -123,6 +123,13 @@ export const SizingSchema = z.object({
     vertical: z.enum(['fixed', 'hug', 'fill']),
 })
 
+export const LayoutConstraintsSchema = z.object({
+    horizontal: z.enum(['left', 'right', 'center', 'leftRight', 'scale']),
+    vertical: z.enum(['top', 'bottom', 'center', 'topBottom', 'scale']),
+})
+
+export type LayoutConstraints = z.infer<typeof LayoutConstraintsSchema>
+
 export const PaddingSchema = z.object({
     top: z.number(),
     right: z.number(),
@@ -372,6 +379,8 @@ export interface BaseNodeProperties {
     // === SPACING (for HTML/CSS compatibility) ===
     /** Margin (CSS spacing outside element borders) - preserved from HTML parsing */
     margin?: { top: number; right: number; bottom: number; left: number }
+    /** Auto margin flags - when true, that margin edge uses 'auto' for centering */
+    autoMargin?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
 
     // === CONSTRAINTS (Phase 4) ===
     // Min/max dimensions (Figma: minWidth, maxWidth, minHeight, maxHeight)
@@ -380,6 +389,8 @@ export interface BaseNodeProperties {
     maxWidth?: number
     minHeight?: number
     maxHeight?: number
+    /** Layout constraints (Figma-style pinning to parent edges) */
+    constraints?: LayoutConstraints
 }
 
 /** Container node — div with optional auto-layout (flexbox/grid) */
@@ -406,6 +417,8 @@ export interface FrameNode extends BaseNodeProperties {
     // === GRID CHILD PROPERTIES ===
     /** Grid column span (col-span-2 = 2, col-span-full = -1) */
     gridColumnSpan?: number
+    /** Grid row span (row-span-2 = 2, row-span-full = -1) */
+    gridRowSpan?: number
 }
 
 /** Text leaf node — renders as heading/paragraph/span */

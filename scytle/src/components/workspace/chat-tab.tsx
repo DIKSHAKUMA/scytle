@@ -444,48 +444,48 @@ export function ChatTab() {
         const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/)
         if (!jsonMatch) return
 
-            // Async IIFE: parseHtmlToNodesViaIframe is async
-            ; (async () => {
-                try {
-                    const actionData = JSON.parse(jsonMatch[1])
+        // Async IIFE: parseHtmlToNodesViaIframe is async
+        ;(async () => {
+            try {
+                const actionData = JSON.parse(jsonMatch[1])
 
-                    if (actionData.html) {
-                        const sgState = useStyleGuideStore.getState()
-                        const parsed = await parseHtmlToNodesViaIframe(actionData.html, 'AI Section', {
-                            variableTable: sgState.variableTable,
-                            themeMode: sgState.themeMode,
-                        })
-                        const newNode: ScytleNode = parsed.children.length === 1
-                            ? parsed.children[0]
-                            : parsed
+                if (actionData.html) {
+                    const sgState = useStyleGuideStore.getState()
+                    const parsed = await parseHtmlToNodesViaIframe(actionData.html, 'AI Section', {
+                        variableTable: sgState.variableTable,
+                        themeMode: sgState.themeMode,
+                    })
+                    const newNode: ScytleNode = parsed.children.length === 1
+                        ? parsed.children[0]
+                        : parsed
 
-                        if (actionData.action === 'replaceNode' && actionData.targetNodeId) {
-                            const oldNode = findNodeById(nodes as ScytleNode[], actionData.targetNodeId)
-                            if (oldNode) {
-                                newNode.x = oldNode.x
-                                newNode.y = oldNode.y
-                                newNode.id = oldNode.id
-                                replaceNode(actionData.targetNodeId, newNode)
-                            } else {
-                                // Target not found — add as new top-level node
-                                addNode(newNode)
-                            }
-                        } else if (actionData.action === 'addNode') {
-                            // 'root' or missing targetNodeId means top-level; otherwise find parent
-                            const parentId = actionData.targetNodeId && actionData.targetNodeId !== 'root'
-                                ? actionData.targetNodeId
-                                : undefined
-                            const parentExists = parentId ? !!findNodeById(nodes as ScytleNode[], parentId) : true
-                            addNode(newNode, parentExists ? parentId : undefined)
-                        } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
-                            deleteNode(actionData.targetNodeId)
+                    if (actionData.action === 'replaceNode' && actionData.targetNodeId) {
+                        const oldNode = findNodeById(nodes as ScytleNode[], actionData.targetNodeId)
+                        if (oldNode) {
+                            newNode.x = oldNode.x
+                            newNode.y = oldNode.y
+                            newNode.id = oldNode.id
+                            replaceNode(actionData.targetNodeId, newNode)
+                        } else {
+                            // Target not found — add as new top-level node
+                            addNode(newNode)
                         }
+                    } else if (actionData.action === 'addNode') {
+                        // 'root' or missing targetNodeId means top-level; otherwise find parent
+                        const parentId = actionData.targetNodeId && actionData.targetNodeId !== 'root'
+                            ? actionData.targetNodeId
+                            : undefined
+                        const parentExists = parentId ? !!findNodeById(nodes as ScytleNode[], parentId) : true
+                        addNode(newNode, parentExists ? parentId : undefined)
+                    } else if (actionData.action === 'deleteNode' && actionData.targetNodeId) {
+                        deleteNode(actionData.targetNodeId)
                     }
-                } catch (e) {
-                        // Parsing failure is non-fatal; user sees the AI text response
-                        console.warn('[ChatTab] Parse error:', e)
-                    }
-                })()
+                }
+            } catch (e) {
+                // Parsing failure is non-fatal; user sees the AI text response
+                console.warn('[ChatTab] Parse error:', e)
+            }
+        })()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [messages, isStreaming])
 
