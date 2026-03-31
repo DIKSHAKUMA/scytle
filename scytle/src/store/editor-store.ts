@@ -13,6 +13,10 @@ import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
 const MAX_HISTORY = 50
 
+// Serialized server save — ensures only one save is in-flight at a time
+let _serverSavePromise: Promise<void> = Promise.resolve()
+let _serverSavePending = false
+
 /**
  * Save a snapshot of current nodes to past[], clear future[].
  * Called BEFORE mutations. Skipped during batch operations (drag/resize).
@@ -1531,30 +1535,51 @@ export const useEditorStore = create<EditorState>()(
                     )
                 } catch (_e) { /* quota exceeded */ }
 
-                // 2. Async save to server (fire-and-forget, with error logging)
+                // 2. Serialized async save to server (waits for previous save to finish)
                 const projectId = state._projectId
-                import('@/lib/appwrite').then(({ createJWT }) => {
-                    createJWT().then(jwt => {
+
+                // If a save is already queued, mark pending so it picks up latest data on next cycle
+                if (_serverSavePending) return
+                _serverSavePending = true
+
+                const doSave = async () => {
+                    _serverSavePending = false
+                    try {
+                        const { createJWT } = await import('@/lib/appwrite')
+                        const jwt = await createJWT()
                         if (!jwt) {
                             console.warn('📦 Canvas save skipped: no JWT')
                             return
                         }
-                        fetch(`/api/projects/${projectId}/canvas`, {
+                        // Always save the LATEST state (not stale snapshot)
+                        const latestState = get()
+                        const latestPages = latestState.pages.map((p) =>
+                            p.id === latestState.activePageId
+                                ? { ...p, nodes: latestState.nodes, canvasColor: latestState.canvasColor, zoom: latestState.zoom, panX: latestState.panX, panY: latestState.panY }
+                                : p
+                        )
+                        const latestData = {
+                            pages: latestPages,
+                            activePageId: latestState.activePageId,
+                            hasEverHadNodes: latestState.hasEverHadNodes,
+                        }
+                        const res = await fetch(`/api/projects/${projectId}/canvas`, {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Bearer ${jwt.jwt}`,
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify(data),
-                        }).then(res => {
-                            if (!res.ok) {
-                                console.error(`📦 Canvas save failed: ${res.status} ${res.statusText}`)
-                            }
-                        }).catch(err => {
-                            console.error('📦 Canvas save network error:', err)
+                            body: JSON.stringify(latestData),
                         })
-                    }).catch(() => {})
-                }).catch(() => {})
+                        if (!res.ok) {
+                            console.error(`📦 Canvas save failed: ${res.status} ${res.statusText}`)
+                        }
+                    } catch (err) {
+                        console.error('📦 Canvas save network error:', err)
+                    }
+                }
+
+                _serverSavePromise = _serverSavePromise.then(doSave, doSave)
             },
 
             setSelectedIds: (ids) =>

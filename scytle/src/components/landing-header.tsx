@@ -1,10 +1,19 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Zap, Loader2 } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import {
+    Navbar,
+    NavBody,
+    NavItems,
+    MobileNav,
+    MobileNavHeader,
+    MobileNavToggle,
+    MobileNavMenu,
+    NavbarButton,
+} from '@/components/ui/resizable-navbar'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
     DropdownMenu,
@@ -15,7 +24,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store'
 
+const navItems = [
+    { name: 'Features', link: '#features' },
+    { name: 'How it works', link: '#how-it-works' },
+]
+
 export function LandingHeader() {
+    const [mobileOpen, setMobileOpen] = useState(false)
     const { user, isAuthenticated, isLoading, checkSession, logout } = useAuthStore()
 
     useEffect(() => {
@@ -23,6 +38,7 @@ export function LandingHeader() {
     }, [checkSession])
 
     const handleLogout = async () => {
+        setMobileOpen(false)
         await logout()
     }
 
@@ -37,84 +53,184 @@ export function LandingHeader() {
     }
 
     return (
-        <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
-            <div className="container flex h-16 items-center justify-between">
-                <Link href="/" className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center shadow-lg shadow-accent/20">
-                        <Zap className="w-5 h-5 text-white" />
-                    </div>
-                    <span className="font-display font-bold text-xl tracking-tight">Scytle</span>
-                </Link>
+        <>
+        <div className="relative w-full">
+            <Navbar>
+                {/* ── Desktop ──────────────────────────────────────────── */}
+                <NavBody>
+                    {/* Logo */}
+                    <Link
+                        href="/"
+                        className="relative z-20 mr-4 flex items-center gap-2 px-2 py-1"
+                    >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent/70 shadow-md shadow-accent/20">
+                            <Zap className="h-4 w-4 text-white" />
+                        </div>
+                        <span className="font-display text-lg font-bold tracking-tight text-foreground">
+                            Scytle
+                        </span>
+                    </Link>
 
-                <nav className="hidden md:flex items-center gap-8">
-                    <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                        Features
-                    </Link>
-                    <Link href="#how-it-works" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                        How it works
-                    </Link>
-                    <Link href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                        Pricing
-                    </Link>
-                </nav>
+                    {/* Centre nav links */}
+                    <NavItems items={navItems} />
 
-                <div className="flex items-center gap-3">
-                    {isLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                    ) : isAuthenticated && user ? (
-                        <>
-                            <Link href="/dashboard">
-                                <Button variant="ghost" size="sm" className="font-medium">
+                    {/* Right actions */}
+                    <div className="relative z-20 flex items-center gap-3">
+                        {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : isAuthenticated && user ? (
+                            <>
+                                <NavbarButton
+                                    href="/dashboard"
+                                    as={Link}
+                                    variant="secondary"
+                                    className="text-sm font-medium text-foreground"
+                                >
                                     Dashboard
-                                </Button>
-                            </Link>
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="relative h-9 w-9 rounded-full">
-                                        <Avatar className="h-9 w-9">
-                                            <AvatarFallback className="bg-accent text-white text-sm font-medium">
-                                                {getInitials(user.name)}
-                                            </AvatarFallback>
-                                        </Avatar>
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56">
-                                    <div className="flex items-center justify-start gap-2 p-2">
-                                        <div className="flex flex-col space-y-1 leading-none">
-                                            <p className="font-medium">{user.name}</p>
-                                            <p className="w-[200px] truncate text-sm text-muted-foreground">
-                                                {user.email}
-                                            </p>
+                                </NavbarButton>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button className="relative h-8 w-8 rounded-full ring-2 ring-transparent transition-all hover:ring-accent/25">
+                                            <Avatar className="h-8 w-8">
+                                                <AvatarFallback className="bg-accent text-xs font-semibold text-white">
+                                                    {getInitials(user.name)}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <div className="flex items-center gap-2 p-2">
+                                            <div className="flex flex-col space-y-1 leading-none">
+                                                <p className="font-medium">{user.name}</p>
+                                                <p className="w-[200px] truncate text-sm text-muted-foreground">
+                                                    {user.email}
+                                                </p>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem asChild>
-                                        <Link href="/dashboard">Dashboard</Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem asChild>
-                                        <Link href="/settings">Settings</Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                                        Log out
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </>
-                    ) : (
-                        <>
-                            <Link href="/login">
-                                <Button variant="ghost" size="sm" className="font-medium">Log in</Button>
-                            </Link>
-                            <Link href="/signup">
-                                <Button size="sm" className="font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/dashboard">Dashboard</Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/settings">Settings</Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            onClick={handleLogout}
+                                            className="text-destructive focus:text-destructive"
+                                        >
+                                            Log out
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        ) : (
+                            <>
+                                <NavbarButton
+                                    href="/login"
+                                    as={Link}
+                                    variant="secondary"
+                                    className="text-sm font-medium text-foreground"
+                                >
+                                    Log in
+                                </NavbarButton>
+                                <NavbarButton
+                                    href="/signup"
+                                    as={Link}
+                                    variant="primary"
+                                    className="rounded-full bg-accent text-white shadow-md shadow-accent/20 hover:bg-accent/90"
+                                >
                                     Get Started
-                                </Button>
-                            </Link>
-                        </>
-                    )}
-                </div>
-            </div>
-        </header>
+                                </NavbarButton>
+                            </>
+                        )}
+                    </div>
+                </NavBody>
+
+                {/* ── Mobile ───────────────────────────────────────────── */}
+                <MobileNav>
+                    <MobileNavHeader>
+                        <Link
+                            href="/"
+                            className="relative z-20 flex items-center gap-2 px-2 py-1"
+                        >
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent/70 shadow-md shadow-accent/20">
+                                <Zap className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="font-display text-lg font-bold tracking-tight text-foreground">
+                                Scytle
+                            </span>
+                        </Link>
+                        <MobileNavToggle
+                            isOpen={mobileOpen}
+                            onClick={() => setMobileOpen(!mobileOpen)}
+                        />
+                    </MobileNavHeader>
+
+                    <MobileNavMenu
+                        isOpen={mobileOpen}
+                        onClose={() => setMobileOpen(false)}
+                    >
+                        {navItems.map((item, idx) => (
+                            <a
+                                key={`mobile-link-${idx}`}
+                                href={item.link}
+                                onClick={() => setMobileOpen(false)}
+                                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                            >
+                                {item.name}
+                            </a>
+                        ))}
+                        <div className="flex w-full flex-col gap-3 pt-2">
+                            {isAuthenticated && user ? (
+                                <>
+                                    <NavbarButton
+                                        href="/dashboard"
+                                        as={Link}
+                                        variant="primary"
+                                        className="w-full"
+                                        onClick={() => setMobileOpen(false)}
+                                    >
+                                        Dashboard
+                                    </NavbarButton>
+                                    <NavbarButton
+                                        as="button"
+                                        variant="secondary"
+                                        className="w-full text-destructive"
+                                        onClick={handleLogout}
+                                    >
+                                        Log out
+                                    </NavbarButton>
+                                </>
+                            ) : (
+                                <>
+                                    <NavbarButton
+                                        href="/login"
+                                        as={Link}
+                                        variant="secondary"
+                                        className="w-full text-foreground"
+                                        onClick={() => setMobileOpen(false)}
+                                    >
+                                        Log in
+                                    </NavbarButton>
+                                    <NavbarButton
+                                        href="/signup"
+                                        as={Link}
+                                        variant="primary"
+                                        className="w-full rounded-full bg-accent text-white shadow-md shadow-accent/20"
+                                        onClick={() => setMobileOpen(false)}
+                                    >
+                                        Get Started
+                                    </NavbarButton>
+                                </>
+                            )}
+                        </div>
+                    </MobileNavMenu>
+                </MobileNav>
+            </Navbar>
+        </div>
+        {/* Spacer for fixed navbar */}
+        <div className="h-16" />
+        </>
     )
 }
