@@ -415,11 +415,17 @@ export function computeBaseStyles(
     if (shadowParts.length > 0) s.boxShadow = shadowParts.join(', ')
 
     // Apply CSS filter from image fill adjustments (single image fill only)
+    const filterParts: string[] = []
     const visibleFills = node.fills.filter((f) => f.visible !== false)
     if (visibleFills.length === 1 && visibleFills[0].type === 'image') {
         const imgFilter = computeImageFillFilter(visibleFills[0])
-        if (imgFilter) s.filter = imgFilter
+        if (imgFilter) filterParts.push(imgFilter)
     }
+    // Layer blur (CSS filter: blur)
+    if (node.layerBlur && node.layerBlur > 0) {
+        filterParts.push(`blur(calc(${node.layerBlur}px * var(--z, 1)))`)
+    }
+    if (filterParts.length > 0) s.filter = filterParts.join(' ')
 
     // Apply blend mode from first visible fill (CSS mix-blend-mode on the element)
     const firstFill = visibleFills[0]

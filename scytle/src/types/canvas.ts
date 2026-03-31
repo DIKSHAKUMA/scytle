@@ -361,6 +361,8 @@ export interface BaseNodeProperties {
     fills: Fill[]
     border?: Border
     shadows: Shadow[]
+    /** Layer blur in px (CSS filter: blur). 0 = no blur. */
+    layerBlur?: number
 
     // === THEME VARIABLE REFS ===
     /** Theme ref for borderRadius (e.g. 'radius/md') */

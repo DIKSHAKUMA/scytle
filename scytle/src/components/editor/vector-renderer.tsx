@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import type { VectorNode } from '@/types/canvas'
 import { networkToSVGPath } from '@/lib/vector-utils'
 import { hexOpacityToRgba, normaliseHex, hexToHashHex } from '@/lib/color-utils'
+import { computeBaseStyles } from './render-utils'
 
 // ============================================================
 // Props
@@ -21,9 +22,9 @@ interface VectorRendererProps {
 /**
  * Renders a VectorNode as a positioned div wrapper containing an inline SVG.
  *
- * Layout:  The wrapper div holds positioning (position, left, top) and sizing
- *          (width, height) but NO visual styles like background/fill.
- *          Fills are applied ONLY to the SVG path element.
+ * Layout:  The wrapper div uses computeBaseStyles (same as all other renderers)
+ *          for position/sizing so it participates correctly in flex/grid layout.
+ *          Fills are applied ONLY to the SVG path element, not the wrapper.
  *
  * Fill:    Solid fills from node.fills[0] are mapped to the SVG fill attribute.
  *          Gradient / multi-fill support is a future phase.
@@ -34,33 +35,37 @@ interface VectorRendererProps {
 export const VectorRenderer = memo(function VectorRenderer({
     node,
     isTopLevel = false,
+    parentDirection,
     parentLayoutMode,
 }: VectorRendererProps) {
-    // ── Wrapper styles (position/size ONLY — no fills) ───────
+    // ── Wrapper styles — use computeBaseStyles for correct layout participation ──
+    // computeBaseStyles handles: position, sizing (fixed/fill/hug), opacity,
+    // rotation, flip, margins, min/max constraints — same as FrameRenderer/TextRenderer.
+    // We strip background/border/shadow since VectorNode visuals are on the SVG path.
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
+
     const wrapStyle: CSSProperties = {
-        boxSizing: 'border-box',
-        position: 'absolute',
+        ...baseStyle,
+        // Vector-specific: allow SVG content to extend beyond wrapper (stroke overshoot)
         overflow: 'visible',
+        // Ensure wrapper is a positioning context for the inner SVG
+        position: baseStyle.position || 'relative',
+        // Strip all visual properties — those are on the SVG path, not the wrapper
+        background: undefined,
+        backgroundColor: undefined,
+        backgroundImage: undefined,
+        backgroundSize: undefined,
+        backgroundPosition: undefined,
+        backgroundRepeat: undefined,
+        border: undefined,
+        boxShadow: undefined,
+        outlineWidth: undefined,
+        outlineStyle: undefined,
+        outlineColor: undefined,
+        outlineOffset: undefined,
+        filter: undefined,
+        mixBlendMode: undefined,
     }
-
-    // Position: top-level includes pan offset, nested is relative to parent
-    if (isTopLevel) {
-        wrapStyle.left = `calc(${node.x}px * var(--z, 1) + var(--px, 0) * 1px)`
-        wrapStyle.top = `calc(${node.y}px * var(--z, 1) + var(--py, 0) * 1px)`
-    } else {
-        wrapStyle.left = `calc(${node.x}px * var(--z, 1))`
-        wrapStyle.top = `calc(${node.y}px * var(--z, 1))`
-    }
-
-    // Size
-    wrapStyle.width = `calc(${node.width}px * var(--z, 1))`
-    wrapStyle.height = `calc(${node.height}px * var(--z, 1))`
-
-    // Opacity at node level
-    if (node.opacity < 1) wrapStyle.opacity = node.opacity
-
-    // Rotation
-    if (node.rotation !== 0) wrapStyle.transform = `rotate(${node.rotation}deg)`
 
     // ── Path data ─────────────────────────────────────────────
     const net = node.vectorNetwork

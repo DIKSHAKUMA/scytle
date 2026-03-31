@@ -35,7 +35,7 @@ export interface PageGenerationContext {
         radius?: { sm: number; md: number; lg: number }
         spacing?: { sm: number; md: number; lg: number; gap: number }
         shadows?: { sm: string; md: string }
-        fontSizes?: { h1: number; h2: number; body: number }
+        fontSizes?: { h1: number; h2: number; h3?: number; body: number }
     }
     siblingPages?: Array<{ name: string; description: string }>
 }
@@ -174,6 +174,7 @@ BOX SHADOW (use exactly these values):
 FONT SIZES (use exactly these values):
 - h1: text-[${tc.fontSizes.h1}px]
 - h2: text-[${tc.fontSizes.h2}px]
+- h3: text-[${tc.fontSizes.h3 || Math.round(tc.fontSizes.h2 * 0.75)}px]
 - Body text: text-[${tc.fontSizes.body}px]`)
     }
     const themeRulesStr = themeRules.length > 0 ? '\n' + themeRules.join('\n') : ''

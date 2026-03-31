@@ -257,7 +257,9 @@ function walkRenderedElement(
     // BUT: if the element has visual properties (bg, border, padding, radius),
     // it must be a container (FrameNode) with a text child — not a plain TextNode.
     // Example: <button class="px-3 py-1.5 bg-blue-600 text-white rounded-lg">Buy Now</button>
-    if (isTextOnlyElement(el, tag, win) && !hasVisualProperties(cs)) {
+    const _isTextOnly = isTextOnlyElement(el, tag, win)
+    const _hasVisual = hasVisualProperties(cs)
+    if (_isTextOnly && !_hasVisual) {
         return buildTextNodeFromComputed(el, cs, rect, tag, lm, win)
     }
 
@@ -285,8 +287,13 @@ function buildTextNodeFromComputed(
     lm?: LinkMaps,
     win?: Window,
 ): TextNode {
-    const text = extractTextContent(el, cs)
-    const color = rgbToHex(cs.color)
+    const text = extractTextContent(el, cs, win)
+    const colorHex = rgbToHex(cs.color)
+    const colorAlpha = rgbToOpacity(cs.color)
+    // Preserve alpha in 8-digit hex if not fully opaque
+    const color = colorAlpha < 1 && colorHex !== 'transparent'
+        ? `${colorHex}${Math.round(colorAlpha * 255).toString(16).padStart(2, '0')}`
+        : colorHex
     const fontFamily = extractPrimaryFont(cs.fontFamily)
     const fontSize = parseFloat(cs.fontSize) || 16
     const fontWeight = parseInt(cs.fontWeight) || 400
@@ -332,7 +339,7 @@ function buildTextNodeFromComputed(
         sizing: inferTextSizing(tag, cs, el, win),
 
         // Base properties
-        opacity: parseFloat(cs.opacity) || 1,
+        opacity: parseOpacity(cs.opacity),
         rotation: 0,
         overflow: 'visible',
         borderRadius: 0,
@@ -341,6 +348,9 @@ function buildTextNodeFromComputed(
         positioning: cs.position === 'absolute' || cs.position === 'fixed' ? 'absolute' : 'auto',
         margin: extractMargin(cs),
         autoMargin: win ? extractAutoMargin(el, win) : undefined,
+
+        // Min/max constraints (e.g. max-w-xl on text elements)
+        ...extractMinMaxConstraints(cs),
 
         // Theme variable refs (exact-match from LinkMaps)
         colorRef: lm ? matchColor(color, lm) : undefined,
@@ -366,10 +376,9 @@ function buildContainerNodeFromComputed(
     win: Window,
     lm?: LinkMaps,
 ): FrameNode {
-    // Recursively walk children
+    // Recursively walk children — use childNodes to also capture text node siblings
     const children: ScytleNode[] = []
-    for (const child of el.children) {
-        // Use nodeType instead of instanceof — instanceof fails across iframe boundaries
+    for (const child of el.childNodes) {
         if (child.nodeType === Node.ELEMENT_NODE) {
             const childEl = child as HTMLElement
             const node = walkRenderedElement(childEl, win, el, lm)
@@ -387,6 +396,38 @@ function buildContainerNodeFromComputed(
                 }
                 children.push(node)
             }
+        } else if (child.nodeType === Node.TEXT_NODE) {
+            // Raw text node siblings (e.g. "Watch Demo" next to an SVG in a flex button)
+            const text = child.textContent?.trim()
+            if (text) {
+                const inlineColorHex = rgbToHex(cs.color)
+                const inlineColorAlpha = rgbToOpacity(cs.color)
+                const inlineColor = inlineColorAlpha < 1 && inlineColorHex !== 'transparent'
+                    ? `${inlineColorHex}${Math.round(inlineColorAlpha * 255).toString(16).padStart(2, '0')}`
+                    : inlineColorHex
+                const textNode = createText({
+                    id: generateId(),
+                    name: text.slice(0, 40),
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                    characters: text,
+                    fontSize: parseFloat(cs.fontSize) || 16,
+                    fontWeight: parseInt(cs.fontWeight) || 400,
+                    fontFamily: extractPrimaryFont(cs.fontFamily),
+                    fontStyle: cs.fontStyle === 'italic' ? 'italic' : undefined,
+                    lineHeight: cs.lineHeight === 'normal' ? 'auto' : parseFloat(cs.lineHeight),
+                    letterSpacing: cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing),
+                    textDecoration: parseTextDecoration(cs.textDecorationLine),
+                    textTransform: mapTextTransform(cs.textTransform),
+                    color: inlineColor,
+                    textAlign: mapTextAlign(cs.textAlign),
+                    autoResize: 'width-and-height',
+                    sizing: { horizontal: 'hug', vertical: 'hug' },
+                })
+                children.push(textNode)
+            }
         }
     }
 
@@ -395,7 +436,16 @@ function buildContainerNodeFromComputed(
     if (children.length === 0 && el.textContent?.trim()) {
         const textNode = buildTextNodeFromComputed(el, cs, rect, tag, lm, win)
         if (hasVisualProperties(cs)) {
-            // Wrap text inside the visual container
+            // Wrap text inside the visual container.
+            // The text node was created from the SAME element as the wrapper frame,
+            // so it inherits properties that belong on the frame, not the text child.
+            // Reset: positioning (absolute belongs on the frame, not the text inside it),
+            // margin (spacing is the frame's job), sizing (text should hug inside frame).
+            textNode.positioning = 'auto'
+            textNode.margin = undefined
+            textNode.autoMargin = undefined
+            textNode.sizing = { horizontal: 'hug', vertical: 'hug' }
+            textNode.autoResize = 'width-and-height'
             children.push(textNode)
         } else {
             // Promote to plain text node (no visual container needed)
@@ -448,7 +498,9 @@ function buildContainerNodeFromComputed(
         borderRadiusRef: lm ? matchRadius(borderRadius, lm) : undefined,
         shadows,
         shadowRef: lm && shadows.length > 0 ? matchShadow(shadows, lm) : undefined,
-        opacity: parseFloat(cs.opacity) || 1,
+        opacity: parseOpacity(cs.opacity),
+        // Layer blur — parse CSS filter: blur(Xpx)
+        ...(extractLayerBlur(cs.filter)),
         overflow: (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.overflowY === 'hidden')
             ? 'hidden'
             : 'visible',
@@ -510,8 +562,8 @@ function buildImageNodeFromComputed(
         }
     }
 
-    // If the image has a real src, use ImageFill on a FrameNode (Figma pattern)
-    if (src && !src.startsWith('data:') && src !== '') {
+    // If the image has a real src (URL or data URI), use ImageFill on a FrameNode (Figma pattern)
+    if (src && src !== '') {
         return createFrame({
             id: generateId(),
             name: alt || 'Image',
@@ -527,7 +579,7 @@ function buildImageNodeFromComputed(
             }],
             sizing: { horizontal: 'fill', vertical: 'fixed' },
             borderRadius: extractBorderRadius(cs),
-            opacity: parseFloat(cs.opacity) || 1,
+            opacity: parseOpacity(cs.opacity),
             overflow: 'hidden',
             children: [],
             layout: { mode: 'none' },
@@ -548,7 +600,7 @@ function buildImageNodeFromComputed(
         placeholderLabel: alt || 'Image',
         sizing: { horizontal: 'fill', vertical: 'fixed' },
         borderRadius: extractBorderRadius(cs),
-        opacity: parseFloat(cs.opacity) || 1,
+        opacity: parseOpacity(cs.opacity),
     })
 }
 
@@ -612,6 +664,47 @@ function buildVectorNodeFromNetwork(
     // Resolve fill color (handle currentColor via computed style)
     const fillColor = resolveCurrentColor(el, cs)
 
+    // ── Resolve stroke from SVG attributes ──
+    // getComputedStyle on an <svg> element does NOT reliably return stroke
+    // properties set on child <path>/<circle>/etc. elements.
+    // Read attributes in priority order:
+    //   1. First child shape element's attributes (most specific)
+    //   2. SVG root element's attributes (presentation attributes)
+    //   3. Computed style (fallback)
+    const firstPath = el.querySelector('path, circle, rect, ellipse, line, polygon, polyline')
+    const svgStrokeRaw =
+        firstPath?.getAttribute('stroke') ||
+        el.getAttribute('stroke') ||
+        cs.stroke || ''
+    const svgStrokeWidthRaw =
+        firstPath?.getAttribute('stroke-width') ||
+        el.getAttribute('stroke-width') ||
+        cs.strokeWidth || '0'
+
+    // Resolve 'currentColor' and named colors through computed style
+    let strokeColor = '#000000'
+    if (svgStrokeRaw && svgStrokeRaw !== 'none') {
+        if (svgStrokeRaw === 'currentColor') {
+            strokeColor = rgbToHex(cs.color)
+        } else if (svgStrokeRaw === 'white') {
+            strokeColor = '#ffffff'
+        } else if (svgStrokeRaw === 'black') {
+            strokeColor = '#000000'
+        } else if (svgStrokeRaw.startsWith('#') || svgStrokeRaw.startsWith('rgb')) {
+            strokeColor = rgbToHex(svgStrokeRaw)
+        } else {
+            // Named CSS color — fall back to computed color
+            strokeColor = rgbToHex(cs.color)
+        }
+    }
+
+    const strokeWeight = parseFloat(svgStrokeWidthRaw) || 0
+    const hasStroke = svgStrokeRaw !== '' && svgStrokeRaw !== 'none' && strokeWeight > 0
+
+    // Also read stroke-linecap and stroke-linejoin from SVG attributes
+    const rawCap = firstPath?.getAttribute('stroke-linecap') || el.getAttribute('stroke-linecap') || ''
+    const rawJoin = firstPath?.getAttribute('stroke-linejoin') || el.getAttribute('stroke-linejoin') || ''
+
     return createVector({
         id: generateId(),
         name: inferSvgName(el),
@@ -626,10 +719,12 @@ function buildVectorNodeFromNetwork(
             opacity: 1,
             visible: true,
         }] : [],
-        strokeColor: rgbToHex(cs.stroke || '#000000'),
-        strokeWeight: parseFloat(cs.strokeWidth || '0') || 0,
-        strokeVisible: parseFloat(cs.strokeWidth || '0') > 0,
-        opacity: parseFloat(cs.opacity) || 1,
+        strokeColor,
+        strokeWeight,
+        strokeVisible: hasStroke,
+        strokeCap: rawCap === 'round' ? 'ROUND' : rawCap === 'square' ? 'SQUARE' : 'NONE',
+        strokeJoin: rawJoin === 'round' ? 'ROUND' : rawJoin === 'bevel' ? 'BEVEL' : 'MITER',
+        opacity: parseOpacity(cs.opacity),
     })
 }
 
@@ -706,7 +801,7 @@ function buildSvgAsDataUri(
         }],
         borderRadius: 0,
         shadows: [],
-        opacity: parseFloat(cs.opacity) || 1,
+        opacity: parseOpacity(cs.opacity),
         overflow: 'hidden',
         children: [],
     })
@@ -818,6 +913,12 @@ function buildDividerNode(
 // Color Conversion Utilities
 // ═══════════════════════════════════════════════════
 
+/** Parse opacity string, correctly handling opacity: 0 (which || 1 would clobber) */
+function parseOpacity(val: string): number {
+    const n = parseFloat(val)
+    return isNaN(n) ? 1 : n
+}
+
 /**
  * Convert CSS computed color string to hex.
  *
@@ -867,6 +968,18 @@ function rgbToHex(rgb: string): string {
             parseFloat(oklchMatch[3]),
             parseFloat(oklchMatch[4]),
         )
+    }
+
+    // oklab(L a b) or oklab(L a b / alpha) — Tailwind v4 uses this for near-achromatic colors
+    // (e.g. bg-white/90 → oklab(0.999994 0.0000455678 0.0000200868 / 0.9))
+    // oklab is the Cartesian form of oklch — same conversion, skip polar→Cartesian step.
+    const oklabMatch = rgb.match(/oklab\(\s*([\d.]+)(%?)\s+([-\d.]+)\s+([-\d.]+)/)
+    if (oklabMatch) {
+        let L = parseFloat(oklabMatch[1])
+        if (oklabMatch[2] === '%') L = L / 100
+        const a = parseFloat(oklabMatch[3])
+        const b = parseFloat(oklabMatch[4])
+        return oklabToHex(L, a, b)
     }
 
     // color(srgb r g b) or color(srgb r g b / alpha)
@@ -927,6 +1040,35 @@ function oklchToHex(L: number, C: number, H: number): string {
 }
 
 /**
+ * Convert oklab to hex (direct Cartesian form — no polar conversion needed).
+ * Tailwind v4 uses oklab for near-achromatic colors (e.g. bg-white/90).
+ */
+function oklabToHex(L: number, a: number, b: number): string {
+    // oklab → linear sRGB (via LMS) — same as oklchToHex but a,b are already Cartesian
+    const l_ = L + 0.3963377774 * a + 0.2158037573 * b
+    const m_ = L - 0.1055613458 * a - 0.0638541728 * b
+    const s_ = L - 0.0894841775 * a - 1.2914855480 * b
+
+    const l = l_ * l_ * l_
+    const m = m_ * m_ * m_
+    const s = s_ * s_ * s_
+
+    const r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+    const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+    const bVal = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+
+    const toSrgb = (x: number) => {
+        if (x <= 0) return 0
+        if (x >= 1) return 255
+        return Math.round((x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055) * 255)
+    }
+
+    return '#' + [toSrgb(r), toSrgb(g), toSrgb(bVal)]
+        .map(c => Math.min(255, Math.max(0, c)).toString(16).padStart(2, '0'))
+        .join('')
+}
+
+/**
  * Extract opacity from computed color string.
  * Handles rgba(), oklch(... / alpha), color(... / alpha), and space-separated rgb().
  */
@@ -952,8 +1094,9 @@ function isTransparentColor(color: string): boolean {
     if (!color) return true
     if (color === 'transparent') return true
     if (color === 'rgba(0, 0, 0, 0)') return true
-    // oklch with zero alpha: oklch(0 0 0 / 0), oklch(... / 0)
-    if (color.includes('/ 0)') || color.includes('/0)')) return true
+    // Check for zero alpha in any format: "/ 0)", "/0)", "/ 0.0)", "/0.00)", etc.
+    const alphaMatch = color.match(/\/\s*([\d.]+)\s*\)$/)
+    if (alphaMatch && parseFloat(alphaMatch[1]) === 0) return true
     return false
 }
 
@@ -1082,20 +1225,35 @@ function extractMinMaxConstraints(cs: CSSStyleDeclaration): {
 }
 
 function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
-    const width = parseFloat(cs.borderTopWidth) || 0
-    if (width === 0) return undefined
+    // Check all four sides and use the thickest visible border
+    const sides = [
+        { width: parseFloat(cs.borderTopWidth) || 0, color: cs.borderTopColor, style: cs.borderTopStyle },
+        { width: parseFloat(cs.borderRightWidth) || 0, color: cs.borderRightColor, style: cs.borderRightStyle },
+        { width: parseFloat(cs.borderBottomWidth) || 0, color: cs.borderBottomColor, style: cs.borderBottomStyle },
+        { width: parseFloat(cs.borderLeftWidth) || 0, color: cs.borderLeftColor, style: cs.borderLeftStyle },
+    ]
 
-    if (isTransparentColor(cs.borderTopColor)) return undefined
-    const color = rgbToHex(cs.borderTopColor)
+    // Find the thickest non-transparent border
+    let best = sides[0]
+    for (const side of sides) {
+        if (side.width > best.width && !isTransparentColor(side.color)) {
+            best = side
+        }
+    }
+
+    if (best.width === 0) return undefined
+    if (isTransparentColor(best.color)) return undefined
+
+    const color = rgbToHex(best.color)
 
     return {
         color,
-        width,
-        style: (cs.borderTopStyle === 'dashed' ? 'dashed'
-            : cs.borderTopStyle === 'dotted' ? 'dotted'
+        width: best.width,
+        style: (best.style === 'dashed' ? 'dashed'
+            : best.style === 'dotted' ? 'dotted'
                 : 'solid') as 'solid' | 'dashed' | 'dotted',
         position: 'inside',
-        opacity: rgbToOpacity(cs.borderTopColor),
+        opacity: rgbToOpacity(best.color),
         visible: true,
     }
 }
@@ -1160,6 +1318,15 @@ function extractFills(cs: CSSStyleDeclaration): Fill[] {
     return fills
 }
 
+/** Extract layer blur from CSS filter property (e.g. 'blur(48px)') */
+function extractLayerBlur(filter: string): { layerBlur: number } | {} {
+    if (!filter || filter === 'none') return {}
+    const match = filter.match(/blur\(\s*([\d.]+)px\s*\)/)
+    if (!match) return {}
+    const val = parseFloat(match[1])
+    return val > 0 ? { layerBlur: val } : {}
+}
+
 function extractShadows(boxShadow: string): Shadow[] {
     if (!boxShadow || boxShadow === 'none') return []
 
@@ -1203,7 +1370,7 @@ function parseSingleShadow(shadow: string): Shadow | null {
     // Extract color — handle rgb(), rgba(), oklch(), color(), hex, and named colors.
     // Tailwind v4 outputs oklch(0 0 0 / 0.1) — we must preserve the alpha channel.
     // Try function-style colors first (most specific), then hex, then named colors.
-    const funcColorMatch = cleaned.match(/((?:rgba?|oklch|color)\([^)]+\))/)
+    const funcColorMatch = cleaned.match(/((?:rgba?|oklch|oklab|color)\([^)]+\))/)
     const hexColorMatch = !funcColorMatch ? cleaned.match(/(#[0-9a-fA-F]{3,8})\b/) : null
 
     let color: string
@@ -1310,7 +1477,7 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
         const stops: Array<{ position: number; color: string; opacity?: number }> = []
         // Generic approach: extract any color function followed by optional percentage
         // Matches: rgb(...) 50%, rgba(...) 0%, oklch(...) 100%, color(srgb ...) 50%
-        const colorFuncRegex = /((?:rgba?|oklch|color)\([^)]+\))\s*([\d.]+%)?/g
+        const colorFuncRegex = /((?:rgba?|oklch|oklab|color)\([^)]+\))\s*([\d.]+%)?/g
         let match
         while ((match = colorFuncRegex.exec(content)) !== null) {
             const colorStr = match[1]
@@ -1376,7 +1543,7 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
     if (radialMatch) {
         const content = radialMatch[1]
         const stops: Array<{ position: number; color: string; opacity?: number }> = []
-        const colorFuncRegex = /((?:rgba?|oklch|color)\([^)]+\))\s*([\d.]+%)?/g
+        const colorFuncRegex = /((?:rgba?|oklch|oklab|color)\([^)]+\))\s*([\d.]+%)?/g
         let match
         while ((match = colorFuncRegex.exec(content)) !== null) {
             stops.push({
@@ -1616,10 +1783,11 @@ function inferTextSizing(
             return { horizontal: 'fixed', vertical }
         }
 
-        // Check parent context — flex-row children should hug, not fill
+        // Check parent context — flex children need special sizing logic
         const parentCs = el.parentElement ? win.getComputedStyle(el.parentElement) : null
         const parentIsFlex = parentCs?.display.includes('flex')
         const parentIsRow = parentCs?.flexDirection === 'row' || parentCs?.flexDirection === 'row-reverse'
+        const parentIsCol = parentIsFlex && !parentIsRow
 
         // flex-1 / flex-grow in a row → fill
         if (parentIsFlex && parentIsRow && parseFloat(cs.flexGrow) > 0) {
@@ -1628,6 +1796,20 @@ function inferTextSizing(
 
         if (parentIsFlex && parentIsRow) {
             return { horizontal: 'hug', vertical: 'hug' }
+        }
+
+        // Flex column: horizontal = cross axis — check if stretched
+        if (parentIsCol && (isBlock || isHeading)) {
+            const isCrossStretched = (() => {
+                const alignSelf = cs.alignSelf
+                if (alignSelf === 'stretch') return true
+                if (alignSelf === 'auto' || alignSelf === 'normal' || alignSelf === '') {
+                    const pai = parentCs?.alignItems
+                    return pai === 'stretch' || pai === 'normal' || !pai
+                }
+                return false
+            })()
+            return { horizontal: isCrossStretched ? 'fill' : 'hug', vertical: 'hug' }
         }
     }
 
@@ -1666,7 +1848,7 @@ function inferMaxLines(cs: CSSStyleDeclaration): number {
  * Extract text content from an element, handling inline children.
  * Respects white-space CSS property.
  */
-function extractTextContent(el: HTMLElement, cs: CSSStyleDeclaration): string {
+function extractTextContent(el: HTMLElement, cs: CSSStyleDeclaration, win?: Window): string {
     const preserveWhitespace = cs.whiteSpace === 'pre' || cs.whiteSpace === 'pre-wrap'
 
     if (preserveWhitespace) {
@@ -1681,16 +1863,20 @@ function extractTextContent(el: HTMLElement, cs: CSSStyleDeclaration): string {
         } else if (child.nodeName === 'BR') {
             text += '\n'
         } else if (child.nodeType === Node.ELEMENT_NODE) {
-            // For inline elements (strong, em, a, span), include their text
+            // For inline elements (strong, em, a, span, button, etc.), include their text.
+            // Use computed display (not inline style) — browser defaults like button's
+            // inline-block aren't reflected in el.style.display.
             const childEl = child as HTMLElement
             const childTag = childEl.tagName.toLowerCase()
-            if (INLINE_TAGS.has(childTag) || childEl.style.display === 'inline' || childEl.style.display === 'inline-block') {
+            const computedDisplay = win ? win.getComputedStyle(childEl).display : childEl.style.display
+            if (INLINE_TAGS.has(childTag) || computedDisplay === 'inline' || computedDisplay === 'inline-block') {
                 text += childEl.textContent || ''
             }
         }
     }
 
-    return text.replace(/\s+/g, ' ').trim()
+    // Normalize horizontal whitespace (spaces/tabs) but preserve \n from <br> tags
+    return text.replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim()
 }
 
 /**
@@ -1698,8 +1884,22 @@ function extractTextContent(el: HTMLElement, cs: CSSStyleDeclaration): string {
  * True if it contains only inline content (text, spans, etc.)
  */
 function isTextOnlyElement(el: HTMLElement, tag: string, win: Window): boolean {
-    // Always treat these as text
-    if (TEXT_ONLY_TAGS.has(tag)) return true
+    // Always treat these as text — BUT only if inline children don't have
+    // distinct styling (e.g. different colors, backgrounds) that would be lost
+    if (TEXT_ONLY_TAGS.has(tag)) {
+        // If no element children, it's pure text → always text-only
+        if (el.children.length === 0) return true
+        // Check if any inline child has a different color than the parent
+        const parentColor = win.getComputedStyle(el).color
+        for (const child of el.children) {
+            const childCs = win.getComputedStyle(child)
+            // If child has visual properties (bg, border, padding), it needs to be a container
+            if (hasVisualProperties(childCs)) return false
+            // If child has a different color, it needs separate text nodes
+            if (childCs.color !== parentColor) return false
+        }
+        return true
+    }
 
     // Flex/grid containers should NEVER be flattened to text nodes —
     // even if all their children are inline, they need their layout mode preserved.
@@ -1863,7 +2063,21 @@ function inferHtmlTag(tag: string): TextNode['htmlTag'] | undefined {
 function resolveCurrentColor(el: SVGSVGElement, cs: CSSStyleDeclaration): string | undefined {
     const fill = el.getAttribute('fill')
     if (fill === 'none') return undefined
-    if (fill === 'currentColor' || !fill) {
+    if (fill === 'currentColor') {
+        return rgbToHex(cs.color)
+    }
+    // No fill attribute — check child paths for their fill
+    if (!fill) {
+        const firstPath = el.querySelector('path, circle, rect, ellipse, polygon, polyline')
+        const childFill = firstPath?.getAttribute('fill')
+        if (childFill === 'none') return undefined
+        if (childFill === 'currentColor' || !childFill) {
+            // SVG default fill is black when no fill is specified anywhere,
+            // but if the icon library sets no fill, currentColor is the convention
+            return rgbToHex(cs.color)
+        }
+        if (childFill.startsWith('#')) return childFill
+        if (childFill.startsWith('rgb')) return rgbToHex(childFill)
         return rgbToHex(cs.color)
     }
     if (fill.startsWith('#')) return fill

@@ -199,7 +199,8 @@ export class IframeRenderer {
      * Wait for:
      *   1. Tailwind CSS to load and process classes
      *   2. Google Fonts to load
-     *   3. Layout to stabilize (two animation frames)
+     *   3. Images to load (for correct getBoundingClientRect dimensions)
+     *   4. Layout to stabilize (two animation frames)
      */
     private async waitForReady(doc: Document): Promise<void> {
         // 1. Wait for Tailwind script to execute and generate styles
@@ -208,7 +209,10 @@ export class IframeRenderer {
         // 2. Wait for fonts to load
         await this.waitForFonts(doc)
 
-        // 3. Two animation frames for layout stabilization
+        // 3. Wait for images to load (for correct dimensions)
+        await this.waitForImages(doc)
+
+        // 4. Two animation frames for layout stabilization
         await this.waitForLayout()
     }
 
@@ -286,6 +290,42 @@ export class IframeRenderer {
             // Font loading failed — proceed anyway (text will use fallback fonts)
             console.warn('[IframeRenderer] Font loading failed, using fallback fonts')
         }
+    }
+
+    /**
+     * Wait for images to load so their dimensions are available.
+     * Only waits for images with real src URLs (not data: or empty).
+     * Uses a timeout to avoid blocking indefinitely on broken images.
+     */
+    private async waitForImages(doc: Document): Promise<void> {
+        const images = doc.querySelectorAll('img[src]')
+        if (images.length === 0) return
+
+        const IMAGE_TIMEOUT = 5000
+        const promises: Promise<void>[] = []
+
+        for (const img of images) {
+            const imgEl = img as HTMLImageElement
+            const src = imgEl.src || ''
+            // Skip data URIs and empty sources — they won't provide intrinsic dimensions
+            if (!src || src.startsWith('data:') || src === 'about:blank') continue
+            // Already loaded
+            if (imgEl.complete && imgEl.naturalHeight > 0) continue
+
+            promises.push(new Promise<void>((resolve) => {
+                const done = () => resolve()
+                imgEl.addEventListener('load', done, { once: true })
+                imgEl.addEventListener('error', done, { once: true })
+            }))
+        }
+
+        if (promises.length === 0) return
+
+        // Wait for all images or timeout
+        await Promise.race([
+            Promise.all(promises),
+            new Promise(r => setTimeout(r, IMAGE_TIMEOUT)),
+        ])
     }
 
     /**

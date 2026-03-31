@@ -213,6 +213,7 @@ export function ChatTab() {
                     rootWidth: selectedNode.width,
                     variableTable: sgState.variableTable,
                     themeMode: sgState.themeMode,
+                    fonts: extractChatFonts(result.html, sgState),
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 // Preserve position, dimensions & id from the original node
@@ -454,6 +455,7 @@ export function ChatTab() {
                     const parsed = await parseHtmlToNodesViaIframe(actionData.html, 'AI Section', {
                         variableTable: sgState.variableTable,
                         themeMode: sgState.themeMode,
+                        fonts: extractChatFonts(actionData.html, sgState),
                     })
                     const newNode: ScytleNode = parsed.children.length === 1
                         ? parsed.children[0]
@@ -790,4 +792,25 @@ export function ChatTab() {
             </div>
         </div>
     )
+}
+
+/** Extract font families from chat-generated HTML + style guide for iframe font loading */
+function extractChatFonts(
+    html: string,
+    sgState: { variableTable: Record<string, { light: string; dark: string }>; themeMode: 'light' | 'dark' },
+): string[] {
+    const families = new Set<string>()
+    const fontClasses = html.match(/font-\[([^\]]+)\]/g)
+    if (fontClasses) {
+        for (const fc of fontClasses) {
+            const family = fc.slice(6, -1).replace(/_/g, ' ').replace(/['"]/g, '')
+            if (family) families.add(family)
+        }
+    }
+    const table = sgState.variableTable
+    const mode = sgState.themeMode
+    if (table['font/heading']?.[mode]) families.add(table['font/heading'][mode])
+    if (table['font/body']?.[mode]) families.add(table['font/body'][mode])
+    const systemFonts = new Set(['Inter', 'sans-serif', 'serif', 'monospace', 'mono', 'system-ui', 'Arial', 'Helvetica'])
+    return Array.from(families).filter(f => !systemFonts.has(f))
 }

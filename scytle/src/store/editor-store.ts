@@ -83,6 +83,9 @@ export interface PenDrawingState {
     /** Outgoing tangent from the last-placed vertex (set by click+drag).
      *  Used as tangentStart on the next segment created. */
     _outgoingTangent?: { x: number; y: number }
+    /** Incoming tangent for the first vertex (mirrored handle from first drag).
+     *  Used as tangentEnd on the closing segment when the path is closed. */
+    _firstVertexIncomingTangent?: { x: number; y: number }
 }
 
 

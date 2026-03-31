@@ -37,6 +37,8 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const nodes = useEditorStore((s) => s.nodes)
     const activeTool = useEditorStore((s) => s.activeTool)
     const canvasColor = useEditorStore((s) => s.canvasColor)
+    const penNearStart = useEditorStore((s) => s.penDrawingState?.nearStartPoint ?? false)
+    const penIsDrawing = useEditorStore((s) => s.penDrawingState?.isDrawing ?? false)
 
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
@@ -141,7 +143,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     useKeyboardShortcuts()
 
     // Pen tool drawing hook
-    const { handlePenPointerDown, handlePenPointerMove, handlePenPointerUp } = usePenTool(screenToCanvas)
+    const { handlePenPointerDown, handlePenPointerMove, handlePenPointerUp, handlePenKeyDown } = usePenTool(screenToCanvas)
 
     // ----------------------------------------------------------
     // Wheel handler: scroll = pan, Cmd/Ctrl+scroll = zoom
@@ -228,6 +230,14 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             window.removeEventListener('keyup', handleKeyUp)
         }
     }, [])
+
+    // ----------------------------------------------------------
+    // Pen tool keyboard shortcuts (Escape/Enter/Backspace)
+    // ----------------------------------------------------------
+    useEffect(() => {
+        window.addEventListener('keydown', handlePenKeyDown)
+        return () => window.removeEventListener('keydown', handlePenKeyDown)
+    }, [handlePenKeyDown])
 
     // ----------------------------------------------------------
     // Helper: walk up from a DOM target to find data-node-id
@@ -652,7 +662,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             // Pen tool cursor tracking
             if (activeTool === 'pen') {
-                handlePenPointerMove(e.clientX, e.clientY)
+                handlePenPointerMove(e.clientX, e.clientY, e.shiftKey, e.altKey)
                 return
             }
 
@@ -781,6 +791,10 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     // ----------------------------------------------------------
     // Cursor
     // ----------------------------------------------------------
+    // Pen tool SVG cursors
+    const penCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M13.13 22.19L11.5 18.36C13.07 17.78 14.54 17 15.9 16.09L13.13 22.19M5.64 12.5L1.81 10.87L7.91 8.1C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39C21.61 2.39 16.66 .269 11 5.93C8.81 8.12 7.5 10.53 6.65 12.64C6.37 13.39 6.56 14.21 7.11 14.77L9.24 16.89C9.79 17.45 10.61 17.63 11.36 17.35C13.5 16.53 15.88 15.19 18.07 13C23.73 7.34 21.61 2.39 21.61 2.39M14.54 9.46C13.76 8.68 13.76 7.41 14.54 6.63S16.59 5.85 17.37 6.63C18.14 7.41 18.15 8.68 17.37 9.46C16.59 10.24 15.32 10.24 14.54 9.46Z' fill='%23333'/%3E%3C/svg%3E") 2 22, crosshair`
+    const penCloseCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M13.13 22.19L11.5 18.36C13.07 17.78 14.54 17 15.9 16.09L13.13 22.19M5.64 12.5L1.81 10.87L7.91 8.1C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39C21.61 2.39 16.66 .269 11 5.93C8.81 8.12 7.5 10.53 6.65 12.64C6.37 13.39 6.56 14.21 7.11 14.77L9.24 16.89C9.79 17.45 10.61 17.63 11.36 17.35C13.5 16.53 15.88 15.19 18.07 13C23.73 7.34 21.61 2.39 21.61 2.39M14.54 9.46C13.76 8.68 13.76 7.41 14.54 6.63S16.59 5.85 17.37 6.63C18.14 7.41 18.15 8.68 17.37 9.46C16.59 10.24 15.32 10.24 14.54 9.46Z' fill='%23333'/%3E%3Ccircle cx='18' cy='18' r='4' fill='none' stroke='%23333' stroke-width='1.5'/%3E%3C/svg%3E") 2 22, crosshair`
+
     const cursor = resizeInfo.isResizing
         ? handleToCursor(resizeInfo.handle!)
         : isHandMode
@@ -791,9 +805,15 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 ? 'crosshair'
                 : dragInfo.isDragging
                     ? 'grabbing'
-                    : (activeTool === 'frame' || activeTool === 'text' || activeTool === 'pen')
-                        ? 'crosshair'
-                        : 'default'
+                    : activeTool === 'pen'
+                        ? penNearStart
+                            ? penCloseCursor
+                            : penIsDrawing
+                                ? penCursor
+                                : penCursor
+                        : (activeTool === 'frame' || activeTool === 'text')
+                            ? 'crosshair'
+                            : 'default'
     // ----------------------------------------------------------
     // Render
     // ----------------------------------------------------------

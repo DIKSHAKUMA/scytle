@@ -69,8 +69,9 @@ function headingTagToFontSizeRef(tag: string): string | undefined {
     switch (tag) {
         case 'h1': return 'fontSize/h1'
         case 'h2': return 'fontSize/h2'
-        // h3-h6: use h2 ref as a reasonable fallback
-        case 'h3': case 'h4': case 'h5': case 'h6': return 'fontSize/h2'
+        case 'h3': return 'fontSize/h3'
+        // h4-h6: use h3 ref as closest match
+        case 'h4': case 'h5': case 'h6': return 'fontSize/h3'
         default: return undefined
     }
 }
@@ -114,9 +115,11 @@ function classifyFillColor(
         return 'bg/secondary'
     }
 
-    // Dark colors used as fills → bg/primary (in dark mode context)
-    if (isDarkColor(color)) {
-        return 'bg/primary'
+    // Dark colors — only classify if we're in dark mode (where dark fills are expected
+    // as bg/primary). In light mode, dark fills are intentionally dark sections
+    // (e.g. dark hero, dark footer) and should NOT be relinked to bg/primary (white).
+    if (isDarkColor(color) && mode === 'dark') {
+        if (bgPrimary && dist(color, bgPrimary) < 40) return 'bg/primary'
     }
 
     // Saturated mid-tones → accent
@@ -128,7 +131,8 @@ function classifyFillColor(
         if (saturation > 0.3) return 'accent'
     }
 
-    return 'bg/secondary'
+    // Unmatched colors — don't force-assign a ref, leave as literal
+    return undefined
 }
 
 // ═══════════════════════════════════════════════════
@@ -152,10 +156,11 @@ function classifyTextColor(
     // Text on accent-colored parents
     if (parentFillRef === 'accent') return 'text/on-accent'
 
-    // Exact-ish matches first
+    // Exact-ish matches first — check accent BEFORE text/primary
+    // since accent text (links, CTAs) must not be misclassified as body text
+    if (accent && dist(color, accent) < 50) return 'accent'
     if (textPrimary && dist(color, textPrimary) < 40) return 'text/primary'
     if (textSecondary && dist(color, textSecondary) < 40) return 'text/secondary'
-    if (accent && dist(color, accent) < 60) return 'accent'
     if (textOnAccent && dist(color, textOnAccent) < 30) return 'text/on-accent'
 
     // Headings → primary text
@@ -354,6 +359,9 @@ function relinkText(
             node.fontSizeRef = headingTagToFontSizeRef(tag)
         } else if (node.fontSize <= 18) {
             node.fontSizeRef = 'fontSize/body'
+        } else {
+            // Mid-range text (18-32px) — assign closest fontSize ref
+            node.fontSizeRef = closestFontSizeRef(node.fontSize, table, mode)
         }
     }
 
@@ -385,6 +393,19 @@ function closestRadiusRef(value: number, table: VariableTable, mode: ThemeMode):
 function closestSpacingRef(value: number, table: VariableTable, mode: ThemeMode): string {
     const refs = ['spacing/sm', 'spacing/md', 'spacing/lg', 'spacing/gap']
     let closest = refs[0]
+    let minDist = Infinity
+    for (const ref of refs) {
+        const tv = table[ref]?.[mode]
+        if (!tv) continue
+        const d = Math.abs(value - parseFloat(tv))
+        if (d < minDist) { minDist = d; closest = ref }
+    }
+    return closest
+}
+
+function closestFontSizeRef(value: number, table: VariableTable, mode: ThemeMode): string {
+    const refs = ['fontSize/h1', 'fontSize/h2', 'fontSize/h3', 'fontSize/body']
+    let closest = 'fontSize/body'
     let minDist = Infinity
     for (const ref of refs) {
         const tv = table[ref]?.[mode]

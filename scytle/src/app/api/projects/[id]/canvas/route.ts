@@ -38,6 +38,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         // 3. Read canvas file from Storage
         const storage = new Storage(client)
         const fileId = canvasFileId(projectId)
+        console.log(`📦 Canvas load: projectId=${projectId}, fileId=${fileId}`)
 
         try {
             const fileData = await storage.getFileDownload(BUCKET_ID, fileId)
@@ -101,10 +102,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }
 
-        // 4. Write canvas JSON to Storage (delete old + create new, with retry for race conditions)
+        // 4. Write canvas JSON to Storage (upsert: update if exists, create if not)
         const storage = new Storage(client)
         const fileId = canvasFileId(projectId)
         const canvasJson = JSON.stringify(body)
+
+        console.log(`📦 Canvas save: projectId=${projectId}, fileId=${fileId}, size=${canvasJson.length}`)
 
         const MAX_RETRIES = 3
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -112,13 +115,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 // Delete existing file first (ignore if not found)
                 try {
                     await storage.deleteFile(BUCKET_ID, fileId)
+                    console.log(`📦 Canvas save: deleted old file ${fileId}`)
                 } catch {
-                    // File doesn't exist yet — that's fine
+                    console.log(`📦 Canvas save: no existing file to delete (first save)`)
                 }
 
                 // Create new file with deterministic ID
                 const file = new File([canvasJson], `canvas-${projectId}.json`, { type: 'application/json' })
                 await storage.createFile(BUCKET_ID, fileId, file)
+                console.log(`📦 Canvas save: SUCCESS — file ${fileId} created`)
                 break // Success — exit retry loop
             } catch (error) {
                 const errMsg = error instanceof Error ? error.message : String(error)

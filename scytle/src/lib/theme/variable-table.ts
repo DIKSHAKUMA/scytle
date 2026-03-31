@@ -40,8 +40,8 @@ export const VARIABLE_KEYS = [
     'spacing/sm', 'spacing/md', 'spacing/lg', 'spacing/gap',
     // Shadows (2)
     'shadow/sm', 'shadow/md',
-    // Font sizes (3)
-    'fontSize/h1', 'fontSize/h2', 'fontSize/body',
+    // Font sizes (4)
+    'fontSize/h1', 'fontSize/h2', 'fontSize/h3', 'fontSize/body',
 ] as const
 
 export type VariableKey = (typeof VARIABLE_KEYS)[number]
@@ -79,10 +79,11 @@ function deriveShadows(mode: 'light' | 'dark'): { sm: string; md: string } {
 }
 
 /** Derive font sizes from sizeScale */
-function deriveFontSizes(sizeScale: number): { h1: string; h2: string; body: string } {
+function deriveFontSizes(sizeScale: number): { h1: string; h2: string; h3: string; body: string } {
     return {
         h1: String(Math.round(48 * sizeScale)),
         h2: String(Math.round(32 * sizeScale)),
+        h3: String(Math.round(24 * sizeScale)),
         body: '16',
     }
 }
@@ -159,6 +160,7 @@ export function conceptToVariableTable(concept: Concept): VariableTable {
 
         'fontSize/h1': { light: fontSizes.h1, dark: fontSizes.h1 },
         'fontSize/h2': { light: fontSizes.h2, dark: fontSizes.h2 },
+        'fontSize/h3': { light: fontSizes.h3, dark: fontSizes.h3 },
         'fontSize/body': { light: fontSizes.body, dark: fontSizes.body },
     }
 }
@@ -292,6 +294,7 @@ const VARIABLE_META: Record<VariableKey, { displayName: string; valueType: Varia
     // Font sizes
     'fontSize/h1':      { displayName: 'Heading 1',            valueType: 'number' },
     'fontSize/h2':      { displayName: 'Heading 2',            valueType: 'number' },
+    'fontSize/h3':      { displayName: 'Heading 3',            valueType: 'number' },
     'fontSize/body':    { displayName: 'Body',                 valueType: 'number' },
 }
 
@@ -346,7 +349,7 @@ export const STANDARD_COLLECTIONS: VariableCollection[] = [
             {
                 id: 'font-sizes',
                 name: 'Font Sizes',
-                variableKeys: ['fontSize/h1', 'fontSize/h2', 'fontSize/body'],
+                variableKeys: ['fontSize/h1', 'fontSize/h2', 'fontSize/h3', 'fontSize/body'],
             },
         ],
     },
@@ -428,7 +431,7 @@ export const VARIABLE_SCOPES: Record<string, VariableKey[]> = {
     'fill.color':       ['bg/primary', 'bg/secondary', 'accent', 'text/primary', 'text/secondary', 'text/on-accent', 'border'],
     'text.color':       ['text/primary', 'text/secondary', 'text/on-accent', 'accent'],
     'text.fontFamily':  ['font/heading', 'font/body'],
-    'text.fontSize':    ['fontSize/h1', 'fontSize/h2', 'fontSize/body'],
+    'text.fontSize':    ['fontSize/h1', 'fontSize/h2', 'fontSize/h3', 'fontSize/body'],
     'text.fontWeight':  ['fontWeight/heading', 'fontWeight/body'],
     'shadow.color':     ['accent', 'text/primary', 'border'],
     'borderRadius':     ['radius/sm', 'radius/md', 'radius/lg'],

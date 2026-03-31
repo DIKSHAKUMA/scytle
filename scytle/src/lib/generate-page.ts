@@ -74,7 +74,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     const themeContext = options.themeContext || (Object.keys(table).length > 0 ? {
         primary: table['accent']?.[mode] || '#2563eb',
         secondary: table['bg/secondary']?.[mode] || '#f5f5f5',
-        accent: table['accent']?.[mode] || '#10b981',
+        accent: deriveAccentVariant(table['accent']?.[mode] || '#2563eb'),
         bg: table['bg/primary']?.[mode] || '#ffffff',
         text: table['text/primary']?.[mode] || '#111827',
         fonts: table['font/heading'] ? {
@@ -99,6 +99,7 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
         fontSizes: table['fontSize/h1'] ? {
             h1: parseInt(table['fontSize/h1'][mode]) || 48,
             h2: parseInt(table['fontSize/h2'][mode]) || 32,
+            h3: parseInt(table['fontSize/h3']?.[mode]) || 24,
             body: parseInt(table['fontSize/body'][mode]) || 16,
         } : undefined,
     } : undefined)
@@ -250,6 +251,51 @@ function extractFontFamilies(
     // Filter out system fonts that don't need loading
     const systemFonts = new Set(['Inter', 'sans-serif', 'serif', 'monospace', 'mono', 'system-ui', 'Arial', 'Helvetica'])
     return Array.from(families).filter(f => !systemFonts.has(f))
+}
+
+/**
+ * Derive a distinct accent color from a primary hex by shifting hue ~30°.
+ * This ensures the AI prompt gets two visually different brand colors
+ * even when the variable table only has one accent token.
+ */
+function deriveAccentVariant(hex: string): string {
+    const h = hex.replace('#', '')
+    const r = parseInt(h.slice(0, 2), 16) / 255
+    const g = parseInt(h.slice(2, 4), 16) / 255
+    const b = parseInt(h.slice(4, 6), 16) / 255
+
+    const max = Math.max(r, g, b), min = Math.min(r, g, b)
+    const l = (max + min) / 2
+    let hue = 0, s = 0
+
+    if (max !== min) {
+        const d = max - min
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+        if (max === r) hue = ((g - b) / d + (g < b ? 6 : 0)) / 6
+        else if (max === g) hue = ((b - r) / d + 2) / 6
+        else hue = ((r - g) / d + 4) / 6
+    }
+
+    // Shift hue by ~80° and slightly adjust saturation for visual distinction
+    const newHue = (hue + 0.22) % 1
+    const newSat = Math.min(1, s * 1.1)
+
+    const hue2rgb = (p: number, q: number, t: number) => {
+        if (t < 0) t += 1
+        if (t > 1) t -= 1
+        if (t < 1 / 6) return p + (q - p) * 6 * t
+        if (t < 1 / 2) return q
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
+        return p
+    }
+
+    const q = l < 0.5 ? l * (1 + newSat) : l + newSat - l * newSat
+    const p = 2 * l - q
+    const nr = Math.round(hue2rgb(p, q, newHue + 1 / 3) * 255)
+    const ng = Math.round(hue2rgb(p, q, newHue) * 255)
+    const nb = Math.round(hue2rgb(p, q, newHue - 1 / 3) * 255)
+
+    return '#' + [nr, ng, nb].map(c => Math.min(255, Math.max(0, c)).toString(16).padStart(2, '0')).join('')
 }
 
 // ── Multi-Page Project Generation ────────────────────────────

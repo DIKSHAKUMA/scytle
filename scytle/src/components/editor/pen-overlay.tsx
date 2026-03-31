@@ -82,17 +82,67 @@ export const PenOverlay = memo(function PenOverlay() {
 
             {/* Rubber-band from last vertex to cursor */}
             {verts.length > 0 && (
-                <line
-                    x1={lastVert.x}
-                    y1={lastVert.y}
-                    x2={cursor.x}
-                    y2={cursor.y}
-                    stroke="#3b82f6"
-                    strokeWidth={1}
-                    strokeDasharray="4 3"
-                    opacity={0.7}
-                />
+                ps._outgoingTangent &&
+                (ps._outgoingTangent.x !== 0 || ps._outgoingTangent.y !== 0) ? (
+                    <path
+                        d={`M ${lastVert.x} ${lastVert.y} C ${lastVert.x + ps._outgoingTangent.x * zoom} ${lastVert.y + ps._outgoingTangent.y * zoom} ${cursor.x} ${cursor.y} ${cursor.x} ${cursor.y}`}
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        opacity={0.7}
+                        fill="none"
+                    />
+                ) : (
+                    <line
+                        x1={lastVert.x}
+                        y1={lastVert.y}
+                        x2={cursor.x}
+                        y2={cursor.y}
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        opacity={0.7}
+                    />
+                )
             )}
+
+            {/* Close preview — dashed path from last vertex to first vertex when near start */}
+            {ps.nearStartPoint && verts.length >= 3 && (() => {
+                const first = verts[0]
+                const last = verts[verts.length - 1]
+                const outT = ps._outgoingTangent
+                const inT = (ps as any)._firstVertexIncomingTangent as { x: number; y: number } | undefined
+                const hasOut = outT && (outT.x !== 0 || outT.y !== 0)
+                const hasIn = inT && (inT.x !== 0 || inT.y !== 0)
+                if (hasOut || hasIn) {
+                    const cp1x = last.x + (hasOut ? outT!.x * zoom : 0)
+                    const cp1y = last.y + (hasOut ? outT!.y * zoom : 0)
+                    const cp2x = first.x + (hasIn ? inT!.x * zoom : 0)
+                    const cp2y = first.y + (hasIn ? inT!.y * zoom : 0)
+                    return (
+                        <path
+                            d={`M ${last.x} ${last.y} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${first.x} ${first.y}`}
+                            stroke="#3b82f6"
+                            strokeWidth={1}
+                            strokeDasharray="4 3"
+                            opacity={0.5}
+                            fill="none"
+                        />
+                    )
+                }
+                return (
+                    <line
+                        x1={last.x}
+                        y1={last.y}
+                        x2={first.x}
+                        y2={first.y}
+                        stroke="#3b82f6"
+                        strokeWidth={1}
+                        strokeDasharray="4 3"
+                        opacity={0.5}
+                    />
+                )
+            })()}
 
             {/* Bezier handle arms + nubs for vertices with tangents */}
             {ps.segments.map((seg, i) => {
@@ -156,10 +206,10 @@ export const PenOverlay = memo(function PenOverlay() {
                     cx={verts[0].x}
                     cy={verts[0].y}
                     r={CLOSE_R}
-                    fill="none"
+                    fill="rgba(59, 130, 246, 0.1)"
                     stroke="#3b82f6"
                     strokeWidth={2}
-                    opacity={0.8}
+                    opacity={1}
                 />
             )}
         </svg>

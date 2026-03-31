@@ -3,6 +3,20 @@ import { useEditorStore } from '@/store/editor-store'
 import { createVector } from '@/types/canvas'
 import type { VectorVertex, VectorSegment } from '@/types/canvas'
 
+/** Constrain a point to the nearest 45° angle relative to an origin */
+function constrainTo45(origin: { x: number; y: number }, point: { x: number; y: number }): { x: number; y: number } {
+    const dx = point.x - origin.x
+    const dy = point.y - origin.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist === 0) return point
+    const angle = Math.atan2(dy, dx)
+    const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4)
+    return {
+        x: origin.x + dist * Math.cos(snapped),
+        y: origin.y + dist * Math.sin(snapped),
+    }
+}
+
 /** Screen-space distance (px) within which cursor "snaps" to close the path */
 const CLOSE_THRESHOLD_PX = 8
 
@@ -57,25 +71,42 @@ export function usePenTool(
             const pos = screenToCanvas(e.clientX, e.clientY)
             const ps = store.penDrawingState
 
+            // ── Alt+click: retract outgoing handle ──
+            if (e.altKey && ps && ps._outgoingTangent) {
+                store.setPenDrawingState({
+                    ...ps,
+                    _outgoingTangent: undefined,
+                })
+                e.preventDefault()
+                return
+            }
+
+            // ── Shift: constrain to 45° relative to last vertex ──
+            let constrainedPos = pos
+            if (e.shiftKey && ps && ps.vertices.length > 0) {
+                const lastV = ps.vertices[ps.vertices.length - 1]
+                constrainedPos = constrainTo45(lastV, pos)
+            }
+
             if (!ps) {
                 // ── First click — create a VectorNode and start drawing ──
                 const vectorNode = createVector({ x: 0, y: 0 })
                 store.addNode(vectorNode)
                 store.selectNode(vectorNode.id)
 
-                const vertex: VectorVertex = { x: pos.x, y: pos.y }
+                const vertex: VectorVertex = { x: constrainedPos.x, y: constrainedPos.y }
                 store.setPenDrawingState({
                     nodeId: vectorNode.id,
                     vertices: [vertex],
                     segments: [],
                     isDrawing: true,
-                    cursorX: pos.x,
-                    cursorY: pos.y,
+                    cursorX: constrainedPos.x,
+                    cursorY: constrainedPos.y,
                     nearStartPoint: false,
                 })
 
                 dragRef.current = {
-                    anchorPos: pos,
+                    anchorPos: constrainedPos,
                     isFirstVertex: true,
                     vertexIndex: 0,
                     isDragging: false,
@@ -88,6 +119,7 @@ export function usePenTool(
                         start: lastIdx,
                         end: 0,
                         ...(ps._outgoingTangent ? { tangentStart: ps._outgoingTangent } : {}),
+                        ...(ps._firstVertexIncomingTangent ? { tangentEnd: ps._firstVertexIncomingTangent } : {}),
                     }
                     store.setPenDrawingState({
                         ...ps,
@@ -101,7 +133,7 @@ export function usePenTool(
 
                 // ── Normal click — append vertex + connecting segment ──
                 const newIdx = ps.vertices.length
-                const newVertex: VectorVertex = { x: pos.x, y: pos.y }
+                const newVertex: VectorVertex = { x: constrainedPos.x, y: constrainedPos.y }
                 const newSegment: VectorSegment = {
                     start: newIdx - 1,
                     end: newIdx,
@@ -113,14 +145,14 @@ export function usePenTool(
                     ...ps,
                     vertices: [...ps.vertices, newVertex],
                     segments: [...ps.segments, newSegment],
-                    cursorX: pos.x,
-                    cursorY: pos.y,
+                    cursorX: constrainedPos.x,
+                    cursorY: constrainedPos.y,
                     nearStartPoint: false,
                     _outgoingTangent: undefined, // consumed
                 })
 
                 dragRef.current = {
-                    anchorPos: pos,
+                    anchorPos: constrainedPos,
                     isFirstVertex: false,
                     vertexIndex: newIdx,
                     isDragging: false,
@@ -139,7 +171,7 @@ export function usePenTool(
      * When not dragging: updates cursor position and nearStartPoint.
      */
     const handlePenPointerMove = useCallback(
-        (clientX: number, clientY: number) => {
+        (clientX: number, clientY: number, shiftKey?: boolean, altKey?: boolean) => {
             const store = useEditorStore.getState()
             const ps = store.penDrawingState
             if (!ps) return
@@ -149,11 +181,11 @@ export function usePenTool(
 
             if (drag) {
                 // ── Dragging — compute tangent handles in real-time ──
-                const dx = (pos.x - drag.anchorPos.x) * store.zoom
-                const dy = (pos.y - drag.anchorPos.y) * store.zoom
+                const dx = pos.x - drag.anchorPos.x
+                const dy = pos.y - drag.anchorPos.y
                 const dist = Math.sqrt(dx * dx + dy * dy)
 
-                if (dist > DRAG_THRESHOLD_PX) {
+                if (dist > DRAG_THRESHOLD_PX / store.zoom) {
                     drag.isDragging = true
 
                     // Tangent = offset from anchor vertex to cursor
@@ -162,27 +194,52 @@ export function usePenTool(
                         y: pos.y - drag.anchorPos.y,
                     }
 
-                    // Update the vertex's mirroring to symmetric
-                    const updatedVertices = [...ps.vertices]
-                    updatedVertices[drag.vertexIndex] = {
-                        ...updatedVertices[drag.vertexIndex],
-                        handleMirroring: 'ANGLE_AND_LENGTH',
+                    // Shift: constrain tangent angle to 45° increments
+                    let constrainedTangent = tangent
+                    if (shiftKey) {
+                        const tDist = Math.sqrt(tangent.x * tangent.x + tangent.y * tangent.y)
+                        const tAngle = Math.atan2(tangent.y, tangent.x)
+                        const snapped = Math.round(tAngle / (Math.PI / 4)) * (Math.PI / 4)
+                        constrainedTangent = {
+                            x: tDist * Math.cos(snapped),
+                            y: tDist * Math.sin(snapped),
+                        }
                     }
+
+                    // Update the vertex's mirroring
+                    const updatedVertices = [...ps.vertices]
 
                     // Update the segment that ARRIVES at this vertex (tangentEnd)
                     // The tangent we set is the "outgoing" handle — the mirrored handle
                     // will be the "incoming" tangentEnd on the preceding segment.
                     const updatedSegments = [...ps.segments]
 
-                    // If this vertex has a preceding segment (not the first vertex),
-                    // set tangentEnd on that segment to the mirrored tangent
-                    if (!drag.isFirstVertex && updatedSegments.length > 0) {
-                        const prevSegIdx = updatedSegments.length - 1
-                        updatedSegments[prevSegIdx] = {
-                            ...updatedSegments[prevSegIdx],
-                            tangentEnd: { x: -tangent.x, y: -tangent.y },
+                    if (altKey) {
+                        // Alt: break mirroring — only outgoing handle moves
+                        updatedVertices[drag.vertexIndex] = {
+                            ...updatedVertices[drag.vertexIndex],
+                            handleMirroring: 'NONE',
+                        }
+                        // Don't update the incoming tangentEnd on preceding segment
+                    } else {
+                        updatedVertices[drag.vertexIndex] = {
+                            ...updatedVertices[drag.vertexIndex],
+                            handleMirroring: 'ANGLE_AND_LENGTH',
+                        }
+                        // Set mirrored tangentEnd on preceding segment (existing logic)
+                        if (!drag.isFirstVertex && updatedSegments.length > 0) {
+                            const prevSegIdx = updatedSegments.length - 1
+                            updatedSegments[prevSegIdx] = {
+                                ...updatedSegments[prevSegIdx],
+                                tangentEnd: { x: -constrainedTangent.x, y: -constrainedTangent.y },
+                            }
                         }
                     }
+
+                    // For first vertex, store the mirrored handle for later use when closing
+                    const firstVertexUpdate = drag.isFirstVertex
+                        ? { _firstVertexIncomingTangent: { x: -constrainedTangent.x, y: -constrainedTangent.y } }
+                        : {}
 
                     store.setPenDrawingState({
                         ...ps,
@@ -192,7 +249,8 @@ export function usePenTool(
                         cursorY: pos.y,
                         // Store the outgoing tangent on the drawing state so the
                         // next segment can use it as tangentStart
-                        _outgoingTangent: tangent,
+                        _outgoingTangent: constrainedTangent,
+                        ...firstVertexUpdate,
                     } as typeof ps)
                     return
                 }
@@ -200,10 +258,10 @@ export function usePenTool(
 
             // ── Normal move (no drag) — update cursor + close detection ──
             const startV = ps.vertices[0]
-            const sdx = (pos.x - startV.x) * store.zoom
-            const sdy = (pos.y - startV.y) * store.zoom
-            const distScreen = Math.sqrt(sdx * sdx + sdy * sdy)
-            const nearStart = ps.vertices.length >= 3 && distScreen < CLOSE_THRESHOLD_PX
+            const sdx = pos.x - startV.x
+            const sdy = pos.y - startV.y
+            const distCanvas = Math.sqrt(sdx * sdx + sdy * sdy)
+            const nearStart = ps.vertices.length >= 3 && distCanvas < CLOSE_THRESHOLD_PX / store.zoom
 
             store.setPenDrawingState({
                 ...ps,
@@ -235,5 +293,50 @@ export function usePenTool(
         dragRef.current = null
     }, [])
 
-    return { handlePenPointerDown, handlePenPointerMove, handlePenPointerUp }
+    /**
+     * Keyboard handler for pen tool.
+     * - Escape/Enter: end drawing and commit open path (or clean up if < 2 vertices)
+     * - Backspace/Delete: remove the last placed vertex
+     */
+    const handlePenKeyDown = useCallback((e: KeyboardEvent) => {
+        const store = useEditorStore.getState()
+        const ps = store.penDrawingState
+        if (!ps) return
+
+        if (e.key === 'Escape' || e.key === 'Enter') {
+            e.preventDefault()
+            e.stopPropagation()
+            if (ps.vertices.length >= 2) {
+                store.commitPenPath()
+            } else {
+                // Less than 2 vertices - clean up
+                store.deleteNode(ps.nodeId)
+                store.setPenDrawingState(null)
+            }
+            dragRef.current = null
+        }
+
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            e.preventDefault()
+            e.stopPropagation()
+            if (ps.vertices.length <= 1) {
+                // Remove the whole path
+                store.deleteNode(ps.nodeId)
+                store.setPenDrawingState(null)
+                dragRef.current = null
+            } else {
+                // Remove last vertex and its segment
+                const newVertices = ps.vertices.slice(0, -1)
+                const newSegments = ps.segments.slice(0, -1)
+                store.setPenDrawingState({
+                    ...ps,
+                    vertices: newVertices,
+                    segments: newSegments,
+                    _outgoingTangent: undefined,
+                })
+            }
+        }
+    }, [])
+
+    return { handlePenPointerDown, handlePenPointerMove, handlePenPointerUp, handlePenKeyDown }
 }
