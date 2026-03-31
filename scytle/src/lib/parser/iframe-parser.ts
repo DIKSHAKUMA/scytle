@@ -29,7 +29,6 @@ import {
 } from '@/lib/theme/variable-table'
 import { relinkNodes } from '@/lib/theme/relink-nodes'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
-import { parseHtmlToNodes } from './html-to-nodes'
 
 // ═══════════════════════════════════════════════════
 // Types
@@ -183,17 +182,8 @@ export async function parseHtmlToNodesViaIframe(
 
         return pageFrame
     } catch (error) {
-        // Fallback to legacy parser
-        console.warn('[IframeParser] Failed, falling back to legacy parser:', error)
-        const frame = parseHtmlToNodes(html, pageName, {
-            rootWidth: options?.rootWidth,
-            variableTable: options?.variableTable,
-            themeMode: options?.themeMode,
-        })
-        if (options?.variableTable && options?.themeMode) {
-            relinkNodes(frame.children, options.variableTable, options.themeMode)
-        }
-        return frame
+        console.error('[IframeParser] Failed:', error)
+        throw error
     } finally {
         // ALWAYS clean up the iframe
         renderer.destroy()
