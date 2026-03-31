@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-import { AppShell } from '@/components/app-shell'
+import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useProjectStore } from '@/store'

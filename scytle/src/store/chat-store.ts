@@ -3,7 +3,6 @@ import { immer } from 'zustand/middleware/immer'
 import type { Message, MessageRole, ImageAttachment } from '@/types'
 import { createJWT } from '@/lib/appwrite'
 import { extractBase64Data } from '@/lib/image-utils'
-import { useUnifiedStore } from './unified-store'
 import { useSitemapStore } from './sitemap-store'
 import { useProjectStore } from './project-store'
 
@@ -37,7 +36,6 @@ interface ChatState {
     sendMessage: (content: string, projectId: string, selectedNodeId?: string | null, canvasNodes?: any[], model?: string, images?: ImageAttachment[]) => Promise<void>
     /** Surgical node refinement — calls /api/ai/refine-node, returns parsed result or null on failure */
     refineNode: (ctx: RefineNodeContext) => Promise<RefineNodeResult | null>
-    generateSitemap: (projectId: string, description: string) => Promise<void>
     loadHistory: (projectId: string) => Promise<void>
     addMessage: (role: MessageRole, content: string) => void
     updateLastMessage: (content: string) => void
@@ -271,89 +269,6 @@ export const useChatStore = create<ChatState>()(
                     state.error = msg
                 })
                 return null
-            }
-        },
-
-        // Generate sitemap using AI
-        generateSitemap: async (projectId: string, description: string) => {
-            // Add user message
-            const userMessage: Message = {
-                role: 'user',
-                content: `Generate a sitemap for: ${description}`,
-                timestamp: new Date().toISOString(),
-            }
-
-            set(state => {
-                state.messages.push(userMessage)
-                state.isTyping = true
-                state.error = null
-            })
-
-            try {
-                const jwt = await createJWT()
-                if (!jwt) {
-                    throw new Error('Not authenticated')
-                }
-
-                const response = await fetch('/api/ai/generate-sitemap', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${jwt.jwt}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        projectId,
-                        projectDescription: description
-                    }),
-                })
-
-                if (!response.ok) {
-                    throw new Error('Failed to generate sitemap')
-                }
-
-                const data = await response.json()
-
-                if (data.success && data.sitemap) {
-                    // Load sitemap into the unified store using pages data
-                    // This will apply proper tree layout automatically
-                    // Get project name from the sitemap response or project store
-                    const projectName = data.sitemap.projectName ||
-                        useProjectStore.getState().currentProject?.name ||
-                        'My Project'
-                    useUnifiedStore.getState().loadFromAI(
-                        data.sitemap.pages,
-                        projectName
-                    )
-
-                    // Sync the sitemap ReactFlow canvas with the AI-generated pages
-                    useSitemapStore.getState().loadSitemap(data.sitemap.pages, projectName)
-
-                    // Add success message
-                    const pageNames = data.sitemap.pages.map((p: { label: string }) => p.label).join(', ')
-                    set(state => {
-                        state.messages.push({
-                            role: 'assistant',
-                            content: `✅ I've generated your sitemap! It includes these pages: **${pageNames}**.\n\nYou can now:\n- Click on any page to edit its details\n- Drag pages to reorganize them\n- Use the "Add" tool (A) to add new pages\n- Click on a page to see and edit its sections`,
-                            timestamp: new Date().toISOString(),
-                        })
-                        state.isTyping = false
-                    })
-
-                    // Persist conversation to DB
-                    get()._persistMessages(projectId)
-                } else {
-                    throw new Error('Invalid sitemap response')
-                }
-            } catch (error) {
-                set(state => {
-                    state.error = error instanceof Error ? error.message : 'Failed to generate sitemap'
-                    state.isTyping = false
-                    state.messages.push({
-                        role: 'assistant',
-                        content: '❌ Sorry, I had trouble generating the sitemap. Please try again or describe your project in more detail.',
-                        timestamp: new Date().toISOString(),
-                    })
-                })
             }
         },
 

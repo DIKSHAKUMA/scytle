@@ -7,8 +7,8 @@
  * conceptToVariableTable() bridges the high-level Concept type → this flat table.
  */
 
-import type { Concept } from '@/lib/designs/v2/tokens'
-import { getMainAccent } from '@/lib/designs/v2/tokens/defaults'
+import type { Concept } from '@/lib/theme/tokens'
+import { getMainAccent } from '@/lib/theme/tokens/defaults'
 
 // ═══════════════════════════════════════════════════
 // Types

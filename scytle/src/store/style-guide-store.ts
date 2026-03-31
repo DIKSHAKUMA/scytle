@@ -12,7 +12,6 @@
  *       → applied by <TokenProvider> to canvas wrapper div
  *
  * Pattern: Zustand + immer + subscribeWithSelector
- * (matches unified-store.ts)
  */
 
 import { create } from 'zustand'
@@ -35,27 +34,27 @@ import type {
     ButtonStyle,
     CardStyle,
     RadiusPreset,
-} from '@/lib/designs/v2/tokens'
+} from '@/lib/theme/tokens'
 
 import {
     createDefaultStyleGuideData,
     createDefaultConcept,
     computeTokenCSS,
     computeSchemeOverrideCSS,
-} from '@/lib/designs/v2/tokens/defaults'
+} from '@/lib/theme/tokens/defaults'
 
 import {
     type ColorPalette,
     getRandomPalette,
     getRandomPaletteExcluding,
-} from '@/lib/designs/v2/tokens/palettes'
+} from '@/lib/theme/tokens/palettes'
 
 import {
     type FontPair,
     getRandomFontPair,
     getRandomFontPairExcluding,
     loadGoogleFonts,
-} from '@/lib/designs/v2/tokens/font-pairs'
+} from '@/lib/theme/tokens/font-pairs'
 
 import { generateId } from '@/lib/utils'
 import { conceptToVariableTable, type VariableTable, type ThemeMode } from '@/lib/theme/variable-table'

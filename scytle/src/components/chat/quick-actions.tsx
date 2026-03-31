@@ -1,7 +1,6 @@
 'use client'
 
 import { useChatStore } from '@/store/chat-store'
-import { useProjectStore } from '@/store/project-store'
 import { Button } from '@/components/ui/button'
 import { Map, Palette, Code, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -42,8 +41,7 @@ const QUICK_ACTIONS = [
 ]
 
 export function QuickActions({ projectId }: QuickActionsProps) {
-    const { sendMessage, generateSitemap, isTyping, isStreaming, messages } = useChatStore()
-    const { currentProject } = useProjectStore()
+    const { sendMessage, isTyping, isStreaming, messages } = useChatStore()
 
     // Don't show quick actions while AI is responding
     if (isTyping || isStreaming) return null
@@ -52,14 +50,7 @@ export function QuickActions({ projectId }: QuickActionsProps) {
     const hasMessages = messages.length > 0
 
     const handleAction = async (action: typeof QUICK_ACTIONS[0]) => {
-        if (action.action === 'sitemap') {
-            // Use project description if available, otherwise use a prompt
-            const description = currentProject?.description ||
-                `A project called ${currentProject?.name || 'New Project'}`
-            await generateSitemap(projectId, description)
-        } else {
-            await sendMessage(action.message, projectId)
-        }
+        await sendMessage(action.message, projectId)
     }
 
     return (

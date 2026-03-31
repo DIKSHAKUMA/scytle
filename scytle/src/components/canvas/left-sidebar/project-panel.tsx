@@ -13,7 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { useSitemapStore } from '@/store/sitemap-store'
-import { useProjectStore, useUnifiedStore } from '@/store'
+import { useProjectStore } from '@/store'
 import { createJWT } from '@/lib/appwrite'
 import { toast } from 'sonner'
 
@@ -92,8 +92,6 @@ export function ProjectPanel() {
             if (data.sitemap?.pages) {
                 const projectName = currentProject?.name || 'Untitled'
                 loadSitemap(data.sitemap.pages, projectName)
-                // Sync unified store so wireframe view updates immediately
-                useUnifiedStore.getState().loadFromAI(data.sitemap.pages, projectName)
                 toast.success(`Generated ${data.sitemap.pages.length} pages`)
             }
 

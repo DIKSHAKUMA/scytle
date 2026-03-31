@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, Zap, Sparkles, Layers, Code, Rocket, Check, Play, Star } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { LandingHeader } from '@/components/landing-header'
+import { LandingHeader } from '@/components/layout/landing-header'
 
 export default function LandingPage() {
   return (

@@ -5,9 +5,9 @@ import { Moon, Sun, Shuffle, Plus, Trash2, Copy, ChevronDown, Type, Palette, Lay
 import { cn } from '@/lib/utils'
 import { useStyleGuideStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
-import { COLOR_PALETTES, type ColorPalette, PALETTE_CATEGORIES } from '@/lib/designs/v2/tokens/palettes'
-import { FONT_PAIRS, type FontPair, loadGoogleFonts } from '@/lib/designs/v2/tokens/font-pairs'
-import type { RadiusPreset, ButtonStyle, CardStyle } from '@/lib/designs/v2/tokens'
+import { COLOR_PALETTES, type ColorPalette, PALETTE_CATEGORIES } from '@/lib/theme/tokens/palettes'
+import { FONT_PAIRS, type FontPair, loadGoogleFonts } from '@/lib/theme/tokens/font-pairs'
+import type { RadiusPreset, ButtonStyle, CardStyle } from '@/lib/theme/tokens'
 import { Separator } from '@/components/ui/separator'
 import { VariablesPanel } from '@/components/editor/properties-panel/variables-panel'
 

@@ -8,12 +8,6 @@ export type CanvasTool = 'select' | 'hand' | 'add'
 let isSaveInProgress = false
 let pendingSave = false
 
-// Guard flag: when true, saveToHistory skips syncing back to unified store.
-// Set when an update originates from the unified store (via page.tsx subscriber)
-// to prevent infinite unified→sitemap→unified loops.
-let _skipUnifiedSync = false
-export const setSkipUnifiedSync = (skip: boolean) => { _skipUnifiedSync = skip }
-
 // Immediate save function - saves right away, queues if another save is in progress
 async function triggerSave() {
     if (isSaveInProgress) {
@@ -571,15 +565,6 @@ export const useSitemapStore = create<SitemapState>()(
                 state.history = newHistory
                 state.historyIndex = newHistory.length - 1
             })
-
-            // Sync sitemap mutations back to the unified store (single source of truth).
-            // Skip if this update originated from the unified store (avoids infinite loop).
-            if (!_skipUnifiedSync) {
-                const { nodes, edges } = get()
-                import('./unified-store').then(({ useUnifiedStore }) => {
-                    useUnifiedStore.getState().syncFromSitemap(nodes, edges)
-                })
-            }
         },
 
         undo: () => {
@@ -589,10 +574,6 @@ export const useSitemapStore = create<SitemapState>()(
                     state.historyIndex = historyIndex - 1
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex - 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex - 1].edges))
-                })
-                // Undo in unified store too — restores full rich section data
-                import('./unified-store').then(({ useUnifiedStore }) => {
-                    useUnifiedStore.getState().undo()
                 })
             }
         },
@@ -604,10 +585,6 @@ export const useSitemapStore = create<SitemapState>()(
                     state.historyIndex = historyIndex + 1
                     state.nodes = JSON.parse(JSON.stringify(history[historyIndex + 1].nodes))
                     state.edges = JSON.parse(JSON.stringify(history[historyIndex + 1].edges))
-                })
-                // Redo in unified store too — restores full rich section data
-                import('./unified-store').then(({ useUnifiedStore }) => {
-                    useUnifiedStore.getState().redo()
                 })
             }
         },
@@ -883,14 +860,6 @@ export const useSitemapStore = create<SitemapState>()(
 
         loadSitemap: (pages, projectName = 'My Project') => {
             // Convert AI-generated pages to ReactFlow nodes and edges.
-            // Pull resolved sections from the unified store (which runs templates)
-            // since the raw AI pages may not include sections.
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const unifiedMod = require('@/store/unified-store') as { useUnifiedStore: { getState: () => { pages: Array<{ id: string; sections: Array<{ id: string; name: string; description?: string }> }> } } }
-            const unifiedPages = new Map<string, { id: string; name: string; description?: string }[]>()
-            for (const up of unifiedMod.useUnifiedStore.getState().pages) {
-                unifiedPages.set(up.id, up.sections.map(s => ({ id: s.id, name: s.name, description: s.description })))
-            }
 
             const rawNodes: Node[] = []
             const rawEdges: Edge[] = []
@@ -908,10 +877,8 @@ export const useSitemapStore = create<SitemapState>()(
             const homePage = pages.find(p => p.slug === '/' || p.id === 'home') || pages[0]
             const otherPages = pages.filter(p => p !== homePage)
 
-            // Helper: resolve sections for a page — prefer unified store (template-resolved)
-            const getSections = (pageId: string, rawSections?: unknown[]) => {
-                const unified = unifiedPages.get(pageId)
-                if (unified && unified.length > 0) return unified
+            // Helper: resolve sections for a page
+            const getSections = (_pageId: string, rawSections?: unknown[]) => {
                 return rawSections || []
             }
 
@@ -991,10 +958,7 @@ export const useSitemapStore = create<SitemapState>()(
                 state.edges = rawEdges
                 state.selectedNodeId = null
             })
-            // Skip unified sync — loadSitemap is called after loadFromAI already populated unified store
-            _skipUnifiedSync = true
             get().saveToHistory()
-            _skipUnifiedSync = false
 
             // Fit is handled by SitemapCanvas component via hasInitialFit
         },
@@ -1006,10 +970,7 @@ export const useSitemapStore = create<SitemapState>()(
                 state.edges = edges as Edge[]
                 state.selectedNodeId = null
             })
-            // Skip unified sync — loadRawSitemap is called when syncing from unified store
-            _skipUnifiedSync = true
             get().saveToHistory()
-            _skipUnifiedSync = false
 
             // Fit is handled by SitemapCanvas component via hasInitialFit
         },
@@ -1026,17 +987,8 @@ export const useSitemapStore = create<SitemapState>()(
         },
 
         // Save sitemap to backend
-        // Delegates to unified store which is the single source of truth for persistence.
-        // This avoids the race condition where both stores write different formats to sitemapData.
         saveSitemap: async () => {
-            // Import dynamically to avoid circular dependency
-            const { useUnifiedStore } = await import('./unified-store')
-            const unifiedState = useUnifiedStore.getState()
-
-            // Only save if unified store has data and a project ID
-            if (unifiedState.projectId && unifiedState.pages.length > 0) {
-                await unifiedState.save()
-            }
+            // TODO: implement direct sitemap persistence (unified store was removed)
         },
     }))
 )

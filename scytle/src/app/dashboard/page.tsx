@@ -20,7 +20,7 @@ import {
     Command,
 } from 'lucide-react'
 
-import { AppShell } from '@/components/app-shell'
+import { AppShell } from '@/components/layout/app-shell'
 import { Button } from '@/components/ui/button'
 import {
     DropdownMenu,
