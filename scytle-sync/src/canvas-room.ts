@@ -303,6 +303,19 @@ export class CanvasRoom extends DurableObject<Env> {
   // Node Operations
   // ============================================================
 
+  /** Recursively find a node by ID (handles children nested inside frames) */
+  private findNodeDeep(nodes: SyncNode[], id: string): SyncNode | null {
+    for (const node of nodes) {
+      if (node.id === id) return node
+      const children = node.children as SyncNode[] | undefined
+      if (Array.isArray(children)) {
+        const found = this.findNodeDeep(children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
   private handleUpdate(
     ws: WebSocket,
     user: { userId: string },
@@ -310,17 +323,37 @@ export class CanvasRoom extends DurableObject<Env> {
     changes: Record<string, unknown>
   ): void {
     for (const [, nodeMap] of this.nodesByPage) {
-      const node = nodeMap.get(nodeId)
+      // First try direct lookup (top-level node)
+      let node = nodeMap.get(nodeId)
+      let parentNode: SyncNode | null = null
+
+      if (!node) {
+        // Search inside children of all top-level nodes (nested child update)
+        for (const [, topNode] of nodeMap) {
+          const children = topNode.children as SyncNode[] | undefined
+          if (!Array.isArray(children)) continue
+          const found = this.findNodeDeep(children, nodeId)
+          if (found) {
+            node = found
+            parentNode = topNode
+            break
+          }
+        }
+      }
+
       if (!node) continue
 
+      // Apply changes to the in-memory node
       Object.assign(node, changes)
 
+      // Persist: save the top-level node (which contains the modified child)
+      const nodeToSave = parentNode ?? node
       const now = Date.now()
       this.ctx.storage.sql.exec(
         'UPDATE nodes SET data = ?, updated_at = ? WHERE id = ?',
-        JSON.stringify(node),
+        JSON.stringify(nodeToSave),
         now,
-        nodeId
+        nodeToSave.id
       )
 
       this.broadcast(ws, {

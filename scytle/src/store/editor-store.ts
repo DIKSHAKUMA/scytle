@@ -697,8 +697,6 @@ export const useEditorStore = create<EditorState>()(
             // Document mutations -----------------------------------
 
             setNodes: (nodes) => {
-                // Get previous nodes to compute diff for sync
-                const prevNodes = get().nodes
                 set(
                     (state) => {
                         state.nodes = nodes
@@ -707,26 +705,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'setNodes'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const { activePageId } = get()
-                    // Sync: delete removed nodes, add new ones, update changed ones
-                    const prevIds = new Set(prevNodes.map((n) => n.id))
-                    const newIds = new Set(nodes.map((n) => n.id))
-                    // Deleted nodes
-                    for (const pn of prevNodes) {
-                        if (!newIds.has(pn.id)) {
-                            canvasSync.sendDelete(pn.id, activePageId)
-                        }
-                    }
-                    // Added or updated nodes
-                    for (const nn of nodes) {
-                        if (!prevIds.has(nn.id)) {
-                            canvasSync.sendAdd(nn, activePageId)
-                        }
-                    }
-                    // Send reorder
-                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             addNode: (node, parentId, index) => {
@@ -755,9 +734,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'addNode'
                 )
-                if (!canvasSync._applyingRemote) {
-                    canvasSync.sendAdd(node, get().activePageId)
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             updateNode: (id, updates) => {
@@ -772,9 +749,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'updateNode'
                 )
-                if (!canvasSync._applyingRemote) {
-                    canvasSync.sendUpdate(id, updates)
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             replaceNode: (oldId, newNode) => {
@@ -797,12 +772,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'replaceNode'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const pageId = get().activePageId
-                    // Replace = delete old + add new
-                    canvasSync.sendDelete(oldId, pageId)
-                    canvasSync.sendAdd(newNode, pageId)
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             deleteNode: (id) => {
@@ -827,9 +797,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'deleteNode'
                 )
-                if (!canvasSync._applyingRemote) {
-                    canvasSync.sendDelete(id, get().activePageId)
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             reorderNode: (nodeId, gapIndex) =>
@@ -860,8 +828,6 @@ export const useEditorStore = create<EditorState>()(
             // ── Bulk delete ──────────────────────────────────────
 
             deleteSelectedNodes: () => {
-                const { selectedIds, activePageId } = get()
-                const idsToDelete = [...selectedIds]
                 set(
                     (state) => {
                         if (state.selectedIds.length === 0) return
@@ -890,11 +856,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'deleteSelectedNodes'
                 )
-                if (!canvasSync._applyingRemote) {
-                    for (const id of idsToDelete) {
-                        canvasSync.sendDelete(id, activePageId)
-                    }
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             // ── History actions ───────────────────────────────────
@@ -997,10 +959,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'bringForward'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const { nodes, activePageId } = get()
-                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             sendBackward: (id) => {
@@ -1020,10 +979,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'sendBackward'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const { nodes, activePageId } = get()
-                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             bringToFront: (id) => {
@@ -1043,10 +999,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'bringToFront'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const { nodes, activePageId } = get()
-                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             sendToBack: (id) => {
@@ -1066,10 +1019,7 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'sendToBack'
                 )
-                if (!canvasSync._applyingRemote) {
-                    const { nodes, activePageId } = get()
-                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
-                }
+                // Sync handled by auto-sync subscriber
             },
 
             // ── Clipboard actions ─────────────────────────────────
@@ -1636,7 +1586,7 @@ export const useEditorStore = create<EditorState>()(
                         panX: newPage.panX,
                         panY: newPage.panY,
                     })
-                    // Also send all the nodes for the duplicated page
+                    // Send all nodes for the duplicated page (subscriber skips on page switch)
                     for (const node of newPage.nodes) {
                         canvasSync.sendAdd(node, newPage.id)
                     }
@@ -1983,6 +1933,166 @@ canvasSync.bindStore(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useEditorStore.setState as any
 )
+
+// ============================================================
+// Auto-Sync Subscriber: diff-based sync for ALL node mutations
+// ============================================================
+//
+// Instead of manually calling canvasSync.send*() from each action,
+// this subscriber watches every state change and auto-diffs the
+// nodes tree. This catches ALL mutations: undo, redo, paste,
+// group, ungroup, reparent, vector edits, etc.
+//
+// Inspired by tldraw's store listener approach.
+// ============================================================
+
+if (typeof window !== 'undefined') {
+    /** Flatten a node tree into a Map<id, serialized JSON string (without children for frames)> */
+    function flattenNodes(nodes: ScytleNode[]): Map<string, string> {
+        const map = new Map<string, string>()
+        function walk(nodeList: ScytleNode[]) {
+            for (const node of nodeList) {
+                if (node.type === 'frame' && 'children' in node) {
+                    const { children, ...rest } = node as FrameNode
+                    map.set(node.id, JSON.stringify(rest))
+                    walk(children)
+                } else {
+                    map.set(node.id, JSON.stringify(node))
+                }
+            }
+        }
+        walk(nodes)
+        return map
+    }
+
+    /** Get child ID lists for each top-level frame (for structural diff) */
+    function getFrameChildIds(nodes: ScytleNode[]): Map<string, string[]> {
+        const map = new Map<string, string[]>()
+        function collectIds(children: ScytleNode[]): string[] {
+            const ids: string[] = []
+            for (const c of children) {
+                ids.push(c.id)
+                if (c.type === 'frame' && 'children' in c) {
+                    ids.push(...collectIds((c as FrameNode).children))
+                }
+            }
+            return ids
+        }
+        for (const node of nodes) {
+            if (node.type === 'frame' && 'children' in node) {
+                map.set(node.id, collectIds((node as FrameNode).children))
+            }
+        }
+        return map
+    }
+
+    // Track previous state for diffing
+    let prevFlat: Map<string, string> = new Map()
+    let prevTopIds: string[] = []
+    let prevActivePageId: string = ''
+    let prevNodesRef: ScytleNode[] = []
+    let prevChildIds: Map<string, string[]> = new Map()
+
+    useEditorStore.subscribe((state) => {
+        // Skip if this change was caused by a remote sync
+        if (canvasSync._applyingRemote) return
+        // Skip if not connected
+        if (canvasSync.status !== 'connected') return
+
+        const { nodes, activePageId } = state
+
+        // Quick check: if nodes reference didn't change, no mutation happened
+        if (nodes === prevNodesRef && activePageId === prevActivePageId) return
+        prevNodesRef = nodes
+
+        // If page switched, just reset the snapshot — don't diff
+        if (activePageId !== prevActivePageId) {
+            prevActivePageId = activePageId
+            prevFlat = flattenNodes(nodes)
+            prevTopIds = nodes.map(n => n.id)
+            prevChildIds = getFrameChildIds(nodes)
+            return
+        }
+
+        // Flatten current nodes (each node individually, without children)
+        const curFlat = flattenNodes(nodes)
+        const curTopIds = nodes.map(n => n.id)
+        const curChildIds = getFrameChildIds(nodes)
+
+        // ── 1. Top-level adds/deletes ─────────────────────────────
+        const prevTopSet = new Set(prevTopIds)
+        const curTopSet = new Set(curTopIds)
+
+        for (const id of curTopIds) {
+            if (!prevTopSet.has(id)) {
+                const node = nodes.find(n => n.id === id)
+                if (node) canvasSync.sendAdd(node, activePageId)
+            }
+        }
+        for (const id of prevTopIds) {
+            if (!curTopSet.has(id)) {
+                canvasSync.sendDelete(id, activePageId)
+            }
+        }
+
+        // ── 2. Top-level reorder ──────────────────────────────────
+        if (curTopIds.length === prevTopIds.length &&
+            curTopIds.length > 0 &&
+            curTopIds.every(id => prevTopSet.has(id)) &&
+            curTopIds.some((id, i) => id !== prevTopIds[i])) {
+            canvasSync.sendReorder(activePageId, curTopIds)
+        }
+
+        // ── 3. Property changes (on all nodes, including nested) ──
+        for (const [id, json] of curFlat) {
+            const prevJson = prevFlat.get(id)
+            if (prevJson !== undefined && prevJson !== json) {
+                const prevNode = JSON.parse(prevJson)
+                const curNode = JSON.parse(json)
+                const changes: Record<string, unknown> = {}
+                for (const key of Object.keys(curNode)) {
+                    if (JSON.stringify(prevNode[key]) !== JSON.stringify(curNode[key])) {
+                        changes[key] = curNode[key]
+                    }
+                }
+                for (const key of Object.keys(prevNode)) {
+                    if (!(key in curNode)) changes[key] = undefined
+                }
+                if (Object.keys(changes).length > 0) {
+                    canvasSync.sendUpdate(id, changes)
+                }
+            }
+        }
+
+        // ── 4. Structural changes (children added/removed/reordered in frames) ──
+        // Compare child ID lists for each frame. If changed, send full children update.
+        for (const [frameId, curIds] of curChildIds) {
+            const prevIds = prevChildIds.get(frameId)
+            if (!prevIds || JSON.stringify(prevIds) !== JSON.stringify(curIds)) {
+                const frame = nodes.find(n => n.id === frameId)
+                if (frame && frame.type === 'frame') {
+                    canvasSync.sendUpdate(frameId, { children: (frame as FrameNode).children })
+                }
+            }
+        }
+        // Also check for frames that lost all children or were removed
+        for (const [frameId] of prevChildIds) {
+            if (!curChildIds.has(frameId) && curTopSet.has(frameId)) {
+                // Frame still exists but has no children now
+                const frame = nodes.find(n => n.id === frameId)
+                if (frame && frame.type === 'frame') {
+                    canvasSync.sendUpdate(frameId, { children: (frame as FrameNode).children })
+                }
+            }
+        }
+
+        // Update prev snapshot for next diff
+        prevFlat = curFlat
+        prevTopIds = curTopIds
+        prevChildIds = curChildIds
+    })
+
+}
 
 // ============================================================
 // Theme → Canvas Sync: relink all nodes when theme changes

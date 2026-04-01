@@ -84,6 +84,10 @@ class CanvasSync {
   private statusListeners: Set<StatusListener> = new Set()
   private pendingMessages: ClientMessage[] = [] // Queue for messages sent before connected
 
+  // Batch incoming updates to avoid "Maximum update depth exceeded"
+  private pendingUpdates: Map<string, Record<string, unknown>> = new Map()
+  private updateRafId: ReturnType<typeof requestAnimationFrame> | null = null
+
   /**
    * Flag to suppress outgoing sync messages.
    * Set to true when applying remote changes to the store so the
@@ -159,6 +163,11 @@ class CanvasSync {
     this.projectId = null
     this.token = null
     this.pendingMessages = []
+    this.pendingUpdates.clear()
+    if (this.updateRafId) {
+      cancelAnimationFrame(this.updateRafId)
+      this.updateRafId = null
+    }
 
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
@@ -574,24 +583,61 @@ class CanvasSync {
     console.log('🔄 Sync: migration complete!')
   }
 
+  /**
+   * Queue an update and flush all pending updates in one setState on the next frame.
+   * This coalesces rapid-fire updates (e.g., drag operations) to avoid
+   * "Maximum update depth exceeded" in React.
+   */
   private applyUpdate(nodeId: string, changes: Record<string, unknown>): void {
+    // Merge changes for the same node
+    const existing = this.pendingUpdates.get(nodeId)
+    if (existing) {
+      Object.assign(existing, changes)
+    } else {
+      this.pendingUpdates.set(nodeId, { ...changes })
+    }
+
+    // Schedule a single flush
+    if (!this.updateRafId) {
+      this.updateRafId = requestAnimationFrame(() => {
+        this.flushPendingUpdates()
+      })
+    }
+  }
+
+  /** Apply all batched node updates in one setState call */
+  private flushPendingUpdates(): void {
+    this.updateRafId = null
+    if (this.pendingUpdates.size === 0) return
+
+    const batch = new Map(this.pendingUpdates)
+    this.pendingUpdates.clear()
+
     this._applyingRemote = true
     try {
       this.setState!((draft: Record<string, unknown>) => {
-        // Update in the active page's nodes (flat top-level for now)
-        const nodes = draft.nodes as ScytleNode[]
-        const node = this.findNodeDeep(nodes, nodeId)
-        if (node) {
-          Object.assign(node, changes)
-        }
-
-        // Also update in pages array
+        const activePageId = draft.activePageId as string
         const pages = draft.pages as Array<{ id: string; nodes: ScytleNode[] }>
-        for (const page of pages) {
-          const pNode = this.findNodeDeep(page.nodes, nodeId)
-          if (pNode) {
-            Object.assign(pNode, changes)
-            break
+        const nodes = draft.nodes as ScytleNode[]
+
+        for (const [nodeId, changes] of batch) {
+          // Update in pages array (source of truth)
+          let updatedActivePage = false
+          for (const page of pages) {
+            const pNode = this.findNodeDeep(page.nodes, nodeId)
+            if (pNode) {
+              Object.assign(pNode, changes)
+              if (page.id === activePageId) updatedActivePage = true
+              break
+            }
+          }
+
+          // If the node is on the active page, also update the flat nodes array
+          if (updatedActivePage) {
+            const node = this.findNodeDeep(nodes, nodeId)
+            if (node) {
+              Object.assign(node, changes)
+            }
           }
         }
       }, false, 'sync:update')
