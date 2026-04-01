@@ -6,7 +6,7 @@ import {
     buildPagePlannerPrompt,
     buildPagePlannerMessage,
     type PagePlan,
-} from '@/lib/ai/prompts/page-planner'
+} from '@/lib/ai/prompts/planner'
 import type { AIModel } from '@/lib/ai/config'
 
 export const runtime = 'nodejs'
@@ -18,7 +18,14 @@ const PlanPagesSchema = z.object({
     model: z.string().optional(),
 })
 
-// Validate the AI-generated plan matches expected shape
+// Validate the AI-generated plan matches expected shape (v2 — with sections)
+const PlannedSectionSchema = z.object({
+    type: z.string(),
+    layout: z.string(),
+    imageQuery: z.string().nullable(),
+    description: z.string(),
+})
+
 const PagePlanSchema = z.object({
     projectName: z.string(),
     theme: z.object({
@@ -31,9 +38,12 @@ const PagePlanSchema = z.object({
     }),
     pages: z.array(z.object({
         name: z.string(),
+        slug: z.string().optional().default('/'),
         description: z.string(),
         pageType: z.enum(['marketing', 'application', 'auth', 'content']),
+        layoutArchetype: z.string().optional().default('centered-hero'),
         priority: z.number(),
+        sections: z.array(PlannedSectionSchema).optional().default([]),
     })).min(1).max(8),
 })
 
@@ -66,7 +76,7 @@ export async function POST(request: NextRequest) {
 
         console.log(`📋 Planning pages for "${data.description.slice(0, 50)}..." [model: ${modelKey}, type: ${productType}]`)
 
-        // 3. Generate page plan (non-streaming)
+        // 3. Generate page plan using enhanced v2 planner
         const systemPrompt = buildPagePlannerPrompt(productType)
         const userMessage = buildPagePlannerMessage(data.description)
 
@@ -80,9 +90,7 @@ export async function POST(request: NextRequest) {
             })
         } catch (error) {
             const errMsg = error instanceof Error ? error.message : String(error)
-            const errStack = error instanceof Error ? error.stack : ''
             console.error('❌ Page planner generation failed:', errMsg)
-            console.error('Stack:', errStack)
             return NextResponse.json(
                 { error: `Failed to generate page plan: ${errMsg}` },
                 { status: 500 },
@@ -92,7 +100,6 @@ export async function POST(request: NextRequest) {
         // 4. Parse and validate JSON
         let plan: PagePlan
         try {
-            // Strip markdown fences if present
             let json = rawResponse.trim()
             const fenceMatch = json.match(/^```(?:json)?\s*\n([\s\S]*?)```\s*$/)
             if (fenceMatch) json = fenceMatch[1].trim()
@@ -108,7 +115,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        console.log(`✅ Page plan created: "${plan.projectName}" with ${plan.pages.length} pages`)
+        console.log(`✅ Page plan created: "${plan.projectName}" with ${plan.pages.length} pages, ${plan.pages.reduce((sum, p) => sum + p.sections.length, 0)} sections`)
 
         return NextResponse.json({ plan })
     } catch (error) {

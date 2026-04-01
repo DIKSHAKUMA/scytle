@@ -1,29 +1,26 @@
 // ============================================================
-// Client-side Page Generation Pipeline
-// Calls the generate-html API (SSE), collects HTML, parses
-// into ScytleNode tree. Used by the workspace page.
+// Client-side Page Generation Pipeline (v2)
+// Calls plan-pages → search-images → generate-sections API routes.
+// Assembles HTML, autofixes, and parses into ScytleNode tree.
 // ============================================================
 
 import { createJWT } from '@/lib/appwrite'
 import { parseHtmlToNodesViaIframe } from '@/lib/parser'
+import { assemblePage, autofixHtml } from '@/lib/ai/autofix'
 import type { FrameNode } from '@/types/canvas'
 import { useStyleGuideStore } from '@/store'
-
 import type { ProductType } from '@/types'
-import type { PagePlan } from '@/lib/ai/prompts/page-planner'
+import type { PagePlan, PlannedPage } from '@/lib/ai/prompts/planner'
 
 /** Map full model IDs → route keys (for backwards compat) */
 const MODEL_KEY_MAP: Record<string, string> = {
-    // New Gemini models
     'gemini-3.1-pro-preview': 'gemini-pro',
     'gemini-2.5-pro': 'gemini-pro',
     'gemini-2.5-flash': 'gemini-flash',
     'gemini-2.0-flash': 'gemini-flash',
-    // Legacy aliases
     'fast': 'gemini-flash',
     'balanced': 'gemini-pro',
     'powerful': 'gemini-pro',
-    // Old Claude references → redirect to gemini-pro
     'claude-sonnet': 'gemini-pro',
     'claude-opus': 'gemini-pro',
     'claude-sonnet-4-20250514': 'gemini-pro',
@@ -35,8 +32,8 @@ export interface GeneratePageOptions {
     pageDescription?: string
     projectDescription?: string
     industry?: string
-    productType?: ProductType   // 'web' | 'app'
-    model?: string // Model key (gemini-pro, gemini-flash, fast, balanced, etc.)
+    productType?: ProductType
+    model?: string
     themeContext?: {
         primary: string
         secondary: string
@@ -51,27 +48,51 @@ export interface GeneratePageOptions {
         fontSizes?: { h1: number; h2: number; body: number }
     }
     siblingPages?: Array<{ name: string; description: string }>
+    /** Called with section progress: (completed, total) */
+    onSectionProgress?: (completed: number, total: number) => void
+    /** @deprecated Use onSectionProgress instead */
     onProgress?: (partialHtml: string) => void
+    /** Pre-resolved sections (skip planning, go straight to generation) */
+    _sections?: PlannedPage['sections']
+    /** Pre-resolved images map */
+    _images?: Record<string, Array<{ url: string; alt: string }>>
 }
 
-/**
- * Generate a full page via AI and return a parsed FrameNode.
- *
- * Flow: POST /api/ai/generate-html → consume SSE stream → collect HTML
- * → stripMarkdownFences → parseHtmlToNodes → FrameNode
- */
-export async function generatePage(options: GeneratePageOptions): Promise<FrameNode> {
+// ── Helpers ──────────────────────────────────────────────────
+
+async function authFetch(url: string, body: unknown): Promise<Response> {
     const jwt = await createJWT()
     if (!jwt) throw new Error('Not authenticated')
 
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-flash'
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${jwt.jwt}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+    })
 
-    // Build themeContext from variable table if not explicitly provided
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText)
+        throw new Error(`${url} failed (${res.status}): ${text}`)
+    }
+
+    return res
+}
+
+function resolveModelKey(model?: string): string {
+    return MODEL_KEY_MAP[model || ''] || model || 'gemini-flash'
+}
+
+function getThemeFromStore(): GeneratePageOptions['themeContext'] {
     const sgState = useStyleGuideStore.getState()
     const table = sgState.variableTable
     const mode = sgState.themeMode
 
-    const themeContext = options.themeContext || (Object.keys(table).length > 0 ? {
+    if (Object.keys(table).length === 0) return undefined
+
+    return {
         primary: table['accent']?.[mode] || '#2563eb',
         secondary: table['bg/secondary']?.[mode] || '#f5f5f5',
         accent: deriveAccentVariant(table['accent']?.[mode] || '#2563eb'),
@@ -99,103 +120,103 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
         fontSizes: table['fontSize/h1'] ? {
             h1: parseInt(table['fontSize/h1'][mode]) || 48,
             h2: parseInt(table['fontSize/h2'][mode]) || 32,
-            h3: parseInt(table['fontSize/h3']?.[mode]) || 24,
             body: parseInt(table['fontSize/body'][mode]) || 16,
         } : undefined,
-    } : undefined)
+    }
+}
 
-    const response = await fetch('/api/ai/generate-html', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${jwt.jwt}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            pageName: options.pageName,
-            pageDescription: options.pageDescription,
-            projectDescription: options.projectDescription,
-            industry: options.industry,
-            productType: options.productType ?? 'web',
-            themeContext,
-            siblingPages: options.siblingPages,
-            model: modelKey,
-        }),
+// ── Single Page Generation ────────────────────────────────────
+
+/**
+ * Generate a single page via AI and return a parsed FrameNode.
+ *
+ * v2 flow: generate-sections (parallel) → assemblePage → autofix → iframe parse
+ *
+ * If _sections + _images are provided, skips planning and generates directly.
+ * Otherwise, creates a simple plan with generic sections for the page.
+ */
+export async function generatePage(options: GeneratePageOptions): Promise<FrameNode> {
+    const modelKey = resolveModelKey(options.model)
+    const themeContext = options.themeContext || getThemeFromStore()
+
+    const theme = themeContext ? {
+        primary: themeContext.primary,
+        secondary: themeContext.secondary,
+        accent: themeContext.accent,
+        bg: themeContext.bg,
+        text: themeContext.text,
+    } : {
+        primary: '#2563eb',
+        secondary: '#f5f5f5',
+        accent: '#7c3aed',
+        bg: '#ffffff',
+        text: '#111827',
+    }
+
+    const fonts = themeContext?.fonts
+
+    // Use pre-resolved sections or create default ones for a single page
+    let sections = options._sections
+    let images = options._images || {}
+
+    if (!sections) {
+        // For standalone page generation, create sensible default sections
+        sections = buildDefaultSections(options.pageName, options.pageDescription)
+
+        // Search images for sections that need them
+        const imageQueries = sections
+            .filter(s => s.imageQuery)
+            .map(s => ({
+                key: s.imageQuery!,
+                query: s.imageQuery!,
+                count: 2,
+            }))
+
+        if (imageQueries.length > 0) {
+            try {
+                const imgRes = await authFetch('/api/ai/search-images', { queries: imageQueries })
+                const imgData = await imgRes.json()
+                images = imgData.images || {}
+            } catch (e) {
+                console.warn('Image search failed, continuing without images:', e)
+            }
+        }
+    }
+
+    // Generate all sections in parallel
+    const totalSections = sections.length
+    const res = await authFetch('/api/ai/generate-sections', {
+        pageName: options.pageName,
+        brandName: options.projectDescription || options.pageName,
+        brandDescription: options.pageDescription || options.projectDescription,
+        productType: options.productType ?? 'web',
+        model: modelKey,
+        theme,
+        fonts,
+        sections,
+        images,
     })
 
-    if (!response.ok) {
-        const text = await response.text().catch(() => response.statusText)
-        throw new Error(`Generation failed (${response.status}): ${text}`)
-    }
+    const data = await res.json()
+    const sectionHtmls: string[] = data.sections || []
 
-    if (!response.body) {
-        throw new Error('No response body — SSE streaming not supported')
-    }
+    // Fire progress callback
+    options.onSectionProgress?.(totalSections, totalSections)
 
-    // Consume SSE stream
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let html = ''
-    let buffer = ''
-
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-
-        // Process complete SSE lines (delimited by \n\n)
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() || '' // Keep incomplete part in buffer
-
-        for (const part of parts) {
-            for (const line of part.split('\n')) {
-                if (!line.startsWith('data: ')) continue
-
-                let data: { text?: string; done?: boolean; error?: string }
-                try {
-                    data = JSON.parse(line.slice(6))
-                } catch {
-                    continue
-                }
-
-                if (data.error) {
-                    throw new Error(data.error)
-                }
-
-                if (data.text) {
-                    html += data.text
-                    options.onProgress?.(html)
-                }
-            }
-        }
-    }
-
-    // Process any remaining buffer
-    if (buffer) {
-        for (const line of buffer.split('\n')) {
-            if (!line.startsWith('data: ')) continue
-            try {
-                const data = JSON.parse(line.slice(6))
-                if (data.text) html += data.text
-                if (data.error) throw new Error(data.error)
-            } catch {
-                // skip malformed trailing data
-            }
-        }
-    }
+    // Assemble + autofix
+    const html = assemblePage(sectionHtmls, options.pageName)
 
     if (!html.trim()) {
         throw new Error('AI returned empty response')
     }
 
-    console.log(`✅ Received ${html.length} chars of HTML for "${options.pageName}"`)
+    console.log(`✅ Generated ${sectionHtmls.length} sections → ${html.length} chars for "${options.pageName}"`)
 
-    // Strip markdown fences if AI wrapped the output
-    html = stripMarkdownFences(html)
+    // For legacy onProgress consumers
+    options.onProgress?.(html)
 
-    // Parse HTML → ScytleNode tree via hidden iframe (real browser layout)
-    // relinkNodes is called INSIDE parseHtmlToNodesViaIframe — no separate call needed
+    // Parse HTML → ScytleNode tree via hidden iframe
+    const sgState = useStyleGuideStore.getState()
     const frame = await parseHtmlToNodesViaIframe(html, options.pageName, {
         rootWidth: 1440,
         variableTable: sgState.variableTable,
@@ -206,17 +227,182 @@ export async function generatePage(options: GeneratePageOptions): Promise<FrameN
     return frame
 }
 
-/** Remove ```html ... ``` fencing that models sometimes output */
-function stripMarkdownFences(html: string): string {
-    const trimmed = html.trim()
-    const fenceMatch = trimmed.match(/^```(?:html)?\s*\n([\s\S]*?)```\s*$/)
-    if (fenceMatch) return fenceMatch[1].trim()
-    return trimmed
+// ── Multi-Page Project Generation ────────────────────────────
+
+export interface GenerateProjectOptions {
+    projectDescription: string
+    productType?: ProductType
+    model?: string
+    onPlanReady?: (plan: PagePlan) => void
+    onPageStart?: (index: number, pageName: string, total: number) => void
+    onPageComplete?: (index: number, pageName: string, frame: FrameNode) => void
+    onPageProgress?: (index: number, partialHtml: string) => void
+    onSectionProgress?: (pageIndex: number, completed: number, total: number) => void
+}
+
+export interface GenerateProjectResult {
+    plan: PagePlan
+    pages: Array<{ name: string; frame: FrameNode }>
+}
+
+/**
+ * Generate a full multi-page project via AI.
+ *
+ * v2 flow:
+ * 1. POST /api/ai/plan-pages → plan with sections per page
+ * 2. POST /api/ai/search-images → batch search all image queries
+ * 3. For each page: POST /api/ai/generate-sections (parallel sections)
+ *    → assemblePage → autofix → iframe parse
+ */
+export async function generateProject(options: GenerateProjectOptions): Promise<GenerateProjectResult> {
+    const modelKey = resolveModelKey(options.model)
+
+    // ── Step 1: Plan pages ──────────────────────────────────────
+    console.log('📋 Step 1: Planning pages...')
+
+    const planRes = await authFetch('/api/ai/plan-pages', {
+        description: options.projectDescription,
+        productType: options.productType ?? 'web',
+        model: modelKey,
+    })
+
+    const { plan } = (await planRes.json()) as { plan: PagePlan }
+    console.log(`✅ Plan ready: "${plan.projectName}" — ${plan.pages.length} pages`)
+    options.onPlanReady?.(plan)
+
+    // ── Step 2: Batch image search ──────────────────────────────
+    console.log('🖼️ Step 2: Searching images...')
+
+    const imageQueries = plan.pages
+        .flatMap(p => p.sections)
+        .filter(s => s.imageQuery)
+        .map(s => ({
+            key: s.imageQuery!,
+            query: s.imageQuery!,
+            count: 2,
+        }))
+
+    // Deduplicate queries by key
+    const uniqueQueries = Array.from(
+        new Map(imageQueries.map(q => [q.key, q])).values()
+    )
+
+    let images: Record<string, Array<{ url: string; alt: string }>> = {}
+    if (uniqueQueries.length > 0) {
+        try {
+            const imgRes = await authFetch('/api/ai/search-images', { queries: uniqueQueries })
+            const imgData = await imgRes.json()
+            images = imgData.images || {}
+            console.log(`✅ Found images for ${Object.keys(images).length} queries`)
+        } catch (e) {
+            console.warn('Image search failed, continuing without images:', e)
+        }
+    }
+
+    // ── Step 3: Generate pages ──────────────────────────────────
+    console.log('🏗️ Step 3: Generating pages...')
+
+    const sortedPages = [...plan.pages].sort((a, b) => a.priority - b.priority)
+    const results: Array<{ name: string; frame: FrameNode }> = []
+
+    // Generate pages sequentially to avoid overwhelming rate limits
+    // (each page already generates its sections in parallel on the server)
+    for (let i = 0; i < sortedPages.length; i++) {
+        const page = sortedPages[i]
+        options.onPageStart?.(i, page.name, sortedPages.length)
+
+        try {
+            const frame = await generatePage({
+                pageName: page.name,
+                pageDescription: page.description,
+                projectDescription: options.projectDescription,
+                productType: options.productType ?? 'web',
+                model: options.model,
+                themeContext: plan.theme,
+                onSectionProgress: (completed, total) => {
+                    options.onSectionProgress?.(i, completed, total)
+                },
+                onProgress: options.onPageProgress
+                    ? (html) => options.onPageProgress!(i, html)
+                    : undefined,
+                // Pass pre-resolved sections + images so generatePage skips planning
+                _sections: page.sections,
+                _images: images,
+            })
+
+            results.push({ name: page.name, frame })
+            options.onPageComplete?.(i, page.name, frame)
+            console.log(`✅ Page ${i + 1}/${sortedPages.length}: "${page.name}"`)
+        } catch (error) {
+            console.error(`⚠️ Page "${page.name}" failed:`, error instanceof Error ? error.message : error)
+        }
+    }
+
+    if (results.length === 0) {
+        throw new Error('All page generations failed. Please try again.')
+    }
+
+    console.log(`🎉 Project complete: ${results.length}/${sortedPages.length} pages generated`)
+    return { plan, pages: results }
+}
+
+// ── Internal Helpers ─────────────────────────────────────────
+
+/**
+ * Build default sections for standalone page generation
+ * when no pre-planned sections are provided.
+ */
+function buildDefaultSections(pageName: string, description?: string): PlannedPage['sections'] {
+    const lower = pageName.toLowerCase()
+
+    // Common page patterns
+    if (lower.includes('landing') || lower.includes('home') || lower === 'main') {
+        return [
+            { type: 'hero', layout: 'split-hero', imageQuery: description ? `${description} hero` : 'modern website hero', description: `Hero section for ${pageName}` },
+            { type: 'features', layout: 'bento-grid', imageQuery: null, description: `Key features highlight` },
+            { type: 'testimonials', layout: 'card-mosaic', imageQuery: 'professional headshot portrait', description: `Customer testimonials` },
+            { type: 'cta', layout: 'centered-hero', imageQuery: null, description: `Call to action` },
+            { type: 'footer', layout: 'stacked-cards', imageQuery: null, description: `Footer with links and info` },
+        ]
+    }
+
+    if (lower.includes('about')) {
+        return [
+            { type: 'hero', layout: 'centered-hero', imageQuery: description ? `${description} team` : 'team office workspace', description: `About hero` },
+            { type: 'team', layout: 'card-mosaic', imageQuery: 'professional headshot', description: `Team members` },
+            { type: 'stats', layout: 'bento-grid', imageQuery: null, description: `Company stats and milestones` },
+            { type: 'footer', layout: 'stacked-cards', imageQuery: null, description: `Footer` },
+        ]
+    }
+
+    if (lower.includes('pricing')) {
+        return [
+            { type: 'hero', layout: 'centered-hero', imageQuery: null, description: `Pricing page header` },
+            { type: 'pricing', layout: 'card-mosaic', imageQuery: null, description: `Pricing plans comparison` },
+            { type: 'faq', layout: 'stacked-cards', imageQuery: null, description: `Frequently asked questions` },
+            { type: 'footer', layout: 'stacked-cards', imageQuery: null, description: `Footer` },
+        ]
+    }
+
+    if (lower.includes('contact')) {
+        return [
+            { type: 'hero', layout: 'centered-hero', imageQuery: null, description: `Contact page header` },
+            { type: 'contact', layout: 'split-hero', imageQuery: 'modern office building', description: `Contact form and info` },
+            { type: 'footer', layout: 'stacked-cards', imageQuery: null, description: `Footer` },
+        ]
+    }
+
+    // Generic fallback
+    return [
+        { type: 'hero', layout: 'split-hero', imageQuery: description ? `${description}` : 'modern abstract design', description: `Hero section for ${pageName}` },
+        { type: 'features', layout: 'zigzag', imageQuery: null, description: `Main content for ${pageName}` },
+        { type: 'cta', layout: 'centered-hero', imageQuery: null, description: `Call to action` },
+        { type: 'footer', layout: 'stacked-cards', imageQuery: null, description: `Footer` },
+    ]
 }
 
 /**
  * Extract Google Font families from HTML and the active style guide.
- * These are loaded in the iframe before measuring to ensure accurate text metrics.
  */
 function extractFontFamilies(
     html: string,
@@ -242,21 +428,18 @@ function extractFontFamilies(
         }
     }
 
-    // From the active style guide (always load these)
+    // From the active style guide
     const table = sgState.variableTable
     const mode = sgState.themeMode
     if (table['font/heading']?.[mode]) families.add(table['font/heading'][mode])
     if (table['font/body']?.[mode]) families.add(table['font/body'][mode])
 
-    // Filter out system fonts that don't need loading
     const systemFonts = new Set(['Inter', 'sans-serif', 'serif', 'monospace', 'mono', 'system-ui', 'Arial', 'Helvetica'])
     return Array.from(families).filter(f => !systemFonts.has(f))
 }
 
 /**
- * Derive a distinct accent color from a primary hex by shifting hue ~30°.
- * This ensures the AI prompt gets two visually different brand colors
- * even when the variable table only has one accent token.
+ * Derive a distinct accent color from a primary hex by shifting hue ~80°.
  */
 function deriveAccentVariant(hex: string): string {
     const h = hex.replace('#', '')
@@ -276,7 +459,6 @@ function deriveAccentVariant(hex: string): string {
         else hue = ((r - g) / d + 4) / 6
     }
 
-    // Shift hue by ~80° and slightly adjust saturation for visual distinction
     const newHue = (hue + 0.22) % 1
     const newSat = Math.min(1, s * 1.1)
 
@@ -289,115 +471,11 @@ function deriveAccentVariant(hex: string): string {
         return p
     }
 
-    const q = l < 0.5 ? l * (1 + newSat) : l + newSat - l * newSat
-    const p = 2 * l - q
-    const nr = Math.round(hue2rgb(p, q, newHue + 1 / 3) * 255)
-    const ng = Math.round(hue2rgb(p, q, newHue) * 255)
-    const nb = Math.round(hue2rgb(p, q, newHue - 1 / 3) * 255)
+    const q2 = l < 0.5 ? l * (1 + newSat) : l + newSat - l * newSat
+    const p2 = 2 * l - q2
+    const nr = Math.round(hue2rgb(p2, q2, newHue + 1 / 3) * 255)
+    const ng = Math.round(hue2rgb(p2, q2, newHue) * 255)
+    const nb = Math.round(hue2rgb(p2, q2, newHue - 1 / 3) * 255)
 
     return '#' + [nr, ng, nb].map(c => Math.min(255, Math.max(0, c)).toString(16).padStart(2, '0')).join('')
-}
-
-// ── Multi-Page Project Generation ────────────────────────────
-
-export interface GenerateProjectOptions {
-    projectDescription: string
-    productType?: ProductType
-    model?: string
-    onPlanReady?: (plan: PagePlan) => void
-    onPageStart?: (index: number, pageName: string, total: number) => void
-    onPageComplete?: (index: number, pageName: string, frame: FrameNode) => void
-    onPageProgress?: (index: number, partialHtml: string) => void
-}
-
-export interface GenerateProjectResult {
-    plan: PagePlan
-    pages: Array<{ name: string; frame: FrameNode }>
-}
-
-/**
- * Generate a full multi-page project via AI.
- *
- * Flow:
- * 1. POST /api/ai/plan-pages → get plan (3-5 pages with shared theme)
- * 2. For each page (sequential, to avoid rate limits):
- *    a. Call generatePage() with themeContext + siblingPages
- *    b. Callback: onPageComplete(index, frame)
- * 3. Return all pages
- */
-export async function generateProject(options: GenerateProjectOptions): Promise<GenerateProjectResult> {
-    const jwt = await createJWT()
-    if (!jwt) throw new Error('Not authenticated')
-
-    const modelKey = MODEL_KEY_MAP[options.model || ''] || options.model || 'gemini-flash'
-
-    // Step 1: Get page plan from AI
-    const planResponse = await fetch('/api/ai/plan-pages', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${jwt.jwt}`,
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            description: options.projectDescription,
-            productType: options.productType ?? 'web',
-            model: modelKey,
-        }),
-    })
-
-    if (!planResponse.ok) {
-        const text = await planResponse.text().catch(() => planResponse.statusText)
-        throw new Error(`Page planning failed (${planResponse.status}): ${text}`)
-    }
-
-    const { plan } = (await planResponse.json()) as { plan: PagePlan }
-
-    console.log(`📋 Plan ready: "${plan.projectName}" — ${plan.pages.length} pages`)
-    options.onPlanReady?.(plan)
-
-    // Sort pages by priority (1 = first)
-    const sortedPages = [...plan.pages].sort((a, b) => a.priority - b.priority)
-
-    // Build sibling page list (used for nav context)
-    const siblingPages = sortedPages.map(p => ({
-        name: p.name,
-        description: p.description,
-    }))
-
-    // Step 2: Generate each page sequentially
-    const results: Array<{ name: string; frame: FrameNode }> = []
-
-    for (let i = 0; i < sortedPages.length; i++) {
-        const page = sortedPages[i]
-        options.onPageStart?.(i, page.name, sortedPages.length)
-
-        try {
-            const frame = await generatePage({
-                pageName: page.name,
-                pageDescription: page.description,
-                projectDescription: options.projectDescription,
-                productType: options.productType ?? 'web',
-                model: options.model,
-                themeContext: plan.theme,
-                siblingPages,
-                onProgress: options.onPageProgress
-                    ? (html) => options.onPageProgress!(i, html)
-                    : undefined,
-            })
-
-            results.push({ name: page.name, frame })
-            options.onPageComplete?.(i, page.name, frame)
-
-            console.log(`✅ Page ${i + 1}/${sortedPages.length} generated: "${page.name}"`)
-        } catch (error) {
-            console.error(`⚠️ Page ${i + 1}/${sortedPages.length} failed: "${page.name}"`, error instanceof Error ? error.message : error)
-            // Continue with remaining pages — don't abort the whole project
-        }
-    }
-
-    if (results.length === 0) {
-        throw new Error('All page generations failed. Please try again.')
-    }
-
-    return { plan, pages: results }
 }
