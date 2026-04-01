@@ -10,6 +10,7 @@ import { Loader2, Sparkles } from 'lucide-react'
 import { generateProject, generatePage } from '@/lib/generate-page'
 import { createSkeletonFrame } from '@/components/workspace/skeleton-frame'
 import { createJWT } from '@/lib/appwrite'
+import { canvasSync } from '@/lib/sync'
 import type { ProductType, AiModel } from '@/types'
 
 export default function ProjectEditorPage() {
@@ -326,51 +327,61 @@ function ProjectEditor() {
         }
     }, [projectReady, canvasLoaded, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, isGenerating, handleGenerate, handleReferenceGenerate, hasRefImages])
 
-    // Step 1: Initialize editor state from localStorage (sync, no auth needed)
-    useEffect(() => {
-        const store = useEditorStore.getState()
-        store.initForProject(projectId)
-    }, [projectId])
-
-    // Step 2: Once auth is confirmed, try loading from server if localStorage was empty
+    // Connect to real-time sync server once auth is confirmed
     useEffect(() => {
         if (!authChecked) return
 
-        const stateAfterInit = useEditorStore.getState()
-        if (stateAfterInit.nodes.length === 0 && !stateAfterInit.hasEverHadNodes) {
-            // No local data — fetch from server (needs auth)
-            useEditorStore.getState().loadCanvasFromServer(projectId).finally(() => {
-                setCanvasLoaded(true)
-            })
-        } else {
-            // Local data found — no need for server fetch
-            setCanvasLoaded(true)
+        let disconnected = false
+
+        const connectSync = async () => {
+            try {
+                const jwt = await createJWT()
+                if (!jwt || disconnected) return
+
+                // Connect — the server will send an 'init' message with full state
+                canvasSync.connect(projectId, jwt.jwt)
+
+                // Listen for init completion to mark canvas as loaded
+                // Status only changes to 'connected' AFTER init data (or migration)
+                // is fully applied to the store
+                const unsub = canvasSync.onStatusChange((status) => {
+                    if (status === 'connected' && !disconnected) {
+                        setCanvasLoaded(true)
+                    }
+                })
+
+                // If already connected (fast reconnect), mark loaded
+                if (canvasSync.status === 'connected' && !disconnected) {
+                    setCanvasLoaded(true)
+                }
+
+                // Store cleanup function
+                return () => {
+                    unsub()
+                    canvasSync.disconnect()
+                }
+            } catch (err) {
+                console.error('🔄 Sync: connection error', err)
+                setCanvasLoaded(true) // Don't block UI on sync failure
+            }
+        }
+
+        let cleanup: (() => void) | undefined
+        connectSync().then((fn) => { cleanup = fn })
+
+        return () => {
+            disconnected = true
+            cleanup?.()
         }
     }, [projectId, authChecked])
 
-    // Auto-save project state on changes (debounced)
+    // Fallback: also load from localStorage/server for offline resilience
+    // This runs first (no auth needed) so the user sees something immediately
     useEffect(() => {
-        let timer: ReturnType<typeof setTimeout>
-        const unsub = useEditorStore.subscribe((state, prev) => {
-            if (
-                state.nodes !== prev.nodes ||
-                state.canvasColor !== prev.canvasColor ||
-                state.zoom !== prev.zoom ||
-                state.panX !== prev.panX ||
-                state.panY !== prev.panY ||
-                state.pages !== prev.pages ||
-                state.activePageId !== prev.activePageId
-            ) {
-                clearTimeout(timer)
-                timer = setTimeout(() => {
-                    useEditorStore.getState().saveProjectState()
-                }, 500)
-            }
-        })
-        return () => {
-            clearTimeout(timer)
-            unsub()
-            useEditorStore.getState().saveProjectState()
+        const store = useEditorStore.getState()
+        // Only init from localStorage if we haven't received sync data yet
+        if (!store._projectId || store._projectId !== projectId) {
+            store.initForProject(projectId)
         }
     }, [projectId])
 

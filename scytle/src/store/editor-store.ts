@@ -5,6 +5,7 @@ import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 import { relinkNodes } from '@/lib/theme/relink-nodes'
+import { canvasSync } from '@/lib/sync'
 import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
 // ============================================================
@@ -12,10 +13,6 @@ import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 // ============================================================
 
 const MAX_HISTORY = 50
-
-// Serialized server save — ensures only one save is in-flight at a time
-let _serverSavePromise: Promise<void> = Promise.resolve()
-let _serverSavePending = false
 
 /**
  * Save a snapshot of current nodes to past[], clear future[].
@@ -269,12 +266,8 @@ interface EditorState {
     _projectId: string | null
     /** Whether nodes have EVER been added for this project (prevents re-generation after delete-all) */
     hasEverHadNodes: boolean
-    /** Initialize editor for a specific project — loads from localStorage, then server */
+    /** Initialize editor for a specific project */
     initForProject: (projectId: string) => void
-    /** Async: load canvas state from server if localStorage is empty */
-    loadCanvasFromServer: (projectId: string) => Promise<void>
-    /** Save current state to project-specific localStorage + async server sync */
-    saveProjectState: () => void
     /** Set multiple selected IDs at once (for marquee selection) */
     setSelectedIds: (ids: string[]) => void
 
@@ -622,14 +615,19 @@ export const useEditorStore = create<EditorState>()(
 
             // Canvas settings --------------------------------------
 
-            setCanvasColor: (color) =>
+            setCanvasColor: (color) => {
                 set(
                     (state) => {
                         state.canvasColor = color
                     },
                     false,
                     'setCanvasColor'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { activePageId } = get()
+                    canvasSync.sendPageUpdate(activePageId, { canvasColor: color })
+                }
+            },
 
             // Selection --------------------------------------------
 
@@ -698,16 +696,40 @@ export const useEditorStore = create<EditorState>()(
 
             // Document mutations -----------------------------------
 
-            setNodes: (nodes) =>
+            setNodes: (nodes) => {
+                // Get previous nodes to compute diff for sync
+                const prevNodes = get().nodes
                 set(
                     (state) => {
                         state.nodes = nodes
+                        if (nodes.length > 0) state.hasEverHadNodes = true
                     },
                     false,
                     'setNodes'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { activePageId } = get()
+                    // Sync: delete removed nodes, add new ones, update changed ones
+                    const prevIds = new Set(prevNodes.map((n) => n.id))
+                    const newIds = new Set(nodes.map((n) => n.id))
+                    // Deleted nodes
+                    for (const pn of prevNodes) {
+                        if (!newIds.has(pn.id)) {
+                            canvasSync.sendDelete(pn.id, activePageId)
+                        }
+                    }
+                    // Added or updated nodes
+                    for (const nn of nodes) {
+                        if (!prevIds.has(nn.id)) {
+                            canvasSync.sendAdd(nn, activePageId)
+                        }
+                    }
+                    // Send reorder
+                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
+                }
+            },
 
-            addNode: (node, parentId, index) =>
+            addNode: (node, parentId, index) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -732,9 +754,13 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'addNode'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendAdd(node, get().activePageId)
+                }
+            },
 
-            updateNode: (id, updates) =>
+            updateNode: (id, updates) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -745,9 +771,13 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'updateNode'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendUpdate(id, updates)
+                }
+            },
 
-            replaceNode: (oldId, newNode) =>
+            replaceNode: (oldId, newNode) => {
                 set(
                     (state) => {
                         // Check top level first
@@ -766,9 +796,16 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'replaceNode'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const pageId = get().activePageId
+                    // Replace = delete old + add new
+                    canvasSync.sendDelete(oldId, pageId)
+                    canvasSync.sendAdd(newNode, pageId)
+                }
+            },
 
-            deleteNode: (id) =>
+            deleteNode: (id) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -789,7 +826,11 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'deleteNode'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendDelete(id, get().activePageId)
+                }
+            },
 
             reorderNode: (nodeId, gapIndex) =>
                 set(
@@ -818,7 +859,9 @@ export const useEditorStore = create<EditorState>()(
 
             // ── Bulk delete ──────────────────────────────────────
 
-            deleteSelectedNodes: () =>
+            deleteSelectedNodes: () => {
+                const { selectedIds, activePageId } = get()
+                const idsToDelete = [...selectedIds]
                 set(
                     (state) => {
                         if (state.selectedIds.length === 0) return
@@ -846,7 +889,13 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'deleteSelectedNodes'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    for (const id of idsToDelete) {
+                        canvasSync.sendDelete(id, activePageId)
+                    }
+                }
+            },
 
             // ── History actions ───────────────────────────────────
 
@@ -931,7 +980,7 @@ export const useEditorStore = create<EditorState>()(
 
             // ── Z-order actions ───────────────────────────────────
 
-            bringForward: (id) =>
+            bringForward: (id) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -947,9 +996,14 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'bringForward'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { nodes, activePageId } = get()
+                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
+                }
+            },
 
-            sendBackward: (id) =>
+            sendBackward: (id) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -965,9 +1019,14 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'sendBackward'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { nodes, activePageId } = get()
+                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
+                }
+            },
 
-            bringToFront: (id) =>
+            bringToFront: (id) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -983,9 +1042,14 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'bringToFront'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { nodes, activePageId } = get()
+                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
+                }
+            },
 
-            sendToBack: (id) =>
+            sendToBack: (id) => {
                 set(
                     (state) => {
                         _snap(state)
@@ -1001,7 +1065,12 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'sendToBack'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    const { nodes, activePageId } = get()
+                    canvasSync.sendReorder(activePageId, nodes.map((n) => n.id))
+                }
+            },
 
             // ── Clipboard actions ─────────────────────────────────
 
@@ -1370,52 +1439,21 @@ export const useEditorStore = create<EditorState>()(
                 // Already loaded for this project — no-op
                 if (state._projectId === projectId) return
 
-                // Save current project before switching
-                if (state._projectId) {
-                    get().saveProjectState()
-                }
-
-                // Load state for new project
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let loaded: any = null
-                try {
-                    const raw = localStorage.getItem(`scytle-editor-${projectId}`)
-                    if (raw) loaded = JSON.parse(raw)
-                } catch { /* corrupt data — ignore */ }
-
-                // Migrate from old single-canvas format to pages format
-                let pages: EditorPage[]
-                let activePageId: string
-                if (loaded?.pages && Array.isArray(loaded.pages)) {
-                    // New format — pages array
-                    pages = loaded.pages
-                    activePageId = loaded.activePageId ?? pages[0]?.id ?? ''
-                } else {
-                    // Old format or empty — wrap in single page
-                    const page = createEditorPage('Page 1')
-                    page.nodes = loaded?.nodes ?? []
-                    page.canvasColor = loaded?.canvasColor ?? '#F5F5F5'
-                    page.zoom = loaded?.zoom ?? 1
-                    page.panX = loaded?.panX ?? 0
-                    page.panY = loaded?.panY ?? 0
-                    pages = [page]
-                    activePageId = page.id
-                }
-
-                const activePage = pages.find((p) => p.id === activePageId) ?? pages[0]
-
+                // Set project ID and FULLY reset state.
+                // Pages and activePageId are set by the sync server's init message.
+                // Do NOT create pages here — sync.ts createDefaultPage() handles it.
                 set(
                     (draft) => {
                         draft._projectId = projectId
-                        draft.pages = pages
-                        draft.activePageId = activePage.id
-                        draft.nodes = activePage.nodes
-                        draft.canvasColor = activePage.canvasColor
-                        draft.zoom = activePage.zoom
-                        draft.panX = activePage.panX
-                        draft.panY = activePage.panY
-                        // Restore hasEverHadNodes flag (or derive from existing nodes)
-                        draft.hasEverHadNodes = loaded?.hasEverHadNodes ?? activePage.nodes.length > 0
+                        // Clear canvas data from previous project
+                        draft.pages = []
+                        draft.activePageId = ''
+                        draft.nodes = []
+                        draft.canvasColor = '#F5F5F5'
+                        draft.zoom = 1
+                        draft.panX = 0
+                        draft.panY = 0
+                        draft.hasEverHadNodes = false
                         // Reset interaction state
                         draft.selectedIds = []
                         draft.hoveredId = null
@@ -1432,157 +1470,6 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'initForProject'
                 )
-
-                // Clean up stale global persist key
-                try { localStorage.removeItem('scytle-editor-state') } catch { /* ignore */ }
-            },
-
-            // Async load from server — called when localStorage is empty
-            loadCanvasFromServer: async (projectId: string) => {
-                try {
-                    const { createJWT } = await import('@/lib/appwrite')
-                    const jwt = await createJWT()
-                    if (!jwt) {
-                        console.warn('📦 Canvas load skipped: no JWT')
-                        return
-                    }
-
-                    console.log(`📦 Loading canvas from server for project ${projectId}...`)
-                    const response = await fetch(`/api/projects/${projectId}/canvas`, {
-                        headers: { 'Authorization': `Bearer ${jwt.jwt}` },
-                    })
-
-                    if (!response.ok) {
-                        console.error(`📦 Canvas load failed: ${response.status} ${response.statusText}`)
-                        return
-                    }
-
-                    const data = await response.json()
-                    if (!data.canvasState) {
-                        console.log('📦 No canvas state on server (first time)')
-                        return
-                    }
-
-                    const loaded = data.canvasState
-
-                    // Migrate from old single-canvas format to pages format
-                    let pages: EditorPage[]
-                    let activePageId: string
-                    if (loaded?.pages && Array.isArray(loaded.pages)) {
-                        pages = loaded.pages
-                        activePageId = loaded.activePageId ?? pages[0]?.id ?? ''
-                    } else {
-                        const page = createEditorPage('Page 1')
-                        page.nodes = loaded?.nodes ?? []
-                        page.canvasColor = loaded?.canvasColor ?? '#F5F5F5'
-                        page.zoom = loaded?.zoom ?? 1
-                        page.panX = loaded?.panX ?? 0
-                        page.panY = loaded?.panY ?? 0
-                        pages = [page]
-                        activePageId = page.id
-                    }
-
-                    const activePage = pages.find((p) => p.id === activePageId) ?? pages[0]
-
-                    set(
-                        (draft) => {
-                            draft.pages = pages
-                            draft.activePageId = activePage.id
-                            draft.nodes = activePage.nodes
-                            draft.canvasColor = activePage.canvasColor
-                            draft.zoom = activePage.zoom
-                            draft.panX = activePage.panX
-                            draft.panY = activePage.panY
-                            draft.hasEverHadNodes = loaded?.hasEverHadNodes ?? activePage.nodes.length > 0
-                        },
-                        false,
-                        'loadCanvasFromServer'
-                    )
-
-                    // Also cache to localStorage for next visit
-                    try {
-                        localStorage.setItem(
-                            `scytle-editor-${projectId}`,
-                            JSON.stringify({ pages, activePageId, hasEverHadNodes: loaded?.hasEverHadNodes ?? activePage.nodes.length > 0 })
-                        )
-                    } catch { /* quota */ }
-
-                    console.log(`📦 Canvas loaded from server for project ${projectId}`)
-                } catch (error) {
-                    console.error('📦 Error loading canvas from server:', error)
-                }
-            },
-
-            saveProjectState: () => {
-                const state = get()
-                if (!state._projectId) return
-
-                // Sync active page with current canvas state
-                const pages = state.pages.map((p) =>
-                    p.id === state.activePageId
-                        ? { ...p, nodes: state.nodes, canvasColor: state.canvasColor, zoom: state.zoom, panX: state.panX, panY: state.panY }
-                        : p
-                )
-
-                const data = {
-                    pages,
-                    activePageId: state.activePageId,
-                    hasEverHadNodes: state.hasEverHadNodes,
-                }
-
-                // 1. Save to localStorage (instant)
-                try {
-                    localStorage.setItem(
-                        `scytle-editor-${state._projectId}`,
-                        JSON.stringify(data)
-                    )
-                } catch (_e) { /* quota exceeded */ }
-
-                // 2. Serialized async save to server (waits for previous save to finish)
-                const projectId = state._projectId
-
-                // If a save is already queued, mark pending so it picks up latest data on next cycle
-                if (_serverSavePending) return
-                _serverSavePending = true
-
-                const doSave = async () => {
-                    _serverSavePending = false
-                    try {
-                        const { createJWT } = await import('@/lib/appwrite')
-                        const jwt = await createJWT()
-                        if (!jwt) {
-                            console.warn('📦 Canvas save skipped: no JWT')
-                            return
-                        }
-                        // Always save the LATEST state (not stale snapshot)
-                        const latestState = get()
-                        const latestPages = latestState.pages.map((p) =>
-                            p.id === latestState.activePageId
-                                ? { ...p, nodes: latestState.nodes, canvasColor: latestState.canvasColor, zoom: latestState.zoom, panX: latestState.panX, panY: latestState.panY }
-                                : p
-                        )
-                        const latestData = {
-                            pages: latestPages,
-                            activePageId: latestState.activePageId,
-                            hasEverHadNodes: latestState.hasEverHadNodes,
-                        }
-                        const res = await fetch(`/api/projects/${projectId}/canvas`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${jwt.jwt}`,
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(latestData),
-                        })
-                        if (!res.ok) {
-                            console.error(`📦 Canvas save failed: ${res.status} ${res.statusText}`)
-                        }
-                    } catch (err) {
-                        console.error('📦 Canvas save network error:', err)
-                    }
-                }
-
-                _serverSavePromise = _serverSavePromise.then(doSave, doSave)
             },
 
             setSelectedIds: (ids) =>
@@ -1633,6 +1520,17 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'addPage'
                 )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendPageAdd({
+                        id: page.id,
+                        name: page.name,
+                        canvasColor: page.canvasColor,
+                        zoom: page.zoom,
+                        panX: page.panX,
+                        panY: page.panY,
+                    })
+                    canvasSync.sendPageSwitch(page.id)
+                }
                 return page.id
             },
 
@@ -1673,6 +1571,9 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'deletePage'
                 )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendPageDelete(pageId)
+                }
             },
 
             duplicatePage: (pageId) => {
@@ -1726,10 +1627,25 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'duplicatePage'
                 )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendPageAdd({
+                        id: newPage.id,
+                        name: newPage.name,
+                        canvasColor: newPage.canvasColor,
+                        zoom: newPage.zoom,
+                        panX: newPage.panX,
+                        panY: newPage.panY,
+                    })
+                    // Also send all the nodes for the duplicated page
+                    for (const node of newPage.nodes) {
+                        canvasSync.sendAdd(node, newPage.id)
+                    }
+                    canvasSync.sendPageSwitch(newPage.id)
+                }
                 return newPage.id
             },
 
-            renamePage: (pageId, name) =>
+            renamePage: (pageId, name) => {
                 set(
                     (draft) => {
                         const page = draft.pages.find((p: EditorPage) => p.id === pageId)
@@ -1737,7 +1653,11 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'renamePage'
-                ),
+                )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendPageRename(pageId, name)
+                }
+            },
 
             switchPage: (pageId) => {
                 const state = get()
@@ -1778,9 +1698,10 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'switchPage'
                 )
+                if (!canvasSync._applyingRemote) {
+                    canvasSync.sendPageSwitch(pageId)
+                }
             },
-
-            // ── Vector / Pen editing ──────────────────────────────────
 
             enterVectorEditMode: (nodeId) =>
                 set(
@@ -2054,6 +1975,13 @@ export const useEditorStore = create<EditorState>()(
         })),
         { name: 'editor-store' }
     )
+)
+
+// ── Bind sync client to store ─────────────────────────────────
+canvasSync.bindStore(
+    () => useEditorStore.getState(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useEditorStore.setState as any
 )
 
 // ============================================================

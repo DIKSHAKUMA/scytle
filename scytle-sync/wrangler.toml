@@ -1,0 +1,17 @@
+name = "scytle-sync"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[durable_objects]
+bindings = [
+  { name = "CANVAS_ROOM", class_name = "CanvasRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["CanvasRoom"]
+
+[vars]
+APPWRITE_ENDPOINT = "https://cloud.appwrite.io/v1"
+APPWRITE_PROJECT_ID = "697f1aae0010e3a71ed7"
+ALLOWED_ORIGINS = "http://localhost:3000,https://scytle.ai,https://www.scytle.ai"
