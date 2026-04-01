@@ -13,6 +13,7 @@
 
 import type { ScytleNode, FrameNode, TextNode, Fill } from '@/types/canvas'
 import type { VariableTable, ThemeMode } from './variable-table'
+import { deltaE } from './color-distance'
 
 // ═══════════════════════════════════════════════════
 // Color Classification
@@ -50,11 +51,9 @@ function isMidColor(hex: string): boolean {
     return l >= 0.25 && l <= 0.85
 }
 
-/** Euclidean distance between two hex colors */
-function colorDistance(a: string, b: string): number {
-    const [r1, g1, b1] = hexToRgb(a)
-    const [r2, g2, b2] = hexToRgb(b)
-    return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2)
+/** Perceptual color distance (CIE76 ΔE*) — replaces RGB Euclidean */
+function colorDist(a: string, b: string): number {
+    return deltaE(a.toLowerCase(), b.toLowerCase())
 }
 
 // ═══════════════════════════════════════════════════
@@ -94,16 +93,19 @@ function classifyFillColor(
 
     if (!accent) return undefined
 
-    const dist = (a: string, b: string) => colorDistance(a.toLowerCase(), b.toLowerCase())
+    // CIELAB ΔE thresholds (perceptual):
+    //   < 5  = barely distinguishable
+    //   < 15 = same hue family
+    //   < 25 = related color
 
     // Very close to accent → accent
-    if (dist(color, accent) < 60) return 'accent'
+    if (colorDist(color, accent) < 25) return 'accent'
 
     // Very close to bg/primary → bg/primary
-    if (bgPrimary && dist(color, bgPrimary) < 30) return 'bg/primary'
+    if (bgPrimary && colorDist(color, bgPrimary) < 12) return 'bg/primary'
 
     // Very close to bg/secondary → bg/secondary
-    if (bgSecondary && dist(color, bgSecondary) < 40) return 'bg/secondary'
+    if (bgSecondary && colorDist(color, bgSecondary) < 18) return 'bg/secondary'
 
     // For buttons: saturated mid-tones are likely accent
     if (isButtonLike && isMidColor(color)) return 'accent'
@@ -119,7 +121,7 @@ function classifyFillColor(
     // as bg/primary). In light mode, dark fills are intentionally dark sections
     // (e.g. dark hero, dark footer) and should NOT be relinked to bg/primary (white).
     if (isDarkColor(color) && mode === 'dark') {
-        if (bgPrimary && dist(color, bgPrimary) < 40) return 'bg/primary'
+        if (bgPrimary && colorDist(color, bgPrimary) < 18) return 'bg/primary'
     }
 
     // Saturated mid-tones → accent
@@ -151,17 +153,15 @@ function classifyTextColor(
     const textSecondary = table['text/secondary']?.[mode]
     const textOnAccent = table['text/on-accent']?.[mode]
 
-    const dist = (a: string, b: string) => colorDistance(a.toLowerCase(), b.toLowerCase())
-
     // Text on accent-colored parents
     if (parentFillRef === 'accent') return 'text/on-accent'
 
     // Exact-ish matches first — check accent BEFORE text/primary
     // since accent text (links, CTAs) must not be misclassified as body text
-    if (accent && dist(color, accent) < 50) return 'accent'
-    if (textPrimary && dist(color, textPrimary) < 40) return 'text/primary'
-    if (textSecondary && dist(color, textSecondary) < 40) return 'text/secondary'
-    if (textOnAccent && dist(color, textOnAccent) < 30) return 'text/on-accent'
+    if (accent && colorDist(color, accent) < 20) return 'accent'
+    if (textPrimary && colorDist(color, textPrimary) < 15) return 'text/primary'
+    if (textSecondary && colorDist(color, textSecondary) < 18) return 'text/secondary'
+    if (textOnAccent && colorDist(color, textOnAccent) < 12) return 'text/on-accent'
 
     // Headings → primary text
     if (tag && HEADING_TAGS.has(tag)) return 'text/primary'

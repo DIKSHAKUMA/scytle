@@ -6,6 +6,7 @@
 
 import { getSharedSystemRules } from './system'
 import { getLayoutById } from './layouts'
+import { getExampleForSection } from './examples'
 
 export interface SectionContext {
     /** Section type: hero, features, testimonials, pricing, etc. */
@@ -181,6 +182,12 @@ export function buildSectionPrompt(ctx: SectionContext): string {
         ? `LAYOUT REFERENCE (adapt this pattern, don't copy verbatim):\n\`\`\`html\n${layout.skeleton}\n\`\`\``
         : ''
 
+    // Design reference example (few-shot from Relume-inspired patterns)
+    const example = getExampleForSection(sectionType)
+    const designReference = example
+        ? `DESIGN REFERENCE (use as inspiration, DO NOT copy verbatim — adapt creatively):\n\`\`\`html\n${example}\n\`\`\``
+        : ''
+
     const isApp = ctx.productType === 'app'
     const viewportHint = isApp
         ? 'Design for a mobile screen (390px wide). Use compact spacing.'
@@ -203,6 +210,8 @@ ${imageBlock}
 ${adjacentContext}
 
 ${layoutExample}
+
+${designReference}
 
 SECTION DESCRIPTION: ${ctx.description}
 
