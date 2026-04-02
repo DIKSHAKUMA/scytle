@@ -75,18 +75,6 @@ function ModelIcon({ model, size = 'md' }: { model: ModelDefinition; size?: 'sm'
         )
     }
 
-    if (model.provider === 'anthropic') {
-        return (
-            <div className={cn(
-                sizeClasses,
-                'rounded-lg flex items-center justify-center',
-                'bg-gradient-to-br from-amber-500 to-orange-600'
-            )}>
-                <Sparkles className={cn(iconSize, 'text-white')} />
-            </div>
-        )
-    }
-
     return (
         <div className={cn(sizeClasses, 'rounded-lg bg-muted flex items-center justify-center')}>
             <Sparkles className={cn(iconSize, 'text-muted-foreground')} />

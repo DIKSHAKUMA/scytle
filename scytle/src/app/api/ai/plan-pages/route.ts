@@ -11,7 +11,6 @@ import type { AIModel } from '@/lib/ai/config'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 90 // Claude planning may take longer than 60s default
 
 const PlanPagesSchema = z.object({
     description: z.string().min(1, 'Description is required'),

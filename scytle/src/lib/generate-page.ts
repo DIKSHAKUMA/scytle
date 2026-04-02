@@ -21,8 +21,10 @@ const MODEL_KEY_MAP: Record<string, string> = {
     'fast': 'gemini-flash',
     'balanced': 'gemini-pro',
     'powerful': 'gemini-pro',
-    'claude-sonnet-4-6': 'claude-sonnet',
-    'claude-sonnet': 'claude-sonnet',
+    'claude-sonnet': 'gemini-pro',
+    'claude-opus': 'gemini-pro',
+    'claude-sonnet-4-20250514': 'gemini-pro',
+    'claude-opus-4-20250514': 'gemini-pro',
 }
 
 export interface GeneratePageOptions {

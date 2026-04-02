@@ -89,21 +89,6 @@ export const MODEL_REGISTRY: ModelDefinition[] = [
         version: '3.1',
         badge: 'Preview',
     },
-    {
-        key: 'claude-sonnet',
-        modelId: 'claude-sonnet-4-6',
-        displayName: 'Claude Sonnet 4.6',
-        description: 'Balanced speed and quality',
-        provider: 'anthropic',
-        tier: 'standard',
-        capabilities: ['coding', 'thinking', 'vision'],
-        maxOutputTokens: 16384,
-        contextWindow: 200000,
-        requiresGlobalLocation: false,
-        enabled: true,
-        version: '4.6',
-        badge: 'New',
-    },
 ]
 
 // ─────────────────────────────────────────────
