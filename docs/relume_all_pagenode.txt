@@ -1,0 +1,112 @@
+## MARKETING COMPONENTS ##
+
+↳  Navbars : https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=129-13658&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Footers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=136-5239&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Hero Headers ✨ NEW: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=519-5759&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=519-5701&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Features: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=507-5360&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Careers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1161-5815&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Gallery: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1161-5816&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Contact: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=509-5386&p=f&t=NNnvLbRIPOx2usJ1-0
+
+FAQ: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=513-5486&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Pricing: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=515-5518&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Testimonials: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=515-5576&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Logos: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=518-5640&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Team: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=518-5644&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Timelines: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-58971&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ CTA ✨ NEW: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=509-5308&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Cookie Consent: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4175-49580&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Blog Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=521-5775&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Blog Sections: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=522-5848&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Blog Post Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=3501-6972&p=f&t=NNnvLbRIPOx2usJ1-0
+ 
+Banners:https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1919-275&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Contact Modals:https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1919-1293&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Comparisons: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=5561-997&p=f&t=NNnvLbRIPOx2usJ1-0
+
+   Portfolio Sections:https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=2927-6675&p=f&t=NNnvLbRIPOx2usJ1-0
+
+  Portfolio Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=3283-6839&p=f&t=NNnvLbRIPOx2usJ1-0
+
+    Event Sections: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-80292&p=f&t=NNnvLbRIPOx2usJ1-0
+
+  Event Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-85846&p=f&t=NNnvLbRIPOx2usJ1-0
+
+   Event Item Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-87306&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Stats Sections: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-88105&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ Multi-step Forms: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-91107&p=f&t=NNnvLbRIPOx2usJ1-0
+
+   Long Form Content Section: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=3284-8359&p=f&t=NNnvLbRIPOx2usJ1-0
+
+    Loaders: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=3629-6984&p=f&t=NNnvLbRIPOx2usJ1-0
+
+  Links pages: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4578-7185&p=f&t=NNnvLbRIPOx2usJ1-0
+
+
+
+ ## ECOMMERCE COMPONENTS ##
+
+Product Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=2004-6&p=f&t=NNnvLbRIPOx2usJ1-0
+
+Product List Sections: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=2005-808&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Category Filters: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=2110-248&p=f&t=NNnvLbRIPOx2usJ1-0
+
+
+## APPLICATION COMPONENTS ##
+
+↳  Application Shells: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-116704&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Sidebars: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-121341&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Topbars:https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-122640&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Page Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-122818&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Section Headers: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-123110&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Card Headers:https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-123252&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Sign Up and Log In Pages: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1919-420&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Sign Up and Log In Modals: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=1919-1146&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Onboarding Forms: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-125085&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Tables: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=2322-52&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Stacked Lists: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-133785&p=f&t=NNnvLbRIPOx2usJ1-0
+
+ ↳  Grid Lists: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-135105&p=f&t=NNnvLbRIPOx2usJ1-0
+
+  ↳  Stat Cards: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-138040&p=f&t=NNnvLbRIPOx2usJ1-0
+
+  ↳  Forms: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-139087&p=f&t=NNnvLbRIPOx2usJ1-0
+
+↳  Description Lists: https://www.figma.com/design/eNSBEdE0rQPd3pIU9A4UyL/Relume-Figma-Kit--v3.7---Community-?node-id=4174-142227&p=f&t=NNnvLbRIPOx2usJ1-0
+
+
+
+
