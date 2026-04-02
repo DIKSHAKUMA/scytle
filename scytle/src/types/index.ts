@@ -34,7 +34,7 @@ export const SitemapPageSchema = z.object({
 
 // Product & AI Model
 export const ProductTypeSchema = z.enum(['web', 'app'])
-export const AiModelSchema = z.enum(['gemini-pro', 'gemini-flash'])
+export const AiModelSchema = z.enum(['gemini-pro', 'gemini-flash', 'claude-sonnet'])
 
 // Project
 export const ProjectSchema = z.object({

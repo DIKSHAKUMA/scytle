@@ -37,6 +37,7 @@ export async function generateSection(opts: GenerateSectionOptions): Promise<str
     const systemPrompt = buildSectionPrompt(sectionContext)
 
     try {
+        const isClaudeModel = (model || '').includes('claude')
         const html = await generate(
             `Generate the ${section.type} section HTML now. Output raw HTML only.`,
             [],
@@ -44,7 +45,8 @@ export async function generateSection(opts: GenerateSectionOptions): Promise<str
                 model: (model || 'gemini-flash') as AIModel,
                 systemPrompt,
                 temperature: 0.9,
-                maxTokens: 4096,
+                // Claude proxy is slower — use smaller token budget per section
+                maxTokens: isClaudeModel ? 2048 : 4096,
                 // No thinking mode for individual sections — prompt is focused enough
                 thinking: false,
             }

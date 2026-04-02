@@ -5,6 +5,7 @@ import { generateSection } from '@/lib/ai/pipeline/generate-section'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120 // 2 minutes (default is 60s, sequential Claude needs more)
 
 const SectionSchema = z.object({
     type: z.string(),
@@ -65,13 +66,18 @@ export async function POST(request: NextRequest) {
         const sections = data.sections
         const images = data.images || {}
 
-        console.log(`🏗️ Generating ${sections.length} sections for "${data.pageName}" [model: ${data.model || 'gemini-flash'}]`)
+        const modelKey = data.model || 'gemini-flash'
+        // Claude via proxy can't handle many concurrent requests — use sequential mode
+        const isClaudeModel = modelKey.includes('claude')
+        const concurrency = isClaudeModel ? 2 : sections.length // 2 at a time for Claude, full parallel for Gemini
 
-        // 3. Fire all sections in parallel
-        const sectionPromises = sections.map((section, i) => {
+        console.log(`🏗️ Generating ${sections.length} sections for "${data.pageName}" [model: ${modelKey}, concurrency: ${concurrency}]`)
+
+        // 3. Generate sections (parallel for Gemini, batched for Claude)
+        function buildSectionOpts(i: number) {
+            const section = sections[i]
             const sectionImages = section.imageQuery ? (images[section.imageQuery] || []) : []
-
-            return generateSection({
+            return {
                 section,
                 context: {
                     pageName: data.pageName,
@@ -84,11 +90,29 @@ export async function POST(request: NextRequest) {
                     nextSection: i < sections.length - 1 ? { type: sections[i + 1].type, description: sections[i + 1].description } : undefined,
                     productType: data.productType,
                 },
-                model: data.model,
-            })
-        })
+                model: modelKey,
+            }
+        }
 
-        const sectionHtmls = await Promise.all(sectionPromises)
+        let sectionHtmls: string[]
+
+        if (concurrency >= sections.length) {
+            // Full parallel (Gemini)
+            sectionHtmls = await Promise.all(
+                sections.map((_, i) => generateSection(buildSectionOpts(i)))
+            )
+        } else {
+            // Batched concurrency (Claude)
+            sectionHtmls = new Array(sections.length)
+            for (let start = 0; start < sections.length; start += concurrency) {
+                const batch = sections.slice(start, start + concurrency).map((_, j) =>
+                    generateSection(buildSectionOpts(start + j))
+                )
+                const results = await Promise.all(batch)
+                results.forEach((html, j) => { sectionHtmls[start + j] = html })
+                console.log(`  📦 Batch ${Math.floor(start / concurrency) + 1}: ${results.length} sections done`)
+            }
+        }
 
         console.log(`✅ Generated ${sectionHtmls.length} sections for "${data.pageName}"`)
 
