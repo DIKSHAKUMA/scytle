@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { FilesTab } from './files-tab'
-import { ChatTab } from './chat-tab'
+import { ChatPanel } from '@/components/chat/chat-panel'
 import { PanelLeftClose, PanelLeft } from 'lucide-react'
 
 const TABS = ['Files', 'Chat'] as const
@@ -111,7 +111,7 @@ export function LeftPanel() {
                         <FilesTab />
                     </div>
                     <div className={cn('absolute inset-0', activeTab !== 'Chat' && 'hidden')}>
-                        <ChatTab />
+                        <ChatPanel />
                     </div>
                 </div>
             </div>

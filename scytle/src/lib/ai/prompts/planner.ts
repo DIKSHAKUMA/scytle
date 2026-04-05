@@ -5,7 +5,7 @@
 // that drives the entire parallel pipeline.
 // ============================================================
 
-import { getLayoutSummary } from './layouts'
+// Layout summary removed — old pipeline dependency
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -43,14 +43,9 @@ export interface PagePlan {
 
 export function buildPagePlannerPrompt(productType: 'web' | 'app'): string {
     const isApp = productType === 'app'
-    const layoutList = getLayoutSummary()
-
     return `You are an expert product designer and information architect. Given a user's product description, plan the pages, layout archetypes, and sections for their ${isApp ? 'mobile application' : 'website'}.
 
 OUTPUT: Valid JSON only. No markdown fences, no explanation, no extra text.
-
-AVAILABLE LAYOUT ARCHETYPES:
-${layoutList}
 
 JSON SCHEMA:
 {

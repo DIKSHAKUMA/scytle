@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { ModelSelector } from '@/components/model-selector'
 import { useProjectStore } from '@/store'
-import { getDefaultModel } from '@/lib/ai/models'
+import { DEFAULT_MODEL } from '@/lib/ai/model-defs'
 import { processImageFile, extractBase64Data } from '@/lib/image-utils'
 import type { ImageAttachment } from '@/types'
 // ─────────────────────────────────────────────
@@ -57,7 +57,7 @@ export default function NewProjectPage() {
 
     const [input, setInput] = useState('')
     const [productType, setProductType] = useState<'web' | 'app'>('web')
-    const [selectedModel, setSelectedModel] = useState(getDefaultModel().key)
+    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
     const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([])
     const [isGenerating, setIsGenerating] = useState(false)
     const [generatingStatus, setGeneratingStatus] = useState('')

@@ -1,214 +1,122 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getUserFromJWT, createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
-import { createStreamResponse, ChatMessage } from '@/lib/ai'
-import { ChatMessageSchema } from '@/types'
-import { Query, ID } from 'node-appwrite'
+/**
+ * POST /api/chat — Unified AI Chat Endpoint
+ *
+ * Single endpoint for ALL AI interactions.
+ * Uses Vercel AI SDK streamText with tool calling + agent loop.
+ *
+ * Key v6 API details:
+ *   - convertToModelMessages() converts UIMessage[] → provider format
+ *   - toUIMessageStreamResponse() streams back to useChat on client
+ *   - stepCountIs(8) replaces maxSteps: 8
+ *   - installProxyFixer() merges proxy multi-choice responses
+ */
+
+import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai'
+import { resolveModel, installProxyFixer, DEFAULT_MODEL } from '@/lib/ai/providers'
+import { buildSystemPrompt, type SystemPromptContext } from '@/lib/ai/prompts/system'
+import { ALL_TOOLS } from '@/lib/ai/tools'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
-/**
- * POST /api/chat
- * Send a message to the AI and stream the response
- */
-export async function POST(request: NextRequest) {
-    try {
-        // 1. Authenticate user
-        const authHeader = request.headers.get('Authorization')
-        const user = await getUserFromJWT(authHeader)
+// Install proxy response fixer on module load
+installProxyFixer()
 
-        if (!user) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            )
-        }
-
-        // 2. Validate input
-        const body = await request.json()
-        const validation = ChatMessageSchema.safeParse(body)
-
-        if (!validation.success) {
-            return NextResponse.json(
-                { error: 'Invalid input', details: validation.error.issues },
-                { status: 400 }
-            )
-        }
-
-        const { message, projectId, model } = validation.data
-        const images = validation.data.images
-
-        // 3. Verify user owns the project
-        const { databases } = createAdminClient()
-
-        let project
-        try {
-            project = await databases.getDocument(
-                DATABASE_ID,
-                COLLECTIONS.PROJECTS,
-                projectId
-            )
-        } catch {
-            return NextResponse.json(
-                { error: 'Project not found' },
-                { status: 404 }
-            )
-        }
-
-        if (project.userId !== user.$id) {
-            return NextResponse.json(
-                { error: 'Access denied' },
-                { status: 403 }
-            )
-        }
-
-        // 4. Load conversation history
-        let conversationHistory: ChatMessage[] = []
-        let conversationId: string | null = null
-
-        try {
-            const conversations = await databases.listDocuments(
-                DATABASE_ID,
-                COLLECTIONS.AI_CONVERSATIONS,
-                [Query.equal('projectId', projectId), Query.limit(1)]
-            )
-
-            if (conversations.documents.length > 0) {
-                const conv = conversations.documents[0]
-                conversationId = conv.$id
-
-                // Parse messages from stored JSON string
-                const messagesJson = conv.messages as string
-                if (messagesJson) {
-                    const storedMessages = JSON.parse(messagesJson) as unknown[]
-                    if (Array.isArray(storedMessages)) {
-                        conversationHistory = storedMessages.map((msg: unknown) => {
-                            const m = msg as { role: string; content: string; timestamp: string }
-                            return {
-                                role: m.role as 'user' | 'assistant',
-                                content: m.content,
-                                timestamp: new Date(m.timestamp),
-                            }
-                        })
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('📦 Error loading conversation:', error)
-            // Continue without history
-        }
-
-        // 5. Create streaming response
-        // Always use the design chat prompt when canvasNodes are provided (even if empty).
-        // This enables the AI to generate design JSON actions for new page creation.
-        let systemPrompt: string | undefined = 'default'
-        const hasCanvasContext = validation.data.canvasNodes !== undefined
-
-        if (hasCanvasContext) {
-            const { buildDesignChatPrompt } = await import('@/lib/ai/prompts/chat-design')
-            systemPrompt = buildDesignChatPrompt({
-                canvasNodes: validation.data.canvasNodes || [],
-                selectedNodeId: validation.data.selectedNodeId,
-                hasImages: images && images.length > 0,
-                imageCount: images?.length ?? 0,
-            })
-        }
-
-        // Force vision-capable model when images are attached
-        const hasImages = images && images.length > 0
-        const resolvedModel = hasImages ? 'gemini-pro' : (model || 'gemini-flash')
-        if (hasImages && model && model !== 'gemini-pro') {
-            console.log(`🖼️ Images attached — upgrading model from ${model} to gemini-pro (vision required)`)
-        }
-
-        const stream = createStreamResponse(message, conversationHistory, {
-            model: resolvedModel,
-            systemPrompt: systemPrompt,
-            images,
-        })
-
-        // 6. Save user message to conversation (async, don't await)
-        saveMessageToConversation(
-            databases,
-            projectId,
-            conversationId,
-            { role: 'user', content: message, timestamp: new Date() }
-        ).catch(console.error)
-
-        // 7. Return streaming response
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-            },
-        })
-    } catch (error) {
-        console.error('🤖 Chat API error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+    const {
+      messages,
+      model: modelKey,
+      config,
+      context,
+    } = body as {
+      messages: UIMessage[]
+      model?: string
+      config?: { modelName?: string }
+      context?: SystemPromptContext
     }
+
+    if (!messages || !Array.isArray(messages)) {
+      return new Response(
+        JSON.stringify({ error: 'messages array is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Resolve model — assistant-ui sends config.modelName, fallback to model key
+    const selectedModel = config?.modelName || modelKey || DEFAULT_MODEL
+    let resolvedModel
+    try {
+      resolvedModel = resolveModel(selectedModel)
+    } catch {
+      return new Response(
+        JSON.stringify({ error: `Unknown model: ${selectedModel}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Build system prompt with canvas context
+    const systemPrompt = buildSystemPrompt(context || {})
+
+    // Convert UIMessages (from useChat) → model messages (for the provider)
+    const modelMessages = await convertToModelMessages(messages)
+
+    // Determine if model supports reasoning (Claude via proxy)
+    const isProxy = selectedModel.startsWith('claude')
+
+    // Stream the response with tools + agent loop
+    const result = streamText({
+      model: resolvedModel,
+      system: systemPrompt,
+      messages: modelMessages,
+      stopWhen: stepCountIs(8),
+      tools: ALL_TOOLS,
+      // Enable reasoning for Claude models via OpenAI-compatible provider
+      ...(isProxy && {
+        providerOptions: {
+          openai: { reasoningEffort: 'high' },
+        },
+      }),
+      onStepFinish({ toolCalls }) {
+        if (toolCalls.length > 0) {
+          console.log(
+            `[chat] Step: ${toolCalls.length} tool call(s):`,
+            toolCalls.map(tc => tc.toolName).join(', ')
+          )
+        }
+      },
+    })
+
+    // Stream back as UIMessage format for useChat on the client
+    // sendReasoning: true streams thinking tokens to frontend
+    return result.toUIMessageStreamResponse({ sendReasoning: true })
+  } catch (error: any) {
+    console.error('[chat] Error:', error.message)
+
+    // Handle specific error types
+    if (error.message?.includes('rate limit') || error.status === 429) {
+      return new Response(
+        JSON.stringify({
+          error: 'Rate limited. Try again in a moment or switch to a different model.',
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ error: error.message || 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
 }
 
-/**
- * Save a message to the conversation history
- */
-async function saveMessageToConversation(
-    databases: ReturnType<typeof createAdminClient>['databases'],
-    projectId: string,
-    conversationId: string | null,
-    message: ChatMessage
-) {
-    const messageData = {
-        role: message.role,
-        content: message.content,
-        timestamp: message.timestamp.toISOString(),
-    }
-
-    try {
-        if (conversationId) {
-            // Get existing conversation
-            const conv = await databases.getDocument(
-                DATABASE_ID,
-                COLLECTIONS.AI_CONVERSATIONS,
-                conversationId
-            )
-
-            // Parse existing messages (stored as JSON string)
-            const existingMessages = conv.messages ? JSON.parse(conv.messages as string) : []
-
-            // Add new message
-            const messages = [...existingMessages, messageData]
-
-            // Keep only last 50 messages
-            const trimmedMessages = messages.slice(-50)
-
-            await databases.updateDocument(
-                DATABASE_ID,
-                COLLECTIONS.AI_CONVERSATIONS,
-                conversationId,
-                {
-                    messages: JSON.stringify(trimmedMessages),
-                    updatedAt: new Date().toISOString()
-                }
-            )
-        } else {
-            // Create new conversation
-            await databases.createDocument(
-                DATABASE_ID,
-                COLLECTIONS.AI_CONVERSATIONS,
-                ID.unique(),
-                {
-                    projectId,
-                    messages: JSON.stringify([messageData]),
-                    context: JSON.stringify({}),
-                    updatedAt: new Date().toISOString(),
-                }
-            )
-        }
-    } catch (error) {
-        console.error('📦 Error saving message:', error)
-    }
+// GET endpoint to list available models
+export async function GET() {
+  const { getEnabledModels } = await import('@/lib/ai/providers')
+  const models = getEnabledModels()
+  return new Response(JSON.stringify({ models, default: DEFAULT_MODEL }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
