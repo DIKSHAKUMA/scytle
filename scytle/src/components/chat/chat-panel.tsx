@@ -10,13 +10,16 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
+    useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
-import { useChatRuntime } from '@assistant-ui/react-ai-sdk'
+import { useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
+import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
+import { useAuiState } from '@assistant-ui/store'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { Palette, Code2, Pencil, Check, Loader2, Search } from 'lucide-react'
@@ -25,9 +28,54 @@ import { useStyleGuideStore } from '@/store'
 import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
 import { parseHtmlToNodesViaIframe } from '@/lib/parser'
-import { cn } from '@/lib/utils'
-import type { ScytleNode } from '@/types/canvas'
+import { createProjectThreadAdapter } from '@/lib/chat-persistence'
+import type { ScytleNode, FrameNode } from '@/types/canvas'
 import type { SystemPromptContext } from '@/lib/ai/prompts/system'
+
+// ══════════════════════════════════════════════════════════
+// Active page frame tracking
+// ══════════════════════════════════════════════════════════
+
+/** ID of the page frame that sections are appended into during generation */
+let _activePageFrameId: string | null = null
+
+/** Reset when starting a new conversation / thread */
+export function resetActivePageFrame() {
+    _activePageFrameId = null
+}
+
+function createPageFrame(existingNodes: readonly ScytleNode[]): FrameNode {
+    const id = crypto.randomUUID()
+    let x = 0
+    let y = 0
+    if (existingNodes.length > 0) {
+        const last = existingNodes[existingNodes.length - 1]
+        x = last.x
+        y = last.y + last.height + 100
+    }
+    return {
+        id,
+        type: 'frame',
+        name: 'Page',
+        visible: true,
+        locked: false,
+        x,
+        y,
+        width: 1440,
+        height: 800,
+        sizing: { horizontal: 'fixed', vertical: 'hug' },
+        positioning: 'auto',
+        opacity: 1,
+        rotation: 0,
+        overflow: 'hidden',
+        borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 0, bottomRight: 0 },
+        fills: [{ type: 'solid', color: '#FFFFFF', opacity: 1, visible: true }],
+        shadows: [],
+        children: [],
+        layout: { mode: 'flex', direction: 'column', gap: 0 },
+        padding: { top: 0, right: 0, bottom: 0, left: 0 },
+    }
+}
 
 // ══════════════════════════════════════════════════════════
 // Helpers
@@ -78,6 +126,37 @@ function extractChatFonts(
 // ══════════════════════════════════════════════════════════
 // Tool side-effect handler
 // ══════════════════════════════════════════════════════════
+
+/**
+ * Track which tool invocations have already been applied to the canvas/store.
+ * Keyed by a stable ID derived from the tool result content, so switching
+ * threads and re-mounting the tool UI components doesn't re-apply effects.
+ */
+const _appliedToolCalls = new Set<string>()
+
+/** Build a dedup key for a tool invocation */
+function toolDedupeKey(toolName: string, result: any): string {
+    // Use tool name + a hash of key result fields
+    if (toolName === 'generateSection') {
+        return `gs:${(result?.html ?? '').length}:${result?.sectionType ?? ''}`
+    }
+    if (toolName === 'editNode') {
+        return `en:${result?.nodeId ?? ''}:${(result?.html ?? '').length}`
+    }
+    if (toolName === 'updateTheme') {
+        const t = result?.theme
+        return `ut:${t?.accent ?? ''}:${t?.headingFont ?? ''}`
+    }
+    return `${toolName}:${JSON.stringify(result).length}`
+}
+
+/** Check + mark a tool call as applied. Returns true if already applied. */
+function markToolApplied(toolName: string, result: any): boolean {
+    const key = toolDedupeKey(toolName, result)
+    if (_appliedToolCalls.has(key)) return true
+    _appliedToolCalls.add(key)
+    return false
+}
 
 async function applyToolResult(toolName: string, result: any): Promise<void> {
     if (!result) return
@@ -151,13 +230,23 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 const editorStore = useEditorStore.getState()
-                const existingNodes = editorStore.nodes
-                if (existingNodes.length > 0) {
-                    const lastNode = existingNodes[existingNodes.length - 1]
-                    newNode.x = lastNode.x
-                    newNode.y = lastNode.y + lastNode.height
+
+                // Enforce width and sizing so sections fill the parent frame
+                newNode.width = 1440
+                newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
+
+                // Create a parent page frame on the first section call,
+                // then nest all subsequent sections inside it
+                if (
+                    !_activePageFrameId ||
+                    !findNodeById(editorStore.nodes as ScytleNode[], _activePageFrameId)
+                ) {
+                    const pageFrame = createPageFrame(editorStore.nodes as ScytleNode[])
+                    editorStore.addNode(pageFrame)
+                    _activePageFrameId = pageFrame.id
                 }
-                editorStore.addNode(newNode)
+
+                editorStore.addNode(newNode, _activePageFrameId)
             } catch (e) {
                 console.error('Failed to parse section HTML:', e)
             }
@@ -207,10 +296,8 @@ function StatusIcon({ status }: { status: { type: string } }) {
 const UpdateThemeToolUI = makeAssistantToolUI({
     toolName: 'updateTheme',
     render: ({ args, result, status }) => {
-        const appliedRef = useRef(false)
         useEffect(() => {
-            if (status.type === 'complete' && result && !appliedRef.current) {
-                appliedRef.current = true
+            if (status.type === 'complete' && result && !markToolApplied('updateTheme', result)) {
                 applyToolResult('updateTheme', result)
             }
         }, [status.type, result])
@@ -246,10 +333,8 @@ const UpdateThemeToolUI = makeAssistantToolUI({
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
     render: ({ args, result, status }) => {
-        const appliedRef = useRef(false)
         useEffect(() => {
-            if (status.type === 'complete' && result && !appliedRef.current) {
-                appliedRef.current = true
+            if (status.type === 'complete' && result && !markToolApplied('generateSection', result)) {
                 applyToolResult('generateSection', result)
             }
         }, [status.type, result])
@@ -275,10 +360,8 @@ const GenerateSectionToolUI = makeAssistantToolUI({
 const EditNodeToolUI = makeAssistantToolUI({
     toolName: 'editNode',
     render: ({ args, result, status }) => {
-        const appliedRef = useRef(false)
         useEffect(() => {
-            if (status.type === 'complete' && result && !appliedRef.current) {
-                appliedRef.current = true
+            if (status.type === 'complete' && result && !markToolApplied('editNode', result)) {
                 applyToolResult('editNode', result)
             }
         }, [status.type, result])
@@ -326,12 +409,24 @@ const SearchImagesToolUI = makeAssistantToolUI({
 })
 
 // ══════════════════════════════════════════════════════════
+// Per-thread chat runtime hook (called inside RemoteThreadList)
+// ══════════════════════════════════════════════════════════
+
+function useChatThreadRuntime(transport: InstanceType<typeof DefaultChatTransport>) {
+    // assistant-ui provides thread ID via store — useChat keyed by it
+    const threadId = useAuiState((s) => s.threadListItem.id)
+    const chat = useChat({ id: threadId, transport })
+    return useAISDKRuntime(chat)
+}
+
+// ══════════════════════════════════════════════════════════
 // Main ChatPanel
 // ══════════════════════════════════════════════════════════
 
 export function ChatPanel() {
     const selectedIds = useEditorStore((s) => s.selectedIds)
     const nodes = useEditorStore((s) => s.nodes)
+    const projectId = useEditorStore((s) => s._projectId) ?? 'default'
     const context = buildContext(nodes, selectedIds)
 
     const transport = useMemo(
@@ -342,7 +437,18 @@ export function ChatPanel() {
         [context]
     )
 
-    const runtime = useChatRuntime({ transport })
+    // Persistence adapter — localStorage scoped per project
+    const adapter = useMemo(
+        () => createProjectThreadAdapter(projectId),
+        [projectId],
+    )
+
+    const runtime = useRemoteThreadListRuntime({
+        runtimeHook: function ChatRuntimeHook() {
+            return useChatThreadRuntime(transport)
+        },
+        adapter,
+    })
 
     return (
         <AssistantRuntimeProvider runtime={runtime}>

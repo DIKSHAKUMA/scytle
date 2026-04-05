@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromJWT, createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
 import { Query, ID } from 'node-appwrite'
-import { z } from 'zod'
 
 interface RouteParams {
     params: Promise<{ id: string }>
@@ -9,19 +8,19 @@ interface RouteParams {
 
 /**
  * GET /api/projects/[id]/chat
- * Load chat conversation history for a project
+ * Load all chat threads + messages for a project
+ *
+ * Returns: { threads: StoredThread[], messages: Record<threadId, StoredMessageRepo> }
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { id: projectId } = await params
 
-        // 1. Authenticate
         const user = await getUserFromJWT(request.headers.get('Authorization'))
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // 2. Verify project ownership
         const { databases } = createAdminClient()
 
         let project
@@ -35,7 +34,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }
 
-        // 3. Fetch conversation history
         try {
             const conversations = await databases.listDocuments(
                 DATABASE_ID,
@@ -44,22 +42,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             )
 
             if (conversations.documents.length === 0) {
-                return NextResponse.json({ messages: [] })
+                return NextResponse.json({ threads: [], messages: {} })
             }
 
             const conv = conversations.documents[0]
-            const messagesJson = conv.messages as string
+            const data = conv.messages as string
 
-            if (!messagesJson) {
-                return NextResponse.json({ messages: [] })
+            if (!data) {
+                return NextResponse.json({ threads: [], messages: {} })
             }
 
-            const messages = JSON.parse(messagesJson)
+            const parsed = JSON.parse(data)
 
-            return NextResponse.json({ messages: Array.isArray(messages) ? messages : [] })
+            // Support both old format (flat messages array) and new format (threads + messages)
+            if (Array.isArray(parsed)) {
+                // Old format — return empty (can't convert old format meaningfully)
+                return NextResponse.json({ threads: [], messages: {} })
+            }
+
+            return NextResponse.json({
+                threads: parsed.threads ?? [],
+                messages: parsed.messages ?? {},
+            })
         } catch (error) {
             console.error('📦 Error loading conversation history:', error)
-            return NextResponse.json({ messages: [] })
+            return NextResponse.json({ threads: [], messages: {} })
         }
 
     } catch (error) {
@@ -71,36 +78,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 }
 
-const SaveMessagesSchema = z.object({
-    messages: z.array(z.object({
-        role: z.enum(['user', 'assistant', 'system']),
-        content: z.string(),
-        timestamp: z.string(),
-    })),
-})
-
 /**
  * POST /api/projects/[id]/chat
- * Save full conversation messages for a project
+ * Save all chat threads + messages for a project
+ *
+ * Body: { threads: StoredThread[], messages: Record<threadId, StoredMessageRepo> }
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
     try {
         const { id: projectId } = await params
 
-        // 1. Authenticate
         const user = await getUserFromJWT(request.headers.get('Authorization'))
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // 2. Validate input
         const body = await request.json()
-        const validation = SaveMessagesSchema.safeParse(body)
-        if (!validation.success) {
+        if (!body || typeof body !== 'object') {
             return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
         }
 
-        // 3. Verify project ownership
         const { databases } = createAdminClient()
         let project
         try {
@@ -112,8 +109,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
         }
 
-        // 4. Save messages — keep last 50
-        const trimmed = validation.data.messages.slice(-50)
+        const payload = JSON.stringify({
+            threads: body.threads ?? [],
+            messages: body.messages ?? {},
+        })
 
         try {
             const conversations = await databases.listDocuments(
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     COLLECTIONS.AI_CONVERSATIONS,
                     conversations.documents[0].$id,
                     {
-                        messages: JSON.stringify(trimmed),
+                        messages: payload,
                         updatedAt: new Date().toISOString(),
                     }
                 )
@@ -139,7 +138,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                     ID.unique(),
                     {
                         projectId,
-                        messages: JSON.stringify(trimmed),
+                        messages: payload,
                         context: JSON.stringify({}),
                         updatedAt: new Date().toISOString(),
                     }
