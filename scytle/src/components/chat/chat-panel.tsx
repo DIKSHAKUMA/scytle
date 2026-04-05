@@ -81,18 +81,55 @@ function createPageFrame(existingNodes: readonly ScytleNode[]): FrameNode {
 // Helpers
 // ══════════════════════════════════════════════════════════
 
+/** Check if the concept still has default values (Indigo accent, Raleway/Inter) */
+function isDefaultTheme(concept: { colors: { accents: Array<{ hex: string }> }; typography: { headingFont: string; bodyFont: string } }): boolean {
+    const mainAccent = concept.colors.accents[0]
+    const isDefaultAccent = mainAccent?.hex?.toLowerCase() === '#4f46e5' || mainAccent?.hex?.toLowerCase() === '#6366f1'
+    const isDefaultHeading = concept.typography.headingFont.includes('Raleway')
+    const isDefaultBody = concept.typography.bodyFont.includes('Inter')
+    return isDefaultAccent && isDefaultHeading && isDefaultBody
+}
+
 function buildContext(
     nodes: readonly ScytleNode[],
     selectedIds: string[]
 ): SystemPromptContext {
+    // Read full theme from style guide store
+    const sgState = useStyleGuideStore.getState()
+    const concept = sgState.getActiveConcept()
+    const mainAccent = concept.colors.accents.find(a => a.isMain) ?? concept.colors.accents[0]
+
     return {
         canvasNodes: nodes.map(n => ({
             id: n.id,
             type: n.type,
+            name: n.name,
             parentId: null,
-            htmlSnippet: nodeToHtml(n).substring(0, 200),
+            htmlSnippet: nodeToHtml(n).substring(0, 500),
         })),
         selectedNodeId: selectedIds.length > 0 ? selectedIds[0] : null,
+        // Full theme context — AI sees everything
+        theme: {
+            mode: concept.colors.mode,
+            bgPrimary: concept.colors.bgPrimary,
+            bgSecondary: concept.colors.bgSecondary,
+            textPrimary: concept.colors.textPrimary,
+            textSecondary: concept.colors.textSecondary,
+            textMuted: concept.colors.textMuted ?? concept.colors.textSecondary,
+            textOnAccent: concept.colors.textOnAccent,
+            accent: mainAccent?.hex,
+            accentName: mainAccent?.name,
+            border: concept.colors.border,
+            headingFont: concept.typography.headingFont,
+            bodyFont: concept.typography.bodyFont,
+            headingWeight: String(concept.typography.headingWeight),
+            bodyWeight: String(concept.typography.bodyWeight),
+            buttonStyle: concept.ui.buttonStyle,
+            buttonRadius: String(concept.ui.buttonRadius),
+            cardStyle: concept.ui.cardStyle,
+            cardRadius: String(concept.ui.cardRadius),
+        },
+        themeModified: !isDefaultTheme(concept),
     }
 }
 

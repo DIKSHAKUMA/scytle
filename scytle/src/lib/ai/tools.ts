@@ -78,24 +78,6 @@ Never use generic defaults. Every project deserves unique colors.`,
 })
 
 // ═══════════════════════════════════════════════════════════
-// Tool: READ CURRENT THEME
-// ═══════════════════════════════════════════════════════════
-export const getThemeContext = tool({
-  description: `Read the current theme from the theme panel. Call ONLY when:
-- User says "use my current theme" or "keep the current colors"
-- Editing an existing design (don't overwrite user's choices)
-Do NOT call for new designs — use updateTheme instead.`,
-  inputSchema: z.object({}),
-  execute: async () => {
-    // Returns marker — client reads from useStyleGuideStore and returns data
-    return {
-      action: 'getThemeContext' as const,
-      message: 'Reading theme from store...',
-    }
-  },
-})
-
-// ═══════════════════════════════════════════════════════════
 // Tool: GENERATE SECTION — Write HTML to canvas
 // ═══════════════════════════════════════════════════════════
 export const generateSection = tool({
@@ -141,41 +123,6 @@ export const editNode = tool({
 })
 
 // ═══════════════════════════════════════════════════════════
-// Tool: TAKE SCREENSHOT — AI sees the canvas
-// ═══════════════════════════════════════════════════════════
-export const takeScreenshot = tool({
-  description: `Take a screenshot of the canvas to verify the design visually.
-Call this every 2-3 sections. Check: spacing, typography, contrast, alignment, clipping.
-IMPORTANT: Use this regularly to catch issues early.`,
-  inputSchema: z.object({
-    nodeId: z.string().optional().describe('Specific node to screenshot, or omit for full canvas'),
-  }),
-  execute: async ({ nodeId }) => {
-    // Returns marker — client captures screenshot and returns base64
-    return {
-      action: 'takeScreenshot' as const,
-      nodeId,
-      message: 'Capturing screenshot...',
-    }
-  },
-})
-
-// ═══════════════════════════════════════════════════════════
-// Tool: GET CANVAS STATE — Read current nodes
-// ═══════════════════════════════════════════════════════════
-export const getCanvasState = tool({
-  description: 'Read the current canvas node tree. Use before editing existing designs to understand what exists.',
-  inputSchema: z.object({}),
-  execute: async () => {
-    // Returns marker — client reads from editor-store
-    return {
-      action: 'getCanvasState' as const,
-      message: 'Reading canvas state...',
-    }
-  },
-})
-
-// ═══════════════════════════════════════════════════════════
 // Tool: SEARCH IMAGES — Unsplash (fully server-side)
 // ═══════════════════════════════════════════════════════════
 export const searchImages = tool({
@@ -207,36 +154,10 @@ export const searchImages = tool({
   },
 })
 
-// ═══════════════════════════════════════════════════════════
-// Tool: PLAN PAGES — Multi-page structure
-// ═══════════════════════════════════════════════════════════
-export const planPages = tool({
-  description: 'Plan the structure of a multi-page website or app. Returns page names and section breakdown.',
-  inputSchema: z.object({
-    productDescription: z.string(),
-    productType: z.enum(['web', 'app']).default('web'),
-    pageCount: z.number().min(1).max(8).default(3),
-  }),
-  execute: async ({ productDescription, productType, pageCount }) => {
-    // This is purely informational — AI uses the result to guide generation
-    return {
-      action: 'planPages' as const,
-      productDescription,
-      productType,
-      pageCount,
-      message: `Plan ${pageCount} ${productType} pages for: ${productDescription}`,
-    }
-  },
-})
-
 // ─── Export all tools ────────────────────────────────────────────
 export const ALL_TOOLS = {
   updateTheme,
-  getThemeContext,
   generateSection,
   editNode,
-  takeScreenshot,
-  getCanvasState,
   searchImages,
-  planPages,
 } as const

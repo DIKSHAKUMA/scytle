@@ -7,9 +7,6 @@ export { autofixHtml, assemblePage } from './autofix'
 export { searchImages, batchSearchImages } from './unsplash'
 export type { UnsplashImage, ImageQuery, ImageMap } from './unsplash'
 
-// Prompts (types)
-export type { PagePlan, PlannedPage, PlannedSection } from './prompts/planner'
-
 // New system
 export { ALL_TOOLS } from './tools'
 export { MODELS, DEFAULT_MODEL } from './model-defs'
