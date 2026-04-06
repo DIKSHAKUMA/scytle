@@ -105,7 +105,14 @@ The parser links these values to theme variables for live editing later.`,
 // Tool: EDIT NODE — Replace existing node HTML
 // ═══════════════════════════════════════════════════════════
 export const editNode = tool({
-  description: 'Replace the HTML of an existing canvas node. Use for refinements and fixes. Keep the same theme colors.',
+  description: `Replace the HTML of an existing canvas node. Use this tool when:
+- The user has a node SELECTED and asks to modify, change, update, redesign, or fix it
+- The user references a specific existing section by name ("change the navbar", "update the hero")
+- You need to fix or improve a previously generated section
+
+IMPORTANT: If a node is selected in CURRENT CANVAS, default to editNode over generateSection.
+Keep the same theme colors. Preserve the node's role (don't turn a hero into a footer).
+Use the selected node's HTML (shown in context) as your starting point.`,
   inputSchema: z.object({
     nodeId: z.string().describe('ID of the node to replace'),
     html: z.string().describe('New HTML+Tailwind for this node'),

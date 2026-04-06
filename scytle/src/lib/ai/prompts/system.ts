@@ -19,6 +19,7 @@ export interface SystemPromptContext {
     htmlSnippet?: string
   }>
   selectedNodeId?: string | null
+  selectedNodeHtml?: string | null
   hasImages?: boolean
   imageCount?: number
   projectDescription?: string
@@ -276,10 +277,12 @@ Build in order: nav → hero → features → stats/social-proof → cta → foo
 - Include inline font-family styles for custom fonts
 - Section should be full-width (w-full) with generous vertical padding (py-20 to py-32)
 
-## editNode (for refinements)
-Replaces an existing canvas node's HTML. Use for fixes and improvements.
+## editNode (for modifying existing sections)
+Replaces an existing canvas node's HTML. Use for fixes, improvements, and redesigns.
+- ALWAYS use this when a node is selected and the user asks to change it
 - Keep the same theme colors
 - Preserve the node's role (don't turn a hero into a footer)
+- Use the selected node's HTML as your starting base
 
 ## searchImages (for real photos)
 Searches Unsplash for relevant photos. Returns URLs for <img> tags.
@@ -319,7 +322,7 @@ You MUST call updateTheme() first to set a distinctive, contextual theme before 
 No theme data available. Call updateTheme() first before generating any sections.`)
   }
 
-  // Canvas state
+  // Canvas state + selection awareness
   if (hasNodes) {
     const simplified = context.canvasNodes!.map(n => ({
       id: n.id,
@@ -331,6 +334,29 @@ No theme data available. Call updateTheme() first before generating any sections
     sections.push(`# CURRENT CANVAS
 ${JSON.stringify(simplified, null, 2)}
 Selected: ${hasSelection ? context.selectedNodeId : 'None'}`)
+
+    // Selection-aware routing — critical for edit vs generate decision
+    if (hasSelection && context.selectedNodeHtml) {
+      sections.push(`# SELECTED NODE — EDIT MODE
+
+A node is selected on the canvas: **${context.selectedNodeId}**
+
+ROUTING RULES (MANDATORY):
+- If the user asks to MODIFY, CHANGE, UPDATE, REDESIGN, FIX, or IMPROVE the selected node
+  → Use editNode with nodeId="${context.selectedNodeId}"
+  → Do NOT use generateSection — that creates a NEW section
+- If the user asks to ADD something NEW (e.g., "add a pricing section")
+  → Use generateSection as normal
+- If unclear whether the user means the selection or something new
+  → Default to editNode for the selected node
+
+The selected node's current HTML is below. Use it as the base for your edit —
+preserve the overall structure and theme colors, apply the user's requested changes:
+
+\`\`\`html
+${context.selectedNodeHtml}
+\`\`\``)
+    }
   } else {
     sections.push(`# CURRENT CANVAS
 Canvas is empty — no nodes yet. Creating from scratch.

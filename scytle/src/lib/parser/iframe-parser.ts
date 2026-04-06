@@ -2093,7 +2093,10 @@ function hasVisualProperties(cs: CSSStyleDeclaration): boolean {
         parseFloat(cs.paddingRight) > 0 ||
         parseFloat(cs.paddingBottom) > 0 ||
         parseFloat(cs.paddingLeft) > 0
-    const hasBorderRadius = parseFloat(cs.borderTopLeftRadius) > 0
+    const hasBorderRadius = parseFloat(cs.borderTopLeftRadius) > 0 ||
+        parseFloat(cs.borderTopRightRadius) > 0 ||
+        parseFloat(cs.borderBottomLeftRadius) > 0 ||
+        parseFloat(cs.borderBottomRightRadius) > 0
 
     return hasBg || hasBorder || hasShadow || hasBgImage || hasPadding || hasBorderRadius
 }

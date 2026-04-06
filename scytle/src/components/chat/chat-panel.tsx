@@ -99,6 +99,16 @@ function buildContext(
     const concept = sgState.getActiveConcept()
     const mainAccent = concept.colors.accents.find(a => a.isMain) ?? concept.colors.accents[0]
 
+    // Get full HTML for the selected node (untruncated) so AI can rewrite it
+    const selectedId = selectedIds.length > 0 ? selectedIds[0] : null
+    let selectedNodeHtml: string | null = null
+    if (selectedId) {
+        const selectedNode = findNodeById(nodes as ScytleNode[], selectedId)
+        if (selectedNode) {
+            selectedNodeHtml = nodeToHtml(selectedNode)
+        }
+    }
+
     return {
         canvasNodes: nodes.map(n => ({
             id: n.id,
@@ -107,7 +117,8 @@ function buildContext(
             parentId: null,
             htmlSnippet: nodeToHtml(n).substring(0, 500),
         })),
-        selectedNodeId: selectedIds.length > 0 ? selectedIds[0] : null,
+        selectedNodeId: selectedId,
+        selectedNodeHtml,
         // Full theme context — AI sees everything
         theme: {
             mode: concept.colors.mode,
