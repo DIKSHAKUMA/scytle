@@ -815,6 +815,8 @@ export function CanvasPaddingZones({
                 }
 
                 setInlineInput({ side, x, y, value: currentPad[side] })
+                setHoveredSide(null)
+                setPaddingOverlay(null)
             }
         }
 
@@ -902,9 +904,8 @@ export function CanvasPaddingZones({
         <>
             {/* Hover-detection padding zones — pointer-events:auto at z:999
                 (below resize handles at z:1000) so they detect hover everywhere
-                EXCEPT where resize handles are. No onPointerDown — clicks pass
-                through to resize handles or canvas underneath. Shows the blue
-                hatch pattern when the cursor enters the padding area. */}
+                EXCEPT where resize handles are. onPointerDown opens the inline
+                input when clicking anywhere on the blue hatch area. */}
             {zones.map(({ side, style }) => (
                 <div
                     key={`hover-${side}`}
@@ -917,11 +918,12 @@ export function CanvasPaddingZones({
                     }}
                     onMouseEnter={() => handleMouseEnter(side)}
                     onMouseLeave={() => handleMouseLeave(side)}
+                    onPointerDown={(e) => handlePointerDown(side, e)}
                 />
             ))}
 
-            {/* Visual hatch overlay — shown on hovered side, pointer-events:none */}
-            {hoveredSide && (() => {
+            {/* Visual hatch overlay — shown on hovered side, hidden when inline input is active */}
+            {hoveredSide && !inlineInput && (() => {
                 const zone = zones.find(z => z.side === hoveredSide)
                 if (!zone) return null
                 return (
@@ -931,6 +933,7 @@ export function CanvasPaddingZones({
                         style={{
                             position: 'absolute',
                             ...zone.style,
+                            background: BLUE_HATCH,
                             zIndex: 998,
                         }}
                     />
@@ -1085,6 +1088,7 @@ export function CanvasPaddingZones({
                     y={inlineInput.y}
                     value={inlineInput.value}
                     color="blue"
+                    side={inlineInput.side}
                     onSubmit={handleInlineInputChange}
                     onClose={() => setInlineInput(null)}
                 />
@@ -1099,12 +1103,13 @@ export function CanvasPaddingZones({
 // ============================================================
 
 function InlineValueInput({
-    x, y, value, color, onSubmit, onClose,
+    x, y, value, color, side, onSubmit, onClose,
 }: {
     x: number
     y: number
     value: number
     color: 'blue' | 'pink'
+    side?: PaddingSide | 'gap-row' | 'gap-col'
     onSubmit: (v: number) => void
     onClose: () => void
 }) {
@@ -1146,8 +1151,9 @@ function InlineValueInput({
         }
     }
 
-    const borderColor = color === 'blue' ? 'rgba(59, 130, 246, 0.6)' : 'rgba(236, 72, 153, 0.6)'
     const iconColor = color === 'blue' ? '#3b82f6' : '#ec4899'
+    const isHorizontalSide = side === 'left' || side === 'right'
+    const isGap = side === 'gap-row' || side === 'gap-col'
 
     return (
         <div
@@ -1166,15 +1172,33 @@ function InlineValueInput({
                     alignItems: 'center',
                     gap: 4,
                     background: '#1e1e2e',
-                    border: `1px solid ${borderColor}`,
                     borderRadius: 4,
-                    padding: '2px 6px',
+                    padding: '3px 8px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    whiteSpace: 'nowrap',
                 }}
             >
-                <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
-                    <rect x="1" y="1" width="8" height="8" rx="1" stroke={iconColor} strokeWidth="1.5" fill="none" />
-                </svg>
+                {isGap ? (
+                    <svg width={12} height={10} viewBox="0 0 12 10" fill="none">
+                        <rect x="0" y="1" width="4" height="8" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
+                        <rect x="8" y="1" width="4" height="8" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
+                        <line x1="5" y1="5" x2="7" y2="5" stroke={iconColor} strokeWidth="1" />
+                    </svg>
+                ) : (
+                    <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                        {isHorizontalSide ? (
+                            <>
+                                <line x1="1" y1="0" x2="1" y2="10" stroke={iconColor} strokeWidth="1.5" />
+                                <rect x="3" y="1" width="6" height="8" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
+                            </>
+                        ) : (
+                            <>
+                                <line x1="0" y1="1" x2="10" y2="1" stroke={iconColor} strokeWidth="1.5" />
+                                <rect x="1" y="3" width="8" height="6" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
+                            </>
+                        )}
+                    </svg>
+                )}
                 <input
                     ref={inputRef}
                     type="text"
@@ -1187,15 +1211,15 @@ function InlineValueInput({
                     }}
                     onBlur={submit}
                     style={{
-                        width: 48,
+                        width: 40,
                         background: 'transparent',
                         border: 'none',
                         outline: 'none',
-                        color: '#e0e0e0',
+                        color: '#ffffff',
                         fontSize: 11,
                         fontFamily: 'system-ui',
-                        fontWeight: 500,
-                        textAlign: 'center',
+                        fontWeight: 600,
+                        textAlign: 'left',
                         padding: 0,
                     }}
                 />
@@ -1767,6 +1791,7 @@ export function CanvasGapZones({
                     y={inlineInput.y}
                     value={inlineInput.value}
                     color="pink"
+                    side={isColumn ? 'gap-col' : 'gap-row'}
                     onSubmit={handleInlineSubmit}
                     onClose={() => setInlineInput(null)}
                 />
