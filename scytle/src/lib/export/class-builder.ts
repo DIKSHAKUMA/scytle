@@ -55,6 +55,18 @@ function getReverseColorMap(): Record<string, string> {
 export function buildFrameClasses(node: FrameNode): string {
     const c: string[] = []
 
+    // Width / height — emit explicit size classes for fixed-dimension frames.
+    // Without these, the browser auto-sizes the element differently from the canvas,
+    // causing child elements (especially icons/buttons) to shift position.
+    if (node.sizing.horizontal === 'fixed' && node.width) {
+        c.push(sizeToClass('w', node.width))
+    } else if (node.sizing.horizontal === 'fill') {
+        c.push('w-full')
+    }
+    if (node.sizing.vertical === 'fixed' && node.height) {
+        c.push(sizeToClass('h', node.height))
+    }
+
     // Layout
     buildLayoutClasses(node.layout, c)
 
@@ -122,6 +134,13 @@ export function buildTextClasses(node: TextNode): string {
     if (typeof node.lineHeight === 'number') {
         const lhClass = lineHeightToClass(node.lineHeight)
         if (lhClass) c.push(lhClass)
+    }
+
+    // White-space — must match the canvas TextRenderer behaviour:
+    // 'width-and-height' (Figma "Auto width") = single line, no wrap
+    // 'height' / 'none' = wraps inside fixed width
+    if (node.autoResize === 'width-and-height') {
+        c.push('whitespace-nowrap')
     }
 
     // Text color
