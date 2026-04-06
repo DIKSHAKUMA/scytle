@@ -272,19 +272,32 @@ export class IframeRenderer {
 
     /**
      * Wait for Google Fonts to load using the FontFaceSet API.
+     *
+     * The tricky part: `doc.fonts.ready` can resolve instantly if
+     * the Google Fonts CSS `<link>` hasn't been parsed yet (no font
+     * faces declared = nothing to wait for). So we first wait for
+     * at least one FontFace to appear, THEN wait for them to load.
      * Falls back to a timeout if the API isn't available.
      */
     private async waitForFonts(doc: Document): Promise<void> {
         try {
             if (doc.fonts && typeof doc.fonts.ready !== 'undefined') {
-                // Use the standard FontFaceSet API
+                // Phase 1: Wait for Google Fonts CSS to declare font faces.
+                // The <link> tag fetches a CSS file which adds FontFace entries.
+                // Poll until at least one FontFace exists, or timeout.
+                const fontFaceDeadline = Date.now() + 2000
+                while (doc.fonts.size === 0 && Date.now() < fontFaceDeadline) {
+                    await new Promise(r => setTimeout(r, 100))
+                }
+
+                // Phase 2: Now that font faces are declared, wait for them to load.
                 await Promise.race([
                     doc.fonts.ready,
                     new Promise(r => setTimeout(r, FONT_TIMEOUT)),
                 ])
             } else {
                 // fonts.ready not available — fallback wait
-                await new Promise(r => setTimeout(r, 300))
+                await new Promise(r => setTimeout(r, 1500))
             }
         } catch {
             // Font loading failed — proceed anyway (text will use fallback fonts)

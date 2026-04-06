@@ -44,24 +44,39 @@ export function resetActivePageFrame() {
     _activePageFrameId = null
 }
 
-function createPageFrame(existingNodes: readonly ScytleNode[]): FrameNode {
+function createPageFrame(
+    existingNodes: readonly ScytleNode[],
+    width: number = 1440,
+    name: string = 'Page',
+): FrameNode {
     const id = crypto.randomUUID()
     let x = 0
     let y = 0
+
+    // Auto-position: place to the RIGHT of all existing frames, top-aligned.
+    // Mirrors Paper.design's create_artboard behavior (horizontal flow, 100px gap).
     if (existingNodes.length > 0) {
-        const last = existingNodes[existingNodes.length - 1]
-        x = last.x
-        y = last.y + last.height + 100
+        // Find the rightmost edge of all top-level frames
+        let maxRight = 0
+        let minTop = 0
+        for (const node of existingNodes) {
+            const right = node.x + node.width
+            if (right > maxRight) maxRight = right
+            if (node.y < minTop) minTop = node.y
+        }
+        x = maxRight + 100 // 100px gap (Paper uses 80px)
+        y = minTop          // Top-align with existing frames
     }
+
     return {
         id,
         type: 'frame',
-        name: 'Page',
+        name,
         visible: true,
         locked: false,
         x,
         y,
-        width: 1440,
+        width,
         height: 800,
         sizing: { horizontal: 'fixed', vertical: 'hug' },
         positioning: 'auto',
@@ -186,7 +201,7 @@ const _appliedToolCalls = new Set<string>()
 function toolDedupeKey(toolName: string, result: any): string {
     // Use tool name + a hash of key result fields
     if (toolName === 'generateSection') {
-        return `gs:${(result?.html ?? '').length}:${result?.sectionType ?? ''}`
+        return `gs:${(result?.html ?? '').length}:${result?.sectionType ?? ''}:${result?.width ?? 1440}`
     }
     if (toolName === 'editNode') {
         return `en:${result?.nodeId ?? ''}:${(result?.html ?? '').length}`
@@ -265,13 +280,14 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
         }
 
         case 'generateSection': {
-            const { html, sectionType } = result
+            const { html, sectionType, newPage, pageName, width, parentNodeId } = result
             if (!html) return
+            const frameWidth = typeof width === 'number' && width > 0 ? width : 1440
             try {
                 const sgState = useStyleGuideStore.getState()
                 const fonts = extractChatFonts(html, sgState)
                 const parsed = await parseHtmlToNodesViaIframe(html, sectionType || 'Section', {
-                    rootWidth: 1440,
+                    rootWidth: frameWidth,
                     variableTable: sgState.variableTable,
                     themeMode: sgState.themeMode,
                     fonts,
@@ -280,21 +296,36 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const editorStore = useEditorStore.getState()
 
                 // Enforce width and sizing so sections fill the parent frame
-                newNode.width = 1440
+                newNode.width = frameWidth
                 newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
 
-                // Create a parent page frame on the first section call,
-                // then nest all subsequent sections inside it
-                if (
+                // If AI explicitly requests a new page, or no page frame exists yet,
+                // create a new page frame. This enables multi-page designs
+                // (e.g., Home page + Pricing page as separate frames on canvas).
+                const needsNewPage = newPage === true ||
                     !_activePageFrameId ||
                     !findNodeById(editorStore.nodes as ScytleNode[], _activePageFrameId)
-                ) {
-                    const pageFrame = createPageFrame(editorStore.nodes as ScytleNode[])
+
+                if (needsNewPage) {
+                    const pageFrame = createPageFrame(
+                        editorStore.nodes as ScytleNode[],
+                        frameWidth,
+                        pageName || sectionType || 'Page',
+                    )
                     editorStore.addNode(pageFrame)
                     _activePageFrameId = pageFrame.id
                 }
 
-                editorStore.addNode(newNode, _activePageFrameId)
+                // If parentNodeId is a valid existing node (not "root"), use it directly
+                let targetParent = _activePageFrameId
+                if (parentNodeId && parentNodeId !== 'root') {
+                    const parentExists = findNodeById(editorStore.nodes as ScytleNode[], parentNodeId)
+                    if (parentExists) {
+                        targetParent = parentNodeId
+                    }
+                }
+
+                editorStore.addNode(newNode, targetParent ?? undefined)
             } catch (e) {
                 console.error('Failed to parse section HTML:', e)
             }

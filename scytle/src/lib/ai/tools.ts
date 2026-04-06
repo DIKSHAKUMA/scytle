@@ -84,18 +84,31 @@ export const generateSection = tool({
   description: `Generate HTML+Tailwind for ONE visual section and add it to the canvas.
 Call once per section: nav, hero, features, stats, testimonials, pricing, cta, footer.
 CRITICAL: Use the EXACT hex color values from your updateTheme call.
-The parser links these values to theme variables for live editing later.`,
+The parser links these values to theme variables for live editing later.
+
+MULTI-PAGE: Set newPage=true when starting a new page (e.g., user asks for "pricing page"
+after you already built a "home page"). This creates a separate page frame on the canvas.
+The FIRST section of any conversation automatically creates a new page — no need to set newPage for it.
+
+WIDTH: Default is 1440 (desktop). Use 390 for mobile app designs, 768 for tablet.
+When the user says "mobile app", "iPhone", "phone design" → use width=390.
+When the user says "tablet" → use width=768.`,
   inputSchema: z.object({
     sectionType: z.string().describe('Section type: "nav", "hero", "features", "stats", "cta", "footer", etc.'),
     html: z.string().describe('Complete HTML+Tailwind. Use exact hex colors from updateTheme. Include inline font-family styles.'),
-    parentNodeId: z.string().default('root').describe('Canvas node ID to append to. Use "root" for top-level.'),
+    newPage: z.boolean().default(false).describe('Set true to create a NEW page frame (e.g., starting a separate Pricing page). First section auto-creates a page.'),
+    pageName: z.string().optional().describe('Name for the new page frame when newPage=true. E.g., "Pricing", "About", "Mobile - Home"'),
+    width: z.number().default(1440).describe('Page frame width in px. Desktop=1440, Tablet=768, Mobile=390.'),
+    parentNodeId: z.string().default('root').describe('Canvas node ID to append to. Use "root" for the current page frame.'),
   }),
-  execute: async ({ sectionType, html, parentNodeId }) => {
-    // Returns HTML — client parses via iframe and adds to editor-store
+  execute: async ({ sectionType, html, newPage, pageName, width, parentNodeId }) => {
     return {
       action: 'generateSection' as const,
       sectionType,
       html,
+      newPage,
+      pageName,
+      width,
       parentNodeId,
     }
   },

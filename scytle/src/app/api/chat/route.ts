@@ -7,7 +7,7 @@
  * Key v6 API details:
  *   - convertToModelMessages() converts UIMessage[] → provider format
  *   - toUIMessageStreamResponse() streams back to useChat on client
- *   - stepCountIs(8) replaces maxSteps: 8
+ *   - stepCountIs(20) — generous headroom for full page generation
  *   - installProxyFixer() merges proxy multi-choice responses
  */
 
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
       model: resolvedModel,
       system: systemPrompt,
       messages: modelMessages,
-      stopWhen: stepCountIs(8),
+      stopWhen: stepCountIs(20),
       tools: ALL_TOOLS,
       // Enable reasoning for Claude models via OpenAI-compatible provider
       ...(isProxy && {
