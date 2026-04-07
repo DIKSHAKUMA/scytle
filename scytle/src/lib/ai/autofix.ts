@@ -1,8 +1,8 @@
 // ============================================================
 // HTML Autofix Pass
 // Fast regex/string pass that fixes common AI generation mistakes
-// before the HTML is parsed into ScytleNodes via iframe.
-// Runs after section assembly, before iframe parsing.
+// before the HTML is parsed into ScytleNodes.
+// Runs after section assembly, before Tailwind-to-inline + DOMParser.
 // ============================================================
 
 /**
@@ -17,20 +17,31 @@ function stripMarkdownFences(html: string): string {
 }
 
 /**
+ * Void elements that are legitimately self-closing.
+ */
+const VOID_ELEMENTS = new Set([
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+    'link', 'meta', 'param', 'source', 'track', 'wbr',
+])
+
+/**
+ * Fix self-closing non-void tags: <div /> → <div></div>
+ * DOMParser treats self-closing non-void tags incorrectly.
+ */
+function fixSelfClosingTags(html: string): string {
+    return html.replace(/<([\w-]+)(\s[^>]*)?\s*\/>/gi, (match, tag, attrs = '') =>
+        VOID_ELEMENTS.has(tag.toLowerCase()) ? match : `<${tag}${attrs}></${tag}>`
+    )
+}
+
+/**
  * Remove forbidden Tailwind classes that break the canvas parser.
  * Operates on class attribute values.
  */
 function cleanClassAttribute(classStr: string): string {
-    // Split into individual classes
     const classes = classStr.split(/\s+/).filter(Boolean)
 
     const forbidden = new Set([
-        // Margins (all forms)
-        ...classes.filter(c => /^-?m[xytblr]?-/.test(c)),
-        // max-w constraints on sections
-        ...classes.filter(c => /^max-w-/.test(c)),
-        // Space utilities
-        ...classes.filter(c => /^-?space-[xy]-/.test(c)),
         // Divide, ring, backdrop
         ...classes.filter(c => /^divide-/.test(c)),
         ...classes.filter(c => /^ring-/.test(c)),
@@ -62,19 +73,13 @@ export function autofixHtml(html: string): string {
     // 1. Strip markdown fences
     fixed = stripMarkdownFences(fixed)
 
-    // 2. Clean all class attributes
+    // 2. Fix self-closing non-void tags
+    fixed = fixSelfClosingTags(fixed)
+
+    // 3. Clean all class attributes
     fixed = fixed.replace(/class="([^"]*)"/g, (_match, classStr) => {
         const cleaned = cleanClassAttribute(classStr)
         return `class="${cleaned}"`
-    })
-
-    // 3. Remove inline margin styles
-    fixed = fixed.replace(/style="[^"]*"/g, (styleAttr) => {
-        // Keep font-family styles, remove margin/max-width styles
-        const cleaned = styleAttr
-            .replace(/margin[^;]*;?/gi, '')
-            .replace(/max-width[^;]*;?/gi, '')
-        return cleaned
     })
 
     // 4. Ensure all images have alt text

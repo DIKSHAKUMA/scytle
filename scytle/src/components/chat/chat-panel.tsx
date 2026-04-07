@@ -27,7 +27,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
 import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
-import { parseHtmlToNodesViaIframe } from '@/lib/parser'
+import { parseHtml } from '@/lib/parser'
 import { createProjectThreadAdapter } from '@/lib/chat-persistence'
 import type { ScytleNode, FrameNode } from '@/types/canvas'
 import type { SystemPromptContext } from '@/lib/ai/prompts/system'
@@ -286,7 +286,7 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
             try {
                 const sgState = useStyleGuideStore.getState()
                 const fonts = extractChatFonts(html, sgState)
-                const parsed = await parseHtmlToNodesViaIframe(html, sectionType || 'Section', {
+                const parsed = await parseHtml(html, sectionType || 'Section', {
                     rootWidth: frameWidth,
                     variableTable: sgState.variableTable,
                     themeMode: sgState.themeMode,
@@ -341,7 +341,7 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const existingNode = findNodeById(editorStore.nodes as ScytleNode[], nodeId)
                 if (!existingNode) return
                 const fonts = extractChatFonts(html, sgState)
-                const parsed = await parseHtmlToNodesViaIframe(html, existingNode.name, {
+                const parsed = await parseHtml(html, existingNode.name, {
                     rootWidth: existingNode.width,
                     variableTable: sgState.variableTable,
                     themeMode: sgState.themeMode,

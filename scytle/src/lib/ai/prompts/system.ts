@@ -191,8 +191,8 @@ sans-serif (as the only font), Poppins, Montserrat
   // ─── Section 6: Parser Capabilities ──────────────────────────
   sections.push(`# PARSER CAPABILITIES (what works on the canvas)
 
-The HTML you generate gets rendered in an iframe and parsed to canvas nodes.
-The parser reads getComputedStyle() values, so all valid CSS works.
+The HTML you generate is parsed directly into canvas nodes.
+Both Tailwind classes and inline styles are fully supported.
 
 ## FULLY SUPPORTED — use freely
 - Flexbox: flex, flex-col, flex-row, flex-wrap, items-*, justify-*, gap-*, grow, shrink
@@ -214,6 +214,16 @@ The parser reads getComputedStyle() values, so all valid CSS works.
 - Overflow: overflow-hidden (overflow-auto/scroll render as visible — no scrollbars)
 - Inline styles: style="font-family: 'Font'", style="background: linear-gradient(...)"
 - SVG: Simple SVGs (≤8 paths) → vector nodes, complex SVGs → data URI images
+- Icons: Use inline SVG icons from Lucide (https://lucide.dev). Copy the SVG markup directly.
+  Examples:
+  <!-- Arrow Right -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+  <!-- Star -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+  <!-- Menu -->
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+  Use stroke="currentColor" so icons inherit the parent text color via the style attribute.
+  Size icons with width/height attributes (16, 20, 24, 32). Common sizes: 20px for inline, 24px for standalone.
 - HTML elements: <section>, <nav>, <header>, <footer>, <div>, <h1>-<h6>, <p>, <span>,
   <img> with src, <hr> dividers, <br> line breaks, <button>, <a>, <ul>, <li>
 - Flex children sizing: flex-1, grow, shrink, basis-*
@@ -233,6 +243,13 @@ The parser reads getComputedStyle() values, so all valid CSS works.
 - HTML <table> → use flex/grid layout instead
 - CSS columns (column-count) → use grid instead
 
+## COMPLEX VISUALS — how to handle
+- Maps: Use a placeholder image (searchImages "satellite map city") inside a styled frame. Do NOT leave empty colored boxes.
+- Charts/graphs: Build with simple HTML+CSS (flex bars for bar charts, nested divs for progress). Do NOT use canvas/JS charting libraries.
+- Illustrations: Use Unsplash photos or build simple geometric compositions with colored divs and border-radius.
+- Video embeds: Use an image thumbnail with a play button SVG overlay.
+- Interactive elements (tabs, accordions, carousels): Design the VISIBLE state only. Show all content statically or pick the most compelling state.
+
 ## IMPORTANT NOTES
 - Default canvas width is 1440px (desktop). Use the width parameter for mobile (390px) or tablet (768px)
 - Use bg-[#hex] and text-[#hex] format (not Tailwind color names) so the parser
@@ -250,7 +267,7 @@ The parser reads getComputedStyle() values, so all valid CSS works.
 - NO "Lorem ipsum" — write real, compelling copy that matches the brand voice
 - NO generic CTAs: "Learn more", "Click here", "Submit"
   Instead: "Start Free Trial", "See Pricing", "Book a Demo", "Get Started in 60s"
-- NO emoji as icons — use text characters, SVG, or descriptive text
+- NO emoji as icons — use inline SVG icons from Lucide (see SUPPORTED list above)
 - NO AI cliche copy: "Seamless", "Elevate", "Revolutionize", "Unlock", "Empower",
   "Cutting-edge", "Next-gen", "Supercharge", "Game-changing"
 - Headlines should be punchy and specific, not vague marketing fluff
