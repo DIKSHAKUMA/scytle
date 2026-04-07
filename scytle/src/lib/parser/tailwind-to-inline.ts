@@ -9,6 +9,8 @@
  */
 
 import { __unstable__loadDesignSystem } from 'tailwindcss'
+import * as fs from 'fs'
+import * as path from 'path'
 
 // ─── Types ───────────────────────────────────────
 
@@ -25,33 +27,6 @@ type DesignSystem = Awaited<ReturnType<typeof __unstable__loadDesignSystem>>
 let _ds: DesignSystem | null = null
 let _dsPromise: Promise<DesignSystem> | null = null
 
-/**
- * Read a file from node_modules using dynamic import to avoid turbopack
- * intercepting fs/path calls. We use eval to hide from the bundler.
- */
-function readNodeModulesFile(modulePath: string): { path: string; base: string; content: string } {
-  // eslint-disable-next-line no-eval
-  const _fs = eval('require')('fs') as typeof import('fs')
-  // eslint-disable-next-line no-eval
-  const _path = eval('require')('path') as typeof import('path')
-
-  let dir = process.cwd()
-  for (let i = 0; i < 10; i++) {
-    const candidate = _path.join(dir, 'node_modules', modulePath)
-    if (_fs.existsSync(candidate)) {
-      return {
-        path: candidate,
-        base: _path.dirname(candidate),
-        content: _fs.readFileSync(candidate, 'utf-8'),
-      }
-    }
-    const parent = _path.dirname(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-  throw new Error(`Could not find ${modulePath} in node_modules`)
-}
-
 async function getDesignSystem(): Promise<DesignSystem> {
   if (_ds) return _ds
   if (_dsPromise) return _dsPromise
@@ -59,24 +34,19 @@ async function getDesignSystem(): Promise<DesignSystem> {
   _dsPromise = __unstable__loadDesignSystem('@import "tailwindcss";', {
     loadStylesheet: async (id: string, base: string) => {
       if (id === 'tailwindcss') {
-        return readNodeModulesFile('tailwindcss/index.css')
-      }
-      // For other imports (e.g., tailwindcss sub-imports), resolve relative to base
-      // eslint-disable-next-line no-eval
-      const _fs = eval('require')('fs') as typeof import('fs')
-      // eslint-disable-next-line no-eval
-      const _path = eval('require')('path') as typeof import('path')
-
-      const resolved = _path.resolve(base, id)
-      if (_fs.existsSync(resolved)) {
+        const cssPath = require.resolve('tailwindcss/index.css')
         return {
-          path: resolved,
-          base: _path.dirname(resolved),
-          content: _fs.readFileSync(resolved, 'utf-8'),
+          path: cssPath,
+          base: path.dirname(cssPath),
+          content: fs.readFileSync(cssPath, 'utf-8'),
         }
       }
-      // Fallback: try in node_modules
-      return readNodeModulesFile(id)
+      const resolved = require.resolve(id, { paths: [base] })
+      return {
+        path: resolved,
+        base: path.dirname(resolved),
+        content: fs.readFileSync(resolved, 'utf-8'),
+      }
     },
   })
 
@@ -154,57 +124,6 @@ async function resolveAllVars(ds: DesignSystem, value: string): Promise<string> 
 }
 
 // ─── Unit Conversion ─────────────────────────────
-
-/**
- * Convert CSS logical properties to physical properties.
- * Tailwind v4 outputs logical properties (padding-inline, margin-block, etc.)
- * but DOMParser's element.style doesn't expand them to physical properties.
- * We convert at the source so the parser always sees padding-left, margin-top, etc.
- */
-const LOGICAL_TO_PHYSICAL: Record<string, string[]> = {
-  'padding-inline': ['padding-left', 'padding-right'],
-  'padding-block': ['padding-top', 'padding-bottom'],
-  'padding-inline-start': ['padding-left'],
-  'padding-inline-end': ['padding-right'],
-  'padding-block-start': ['padding-top'],
-  'padding-block-end': ['padding-bottom'],
-  'margin-inline': ['margin-left', 'margin-right'],
-  'margin-block': ['margin-top', 'margin-bottom'],
-  'margin-inline-start': ['margin-left'],
-  'margin-inline-end': ['margin-right'],
-  'margin-block-start': ['margin-top'],
-  'margin-block-end': ['margin-bottom'],
-  'border-inline-width': ['border-left-width', 'border-right-width'],
-  'border-block-width': ['border-top-width', 'border-bottom-width'],
-  'border-inline-style': ['border-left-style', 'border-right-style'],
-  'border-block-style': ['border-top-style', 'border-bottom-style'],
-  'border-inline-color': ['border-left-color', 'border-right-color'],
-  'border-block-color': ['border-top-color', 'border-bottom-color'],
-  'inset-inline': ['left', 'right'],
-  'inset-block': ['top', 'bottom'],
-  'inset-inline-start': ['left'],
-  'inset-inline-end': ['right'],
-  'inset-block-start': ['top'],
-  'inset-block-end': ['bottom'],
-}
-
-function logicalToPhysical(props: Record<string, string>): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const [prop, value] of Object.entries(props)) {
-    const physical = LOGICAL_TO_PHYSICAL[prop]
-    if (physical) {
-      for (const p of physical) {
-        // Don't override if physical prop is already set
-        if (!(p in result) && !(p in props)) {
-          result[p] = value
-        }
-      }
-    } else {
-      result[prop] = value
-    }
-  }
-  return result
-}
 
 function remToPx(value: string): string {
   return value.replace(/([\d.]+)rem\b/g, (_, n) => `${parseFloat(n) * 16}px`)
@@ -478,10 +397,7 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
     if (rules.length === 0) continue
 
     // Merge all rules and resolve cross-class --tw-* vars
-    let mergedProps = mergeAndResolve(rules)
-
-    // Convert logical CSS properties to physical (padding-inline → padding-left/right, etc.)
-    mergedProps = logicalToPhysical(mergedProps)
+    const mergedProps = mergeAndResolve(rules)
 
     // Resolve remaining theme vars and convert units
     for (const [prop, value] of Object.entries(mergedProps)) {

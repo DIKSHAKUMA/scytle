@@ -5,10 +5,10 @@
 import type { FrameNode } from '@/types/canvas'
 import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
-// Iframe parser (current default — proven accuracy)
+// Legacy iframe parser (kept as fallback)
 export { parseHtmlToNodesViaIframe } from './iframe-parser'
 
-// DOMParser-based parser (WIP — faster but needs more debugging)
+// New DOMParser-based parser
 export { parseHtmlViaDOMParser } from './domparser'
 
 // Shared utilities
@@ -27,41 +27,34 @@ export interface ParseHtmlOptions {
 }
 
 // ════════════════════════════════════════════════════
-// Main Parse Function
+// Main Parse Function (DOMParser + iframe fallback)
 // ════════════════════════════════════════════════════
 
 /**
  * Parse HTML into a ScytleNode tree.
  *
- * Currently uses the iframe parser (renders in a real browser for accurate layout).
- * The DOMParser pipeline is available via parseHtmlViaDOMParser() for testing
- * but needs further debugging before becoming the default.
+ * Pipeline:
+ *   1. Convert Tailwind classes → inline styles (server API)
+ *   2. Parse with DOMParser (reads element.style, preserves CSS intent)
+ *   3. Falls back to iframe parser if DOMParser fails
+ *
+ * ~100-200ms total vs 5-13s for the iframe approach.
  */
 export async function parseHtml(
     html: string,
     pageName: string = 'Page',
     options?: ParseHtmlOptions,
 ): Promise<FrameNode> {
-    const { parseHtmlToNodesViaIframe } = await import('./iframe-parser')
-    return parseHtmlToNodesViaIframe(html, pageName, options)
-}
-
-/**
- * Parse HTML using the DOMParser pipeline (fast, ~200ms).
- * Requires Tailwind classes to be converted to inline styles first.
- * Use this for testing; not yet the default.
- */
-export async function parseHtmlFast(
-    html: string,
-    pageName: string = 'Page',
-    options?: ParseHtmlOptions,
-): Promise<FrameNode> {
     try {
+        // Step 1: Convert Tailwind classes to inline styles (server-side)
         const inlinedHtml = await convertTailwindClasses(html)
+
+        // Step 2: Parse with DOMParser
         const { parseHtmlViaDOMParser } = await import('./domparser')
         return await parseHtmlViaDOMParser(inlinedHtml, pageName, options)
     } catch (error) {
-        console.warn('[parseHtmlFast] DOMParser failed, falling back to iframe:', error)
+        console.warn('[parseHtml] DOMParser failed, falling back to iframe:', error)
+        // Fallback to iframe parser (handles Tailwind via CDN internally)
         const { parseHtmlToNodesViaIframe } = await import('./iframe-parser')
         return parseHtmlToNodesViaIframe(html, pageName, options)
     }
@@ -69,6 +62,7 @@ export async function parseHtmlFast(
 
 /**
  * Convert Tailwind classes to inline styles via server API.
+ * If the API call fails, returns the original HTML (iframe fallback will handle it).
  */
 async function convertTailwindClasses(html: string): Promise<string> {
     const res = await fetch('/api/tailwind-to-inline', {

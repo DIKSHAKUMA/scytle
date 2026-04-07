@@ -409,36 +409,12 @@ function buildContainerNode(
     const maxPad = Math.max(padding.top, padding.right, padding.bottom, padding.left)
 
     // Estimate dimensions
-    let estWidth = sizing.horizontal === 'fixed'
+    const estWidth = sizing.horizontal === 'fixed'
         ? (parseFloat(cs.width) || containerWidth)
         : containerWidth
-    let estHeight = sizing.vertical === 'fixed'
+    const estHeight = sizing.vertical === 'fixed'
         ? (parseFloat(cs.height) || estimateContainerHeight(children, padding, layout))
         : estimateContainerHeight(children, padding, layout)
-
-    // ── Aspect-ratio enforcement ──
-    // Handles circles (w-12 h-12 rounded-full) and aspect-ratio CSS property.
-    // When aspect-ratio is set on a container, enforce height = width / ratio.
-    // Also: when both width and height are explicitly set in CSS as px values,
-    // always use the CSS values (even if sizing was inferred as 'hug').
-    const explicitW = cs.width?.endsWith('px') ? parseFloat(cs.width) : null
-    const explicitH = cs.height?.endsWith('px') ? parseFloat(cs.height) : null
-
-    if (cs.aspectRatio && cs.aspectRatio !== 'auto') {
-        const parts = cs.aspectRatio.split('/')
-        const ratio = parts.length === 2
-            ? parseFloat(parts[0]) / parseFloat(parts[1])
-            : parseFloat(parts[0])
-        if (ratio > 0 && isFinite(ratio)) {
-            if (explicitW) estHeight = explicitW / ratio
-            else estHeight = estWidth / ratio
-        }
-    } else if (explicitW && explicitH) {
-        // Both dimensions explicitly set in CSS — always use them.
-        // This catches circles (w-12 h-12) where sizing may have been inferred as 'hug'.
-        estWidth = explicitW
-        estHeight = explicitH
-    }
 
     const frame = createFrame({
         id: generateId(),
@@ -970,16 +946,6 @@ function isTransparentColor(color: string): boolean {
     return false
 }
 
-/**
- * Check if a color value is unresolvable (e.g. currentColor, inherit, initial).
- * DOMParser doesn't resolve CSS inheritance, so these are meaningless strings.
- */
-function isUnresolvableColor(color: string): boolean {
-    if (!color) return true
-    const lower = color.toLowerCase().trim()
-    return lower === 'currentcolor' || lower === 'inherit' || lower === 'initial' || lower === 'unset'
-}
-
 // ═══════════════════════════════════════════════════
 // Layout Extraction
 // ═══════════════════════════════════════════════════
@@ -1039,30 +1005,20 @@ function parseGridTemplate(template: string): number | string | undefined {
 // ═══════════════════════════════════════════════════
 
 function extractPadding(cs: CSSStyleDeclaration): Padding {
-    // Tailwind v4 outputs logical properties (padding-inline, padding-block)
-    // which DOMParser doesn't expand to physical properties.
-    // Check both physical and logical properties.
-    const inlineVal = parseFloat((cs as any).paddingInline) || 0
-    const blockVal = parseFloat((cs as any).paddingBlock) || 0
-
     return {
-        top: parseFloat(cs.paddingTop) || blockVal,
-        right: parseFloat(cs.paddingRight) || inlineVal,
-        bottom: parseFloat(cs.paddingBottom) || blockVal,
-        left: parseFloat(cs.paddingLeft) || inlineVal,
+        top: parseFloat(cs.paddingTop) || 0,
+        right: parseFloat(cs.paddingRight) || 0,
+        bottom: parseFloat(cs.paddingBottom) || 0,
+        left: parseFloat(cs.paddingLeft) || 0,
     }
 }
 
 function extractMargin(cs: CSSStyleDeclaration): { top: number; right: number; bottom: number; left: number } {
-    // Handle Tailwind v4 logical properties (margin-inline, margin-block)
-    const inlineVal = parseFloat((cs as any).marginInline) || 0
-    const blockVal = parseFloat((cs as any).marginBlock) || 0
-
     return {
-        top: parseFloat(cs.marginTop) || blockVal,
-        right: parseFloat(cs.marginRight) || inlineVal,
-        bottom: parseFloat(cs.marginBottom) || blockVal,
-        left: parseFloat(cs.marginLeft) || inlineVal,
+        top: parseFloat(cs.marginTop) || 0,
+        right: parseFloat(cs.marginRight) || 0,
+        bottom: parseFloat(cs.marginBottom) || 0,
+        left: parseFloat(cs.marginLeft) || 0,
     }
 }
 
@@ -1114,27 +1070,18 @@ function extractMinMaxConstraints(cs: CSSStyleDeclaration): {
 }
 
 function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
-    // Handle Tailwind v4 logical properties (border-inline-width, border-block-width)
-    const inlineWidth = parseFloat((cs as any).borderInlineWidth) || 0
-    const blockWidth = parseFloat((cs as any).borderBlockWidth) || 0
-    const inlineColor = (cs as any).borderInlineColor || ''
-    const blockColor = (cs as any).borderBlockColor || ''
-    const inlineStyle = (cs as any).borderInlineStyle || ''
-    const blockStyle = (cs as any).borderBlockStyle || ''
-
     // Early return: if no border-related inline styles are set, skip entirely
     // This prevents DOMParser defaults from creating phantom borders
-    if (!cs.borderTopWidth && !cs.borderRightWidth && !cs.borderBottomWidth && !cs.borderLeftWidth
-        && !cs.borderWidth && inlineWidth === 0 && blockWidth === 0) {
+    if (!cs.borderTopWidth && !cs.borderRightWidth && !cs.borderBottomWidth && !cs.borderLeftWidth && !cs.borderWidth) {
         return undefined
     }
 
-    // Check individual sides and shorthand, with logical property fallbacks
+    // Check individual sides and shorthand
     const sides = [
-        { width: parseFloat(cs.borderTopWidth) || blockWidth, color: cs.borderTopColor || blockColor, style: cs.borderTopStyle || blockStyle },
-        { width: parseFloat(cs.borderRightWidth) || inlineWidth, color: cs.borderRightColor || inlineColor, style: cs.borderRightStyle || inlineStyle },
-        { width: parseFloat(cs.borderBottomWidth) || blockWidth, color: cs.borderBottomColor || blockColor, style: cs.borderBottomStyle || blockStyle },
-        { width: parseFloat(cs.borderLeftWidth) || inlineWidth, color: cs.borderLeftColor || inlineColor, style: cs.borderLeftStyle || inlineStyle },
+        { width: parseFloat(cs.borderTopWidth) || 0, color: cs.borderTopColor, style: cs.borderTopStyle },
+        { width: parseFloat(cs.borderRightWidth) || 0, color: cs.borderRightColor, style: cs.borderRightStyle },
+        { width: parseFloat(cs.borderBottomWidth) || 0, color: cs.borderBottomColor, style: cs.borderBottomStyle },
+        { width: parseFloat(cs.borderLeftWidth) || 0, color: cs.borderLeftColor, style: cs.borderLeftStyle },
     ]
 
     // Also check shorthand border
@@ -1142,21 +1089,21 @@ function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
     const shorthandColor = cs.borderColor
     const shorthandStyle = cs.borderStyle
 
-    // Find the thickest non-transparent, resolvable border
+    // Find the thickest non-transparent border
     let best = sides[0]
     for (const side of sides) {
-        if (side.width > best.width && side.color && !isTransparentColor(side.color) && !isUnresolvableColor(side.color)) {
+        if (side.width > best.width && side.color && !isTransparentColor(side.color)) {
             best = side
         }
     }
 
     // If individual sides found nothing, try shorthand
-    if (best.width === 0 && shorthandWidth > 0 && shorthandColor && !isTransparentColor(shorthandColor) && !isUnresolvableColor(shorthandColor)) {
+    if (best.width === 0 && shorthandWidth > 0 && shorthandColor && !isTransparentColor(shorthandColor)) {
         best = { width: shorthandWidth, color: shorthandColor, style: shorthandStyle || 'solid' }
     }
 
     if (best.width === 0) return undefined
-    if (!best.color || isTransparentColor(best.color) || isUnresolvableColor(best.color)) return undefined
+    if (!best.color || isTransparentColor(best.color)) return undefined
 
     const color = rgbToHex(best.color)
 
