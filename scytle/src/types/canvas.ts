@@ -116,6 +116,13 @@ export const BorderSchema = z.object({
     colorRef: z.string().optional(),
     /** User detached this border from theme — relinkNodes will skip it */
     detached: z.boolean().optional(),
+    /** Which sides to render. Defaults to all sides if omitted. */
+    sides: z.object({
+        top: z.boolean(),
+        right: z.boolean(),
+        bottom: z.boolean(),
+        left: z.boolean(),
+    }).optional(),
 })
 
 export const SizingSchema = z.object({
@@ -393,6 +400,18 @@ export interface BaseNodeProperties {
     maxHeight?: number
     /** Layout constraints (Figma-style pinning to parent edges) */
     constraints?: LayoutConstraints
+
+    /** Raw CSS position values for absolute elements (Paper-style deferred resolution).
+     *  The canvas renderer resolves these against actual parent dimensions at render time,
+     *  instead of the parser guessing parent dimensions during conversion. */
+    cssPosition?: {
+        top?: string     // e.g. "50%", "16px", "calc(1/2 * 100%)"
+        right?: string
+        bottom?: string
+        left?: string
+        translate?: string  // e.g. "-50% -50%"
+        transform?: string  // legacy: "translate(-50%, -50%)"
+    }
 }
 
 /** Container node — div with optional auto-layout (flexbox/grid) */

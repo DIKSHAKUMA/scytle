@@ -192,7 +192,8 @@ function computeBoxShadow(shadows: Shadow[], themeCtx?: ThemeResolverCtx | null)
 
 /** Build box-shadow string from a solid border with inside/center/outside position support.
  *  Uses box-shadow exclusively so it never affects layout (unlike CSS border).
- *  Only applicable for solid borders — dashed/dotted fall back to CSS border. */
+ *  Only applicable for solid borders — dashed/dotted fall back to CSS border.
+ *  Supports per-side borders via the `sides` property. */
 function computeBorderAsShadow(border: Border, themeCtx?: ThemeResolverCtx | null): string | undefined {
     if (border.visible === false) return undefined
     if (border.style !== 'solid' || border.width === 0) return undefined
@@ -203,6 +204,25 @@ function computeBorderAsShadow(border: Border, themeCtx?: ThemeResolverCtx | nul
     // Always use rgba — avoids rendering quirks with raw hex in box-shadow at opacity=1
     const color = hexOpacityToRgba(normaliseHex(rawColor), border.opacity ?? 1)
     const w = `calc(${width}px * var(--z, 1))`
+
+    // Per-side borders: use individual inset box-shadows for each active side
+    if (border.sides) {
+        const { top, right, bottom, left } = border.sides
+        if (!top && !right && !bottom && !left) return undefined
+        if (top && right && bottom && left) {
+            // All sides = uniform, use the normal path
+        } else {
+            // Build per-side inset shadows
+            const shadows: string[] = []
+            const nw = `calc(${-width}px * var(--z, 1))` // negative width
+            if (top)    shadows.push(`inset 0 ${w} 0 0 ${color}`)
+            if (bottom) shadows.push(`inset 0 ${nw} 0 0 ${color}`)
+            if (left)   shadows.push(`inset ${w} 0 0 0 ${color}`)
+            if (right)  shadows.push(`inset ${nw} 0 0 0 ${color}`)
+            return shadows.join(', ')
+        }
+    }
+
     if (position === 'inside') {
         return `inset 0 0 0 ${w} ${color}`
     } else if (position === 'outside') {
@@ -229,6 +249,18 @@ function computeBorder(border?: Border, themeCtx?: ThemeResolverCtx | null): CSS
     const position = border.position ?? 'inside'
 
     if (position === 'inside') {
+        // Per-side support for dashed/dotted
+        if (border.sides && !(border.sides.top && border.sides.right && border.sides.bottom && border.sides.left)) {
+            const s = border.sides
+            return {
+                borderTopWidth: s.top ? w : '0',
+                borderRightWidth: s.right ? w : '0',
+                borderBottomWidth: s.bottom ? w : '0',
+                borderLeftWidth: s.left ? w : '0',
+                borderStyle: border.style,
+                borderColor: color,
+            }
+        }
         return {
             borderWidth: w,
             borderStyle: border.style,
@@ -289,6 +321,63 @@ function computePadding(p: Padding, pRef?: string, themeCtx?: ThemeResolverCtx |
 // parent-resize logic is implemented. The node always renders at (x, y).
 
 // ============================================================
+// CSS Position Resolution (Paper-style deferred positioning)
+// ============================================================
+
+/**
+ * Resolve raw CSS position values into CSSProperties for rendering.
+ * Instead of pre-computing pixel x/y in the parser, raw CSS values like
+ * "50%", "16px", "calc(1/2 * 100%)" are stored on the node and resolved
+ * here by the browser's CSS engine against actual parent dimensions.
+ *
+ * Zoom handling:
+ * - Percentage values (e.g. "50%") don't need zoom scaling because
+ *   the parent is already zoomed, so 50% of zoomed parent = correct.
+ * - Pixel values (e.g. "16px") need zoom scaling via calc() * var(--z).
+ * - translate percentages are self-relative, auto-correct with zoom.
+ */
+function resolveCssPosition(
+    cssPos: NonNullable<ScytleNode['cssPosition']>,
+): CSSProperties {
+    const s: CSSProperties = { position: 'absolute' }
+
+    // Helper: wrap pixel values in zoom calc, pass % values through
+    const zoomScale = (val: string): string => {
+        const trimmed = val.trim()
+        // Percentage or calc with %: no zoom needed (parent is already zoomed)
+        if (trimmed.endsWith('%') || trimmed.includes('%')) return trimmed
+        // Pixel value: apply zoom
+        return `calc(${trimmed} * var(--z, 1))`
+    }
+
+    // Horizontal: left takes priority over right
+    if (cssPos.left != null) s.left = zoomScale(cssPos.left)
+    else if (cssPos.right != null) s.right = zoomScale(cssPos.right)
+
+    // Vertical: top takes priority over bottom
+    if (cssPos.top != null) s.top = zoomScale(cssPos.top)
+    else if (cssPos.bottom != null) s.bottom = zoomScale(cssPos.bottom)
+
+    // Both edges set (stretch behavior)
+    if (cssPos.left != null && cssPos.right != null) {
+        s.left = zoomScale(cssPos.left)
+        s.right = zoomScale(cssPos.right)
+    }
+    if (cssPos.top != null && cssPos.bottom != null) {
+        s.top = zoomScale(cssPos.top)
+        s.bottom = zoomScale(cssPos.bottom)
+    }
+
+    // CSS translate property (Tailwind v4: "-50% -50%", "calc(1/3 * 100%) calc(...)")
+    if (cssPos.translate) s.translate = cssPos.translate
+
+    // Legacy CSS transform (translate(), translateX(), translateY())
+    if (cssPos.transform) s.transform = cssPos.transform
+
+    return s
+}
+
+// ============================================================
 // Composite Style Builders
 // ============================================================
 
@@ -317,15 +406,21 @@ export function computeBaseStyles(
     const isFreeformChild = parentLayoutMode === 'none'
     const isAbsoluteInAutoLayout = node.positioning === 'absolute' && parentLayoutMode != null && parentLayoutMode !== 'none'
     if (isTopLevel || node.positioning === 'absolute' || isFreeformChild) {
-        s.position = 'absolute'
-        if (isTopLevel) {
-            s.left = `calc(${node.x}px * var(--z, 1) + var(--px, 0) * 1px)`
-            s.top = `calc(${node.y}px * var(--z, 1) + var(--py, 0) * 1px)`
+        if (node.cssPosition && !isTopLevel) {
+            // Paper-style: let CSS resolve positions against actual parent dimensions.
+            // Raw CSS values (e.g. "50%", "16px", "calc(1/2 * 100%)") are passed through
+            // so the browser resolves percentages against the zoomed parent.
+            Object.assign(s, resolveCssPosition(node.cssPosition))
         } else {
-            // All absolute children (freeform, explicit, or ignoring auto layout)
-            // position at their stored x/y. Constraints are metadata for parent-resize only.
-            s.left = `calc(${node.x}px * var(--z, 1))`
-            s.top = `calc(${node.y}px * var(--z, 1))`
+            // Legacy: pre-computed pixel positions (manual placement, drag-and-drop, top-level)
+            s.position = 'absolute'
+            if (isTopLevel) {
+                s.left = `calc(${node.x}px * var(--z, 1) + var(--px, 0) * 1px)`
+                s.top = `calc(${node.y}px * var(--z, 1) + var(--py, 0) * 1px)`
+            } else {
+                s.left = `calc(${node.x}px * var(--z, 1))`
+                s.top = `calc(${node.y}px * var(--z, 1))`
+            }
         }
     }
 

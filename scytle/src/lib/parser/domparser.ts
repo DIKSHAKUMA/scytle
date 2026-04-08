@@ -21,6 +21,7 @@ import {
     type FrameNode, type TextNode, type ImageNode, type VectorNode,
     type ScytleNode, type Fill, type Border, type Shadow,
     type Layout, type Padding, type Sizing, type BorderRadius,
+    type LayoutConstraints,
 } from '@/types/canvas'
 import {
     buildLinkMaps, normalizeHex, normalizeShadow,
@@ -41,6 +42,21 @@ export interface DOMParserOptions {
     fonts?: string[]
 }
 
+/**
+ * CSS properties that are inherited in browsers but NOT in inline styles.
+ * DOMParser reads `el.style` which only has explicitly set properties,
+ * so we must manually thread inherited values down the tree.
+ */
+interface InheritedStyles {
+    color?: string       // CSS `color` — inherited by default
+    textAlign?: string   // CSS `text-align` — inherited by default
+    fontSize?: string    // CSS `font-size` — inherited
+    fontWeight?: string  // CSS `font-weight` — inherited
+    fontFamily?: string  // CSS `font-family` — inherited
+    lineHeight?: string  // CSS `line-height` — inherited
+    letterSpacing?: string // CSS `letter-spacing` — inherited
+}
+
 // ═══════════════════════════════════════════════════
 // Constants
 // ═══════════════════════════════════════════════════
@@ -59,7 +75,10 @@ const INLINE_TAGS = new Set([
 
 const HTML_TAG_MAP: Record<string, TextNode['htmlTag']> = {
     h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h4', h5: 'h5', h6: 'h6',
-    p: 'p', span: 'span', a: 'a', li: 'li',
+    p: 'p', span: 'span', a: 'a',
+    // Note: 'li' is intentionally omitted — using htmlTag='li' causes the renderer
+    // to create an actual <li> element which shows browser-default bullet markers.
+    // Tailwind resets list-style to none, so we should not show bullets.
 }
 
 const SEMANTIC_NAMES: Record<string, string> = {
@@ -71,6 +90,30 @@ const SEMANTIC_NAMES: Record<string, string> = {
 
 /** Block-level display values — elements with these fill width by default */
 const BLOCK_DISPLAYS = new Set(['block', 'flex', 'grid', 'list-item', 'table'])
+
+/**
+ * Merge parent inherited styles with the current element's inline styles.
+ * If the element has an explicit value, it overrides the inherited one.
+ */
+function mergeInherited(cs: CSSStyleDeclaration, parent?: InheritedStyles): InheritedStyles {
+    return {
+        color: cs.color || parent?.color,
+        textAlign: cs.textAlign || parent?.textAlign,
+        fontSize: cs.fontSize || parent?.fontSize,
+        fontWeight: cs.fontWeight || parent?.fontWeight,
+        fontFamily: cs.fontFamily || parent?.fontFamily,
+        lineHeight: cs.lineHeight || parent?.lineHeight,
+        letterSpacing: cs.letterSpacing || parent?.letterSpacing,
+    }
+}
+
+/**
+ * Get the effective value of an inherited CSS property:
+ * use the element's inline style if set, otherwise fall back to inherited.
+ */
+function eff(csVal: string, inheritedVal?: string): string {
+    return csVal || inheritedVal || ''
+}
 
 // ═══════════════════════════════════════════════════
 // Public API
@@ -118,9 +161,11 @@ export async function parseHtmlViaDOMParser(
     const isSimpleWrapper = !hasVisualProperties(rootStyle) && rootEl.children.length > 0
 
     if (isSimpleWrapper) {
+        // Build inherited styles from the wrapper (e.g. text-align, color)
+        const wrapperInherited = mergeInherited(rootStyle)
         for (const child of rootEl.children) {
             if (child.nodeType === Node.ELEMENT_NODE) {
-                const node = walkElement(child as HTMLElement, width, lm)
+                const node = walkElement(child as HTMLElement, width, lm, wrapperInherited)
                 if (node) rootChildren.push(node)
             }
         }
@@ -201,6 +246,7 @@ function walkElement(
     el: HTMLElement,
     parentWidth: number,
     lm?: LinkMaps,
+    inherited?: InheritedStyles,
 ): ScytleNode | null {
     const tag = el.tagName.toLowerCase()
 
@@ -211,6 +257,9 @@ function walkElement(
 
     // Skip hidden elements
     if (cs.display === 'none' || cs.visibility === 'collapse') return null
+
+    // Merge inherited styles for this element
+    const inh = mergeInherited(cs, inherited)
 
     // Dispatch by element type
 
@@ -235,11 +284,11 @@ function walkElement(
     const _isTextOnly = isTextOnlyElement(el, tag)
     const _hasVisual = hasVisualProperties(cs)
     if (_isTextOnly && !_hasVisual) {
-        return buildTextNode(el, cs, tag, parentWidth, lm)
+        return buildTextNode(el, cs, tag, parentWidth, lm, inh)
     }
 
     // Container elements
-    return buildContainerNode(el, cs, tag, parentWidth, lm)
+    return buildContainerNode(el, cs, tag, parentWidth, lm, inh)
 }
 
 // ═══════════════════════════════════════════════════
@@ -252,22 +301,26 @@ function buildTextNode(
     tag: string,
     parentWidth: number,
     lm?: LinkMaps,
+    inherited?: InheritedStyles,
 ): TextNode {
     const text = extractTextContent(el)
-    const colorHex = rgbToHex(cs.color)
-    const colorAlpha = rgbToOpacity(cs.color)
+    // Use inherited color if element doesn't have explicit color
+    const effectiveColor = eff(cs.color, inherited?.color)
+    const colorHex = rgbToHex(effectiveColor)
+    const colorAlpha = rgbToOpacity(effectiveColor)
     const color = colorAlpha < 1 && colorHex !== 'transparent'
         ? `${colorHex}${Math.round(colorAlpha * 255).toString(16).padStart(2, '0')}`
         : colorHex
-    const fontFamily = extractPrimaryFont(cs.fontFamily)
-    const fontSize = parseFloat(cs.fontSize) || 16
-    const fontWeight = parseInt(cs.fontWeight) || 400
+    const fontFamily = extractPrimaryFont(eff(cs.fontFamily, inherited?.fontFamily))
+    const fontSize = parseFloat(eff(cs.fontSize, inherited?.fontSize)) || 16
+    const fontWeight = parseInt(eff(cs.fontWeight, inherited?.fontWeight)) || 400
+    const effectiveTextAlign = eff(cs.textAlign, inherited?.textAlign)
+    const effectiveLineHeight = eff(cs.lineHeight, inherited?.lineHeight)
+    const effectiveLetterSpacing = eff(cs.letterSpacing, inherited?.letterSpacing)
     const htmlTag = inferHtmlTag(tag)
     const sizing = inferTextSizing(tag, cs)
     const w = sizing.horizontal === 'fill' ? parentWidth : estimateTextWidth(text, fontSize)
-    const lhMultiplier = cs.lineHeight && cs.lineHeight !== 'normal'
-        ? parseFloat(cs.lineHeight) / fontSize
-        : 1.5
+    const lhMultiplier = parseLineHeightMultiplier(effectiveLineHeight, fontSize)
     const h = estimateTextHeight(text, fontSize, w, lhMultiplier)
 
     return createText({
@@ -283,13 +336,13 @@ function buildTextNode(
         fontWeight,
         fontFamily,
         fontStyle: cs.fontStyle === 'italic' ? 'italic' : undefined,
-        lineHeight: !cs.lineHeight || cs.lineHeight === 'normal'
+        lineHeight: !effectiveLineHeight || effectiveLineHeight === 'normal'
             ? 'auto'
-            : parseFloat(cs.lineHeight),
-        letterSpacing: !cs.letterSpacing || cs.letterSpacing === 'normal'
+            : parseFloat(effectiveLineHeight),
+        letterSpacing: !effectiveLetterSpacing || effectiveLetterSpacing === 'normal'
             ? 0
-            : parseFloat(cs.letterSpacing),
-        textAlign: mapTextAlign(cs.textAlign),
+            : parseFloat(effectiveLetterSpacing),
+        textAlign: mapTextAlign(effectiveTextAlign),
         textTransform: mapTextTransform(cs.textTransform),
         textDecoration: parseTextDecoration(cs.textDecorationLine || cs.textDecoration),
         color,
@@ -323,52 +376,90 @@ function buildContainerNode(
     tag: string,
     parentWidth: number,
     lm?: LinkMaps,
+    inherited?: InheritedStyles,
 ): FrameNode {
-    const layout = extractLayout(cs)
+    const inh = mergeInherited(cs, inherited)
+    const layout = extractLayout(cs, tag, inherited)
     const padding = extractPadding(cs)
     const sizing = inferContainerSizing(el, cs)
 
     // Estimate this container's available width for children
-    const containerWidth = sizing.horizontal === 'fill'
+    let containerWidth = sizing.horizontal === 'fill'
         ? parentWidth
         : (parseFloat(cs.width) || parentWidth)
-    const childAvailWidth = containerWidth - padding.left - padding.right
+
+    // Apply maxWidth constraint BEFORE grid/child division
+    const maxW = parseFloat(cs.maxWidth)
+    if (!isNaN(maxW) && cs.maxWidth !== 'none' && maxW < containerWidth) {
+        containerWidth = maxW
+    }
+
+    let childAvailWidth = containerWidth - padding.left - padding.right
+
+    // For grid containers, divide available width by number of columns
+    if (layout.mode === 'grid' && layout.columns && typeof layout.columns === 'number') {
+        const gridGap = layout.gap || 0
+        const totalGap = gridGap * (layout.columns - 1)
+        childAvailWidth = (childAvailWidth - totalGap) / layout.columns
+    }
 
     // Recursively walk children
     const children: ScytleNode[] = []
+    const isGrid = layout.mode === 'grid' && layout.columns && typeof layout.columns === 'number'
+    const gridGap = layout.gap || 0
     for (const child of el.childNodes) {
         if (child.nodeType === Node.ELEMENT_NODE) {
             const childEl = child as HTMLElement
-            const node = walkElement(childEl, childAvailWidth, lm)
+            // For grid children with col-span, adjust parentWidth to span multiple columns
+            let childParentWidth = childAvailWidth
+            if (isGrid) {
+                const gc = childEl.style.gridColumn
+                if (gc) {
+                    const spanMatch = gc.match(/span\s+(\d+)/)
+                    const span = spanMatch ? parseInt(spanMatch[1]) : (gc === '1 / -1' ? (layout.columns as number) : 1)
+                    if (span > 1) {
+                        childParentWidth = childAvailWidth * span + gridGap * (span - 1)
+                    }
+                }
+            }
+            const node = walkElement(childEl, childParentWidth, lm, inh)
             if (node) children.push(node)
         } else if (child.nodeType === Node.TEXT_NODE) {
             const text = child.textContent?.trim()
             if (text) {
-                const fontSize = parseFloat(cs.fontSize) || 16
-                const fontWeight = parseInt(cs.fontWeight) || 400
-                const inlineColorHex = rgbToHex(cs.color)
-                const inlineColorAlpha = rgbToOpacity(cs.color)
+                // Use inherited values for bare text nodes
+                const effectiveColor = eff(cs.color, inh.color)
+                const fontSize = parseFloat(eff(cs.fontSize, inh.fontSize)) || 16
+                const fontWeight = parseInt(eff(cs.fontWeight, inh.fontWeight)) || 400
+                const inlineColorHex = rgbToHex(effectiveColor)
+                const inlineColorAlpha = rgbToOpacity(effectiveColor)
                 const inlineColor = inlineColorAlpha < 1 && inlineColorHex !== 'transparent'
                     ? `${inlineColorHex}${Math.round(inlineColorAlpha * 255).toString(16).padStart(2, '0')}`
                     : inlineColorHex
+                const effectiveLineHeight = eff(cs.lineHeight, inh.lineHeight)
+                const effectiveLetterSpacing = eff(cs.letterSpacing, inh.letterSpacing)
+                const effectiveTextAlign = eff(cs.textAlign, inh.textAlign)
+                const lhMultiplier = parseLineHeightMultiplier(effectiveLineHeight, fontSize)
+                const estW = Math.min(estimateTextWidth(text, fontSize), childAvailWidth)
+                const estH = estimateTextHeight(text, fontSize, estW, lhMultiplier)
                 const textNode = createText({
                     id: generateId(),
                     name: text.slice(0, 40),
                     x: 0,
                     y: 0,
-                    width: 1,
-                    height: 1,
+                    width: Math.max(estW, 1),
+                    height: Math.max(estH, 1),
                     characters: text,
                     fontSize,
                     fontWeight,
-                    fontFamily: extractPrimaryFont(cs.fontFamily),
+                    fontFamily: extractPrimaryFont(eff(cs.fontFamily, inh.fontFamily)),
                     fontStyle: cs.fontStyle === 'italic' ? 'italic' : undefined,
-                    lineHeight: !cs.lineHeight || cs.lineHeight === 'normal' ? 'auto' : parseFloat(cs.lineHeight),
-                    letterSpacing: !cs.letterSpacing || cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing),
+                    lineHeight: !effectiveLineHeight || effectiveLineHeight === 'normal' ? 'auto' : parseFloat(effectiveLineHeight),
+                    letterSpacing: !effectiveLetterSpacing || effectiveLetterSpacing === 'normal' ? 0 : parseFloat(effectiveLetterSpacing),
                     textDecoration: parseTextDecoration(cs.textDecorationLine || cs.textDecoration),
                     textTransform: mapTextTransform(cs.textTransform),
                     color: inlineColor,
-                    textAlign: mapTextAlign(cs.textAlign),
+                    textAlign: mapTextAlign(effectiveTextAlign),
                     autoResize: 'width-and-height',
                     sizing: { horizontal: 'hug', vertical: 'hug' },
                 })
@@ -379,7 +470,7 @@ function buildContainerNode(
 
     // Handle mixed content: container has text-only content not caught by isTextOnlyElement
     if (children.length === 0 && el.textContent?.trim()) {
-        const textNode = buildTextNode(el, cs, tag, childAvailWidth, lm)
+        const textNode = buildTextNode(el, cs, tag, childAvailWidth, lm, inh)
         if (hasVisualProperties(cs)) {
             textNode.positioning = 'auto'
             textNode.margin = undefined
@@ -409,12 +500,39 @@ function buildContainerNode(
     const maxPad = Math.max(padding.top, padding.right, padding.bottom, padding.left)
 
     // Estimate dimensions
-    const estWidth = sizing.horizontal === 'fixed'
+    let estWidth = sizing.horizontal === 'fixed'
         ? (parseFloat(cs.width) || containerWidth)
-        : containerWidth
-    const estHeight = sizing.vertical === 'fixed'
+        : sizing.horizontal === 'hug'
+            ? estimateContainerWidth(children, padding, layout)
+            : containerWidth
+    let estHeight = sizing.vertical === 'fixed'
         ? (parseFloat(cs.height) || estimateContainerHeight(children, padding, layout))
         : estimateContainerHeight(children, padding, layout)
+
+
+    // Apply maxWidth constraint to estimated width
+    const maxWidthVal = parseFloat(cs.maxWidth)
+    if (!isNaN(maxWidthVal) && cs.maxWidth !== 'none' && maxWidthVal < estWidth) {
+        estWidth = maxWidthVal
+    }
+
+    // Aspect-ratio enforcement (circles, aspect-ratio containers)
+    const explicitW = cs.width?.endsWith('px') ? parseFloat(cs.width) : null
+    const explicitH = cs.height?.endsWith('px') ? parseFloat(cs.height) : null
+
+    if (cs.aspectRatio && cs.aspectRatio !== 'auto') {
+        const parts = cs.aspectRatio.split('/')
+        const ratio = parts.length === 2
+            ? parseFloat(parts[0]) / parseFloat(parts[1])
+            : parseFloat(parts[0])
+        if (ratio > 0 && isFinite(ratio)) {
+            estHeight = (explicitW || estWidth) / ratio
+        }
+    } else if (explicitW && explicitH) {
+        // Both dimensions explicitly set (e.g., w-12 h-12) — always use CSS values
+        estWidth = explicitW
+        estHeight = explicitH
+    }
 
     const frame = createFrame({
         id: generateId(),
@@ -452,7 +570,21 @@ function buildContainerNode(
             : {}),
         margin: extractMargin(cs),
         autoMargin: extractAutoMargin(el),
+        // Grid child spans (col-span-2, row-span-2, etc.)
+        ...extractGridSpan(cs),
     })
+
+    // Set x/y for absolute-positioned elements from CSS top/left/right/bottom + transform
+    if (cs.position === 'absolute' || cs.position === 'fixed') {
+        // Paper-style: store raw CSS position values, let canvas resolve at render time
+        const { cssPosition, constraints } = extractCssPosition(cs)
+        frame.cssPosition = cssPosition
+        frame.constraints = constraints
+        frame.x = 0  // Default; renderer will compute actual position from cssPosition
+        frame.y = 0
+    }
+
+    // No need for fixAbsoluteChildPositions — canvas renderer resolves positions at render time
 
     assignChildPositions(frame)
     return frame
@@ -787,7 +919,10 @@ function buildDividerNode(
 function parseOpacity(val: string): number {
     if (!val) return 1
     const n = parseFloat(val)
-    return isNaN(n) ? 1 : n
+    if (isNaN(n)) return 1
+    // Handle percentage values (e.g., "20%" → 0.2)
+    if (val.trim().endsWith('%')) return n / 100
+    return n
 }
 
 /**
@@ -804,6 +939,12 @@ function parseOpacity(val: string): number {
  */
 function rgbToHex(rgb: string): string {
     if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') return 'transparent'
+
+    // Unresolvable CSS keywords — DOMParser can't resolve inheritance
+    const lower = rgb.trim().toLowerCase()
+    if (lower === 'currentcolor' || lower === 'inherit' || lower === 'initial' || lower === 'unset' || lower === '') {
+        return 'transparent'
+    }
 
     // Already hex
     if (rgb.startsWith('#')) return normalizeHex(rgb)
@@ -871,7 +1012,6 @@ function rgbToHex(rgb: string): string {
         black: '#000000', white: '#ffffff', red: '#ff0000', green: '#008000',
         blue: '#0000ff', yellow: '#ffff00', gray: '#808080', grey: '#808080',
     }
-    const lower = rgb.trim().toLowerCase()
     if (named[lower]) return named[lower]
 
     return '#000000'
@@ -950,7 +1090,7 @@ function isTransparentColor(color: string): boolean {
 // Layout Extraction
 // ═══════════════════════════════════════════════════
 
-function extractLayout(cs: CSSStyleDeclaration): Layout {
+function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: InheritedStyles): Layout {
     const display = cs.display
 
     if (display === 'grid' || display === 'inline-grid') {
@@ -979,7 +1119,21 @@ function extractLayout(cs: CSSStyleDeclaration): Layout {
     }
 
     // Block/inline elements → treat as flex column for Scytle canvas
-    return { mode: 'flex', direction: 'column', gap: 0 }
+    // Map text-align to flex alignment (text-center → align-items: center in flex-column)
+    const textAlign = eff(cs.textAlign, inherited?.textAlign)
+    const flexAlign = textAlign === 'center' ? 'center'
+        : textAlign === 'right' || textAlign === 'end' ? 'end'
+        : undefined
+
+    // Exception: TEXT_ONLY_TAGS (p, h1-h6) with mixed inline children should flow horizontally
+    // Exception: button/a with text should center content
+    if (tag && TEXT_ONLY_TAGS.has(tag)) {
+        return { mode: 'flex', direction: 'row', gap: 0, align: 'baseline' as Layout['align'], justify: flexAlign as Layout['justify'] }
+    }
+    if (tag === 'button' || tag === 'a') {
+        return { mode: 'flex', direction: 'row', gap: 0, justify: 'center', align: 'center' }
+    }
+    return { mode: 'flex', direction: 'column', gap: 0, align: flexAlign as Layout['align'] }
 }
 
 /**
@@ -1005,21 +1159,96 @@ function parseGridTemplate(template: string): number | string | undefined {
 // ═══════════════════════════════════════════════════
 
 function extractPadding(cs: CSSStyleDeclaration): Padding {
-    return {
-        top: parseFloat(cs.paddingTop) || 0,
-        right: parseFloat(cs.paddingRight) || 0,
-        bottom: parseFloat(cs.paddingBottom) || 0,
-        left: parseFloat(cs.paddingLeft) || 0,
+    const top = parseFloat(cs.paddingTop) || 0
+    const right = parseFloat(cs.paddingRight) || 0
+    const bottom = parseFloat(cs.paddingBottom) || 0
+    const left = parseFloat(cs.paddingLeft) || 0
+
+    // If longhand properties are all 0 but shorthand `padding` is set,
+    // parse the shorthand (DOMParser may not expand shorthand to longhands)
+    if (top === 0 && right === 0 && bottom === 0 && left === 0 && cs.padding) {
+        const parts = cs.padding.trim().split(/\s+/)
+        if (parts.length === 1) {
+            const v = parseFloat(parts[0]) || 0
+            return { top: v, right: v, bottom: v, left: v }
+        } else if (parts.length === 2) {
+            const vert = parseFloat(parts[0]) || 0
+            const horiz = parseFloat(parts[1]) || 0
+            return { top: vert, right: horiz, bottom: vert, left: horiz }
+        } else if (parts.length === 3) {
+            return {
+                top: parseFloat(parts[0]) || 0,
+                right: parseFloat(parts[1]) || 0,
+                bottom: parseFloat(parts[2]) || 0,
+                left: parseFloat(parts[1]) || 0,
+            }
+        } else if (parts.length === 4) {
+            return {
+                top: parseFloat(parts[0]) || 0,
+                right: parseFloat(parts[1]) || 0,
+                bottom: parseFloat(parts[2]) || 0,
+                left: parseFloat(parts[3]) || 0,
+            }
+        }
     }
+
+    return { top, right, bottom, left }
+}
+
+/** Parse line-height to a multiplier for height estimation.
+ *  Unitless values (e.g. "1.333") are already multipliers.
+ *  px values (e.g. "20px") must be divided by fontSize.
+ */
+function parseLineHeightMultiplier(lineHeight: string | undefined, fontSize: number): number {
+    if (!lineHeight || lineHeight === 'normal' || lineHeight === 'auto') return 1.5
+    const val = parseFloat(lineHeight)
+    if (isNaN(val)) return 1.5
+    // If ends with 'px', it's an absolute value → convert to multiplier
+    if (lineHeight.endsWith('px')) return val / fontSize
+    // Otherwise it's a unitless multiplier (e.g. "1.333", "1.5")
+    return val
 }
 
 function extractMargin(cs: CSSStyleDeclaration): { top: number; right: number; bottom: number; left: number } {
+    // Use parsePx instead of || 0 — preserves negative margins (e.g., -ml-3 → -12px)
     return {
-        top: parseFloat(cs.marginTop) || 0,
-        right: parseFloat(cs.marginRight) || 0,
-        bottom: parseFloat(cs.marginBottom) || 0,
-        left: parseFloat(cs.marginLeft) || 0,
+        top: parsePx(cs.marginTop),
+        right: parsePx(cs.marginRight),
+        bottom: parsePx(cs.marginBottom),
+        left: parsePx(cs.marginLeft),
     }
+}
+
+/** Parse a CSS px value, preserving negatives. Returns 0 for non-px/empty. */
+function parsePx(val: string): number {
+    if (!val) return 0
+    const n = parseFloat(val)
+    return isNaN(n) ? 0 : n
+}
+
+/** Like parsePx but resolves percentage values against a reference size.
+ *  Handles: "50%" → 50% of refSize, "16px" → 16, "calc(1/2 * 100%)" → 50% of refSize */
+function parsePxOrPercent(val: string, refSize: number): number {
+    if (!val) return 0
+    const trimmed = val.trim()
+    // Direct percentage: "50%"
+    if (trimmed.endsWith('%')) {
+        const pct = parseFloat(trimmed)
+        return isNaN(pct) ? 0 : (pct / 100) * refSize
+    }
+    // calc(N/M * 100%) → percentage
+    if (trimmed.startsWith('calc(')) {
+        const fracPctMatch = trimmed.match(/calc\(\s*(-?\d+)\s*\/\s*(\d+)\s*\*\s*100%\s*\)/)
+        if (fracPctMatch) {
+            return (parseInt(fracPctMatch[1]) / parseInt(fracPctMatch[2])) * refSize
+        }
+        // calc(N%) → percentage
+        const simplePctMatch = trimmed.match(/calc\(\s*(-?[\d.]+)%\s*\)/)
+        if (simplePctMatch) {
+            return (parseFloat(simplePctMatch[1]) / 100) * refSize
+        }
+    }
+    return parsePx(val)
 }
 
 /**
@@ -1069,19 +1298,145 @@ function extractMinMaxConstraints(cs: CSSStyleDeclaration): {
     return result
 }
 
+/**
+ * Extract grid column/row spans from inline CSS.
+ * Tailwind: col-span-2 → grid-column: span 2 / span 2
+ *           row-span-2 → grid-row: span 2 / span 2
+ */
+function extractGridSpan(cs: CSSStyleDeclaration): { gridColumnSpan?: number; gridRowSpan?: number } {
+    const result: { gridColumnSpan?: number; gridRowSpan?: number } = {}
+
+    const gc = cs.gridColumn
+    if (gc) {
+        if (gc === '1 / -1') {
+            result.gridColumnSpan = -1  // Full width
+        } else {
+            const spanMatch = gc.match(/span\s+(\d+)/)
+            if (spanMatch) result.gridColumnSpan = parseInt(spanMatch[1])
+        }
+    }
+
+    const gr = cs.gridRow
+    if (gr) {
+        if (gr === '1 / -1') {
+            result.gridRowSpan = -1
+        } else {
+            const spanMatch = gr.match(/span\s+(\d+)/)
+            if (spanMatch) result.gridRowSpan = parseInt(spanMatch[1])
+        }
+    }
+
+    return result
+}
+
+/**
+ * Extract raw CSS position values for absolute-positioned elements.
+ * Paper-style: stores raw CSS strings instead of computing pixel x/y.
+ * The canvas renderer resolves these against actual parent dimensions at render time.
+ */
+function extractCssPosition(cs: CSSStyleDeclaration): {
+    cssPosition: NonNullable<import('@/types/canvas').BaseNodeProperties['cssPosition']>
+    constraints: LayoutConstraints
+} {
+    const cssPosition: NonNullable<import('@/types/canvas').BaseNodeProperties['cssPosition']> = {}
+    let hConstraint: LayoutConstraints['horizontal'] = 'left'
+    let vConstraint: LayoutConstraints['vertical'] = 'top'
+
+    const hasLeft = cs.left && cs.left !== 'auto'
+    const hasRight = cs.right && cs.right !== 'auto'
+    const hasTop = cs.top && cs.top !== 'auto'
+    const hasBottom = cs.bottom && cs.bottom !== 'auto'
+
+    if (hasLeft) { cssPosition.left = cs.left; hConstraint = 'left' }
+    if (hasRight) { cssPosition.right = cs.right; hConstraint = hasLeft ? 'leftRight' : 'right' }
+    if (hasTop) { cssPosition.top = cs.top; vConstraint = 'top' }
+    if (hasBottom) { cssPosition.bottom = cs.bottom; vConstraint = hasTop ? 'topBottom' : 'bottom' }
+
+    // CSS translate property (Tailwind v4 uses this instead of transform)
+    const translateProp = (cs as unknown as Record<string, string>).translate
+    if (translateProp && translateProp !== 'none') cssPosition.translate = translateProp
+
+    // Legacy CSS transform (translate/translateX/translateY)
+    if (cs.transform && cs.transform !== 'none') cssPosition.transform = cs.transform
+
+    return { cssPosition, constraints: { horizontal: hConstraint, vertical: vConstraint } }
+}
+
+/** Split CSS translate values that may contain nested calc() with spaces */
+function splitTranslateValues(translate: string): string[] {
+    // Split on spaces that are NOT inside parentheses
+    const parts: string[] = []
+    let current = ''
+    let depth = 0
+    for (const char of translate) {
+        if (char === '(') depth++
+        if (char === ')') depth--
+        if (char === ' ' && depth === 0 && current.trim()) {
+            parts.push(current.trim())
+            current = ''
+        } else {
+            current += char
+        }
+    }
+    if (current.trim()) parts.push(current.trim())
+    return parts
+}
+
+/** Parse a translate value: Npx → N, N% → N% of reference, calc(...) with fractions */
+function parseTranslateValue(val: string, refSize: number): number {
+    val = val.trim()
+
+    // Direct px value
+    if (val.endsWith('px')) return parsePx(val)
+
+    // Percentage
+    if (val.endsWith('%')) {
+        const pct = parseFloat(val) || 0
+        return (pct / 100) * refSize
+    }
+
+    // calc(N/M * 100%) → percentage-based offset
+    // TW v4: calc(1/3 * 100%) or calc(calc(1/2 * 100%) * -1)
+    if (val.startsWith('calc(')) {
+        // Simple calc percentage: calc(33.3333%) or calc(-50%)
+        const simplePct = val.match(/calc\(\s*(-?[\d.]+)%\s*\)/)
+        if (simplePct) {
+            return (parseFloat(simplePct[1]) / 100) * refSize
+        }
+        // Fraction pattern: calc(1/3 * 100%)
+        const pctMatch = val.match(/calc\(\s*(\d+)\s*\/\s*(\d+)\s*\*\s*100%\s*\)/)
+        if (pctMatch) {
+            const fraction = parseInt(pctMatch[1]) / parseInt(pctMatch[2])
+            return fraction * refSize
+        }
+        // Negative pattern: calc(calc(N/M * 100%) * -1)
+        const negPctMatch = val.match(/calc\(\s*calc\(\s*(\d+)\s*\/\s*(\d+)\s*\*\s*100%\s*\)\s*\*\s*-1\s*\)/)
+        if (negPctMatch) {
+            const fraction = parseInt(negPctMatch[1]) / parseInt(negPctMatch[2])
+            return -fraction * refSize
+        }
+        // Simple calc with px
+        const simplePx = val.match(/calc\(\s*([+-]?[\d.]+)px\s*\)/)
+        if (simplePx) return parseFloat(simplePx[1]) || 0
+    }
+
+    // Plain number
+    const n = parseFloat(val)
+    return isNaN(n) ? 0 : n
+}
+
 function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
     // Early return: if no border-related inline styles are set, skip entirely
-    // This prevents DOMParser defaults from creating phantom borders
     if (!cs.borderTopWidth && !cs.borderRightWidth && !cs.borderBottomWidth && !cs.borderLeftWidth && !cs.borderWidth) {
         return undefined
     }
 
     // Check individual sides and shorthand
     const sides = [
-        { width: parseFloat(cs.borderTopWidth) || 0, color: cs.borderTopColor, style: cs.borderTopStyle },
-        { width: parseFloat(cs.borderRightWidth) || 0, color: cs.borderRightColor, style: cs.borderRightStyle },
-        { width: parseFloat(cs.borderBottomWidth) || 0, color: cs.borderBottomColor, style: cs.borderBottomStyle },
-        { width: parseFloat(cs.borderLeftWidth) || 0, color: cs.borderLeftColor, style: cs.borderLeftStyle },
+        { side: 'top' as const, width: parseFloat(cs.borderTopWidth) || 0, color: cs.borderTopColor, style: cs.borderTopStyle },
+        { side: 'right' as const, width: parseFloat(cs.borderRightWidth) || 0, color: cs.borderRightColor, style: cs.borderRightStyle },
+        { side: 'bottom' as const, width: parseFloat(cs.borderBottomWidth) || 0, color: cs.borderBottomColor, style: cs.borderBottomStyle },
+        { side: 'left' as const, width: parseFloat(cs.borderLeftWidth) || 0, color: cs.borderLeftColor, style: cs.borderLeftStyle },
     ]
 
     // Also check shorthand border
@@ -1089,23 +1444,48 @@ function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
     const shorthandColor = cs.borderColor
     const shorthandStyle = cs.borderStyle
 
-    // Find the thickest non-transparent border
-    let best = sides[0]
-    for (const side of sides) {
-        if (side.width > best.width && side.color && !isTransparentColor(side.color)) {
-            best = side
+    // Determine which sides are active
+    const activeSides = sides.filter(s => s.width > 0)
+
+    // If shorthand sets all sides uniformly
+    if (shorthandWidth > 0 && shorthandColor && !isTransparentColor(shorthandColor)) {
+        const color = rgbToHex(shorthandColor)
+        if (color === 'transparent') return undefined
+        return {
+            color,
+            width: shorthandWidth,
+            style: (shorthandStyle === 'dashed' ? 'dashed'
+                : shorthandStyle === 'dotted' ? 'dotted'
+                    : 'solid') as 'solid' | 'dashed' | 'dotted',
+            position: 'inside',
+            opacity: rgbToOpacity(shorthandColor),
+            visible: true,
         }
     }
 
-    // If individual sides found nothing, try shorthand
-    if (best.width === 0 && shorthandWidth > 0 && shorthandColor && !isTransparentColor(shorthandColor)) {
-        best = { width: shorthandWidth, color: shorthandColor, style: shorthandStyle || 'solid' }
+    // No active sides at all
+    if (activeSides.length === 0) return undefined
+
+    // Find the best (thickest) active side for color/style reference
+    let best = activeSides[0]
+    for (const side of activeSides) {
+        if (side.width > best.width) best = side
     }
 
-    if (best.width === 0) return undefined
-    if (!best.color || isTransparentColor(best.color)) return undefined
+    // Resolve color: prefer side-specific color, fall back to shorthand border-color
+    const resolvedColor = best.color || shorthandColor
+    if (!resolvedColor || isTransparentColor(resolvedColor)) return undefined
+    const color = rgbToHex(resolvedColor)
+    if (color === 'transparent') return undefined
 
-    const color = rgbToHex(best.color)
+    // Build sides flags
+    const sideFlags = {
+        top: (sides[0].width > 0),
+        right: (sides[1].width > 0),
+        bottom: (sides[2].width > 0),
+        left: (sides[3].width > 0),
+    }
+    const allSides = sideFlags.top && sideFlags.right && sideFlags.bottom && sideFlags.left
 
     return {
         color,
@@ -1114,20 +1494,29 @@ function extractBorder(cs: CSSStyleDeclaration): Border | undefined {
             : best.style === 'dotted' ? 'dotted'
                 : 'solid') as 'solid' | 'dashed' | 'dotted',
         position: 'inside',
-        opacity: rgbToOpacity(best.color),
+        opacity: rgbToOpacity(resolvedColor),
         visible: true,
+        // Only set sides if NOT all 4 — omit for uniform borders (backward compatible)
+        ...(allSides ? {} : { sides: sideFlags }),
     }
 }
 
 function extractBorderRadius(cs: CSSStyleDeclaration): BorderRadius {
-    const tl = parseFloat(cs.borderTopLeftRadius) || 0
-    const tr = parseFloat(cs.borderTopRightRadius) || 0
-    const br = parseFloat(cs.borderBottomRightRadius) || 0
-    const bl = parseFloat(cs.borderBottomLeftRadius) || 0
+    // TW v4 outputs calc(infinity * 1px) for rounded-full. parseFloat returns NaN.
+    const parseBR = (val: string): number => {
+        if (!val) return 0
+        if (val.includes('infinity') || val.includes('9999')) return 9999
+        return parseFloat(val) || 0
+    }
+
+    const tl = parseBR(cs.borderTopLeftRadius)
+    const tr = parseBR(cs.borderTopRightRadius)
+    const br = parseBR(cs.borderBottomRightRadius)
+    const bl = parseBR(cs.borderBottomLeftRadius)
 
     // Also check shorthand
     if (tl === 0 && tr === 0 && br === 0 && bl === 0 && cs.borderRadius) {
-        const val = parseFloat(cs.borderRadius)
+        const val = parseBR(cs.borderRadius)
         if (val > 0) return val
     }
 
@@ -1524,9 +1913,17 @@ function inferContainerSizing(
     } else if (widthVal && isFull(widthVal)) {
         horizontal = 'fill'
     } else if (!widthVal || widthVal === 'auto' || widthVal === '') {
-        // No width set: block-level elements fill, inline elements hug
+        // No width set: check display, then fall back to tag semantics
         const display = cs.display
-        const isBlockLevel = !display || BLOCK_DISPLAYS.has(display)
+        const tag = el.tagName.toLowerCase()
+        // Tags that are inline by default should hug, not fill
+        const INLINE_DEFAULT_TAGS = new Set([
+            'a', 'span', 'button', 'label', 'li', 'strong', 'em', 'b', 'i',
+            'code', 'small', 'input', 'select', 'textarea', 'img',
+        ])
+        const isBlockLevel = display
+            ? BLOCK_DISPLAYS.has(display)
+            : !INLINE_DEFAULT_TAGS.has(tag) // no display set → check tag default
         horizontal = (isBlockLevel && !isAbsoluteOrFixed) ? 'fill' : 'hug'
     }
 
@@ -1569,14 +1966,23 @@ function inferContainerSizing(
     return { horizontal, vertical }
 }
 
+/** Tags that are block-level by default in HTML (fill width) */
+const BLOCK_LEVEL_TEXT_TAGS = new Set([
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'figcaption',
+])
+
+/** Tags that are inline by default in HTML (hug content) */
+const INLINE_TEXT_TAGS = new Set([
+    'a', 'span', 'button', 'label', 'li', 'strong', 'em', 'b', 'i',
+    'code', 'small', 'sub', 'sup', 'mark', 'abbr', 'cite', 'time',
+    'del', 'ins', 'kbd', 'var', 'u',
+])
+
 function inferTextSizing(
     tag: string,
     cs: CSSStyleDeclaration,
 ): Sizing {
-    const isHeading = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)
     const display = cs.display
-    const isBlock = display === 'block' || !display
-    const isInline = display === 'inline' || display === 'inline-block'
 
     // Explicit pixel width
     if (cs.width && cs.width.endsWith('px')) {
@@ -1584,11 +1990,22 @@ function inferTextSizing(
         return { horizontal: 'fixed', vertical }
     }
 
-    // Check parent context from inline style
-    const parentStyle = (typeof HTMLElement !== 'undefined' ? undefined : undefined) // not available without el
-    // Without parent context in this simplified path, use tag semantics:
-    if (isInline) return { horizontal: 'hug', vertical: 'hug' }
-    if (isBlock || isHeading) return { horizontal: 'fill', vertical: 'hug' }
+    // Width: 100% → fill
+    if (cs.width === '100%') return { horizontal: 'fill', vertical: 'hug' }
+
+    // Explicit display overrides tag defaults
+    if (display === 'inline' || display === 'inline-block' || display === 'inline-flex') {
+        return { horizontal: 'hug', vertical: 'hug' }
+    }
+    if (display === 'block' || display === 'flex' || display === 'grid') {
+        return { horizontal: 'fill', vertical: 'hug' }
+    }
+
+    // No explicit display → use HTML tag defaults
+    if (INLINE_TEXT_TAGS.has(tag)) return { horizontal: 'hug', vertical: 'hug' }
+    if (BLOCK_LEVEL_TEXT_TAGS.has(tag)) return { horizontal: 'fill', vertical: 'hug' }
+
+    // Unknown tag with no display → hug (safe default)
     return { horizontal: 'hug', vertical: 'hug' }
 }
 
@@ -1596,8 +2013,14 @@ function inferAutoResize(tag: string, cs: CSSStyleDeclaration): TextNode['autoRe
     if (cs.textOverflow === 'ellipsis') return 'none'
     if (cs.overflow === 'hidden' && cs.whiteSpace === 'nowrap') return 'none'
 
-    const isBlock = cs.display === 'block' || !cs.display
-    if (isBlock) return 'height'
+    // Check explicit display first, then fall back to tag defaults
+    const display = cs.display
+    if (display === 'block' || display === 'flex' || display === 'grid') return 'height'
+    if (display === 'inline' || display === 'inline-block' || display === 'inline-flex') return 'width-and-height'
+
+    // No explicit display → use HTML tag default
+    if (BLOCK_LEVEL_TEXT_TAGS.has(tag)) return 'height'
+    return 'width-and-height'
 
     return 'width-and-height'
 }
@@ -1648,10 +2071,13 @@ function extractTextContent(el: HTMLElement): string {
 function isTextOnlyElement(el: HTMLElement, tag: string): boolean {
     if (TEXT_ONLY_TAGS.has(tag)) {
         if (el.children.length === 0) return true
-        // Check if inline children have distinct styling
+        // Check if inline children have distinct styling (visual OR text styling)
         for (const child of el.children) {
             const childStyle = (child as HTMLElement).style
             if (hasVisualProperties(childStyle)) return false
+            // Also check for distinct text styling (font-size, font-weight, color)
+            // that would be lost if flattened into one text node
+            if (childStyle.fontSize || childStyle.fontWeight || childStyle.color) return false
         }
         return true
     }
@@ -1937,6 +2363,36 @@ function estimateTextWidth(text: string, fontSize: number): number {
     return Math.ceil(text.length * fontSize * CHAR_WIDTH_RATIO)
 }
 
+function estimateContainerWidth(
+    children: ScytleNode[],
+    padding: Padding,
+    layout: Layout,
+): number {
+    const gap = layout.gap || 0
+    const direction = layout.direction || 'column'
+    const flowChildren = children.filter(c => c.positioning !== 'absolute')
+    if (flowChildren.length === 0) return padding.left + padding.right + 40
+
+    const childOuterWidth = (c: ScytleNode) => {
+        const w = c.width || 40
+        const ml = c.margin?.left || 0
+        const mr = c.margin?.right || 0
+        return w + ml + mr
+    }
+
+    if (direction === 'row') {
+        let total = padding.left + padding.right
+        for (let i = 0; i < flowChildren.length; i++) {
+            total += childOuterWidth(flowChildren[i])
+            if (i > 0) total += gap
+        }
+        return total
+    } else {
+        const maxW = Math.max(...flowChildren.map(childOuterWidth))
+        return padding.left + padding.right + maxW
+    }
+}
+
 function estimateContainerHeight(
     children: ScytleNode[],
     padding: Padding,
@@ -1945,17 +2401,42 @@ function estimateContainerHeight(
     const gap = layout.gap || 0
     const direction = layout.direction || 'column'
 
-    if (children.length === 0) return padding.top + padding.bottom + 40
+    // Exclude absolute children from height estimation (they don't contribute to flow)
+    const flowChildren = children.filter(c => c.positioning !== 'absolute')
+
+    if (flowChildren.length === 0) return padding.top + padding.bottom + 40
+
+    // Helper to get child height including its margins
+    const childOuterHeight = (c: ScytleNode) => {
+        const h = c.height || 40
+        const mt = c.margin?.top || 0
+        const mb = c.margin?.bottom || 0
+        return h + mt + mb
+    }
+
+    if (layout.mode === 'grid' && layout.columns && typeof layout.columns === 'number') {
+        // Grid: arrange children in rows of N columns
+        const cols = layout.columns
+        const rowGap = layout.rowGap || layout.gap || 0
+        let totalH = padding.top + padding.bottom
+        for (let i = 0; i < flowChildren.length; i += cols) {
+            const rowChildren = flowChildren.slice(i, i + cols)
+            const rowH = Math.max(...rowChildren.map(childOuterHeight))
+            totalH += rowH
+            if (i > 0) totalH += rowGap
+        }
+        return totalH
+    }
 
     if (direction === 'column') {
         let total = padding.top + padding.bottom
-        for (let i = 0; i < children.length; i++) {
-            total += children[i].height || 40
+        for (let i = 0; i < flowChildren.length; i++) {
+            total += childOuterHeight(flowChildren[i])
             if (i > 0) total += gap
         }
         return total
     } else {
-        const maxH = Math.max(...children.map(c => c.height || 40))
+        const maxH = Math.max(...flowChildren.map(childOuterHeight))
         return padding.top + padding.bottom + maxH
     }
 }

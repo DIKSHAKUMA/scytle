@@ -9,8 +9,14 @@
  */
 
 import { __unstable__loadDesignSystem } from 'tailwindcss'
-import * as fs from 'fs'
-import * as path from 'path'
+
+// Hide ALL Node.js APIs from Turbopack's bundler via eval('require').
+// Turbopack intercepts bare require/require.resolve/fs/path and rewrites paths.
+// This file only runs server-side (runtime = 'nodejs' in the API route).
+// eslint-disable-next-line no-eval
+const _require: NodeRequire = eval('require')
+const _fs: typeof import('fs') = _require('fs')
+const _path: typeof import('path') = _require('path')
 
 // ─── Types ───────────────────────────────────────
 
@@ -34,18 +40,18 @@ async function getDesignSystem(): Promise<DesignSystem> {
   _dsPromise = __unstable__loadDesignSystem('@import "tailwindcss";', {
     loadStylesheet: async (id: string, base: string) => {
       if (id === 'tailwindcss') {
-        const cssPath = require.resolve('tailwindcss/index.css')
+        const cssPath = _require.resolve('tailwindcss/index.css')
         return {
           path: cssPath,
-          base: path.dirname(cssPath),
-          content: fs.readFileSync(cssPath, 'utf-8'),
+          base: _path.dirname(cssPath),
+          content: _fs.readFileSync(cssPath, 'utf-8'),
         }
       }
-      const resolved = require.resolve(id, { paths: [base] })
+      const resolved = _require.resolve(id, { paths: [base] })
       return {
         path: resolved,
-        base: path.dirname(resolved),
-        content: fs.readFileSync(resolved, 'utf-8'),
+        base: _path.dirname(resolved),
+        content: _fs.readFileSync(resolved, 'utf-8'),
       }
     },
   })
@@ -123,7 +129,112 @@ async function resolveAllVars(ds: DesignSystem, value: string): Promise<string> 
   return result
 }
 
+// ─── Color Conversion ───────────────────────────
+
+/**
+ * Convert oklch() color values to hex in a CSS value string.
+ * DOMParser's element.style doesn't reliably expose oklch values.
+ */
+function resolveOklchToHex(value: string): string {
+  // Match oklch(L C H) or oklch(L C H / alpha)
+  return value.replace(
+    /oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/g,
+    (_, lStr, pct, cStr, hStr, alphaStr) => {
+      let L = parseFloat(lStr)
+      if (pct === '%') L = L / 100
+      const C = parseFloat(cStr)
+      const H = parseFloat(hStr)
+
+      // oklch → oklab
+      const hRad = (H * Math.PI) / 180
+      const a = C * Math.cos(hRad)
+      const b = C * Math.sin(hRad)
+
+      // oklab → linear sRGB (via LMS)
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b
+      const s_ = L - 0.0894841775 * a - 1.2914855480 * b
+
+      const l = l_ * l_ * l_
+      const m = m_ * m_ * m_
+      const s = s_ * s_ * s_
+
+      const rLin = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+      const gLin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+      const bLin = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+
+      const toSrgb = (x: number) => {
+        if (x <= 0) return 0
+        if (x >= 1) return 255
+        return Math.round((x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055) * 255)
+      }
+
+      const r = Math.min(255, Math.max(0, toSrgb(rLin)))
+      const g = Math.min(255, Math.max(0, toSrgb(gLin)))
+      const bVal = Math.min(255, Math.max(0, toSrgb(bLin)))
+
+      const hex = '#' + [r, g, bVal].map(c => c.toString(16).padStart(2, '0')).join('')
+
+      // Preserve alpha if present
+      const alpha = alphaStr !== undefined ? parseFloat(alphaStr) : 1
+      if (alpha < 1) {
+        return `rgba(${r}, ${g}, ${bVal}, ${alpha})`
+      }
+      return hex
+    }
+  )
+}
+
 // ─── Unit Conversion ─────────────────────────────
+
+/**
+ * Convert CSS logical properties to physical properties.
+ * Tailwind v4 outputs logical properties (padding-inline, margin-block, etc.)
+ * but DOMParser's element.style doesn't reliably expand them to physical properties.
+ */
+const LOGICAL_TO_PHYSICAL: Record<string, string[]> = {
+  'padding-inline': ['padding-left', 'padding-right'],
+  'padding-block': ['padding-top', 'padding-bottom'],
+  'padding-inline-start': ['padding-left'],
+  'padding-inline-end': ['padding-right'],
+  'padding-block-start': ['padding-top'],
+  'padding-block-end': ['padding-bottom'],
+  'margin-inline': ['margin-left', 'margin-right'],
+  'margin-block': ['margin-top', 'margin-bottom'],
+  'margin-inline-start': ['margin-left'],
+  'margin-inline-end': ['margin-right'],
+  'margin-block-start': ['margin-top'],
+  'margin-block-end': ['margin-bottom'],
+  'border-inline-width': ['border-left-width', 'border-right-width'],
+  'border-block-width': ['border-top-width', 'border-bottom-width'],
+  'border-inline-style': ['border-left-style', 'border-right-style'],
+  'border-block-style': ['border-top-style', 'border-bottom-style'],
+  'border-inline-color': ['border-left-color', 'border-right-color'],
+  'border-block-color': ['border-top-color', 'border-bottom-color'],
+  'inset-inline': ['left', 'right'],
+  'inset-block': ['top', 'bottom'],
+  'inset-inline-start': ['left'],
+  'inset-inline-end': ['right'],
+  'inset-block-start': ['top'],
+  'inset-block-end': ['bottom'],
+}
+
+function logicalToPhysical(props: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [prop, value] of Object.entries(props)) {
+    const physical = LOGICAL_TO_PHYSICAL[prop]
+    if (physical) {
+      for (const p of physical) {
+        if (!(p in result) && !(p in props)) {
+          result[p] = value
+        }
+      }
+    } else {
+      result[prop] = value
+    }
+  }
+  return result
+}
 
 function remToPx(value: string): string {
   return value.replace(/([\d.]+)rem\b/g, (_, n) => `${parseFloat(n) * 16}px`)
@@ -186,6 +297,12 @@ function parseRuleRaw(cssRule: string): ParsedRule {
   const props: Record<string, string> = {}
   const twVars = new Map<string, string>()
   const initials = new Map<string, string>()
+
+  // Skip rules with nested selectors (@media, &:hover, etc.) — these can't be inlined
+  // Rules with @property blocks are fine (they declare initial values)
+  // Look for actual selector nesting: &:hover, @media inside the main block
+  const hasNestedSelectors = /\{\s*(?:&[:\s]|@media)/.test(cssRule)
+  if (hasNestedSelectors) return { props, twVars, initials }
 
   // Extract @property initial-values
   const propertyPattern = /@property\s+(--[\w-]+)\s*\{[^}]*initial-value:\s*([^;}]+)/g
@@ -357,8 +474,27 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
 
   if (uniqueClasses.size === 0) return { html, unresolvedClasses: [] }
 
+  // Filter out variant/responsive classes — they produce CSS with @media / &:hover
+  // selectors that cannot be represented as inline styles.
+  // Variant classes contain a colon before the utility name (hover:, focus:, md:, lg:, etc.)
+  // BUT Tailwind utilities like "text-lg" or "border-t-2" use colons only for variants.
+  // Variant prefixes always appear BEFORE the utility and use `:` as separator.
+  const isVariantClass = (cls: string) => {
+    // Classes like "hover:text-black", "md:flex", "focus:outline-none", "group-hover:text-black"
+    // Always have the pattern <variant>:<utility>
+    // Standard utilities never have a colon prefix like this
+    return /^[a-z][\w-]*:/.test(cls)
+  }
+
+  const filteredClasses = new Set<string>()
+  for (const cls of uniqueClasses) {
+    if (!isVariantClass(cls)) {
+      filteredClasses.add(cls)
+    }
+  }
+
   // Batch convert all unique classes at once
-  const classArray = Array.from(uniqueClasses)
+  const classArray = Array.from(filteredClasses)
   const cssResults = ds.candidatesToCss(classArray)
 
   // Build class → raw parsed rule map
@@ -397,7 +533,10 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
     if (rules.length === 0) continue
 
     // Merge all rules and resolve cross-class --tw-* vars
-    const mergedProps = mergeAndResolve(rules)
+    let mergedProps = mergeAndResolve(rules)
+
+    // Convert logical CSS properties to physical (padding-inline → padding-left/right, etc.)
+    mergedProps = logicalToPhysical(mergedProps)
 
     // Resolve remaining theme vars and convert units
     for (const [prop, value] of Object.entries(mergedProps)) {
@@ -410,6 +549,14 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
       }
       if (resolved.includes('rem')) {
         resolved = remToPx(resolved)
+      }
+      // Resolve oklch() to hex — DOMParser can't reliably parse oklch in element.style
+      if (resolved.includes('oklch(')) {
+        resolved = resolveOklchToHex(resolved)
+      }
+      // Handle infinity values (e.g., calc(infinity * 1px) → 9999px)
+      if (resolved.includes('infinity')) {
+        resolved = resolved.replace(/calc\([^)]*infinity[^)]*\)/g, '9999px')
       }
       mergedProps[prop] = resolved
     }
@@ -471,5 +618,81 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
     result = result.substring(0, rep.start) + rep.replacement + result.substring(rep.end)
   }
 
+  // Post-process: handle space-y-* / space-x-* classes
+  // These use `> * + *` selectors which can't be inlined per-class.
+  // Instead, detect them on parent elements and add margin to direct children.
+  result = distributeSpaceClasses(result, ds)
+
   return { html: result, unresolvedClasses }
+}
+
+/**
+ * Distribute space-y-* / space-x-* to child elements as gap.
+ * Tailwind's space-y-N uses `> * + *` selector which can't be inlined.
+ * We convert it to gap on the parent element (works for flex/grid layouts).
+ * Also removes the bogus margin-top/bottom the converter adds to the parent.
+ */
+function distributeSpaceClasses(html: string, _ds: DesignSystem): string {
+  if (!html.includes('space-y-') && !html.includes('space-x-')) return html
+
+  // Tailwind v4 spacing scale: space-N = N * 4px (same as gap-N, p-N, m-N)
+  const resolveSpacing = (n: string): string | null => {
+    // Handle fractional values like space-y-0.5
+    const num = parseFloat(n)
+    if (!isNaN(num)) return `${num * 4}px`
+    // Named sizes: px = 1px
+    if (n === 'px') return '1px'
+    return null
+  }
+
+  return html.replace(
+    /(<\w+\s[^>]*?)class="([^"]*(?:space-[xy]-)[^"]*)"([^>]*?)style="([^"]*)"([^>]*?>)/g,
+    (fullMatch, before, classStr, mid, styleStr, after) => {
+      const classes = classStr.split(/\s+/)
+      let gapValue = ''
+
+      for (const cls of classes) {
+        const spaceMatch = cls.match(/^space-(y|x)-(.+)$/)
+        if (!spaceMatch) continue
+        const val = resolveSpacing(spaceMatch[2])
+        if (val) gapValue = val
+      }
+
+      if (!gapValue) return fullMatch
+
+      // Remove the space-y/x margin-top/margin-bottom wrongly added to this element
+      let cleanedStyle = styleStr
+        .split(';')
+        .map((d: string) => d.trim())
+        .filter((d: string) => {
+          if (!d) return false
+          const prop = d.substring(0, d.indexOf(':')).trim()
+          if (prop === 'margin-top' || prop === 'margin-bottom' ||
+              prop === 'margin-left' || prop === 'margin-right') {
+            const val = d.substring(d.indexOf(':') + 1).trim()
+            if (val.includes('calc(') && (val.includes('* 0') || val.includes('* 1'))) return false
+          }
+          return true
+        })
+        .join('; ')
+
+      if (cleanedStyle && !cleanedStyle.endsWith(';')) cleanedStyle += '; '
+      else if (!cleanedStyle) cleanedStyle = ''
+
+      // If no display is already set, add flex layout so gap works
+      // (space-y → flex column, space-x → flex row)
+      if (!cleanedStyle.includes('display:')) {
+        const cls = classes.find((c: string) => c.match(/^space-(y|x)-/))
+        const axis = cls?.match(/^space-(y|x)-/)?.[1]
+        if (axis === 'y') {
+          cleanedStyle += `display: flex; flex-direction: column; `
+        } else {
+          cleanedStyle += `display: flex; flex-direction: row; `
+        }
+      }
+      cleanedStyle += `gap: ${gapValue}`
+
+      return `${before}class="${classStr}"${mid}style="${cleanedStyle}"${after}`
+    }
+  )
 }

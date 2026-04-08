@@ -46,15 +46,11 @@ export async function parseHtml(
     options?: ParseHtmlOptions,
 ): Promise<FrameNode> {
     try {
-        // Step 1: Convert Tailwind classes to inline styles (server-side)
         const inlinedHtml = await convertTailwindClasses(html)
-
-        // Step 2: Parse with DOMParser
         const { parseHtmlViaDOMParser } = await import('./domparser')
         return await parseHtmlViaDOMParser(inlinedHtml, pageName, options)
     } catch (error) {
         console.warn('[parseHtml] DOMParser failed, falling back to iframe:', error)
-        // Fallback to iframe parser (handles Tailwind via CDN internally)
         const { parseHtmlToNodesViaIframe } = await import('./iframe-parser')
         return parseHtmlToNodesViaIframe(html, pageName, options)
     }
@@ -62,7 +58,6 @@ export async function parseHtml(
 
 /**
  * Convert Tailwind classes to inline styles via server API.
- * If the API call fails, returns the original HTML (iframe fallback will handle it).
  */
 async function convertTailwindClasses(html: string): Promise<string> {
     const res = await fetch('/api/tailwind-to-inline', {
