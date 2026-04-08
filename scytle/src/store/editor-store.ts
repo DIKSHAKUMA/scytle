@@ -1911,10 +1911,11 @@ export const useEditorStore = create<EditorState>()(
                         // Clear drawing state
                         state.penDrawingState = null
 
-                        // Keep the node selected and exit pen tool to select mode
-                        state.selectedIds = [ps.nodeId]
-                        state.activeTool = 'select'
-                        // Don't auto-enter vector edit mode — Figma shows the shape selected
+                        // Figma behavior: stay in pen tool after closing/committing a path
+                        // so the user can immediately draw another shape.
+                        // Deselect the committed node — don't switch to select tool.
+                        state.selectedIds = []
+                        // activeTool stays as 'pen'
                         state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []

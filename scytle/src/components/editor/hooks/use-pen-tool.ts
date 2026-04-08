@@ -92,7 +92,9 @@ export function usePenTool(
                 // ── First click — create a VectorNode and start drawing ──
                 const vectorNode = createVector({ x: 0, y: 0 })
                 store.addNode(vectorNode)
-                store.selectNode(vectorNode.id)
+                // Don't select the node while drawing — it has zero size and
+                // selecting it would show a stray selection box on the canvas.
+                // Selection happens after commitPenPath().
 
                 const vertex: VectorVertex = { x: constrainedPos.x, y: constrainedPos.y }
                 store.setPenDrawingState({
