@@ -244,9 +244,11 @@ export function useKeyboardShortcuts() {
                     return
                 }
 
-                // Pen tool: commit current path and switch to select
-                if (store.penDrawingState) {
-                    store.commitPenPath()
+                // Pen tool: commit current path (if drawing) and switch to select
+                if (store.activeTool === 'pen') {
+                    if (store.penDrawingState) {
+                        store.commitPenPath()
+                    }
                     store.setActiveTool('select')
                     return
                 }

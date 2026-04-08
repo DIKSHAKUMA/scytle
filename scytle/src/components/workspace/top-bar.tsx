@@ -10,6 +10,7 @@ import {
     Hand,
     Square,
     Type,
+    PenTool,
     Undo2,
     Redo2,
     Share2,
@@ -31,6 +32,7 @@ const TOOLS: {
         { tool: 'select', icon: MousePointer2, label: 'Move', shortcut: 'V' },
         { tool: 'hand', icon: Hand, label: 'Hand', shortcut: 'H' },
         { tool: 'frame', icon: Square, label: 'Frame', shortcut: 'F' },
+        { tool: 'pen', icon: PenTool, label: 'Pen', shortcut: 'P' },
         { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },
     ]
 
@@ -79,7 +81,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                             title={`${label} (${shortcut})`}
                             onClick={() => setActiveTool(tool)}
                             className={cn(
-                                'w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150',
+                                'w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 outline-none',
                                 activeTool === tool
                                     ? 'bg-foreground text-background shadow-sm'
                                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'

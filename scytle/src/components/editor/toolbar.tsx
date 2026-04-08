@@ -2,7 +2,7 @@
 
 import { useEditorStore } from '@/store/editor-store'
 import type { CanvasTool } from '@/types/canvas'
-import { MousePointer2, Square, Type, Hand } from 'lucide-react'
+import { MousePointer2, Square, Type, Hand, PenTool } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ============================================================
@@ -17,6 +17,7 @@ const TOOLS: {
 }[] = [
         { tool: 'select', icon: MousePointer2, label: 'Move', shortcut: 'V' },
         { tool: 'frame', icon: Square, label: 'Frame', shortcut: 'F' },
+        { tool: 'pen', icon: PenTool, label: 'Pen', shortcut: 'P' },
         { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },
         { tool: 'hand', icon: Hand, label: 'Hand', shortcut: 'H' },
     ]
