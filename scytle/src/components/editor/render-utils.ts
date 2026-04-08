@@ -428,7 +428,12 @@ export function computeBaseStyles(
     // Absolute-positioned children in auto layout use fixed sizing (not flex)
     // Horizontal
     if (node.sizing.horizontal === 'fixed') {
-        s.width = `calc(${node.width}px * var(--z, 1))`
+        // Use raw CSS percentage if available (e.g. width: 75% from w-3/4)
+        if (node.cssWidth) {
+            s.width = node.cssWidth
+        } else {
+            s.width = `calc(${node.width}px * var(--z, 1))`
+        }
     } else if (node.sizing.horizontal === 'fill') {
         if (isAbsoluteInAutoLayout) {
             // Absolute children can't use flex sizing — fall back to fixed width
@@ -438,17 +443,33 @@ export function computeBaseStyles(
             s.flex = '1 1 0%'
             s.minWidth = 0
         } else if (parentDir === 'column') {
-            // Cross axis in column → stretch (default, but explicit)
-            s.alignSelf = 'stretch'
+            // Cross axis in column → stretch.
+            // IMPORTANT: CSS spec says auto margins override align-self:stretch,
+            // so if node has autoMargin (e.g. mx-auto), use width:100% instead.
+            // This ensures max-width + margin:auto centering works correctly.
+            if (node.autoMargin?.left || node.autoMargin?.right) {
+                s.width = '100%'
+            } else {
+                s.alignSelf = 'stretch'
+            }
         } else {
             s.width = '100%'
         }
     }
-    // hug → width unset (auto)
+    // hug → width unset (auto) … EXCEPT when display is flex/grid,
+    // which are block-level and fill by default.  Paper-style: use fit-content
+    // so inline-flex / inline-grid elements hug their content instead of filling.
+    if (node.sizing.horizontal === 'hug' && 'layout' in node && node.layout?.mode && node.layout.mode !== 'none') {
+        s.width = 'fit-content'
+    }
 
     // Vertical
     if (node.sizing.vertical === 'fixed') {
-        s.height = `calc(${node.height}px * var(--z, 1))`
+        if (node.cssHeight) {
+            s.height = node.cssHeight
+        } else {
+            s.height = `calc(${node.height}px * var(--z, 1))`
+        }
     } else if (node.sizing.vertical === 'fill') {
         if (isAbsoluteInAutoLayout) {
             // Absolute children can't use flex sizing — fall back to fixed height
@@ -589,6 +610,11 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
                     ? `repeat(${node.layout.rows}, 1fr)`
                     : node.layout.rows
         }
+        // Grid alignment (items-center, items-start, etc.)
+        if (node.layout.align)
+            s.alignItems = ALIGN_MAP[node.layout.align] ?? node.layout.align
+        if (node.layout.justify)
+            s.justifyContent = JUSTIFY_MAP[node.layout.justify] ?? node.layout.justify
         // Grid gap: use specific columnGap/rowGap if set, otherwise fall back to generic gap
         const gridColGap = node.layout.columnGap ?? node.layout.gap
         const gridRowGap = node.layout.rowGap ?? node.layout.gap

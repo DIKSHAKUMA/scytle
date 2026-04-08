@@ -501,12 +501,16 @@ function buildContainerNode(
 
     // Estimate dimensions
     let estWidth = sizing.horizontal === 'fixed'
-        ? (parseFloat(cs.width) || containerWidth)
+        ? (cs.width?.endsWith('%')
+            ? (parseFloat(cs.width) / 100) * containerWidth  // Resolve percentage against parent
+            : (parseFloat(cs.width) || containerWidth))
         : sizing.horizontal === 'hug'
             ? estimateContainerWidth(children, padding, layout)
             : containerWidth
     let estHeight = sizing.vertical === 'fixed'
-        ? (parseFloat(cs.height) || estimateContainerHeight(children, padding, layout))
+        ? (cs.height?.endsWith('%')
+            ? (parseFloat(cs.height) / 100) * containerWidth  // Approximate: use width for height %
+            : (parseFloat(cs.height) || estimateContainerHeight(children, padding, layout)))
         : estimateContainerHeight(children, padding, layout)
 
 
@@ -573,6 +577,16 @@ function buildContainerNode(
         // Grid child spans (col-span-2, row-span-2, etc.)
         ...extractGridSpan(cs),
     })
+
+    // Store raw CSS percentage width/height for render-time resolution
+    const widthPct = parseFloat(cs.width || '')
+    if (cs.width?.endsWith('%') && !isNaN(widthPct) && widthPct < 99.5) {
+        frame.cssWidth = cs.width
+    }
+    const heightPct = parseFloat(cs.height || '')
+    if (cs.height?.endsWith('%') && !isNaN(heightPct) && heightPct < 99.5) {
+        frame.cssHeight = cs.height
+    }
 
     // Set x/y for absolute-positioned elements from CSS top/left/right/bottom + transform
     if (cs.position === 'absolute' || cs.position === 'fixed') {
@@ -949,6 +963,23 @@ function rgbToHex(rgb: string): string {
     // Already hex
     if (rgb.startsWith('#')) return normalizeHex(rgb)
 
+    // ── color-mix MUST be checked BEFORE rgb/rgba, because the browser transforms
+    //    color-mix(in oklab, #fff 10%, transparent) to
+    //    color-mix(rgb(255, 255, 255) 10%, transparent) in element.style,
+    //    and the rgb() inside would falsely match the rgb/rgba regex below.
+    if (rgb.includes('color-mix')) {
+        // Browser-transformed format: color-mix(<color> <pct>%, transparent)
+        // e.g. color-mix(rgb(255, 255, 255) 10%, transparent)
+        const browserMixMatch = rgb.match(/color-mix\(\s*((?:rgba?\([^)]+\)|#[\da-fA-F]+|\w+))\s+[\d.]+%\s*,\s*transparent\s*\)/)
+        if (browserMixMatch) return rgbToHex(browserMixMatch[1].trim())
+        // Original CSS format: color-mix(in <colorspace>, <color> <pct>%, transparent)
+        const cssMixMatch = rgb.match(/color-mix\(\s*in\s+\w+\s*,\s*([#\w().,\s]+?)\s+[\d.]+%\s*,\s*transparent\s*\)/)
+        if (cssMixMatch) return rgbToHex(cssMixMatch[1].trim())
+        // Reversed: color-mix(in <colorspace>, transparent, <color> <pct>%)
+        const cssMixMatch2 = rgb.match(/color-mix\(\s*in\s+\w+\s*,\s*transparent\s*,\s*([#\w().,\s]+?)\s+[\d.]+%\s*\)/)
+        if (cssMixMatch2) return rgbToHex(cssMixMatch2[1].trim())
+    }
+
     // Standard rgb/rgba (comma-separated)
     const rgbMatch = rgb.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
     if (rgbMatch) {
@@ -1071,6 +1102,19 @@ function rgbToOpacity(rgb: string): number {
     const slashMatch = rgb.match(/\/\s*([\d.]+)\s*\)/)
     if (slashMatch) return parseFloat(slashMatch[1])
 
+    // color-mix — browser-transformed format (element.style):
+    // color-mix(rgb(255, 255, 255) 10%, transparent)
+    // Note: browser drops "in oklab" and converts hex to rgb() in element.style
+    const browserMixMatch = rgb.match(/color-mix\(\s*(?:rgba?\([^)]+\)|#[\da-fA-F]+|\w+)\s+([\d.]+)%\s*,\s*transparent\s*\)/)
+    if (browserMixMatch) return parseFloat(browserMixMatch[1]) / 100
+
+    // color-mix(in oklab, <color> <percentage>%, transparent)
+    // Tailwind v4: color-mix(in oklab, #fff 10%, transparent) → opacity = 0.10
+    const colorMixMatch = rgb.match(/color-mix\(\s*in\s+\w+\s*,\s*[#\w().,\s]+?\s+([\d.]+)%\s*,\s*transparent\s*\)/)
+    if (colorMixMatch) return parseFloat(colorMixMatch[1]) / 100
+    const colorMixMatch2 = rgb.match(/color-mix\(\s*in\s+\w+\s*,\s*transparent\s*,\s*[#\w().,\s]+?\s+([\d.]+)%\s*\)/)
+    if (colorMixMatch2) return parseFloat(colorMixMatch2[1]) / 100
+
     return 1
 }
 
@@ -1083,6 +1127,11 @@ function isTransparentColor(color: string): boolean {
     if (color === 'rgba(0, 0, 0, 0)') return true
     const alphaMatch = color.match(/\/\s*([\d.]+)\s*\)$/)
     if (alphaMatch && parseFloat(alphaMatch[1]) === 0) return true
+    // color-mix with 0% is transparent (both browser-transformed and original CSS formats)
+    if (color.includes('color-mix') && color.includes('transparent')) {
+        const pctMatch = color.match(/\s([\d.]+)%\s*,\s*transparent/)
+        if (pctMatch && parseFloat(pctMatch[1]) === 0) return true
+    }
     return false
 }
 
@@ -1097,6 +1146,8 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
         return {
             mode: 'grid',
             direction: 'row',
+            align: mapAlignItems(cs.alignItems),
+            justify: mapJustifyContent(cs.justifyContent),
             gap: parseFloat(cs.gap) || 0,
             columns: parseGridTemplate(cs.gridTemplateColumns),
             rows: parseGridTemplate(cs.gridTemplateRows),
@@ -1855,11 +1906,13 @@ function inferContainerSizing(
     // Read parent's inline style for context
     const parentEl = el.parentElement
     const parentStyle = parentEl?.style
-    const parentIsFlexRow = parentStyle?.display === 'flex' &&
-        (parentStyle.flexDirection === 'row' || parentStyle.flexDirection === '' || !parentStyle.flexDirection)
-    const parentIsFlexCol = parentStyle?.display === 'flex' &&
-        parentStyle.flexDirection === 'column'
-    const parentIsGrid = parentStyle?.display === 'grid'
+    const pDisplay = parentStyle?.display
+    const pIsFlex = pDisplay === 'flex' || pDisplay === 'inline-flex'
+    const parentIsFlexRow = pIsFlex &&
+        (parentStyle!.flexDirection === 'row' || parentStyle!.flexDirection === '' || !parentStyle!.flexDirection)
+    const parentIsFlexCol = pIsFlex &&
+        parentStyle!.flexDirection === 'column'
+    const parentIsGrid = pDisplay === 'grid' || pDisplay === 'inline-grid'
 
     let horizontal: 'fixed' | 'hug' | 'fill' = 'hug'
     let vertical: 'fixed' | 'hug' | 'fill' = 'hug'
@@ -1895,15 +1948,21 @@ function inferContainerSizing(
             horizontal = 'fixed'
         } else if (widthVal && isFull(widthVal)) {
             horizontal = 'fill'
+        } else if (widthVal && widthVal.endsWith('%')) {
+            // Non-100% percentage width (e.g. w-1/2 → 50%) → treat as fixed
+            horizontal = 'fixed'
         } else {
             horizontal = 'hug'
         }
     } else if (parentIsFlexCol) {
-        if (isCrossStretched()) {
-            horizontal = 'fill'
-        } else if (widthVal && widthVal.endsWith('px')) {
+        if (widthVal && widthVal.endsWith('px')) {
             horizontal = 'fixed'
         } else if (widthVal && isFull(widthVal)) {
+            horizontal = 'fill'
+        } else if (widthVal && widthVal.endsWith('%')) {
+            // Non-100% percentage width (e.g. w-3/4 → 75%) → treat as fixed
+            horizontal = 'fixed'
+        } else if (isCrossStretched()) {
             horizontal = 'fill'
         } else {
             horizontal = 'hug'
@@ -1912,6 +1971,9 @@ function inferContainerSizing(
         horizontal = 'fixed'
     } else if (widthVal && isFull(widthVal)) {
         horizontal = 'fill'
+    } else if (widthVal && widthVal.endsWith('%')) {
+        // Non-100% percentage width → treat as fixed (resolved to pixels)
+        horizontal = 'fixed'
     } else if (!widthVal || widthVal === 'auto' || widthVal === '') {
         // No width set: check display, then fall back to tag semantics
         const display = cs.display

@@ -401,6 +401,11 @@ export interface BaseNodeProperties {
     /** Layout constraints (Figma-style pinning to parent edges) */
     constraints?: LayoutConstraints
 
+    /** Raw CSS width/height for percentage-based sizing (e.g. "75%").
+     *  When set, the renderer uses this CSS value instead of the pixel width/height. */
+    cssWidth?: string
+    cssHeight?: string
+
     /** Raw CSS position values for absolute elements (Paper-style deferred resolution).
      *  The canvas renderer resolves these against actual parent dimensions at render time,
      *  instead of the parser guessing parent dimensions during conversion. */

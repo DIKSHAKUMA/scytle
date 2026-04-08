@@ -278,6 +278,13 @@ function resolveCalc(value: string): string {
       return `${Math.round(a * b * 1000) / 1000}${unit}`
     }
 
+    // Tailwind v4 fraction-percentage: N/M * 100% (e.g., 3/4 * 100% → 75%)
+    const fracPctMatch = trimmed.match(/^(\d+)\s*\/\s*(\d+)\s*\*\s*100%$/)
+    if (fracPctMatch) {
+      const result = (parseInt(fracPctMatch[1]) / parseInt(fracPctMatch[2])) * 100
+      return `${Math.round(result * 1000) / 1000}%`
+    }
+
     return `calc(${expr})`
   })
 }
