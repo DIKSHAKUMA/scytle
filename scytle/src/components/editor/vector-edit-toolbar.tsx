@@ -52,14 +52,35 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
     const vectorEditTool = useEditorStore((s) => s.vectorEditTool)
     const setVectorEditTool = useEditorStore((s) => s.setVectorEditTool)
     const exitVectorEditMode = useEditorStore((s) => s.exitVectorEditMode)
+    const activeTool = useEditorStore((s) => s.activeTool)
+    const setActiveTool = useEditorStore((s) => s.setActiveTool)
+    const commitPenPath = useEditorStore((s) => s.commitPenPath)
+    const deleteNode = useEditorStore((s) => s.deleteNode)
+    const setPenDrawingState = useEditorStore((s) => s.setPenDrawingState)
 
     const [hoveredTool, setHoveredTool] = useState<VectorEditTool | 'close' | null>(null)
 
     const handleClose = useCallback(() => {
-        exitVectorEditMode()
-    }, [exitVectorEditMode])
+        if (vectorEditNodeId) {
+            // Vector edit mode → exit it
+            exitVectorEditMode()
+        } else if (activeTool === 'pen') {
+            // Pen tool mode → commit open path (if ≥2 vertices) or discard, switch to select
+            const ps = useEditorStore.getState().penDrawingState
+            if (ps) {
+                if (ps.vertices.length >= 2) {
+                    commitPenPath()
+                } else {
+                    deleteNode(ps.nodeId)
+                    setPenDrawingState(null)
+                }
+            }
+            setActiveTool('select')
+        }
+    }, [vectorEditNodeId, activeTool, exitVectorEditMode, commitPenPath, deleteNode, setPenDrawingState, setActiveTool])
 
-    if (!vectorEditNodeId) return null
+    // Show toolbar in vector edit mode OR when pen tool is active
+    if (!vectorEditNodeId && activeTool !== 'pen') return null
 
     return (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1">

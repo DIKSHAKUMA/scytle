@@ -83,6 +83,9 @@ export interface PenDrawingState {
     /** Incoming tangent for the first vertex (mirrored handle from first drag).
      *  Used as tangentEnd on the closing segment when the path is closed. */
     _firstVertexIncomingTangent?: { x: number; y: number }
+    /** Active alignment snap guides — orange lines shown when cursor aligns with an existing vertex.
+     *  vertexX/vertexY is the canvas position of the anchor that triggered the snap. */
+    _alignGuides?: Array<{ axis: 'x' | 'y'; value: number; vertexX: number; vertexY: number }>
 }
 
 

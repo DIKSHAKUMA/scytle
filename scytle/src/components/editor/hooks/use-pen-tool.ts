@@ -17,6 +17,9 @@ function constrainTo45(origin: { x: number; y: number }, point: { x: number; y: 
     }
 }
 
+/** Snap threshold in screen pixels — cursor snaps to alignment within this distance */
+const ALIGN_SNAP_THRESHOLD_PX = 6
+
 /** Screen-space distance (px) within which cursor "snaps" to close the path */
 const CLOSE_THRESHOLD_PX = 8
 
@@ -257,24 +260,63 @@ export function usePenTool(
                         // Store the outgoing tangent on the drawing state so the
                         // next segment can use it as tangentStart
                         _outgoingTangent: constrainedTangent,
+                        _alignGuides: undefined,
                         ...firstVertexUpdate,
                     } as typeof ps)
                     return
                 }
             }
 
-            // ── Normal move (no drag) — update cursor + close detection ──
+            // ── Normal move (no drag) — update cursor + close detection + alignment guides ──
             const startV = ps.vertices[0]
             const sdx = pos.x - startV.x
             const sdy = pos.y - startV.y
             const distCanvas = Math.sqrt(sdx * sdx + sdy * sdy)
             const nearStart = ps.vertices.length >= 3 && distCanvas < CLOSE_THRESHOLD_PX / store.zoom
 
+            // ── Alignment guide detection: snap cursor to X/Y of existing vertices ──
+            const snapThreshold = ALIGN_SNAP_THRESHOLD_PX / store.zoom
+            let snappedX = pos.x
+            let snappedY = pos.y
+            const guides: Array<{ axis: 'x' | 'y'; value: number; vertexX: number; vertexY: number }> = []
+
+            if (ps.vertices.length >= 1) {
+                const allTargets = ps.vertices
+                let bestDx = snapThreshold + 1
+                let bestDy = snapThreshold + 1
+                let bestVxForX: { x: number; y: number } | null = null
+                let bestVxForY: { x: number; y: number } | null = null
+
+                for (const v of allTargets) {
+                    const dx = Math.abs(pos.x - v.x)
+                    const dy = Math.abs(pos.y - v.y)
+                    if (dx < snapThreshold && dx < bestDx) {
+                        bestDx = dx
+                        snappedX = v.x
+                        bestVxForX = v
+                    }
+                    if (dy < snapThreshold && dy < bestDy) {
+                        bestDy = dy
+                        snappedY = v.y
+                        bestVxForY = v
+                    }
+                }
+
+                // Record guides for snapped axes — store the source vertex so we can draw the guide line
+                if (bestDx <= snapThreshold && bestVxForX) {
+                    guides.push({ axis: 'x', value: snappedX, vertexX: bestVxForX.x, vertexY: bestVxForX.y })
+                }
+                if (bestDy <= snapThreshold && bestVxForY) {
+                    guides.push({ axis: 'y', value: snappedY, vertexX: bestVxForY.x, vertexY: bestVxForY.y })
+                }
+            }
+
             store.setPenDrawingState({
                 ...ps,
-                cursorX: pos.x,
-                cursorY: pos.y,
+                cursorX: snappedX,
+                cursorY: snappedY,
                 nearStartPoint: nearStart,
+                _alignGuides: guides.length > 0 ? guides : undefined,
             })
         },
         [screenToCanvas],
