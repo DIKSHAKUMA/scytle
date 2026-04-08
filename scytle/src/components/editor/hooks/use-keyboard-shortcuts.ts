@@ -248,8 +248,10 @@ export function useKeyboardShortcuts() {
                 if (store.activeTool === 'pen') {
                     if (store.penDrawingState) {
                         store.commitPenPath()
+                        store.setActiveTool('select')
                     }
-                    store.setActiveTool('select')
+                    // If penDrawingState is null (closed-path click), handlePenKeyDown
+                    // in use-pen-tool.ts handles Escape (it knows the committed nodeId)
                     return
                 }
 
@@ -295,6 +297,9 @@ export function useKeyboardShortcuts() {
 
             // ── Enter / Shift+Enter — layer navigation ───────────────
             if (key === 'enter' && !store.editingNodeId) {
+                // If pen tool is active (drawing or just committed a closed path),
+                // let handlePenKeyDown handle Enter
+                if (store.activeTool === 'pen' || store.penDrawingState) return
                 // Shift+Enter → select parent (go up one level)
                 if (shift) {
                     e.preventDefault()

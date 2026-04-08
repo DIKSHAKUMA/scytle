@@ -54,6 +54,8 @@ export function usePenTool(
     screenToCanvas: (clientX: number, clientY: number) => { x: number; y: number },
 ) {
     const dragRef = useRef<DragState | null>(null)
+    /** Tracks the nodeId of the last committed (closed) path — so Enter/Esc can select it */
+    const lastCommittedNodeIdRef = useRef<string | null>(null)
 
     /**
      * Left-click on canvas while pen tool is active.
@@ -116,6 +118,7 @@ export function usePenTool(
             } else {
                 // ── Close path when near start vertex ──
                 if (ps.nearStartPoint && ps.vertices.length >= 3) {
+                    const nodeId = ps.nodeId // capture before commit nulls state
                     const lastIdx = ps.vertices.length - 1
                     const closingSegment: VectorSegment = {
                         start: lastIdx,
@@ -129,6 +132,8 @@ export function usePenTool(
                         nearStartPoint: true,
                     })
                     store.commitPenPath()
+                    // Remember the committed node so Enter/Esc can show the selection frame
+                    lastCommittedNodeIdRef.current = nodeId
                     dragRef.current = null
                     return
                 }
@@ -298,23 +303,61 @@ export function usePenTool(
     /**
      * Keyboard handler for pen tool.
      * - Escape/Enter: end drawing and commit open path (or clean up if < 2 vertices)
+     *   Also handles the case where path was already closed via click (ps is null but
+     *   lastCommittedNodeIdRef holds the nodeId) — Enter/Esc should switch to select.
      * - Backspace/Delete: remove the last placed vertex
      */
     const handlePenKeyDown = useCallback((e: KeyboardEvent) => {
         const store = useEditorStore.getState()
         const ps = store.penDrawingState
-        if (!ps) return
 
-        if (e.key === 'Escape' || e.key === 'Enter') {
+        // ── Path already committed via click-to-close (ps is null) ──
+        // Enter or Escape while pen is still active should show selection frame
+        if (!ps) {
+            const committedId = lastCommittedNodeIdRef.current
+            if (committedId && (e.key === 'Enter' || e.key === 'Escape')) {
+                e.preventDefault()
+                e.stopPropagation()
+                store.setActiveTool('select')
+                useEditorStore.setState({ selectedIds: [committedId] })
+                lastCommittedNodeIdRef.current = null
+            }
+            return
+        }
+
+        if (e.key === 'Escape') {
             e.preventDefault()
             e.stopPropagation()
+            let committedNodeId: string | null = null
             if (ps.vertices.length >= 2) {
+                committedNodeId = ps.nodeId
                 store.commitPenPath()
             } else {
-                // Less than 2 vertices - clean up
                 store.deleteNode(ps.nodeId)
                 store.setPenDrawingState(null)
             }
+            // Switch to select and show selection frame
+            store.setActiveTool('select')
+            if (committedNodeId) {
+                useEditorStore.setState({ selectedIds: [committedNodeId] })
+            }
+            dragRef.current = null
+        }
+
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            e.stopPropagation()
+            const nodeId = ps.nodeId
+            if (ps.vertices.length >= 2) {
+                store.commitPenPath()
+            } else {
+                store.deleteNode(nodeId)
+                store.setPenDrawingState(null)
+            }
+            // Enter: switch to select tool and show selection frame
+            store.setActiveTool('select')
+            useEditorStore.setState({ selectedIds: [nodeId] })
+            lastCommittedNodeIdRef.current = null
             dragRef.current = null
         }
 

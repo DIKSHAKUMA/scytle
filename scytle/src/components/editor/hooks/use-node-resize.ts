@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
-import type { Sizing } from '@/types/canvas'
+import type { Sizing, VectorNetwork, VectorNode } from '@/types/canvas'
 
 // ============================================================
 // Constants
@@ -45,6 +45,8 @@ interface ResizeState {
     aspectRatio: number
     /** Pointer ID for capture release */
     pointerId: number
+    /** Original vectorNetwork for VectorNodes — used to scale vertices from pristine state */
+    startVectorNetwork?: VectorNetwork
 }
 
 const INITIAL_STATE: ResizeState = {
@@ -157,6 +159,9 @@ export function useNodeResize(
                 startHeight: node.height,
                 aspectRatio: node.width / Math.max(node.height, 1),
                 pointerId,
+                ...(node.type === 'vector'
+                    ? { startVectorNetwork: (node as VectorNode).vectorNetwork }
+                    : {}),
             }
         },
         []
@@ -266,23 +271,67 @@ export function useNodeResize(
                 }
             }
 
-            // Minimum size clamping
-            if (newWidth < MIN_SIZE) {
-                if (origin.moveX) newX = s.startX + s.startWidth - MIN_SIZE
-                newWidth = MIN_SIZE
+            // Handle flip when dragging past the opposite edge, then clamp to MIN_SIZE
+            let flipX = false
+            let flipY = false
+
+            if (axes.x && newWidth <= 0) {
+                flipX = true
+                // The new left edge is at newX + newWidth (newWidth is negative)
+                newX = newX + newWidth
+                newWidth = -newWidth
             }
-            if (newHeight < MIN_SIZE) {
-                if (origin.moveY) newY = s.startY + s.startHeight - MIN_SIZE
-                newHeight = MIN_SIZE
+            if (axes.y && newHeight <= 0) {
+                flipY = true
+                newY = newY + newHeight
+                newHeight = -newHeight
             }
 
+            // Minimum size clamping (after flip resolution)
+            if (newWidth < MIN_SIZE) newWidth = MIN_SIZE
+            if (newHeight < MIN_SIZE) newHeight = MIN_SIZE
+
             // Apply
-            useEditorStore.getState().updateNode(s.nodeId, {
+            const store = useEditorStore.getState()
+            const updatePayload: Parameters<typeof store.updateNode>[1] = {
                 width: newWidth,
                 height: newHeight,
                 x: newX,
                 y: newY,
-            })
+            }
+
+            // For VectorNodes, scale the path vertices proportionally from their original positions.
+            // When flipped, mirror the vertices across the new bounding box edge.
+            if (s.startVectorNetwork) {
+                const scaleX = newWidth / s.startWidth
+                const scaleY = newHeight / s.startHeight
+                // Sign used to flip tangent directions when axis is mirrored
+                const signX = flipX ? -1 : 1
+                const signY = flipY ? -1 : 1
+
+                const scaledVertices = s.startVectorNetwork.vertices.map((v) => ({
+                    ...v,
+                    // When flipped, mirror: newWidth - v.x*scaleX  (= (startWidth-v.x)*scaleX)
+                    x: flipX ? newWidth - v.x * scaleX : v.x * scaleX,
+                    y: flipY ? newHeight - v.y * scaleY : v.y * scaleY,
+                }))
+                const scaledSegments = s.startVectorNetwork.segments.map((seg) => ({
+                    ...seg,
+                    ...(seg.tangentStart
+                        ? { tangentStart: { x: seg.tangentStart.x * scaleX * signX, y: seg.tangentStart.y * scaleY * signY } }
+                        : {}),
+                    ...(seg.tangentEnd
+                        ? { tangentEnd: { x: seg.tangentEnd.x * scaleX * signX, y: seg.tangentEnd.y * scaleY * signY } }
+                        : {}),
+                }))
+                ;(updatePayload as Record<string, unknown>).vectorNetwork = {
+                    ...s.startVectorNetwork,
+                    vertices: scaledVertices,
+                    segments: scaledSegments,
+                }
+            }
+
+            store.updateNode(s.nodeId, updatePayload)
 
             return true // consumed
         },
