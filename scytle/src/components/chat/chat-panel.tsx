@@ -10,15 +10,15 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
     useRemoteThreadListRuntime,
 } from '@assistant-ui/react'
 import { useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
+import { AssistantChatTransport } from '@assistant-ui/react-ai-sdk'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
 import { useAuiState } from '@assistant-ui/store'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
@@ -190,37 +190,6 @@ function extractChatFonts(
 // Tool side-effect handler
 // ══════════════════════════════════════════════════════════
 
-/**
- * Track which tool invocations have already been applied to the canvas/store.
- * Keyed by a stable ID derived from the tool result content, so switching
- * threads and re-mounting the tool UI components doesn't re-apply effects.
- */
-const _appliedToolCalls = new Set<string>()
-
-/** Build a dedup key for a tool invocation */
-function toolDedupeKey(toolName: string, result: any): string {
-    // Use tool name + a hash of key result fields
-    if (toolName === 'generateSection') {
-        return `gs:${(result?.html ?? '').length}:${result?.sectionType ?? ''}:${result?.width ?? 1440}`
-    }
-    if (toolName === 'editNode') {
-        return `en:${result?.nodeId ?? ''}:${(result?.html ?? '').length}`
-    }
-    if (toolName === 'updateTheme') {
-        const t = result?.theme
-        return `ut:${t?.accent ?? ''}:${t?.headingFont ?? ''}`
-    }
-    return `${toolName}:${JSON.stringify(result).length}`
-}
-
-/** Check + mark a tool call as applied. Returns true if already applied. */
-function markToolApplied(toolName: string, result: any): boolean {
-    const key = toolDedupeKey(toolName, result)
-    if (_appliedToolCalls.has(key)) return true
-    _appliedToolCalls.add(key)
-    return false
-}
-
 async function applyToolResult(toolName: string, result: any): Promise<void> {
     if (!result) return
 
@@ -375,8 +344,11 @@ function StatusIcon({ status }: { status: { type: string } }) {
 const UpdateThemeToolUI = makeAssistantToolUI({
     toolName: 'updateTheme',
     render: ({ args, result, status }) => {
+        const wasRunning = useRef(false)
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied('updateTheme', result)) {
+            if (status.type === 'running') wasRunning.current = true
+            if (status.type === 'complete' && result && wasRunning.current) {
                 applyToolResult('updateTheme', result)
             }
         }, [status.type, result])
@@ -412,8 +384,11 @@ const UpdateThemeToolUI = makeAssistantToolUI({
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
     render: ({ args, result, status }) => {
+        const wasRunning = useRef(false)
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied('generateSection', result)) {
+            if (status.type === 'running') wasRunning.current = true
+            if (status.type === 'complete' && result && wasRunning.current) {
                 applyToolResult('generateSection', result)
             }
         }, [status.type, result])
@@ -439,8 +414,11 @@ const GenerateSectionToolUI = makeAssistantToolUI({
 const EditNodeToolUI = makeAssistantToolUI({
     toolName: 'editNode',
     render: ({ args, result, status }) => {
+        const wasRunning = useRef(false)
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied('editNode', result)) {
+            if (status.type === 'running') wasRunning.current = true
+            if (status.type === 'complete' && result && wasRunning.current) {
                 applyToolResult('editNode', result)
             }
         }, [status.type, result])
@@ -491,11 +469,14 @@ const SearchImagesToolUI = makeAssistantToolUI({
 // Per-thread chat runtime hook (called inside RemoteThreadList)
 // ══════════════════════════════════════════════════════════
 
-function useChatThreadRuntime(transport: InstanceType<typeof DefaultChatTransport>) {
+function useChatThreadRuntime(transport: AssistantChatTransport<any>) {
     // assistant-ui provides thread ID via store — useChat keyed by it
     const threadId = useAuiState((s) => s.threadListItem.id)
     const chat = useChat({ id: threadId, transport })
-    return useAISDKRuntime(chat)
+    const runtime = useAISDKRuntime(chat)
+    // Wire runtime back to transport so modelContext flows into requests
+    transport.setRuntime(runtime)
+    return runtime
 }
 
 // ══════════════════════════════════════════════════════════
@@ -509,7 +490,7 @@ export function ChatPanel() {
     const context = buildContext(nodes, selectedIds)
 
     const transport = useMemo(
-        () => new DefaultChatTransport({
+        () => new AssistantChatTransport({
             api: '/api/chat',
             body: { context },
         }),
