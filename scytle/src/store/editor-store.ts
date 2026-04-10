@@ -29,6 +29,69 @@ const _snap = (state: any) => {
     }
 }
 
+/**
+ * Recompute a VectorNode's bounding box (x/y/width/height) from its
+ * current vertices + bezier control points, then re-origin the vertices
+ * so they are relative to the new top-left.
+ *
+ * Must be called on an immer draft node.
+ */
+function _recomputeVectorBBox(node: VectorNode) {
+    const vn = node.vectorNetwork
+    if (!vn.vertices.length) return
+
+    let minX = Infinity, minY = Infinity
+    let maxX = -Infinity, maxY = -Infinity
+
+    for (const v of vn.vertices) {
+        if (v.x < minX) minX = v.x
+        if (v.y < minY) minY = v.y
+        if (v.x > maxX) maxX = v.x
+        if (v.y > maxY) maxY = v.y
+    }
+
+    // Include bezier control points
+    for (const seg of vn.segments) {
+        const startV = vn.vertices[seg.start]
+        const endV = vn.vertices[seg.end]
+        if (!startV || !endV) continue
+
+        if (seg.tangentStart) {
+            const cpX = startV.x + seg.tangentStart.x
+            const cpY = startV.y + seg.tangentStart.y
+            if (cpX < minX) minX = cpX
+            if (cpY < minY) minY = cpY
+            if (cpX > maxX) maxX = cpX
+            if (cpY > maxY) maxY = cpY
+        }
+        if (seg.tangentEnd) {
+            const cpX = endV.x + seg.tangentEnd.x
+            const cpY = endV.y + seg.tangentEnd.y
+            if (cpX < minX) minX = cpX
+            if (cpY < minY) minY = cpY
+            if (cpX > maxX) maxX = cpX
+            if (cpY > maxY) maxY = cpY
+        }
+    }
+
+    const strokePad = (node.strokeWeight ?? 2) / 2
+    minX -= strokePad
+    minY -= strokePad
+    maxX += strokePad
+    maxY += strokePad
+
+    // Re-origin vertices relative to new top-left
+    for (const v of vn.vertices) {
+        v.x -= minX
+        v.y -= minY
+    }
+
+    node.x += minX
+    node.y += minY
+    node.width = Math.max(maxX - minX, 1)
+    node.height = Math.max(maxY - minY, 1)
+}
+
 // ============================================================
 // Page type (one canvas per page)
 // ============================================================
@@ -1676,6 +1739,16 @@ export const useEditorStore = create<EditorState>()(
                     (state) => {
                         // Figma: exiting vector edit keeps the node selected
                         const nodeId = state.vectorEditNodeId
+
+                        // Recompute bounding box from current vertex positions
+                        if (nodeId) {
+                            const node = findNodeById(state.nodes, nodeId)
+                            if (node && node.type === 'vector') {
+                                _snap(state)
+                                _recomputeVectorBBox(node as VectorNode)
+                            }
+                        }
+
                         state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []

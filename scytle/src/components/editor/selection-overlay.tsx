@@ -200,7 +200,10 @@ export function SelectionOverlay({
         <>
             {Array.from(rects.entries()).map(([id, rect]) => (
                 <div key={id}>
-                    {/* Blue outline — always visible (Figma shows outline during vector edit too) */}
+                    {/* Hide everything when this node is in vector edit mode — anchor point overlay takes over */}
+                    {vectorEditNodeId !== id && (
+                    <>
+                    {/* Blue outline */}
                     <div
                         className="pointer-events-none"
                         style={{
@@ -215,8 +218,7 @@ export function SelectionOverlay({
                         }}
                     />
 
-                    {/* Hide resize handles in vector edit mode — anchor points take over.
-                        Figma shows the outline but hides corner/edge handles during vector editing. */}
+                    {/* Resize handles */}
                     {!vectorEditNodeId && (
                         <>
                             {/* 4 corner resize handles — visible dots */}
@@ -266,6 +268,8 @@ export function SelectionOverlay({
                                 )
                             })}
                         </>
+                    )}
+                    </>
                     )}
                 </div>
             ))}

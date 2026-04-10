@@ -23,6 +23,8 @@ interface DragInfo {
     /** Original position of the item being dragged */
     origX: number
     origY: number
+    /** Original positions of all selected vertices at drag start (for multi-vertex drag) */
+    origPositions?: Map<number, { x: number; y: number }>
 }
 
 /**
@@ -121,6 +123,18 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 if (!v) return
 
                 const canvas = screenToCanvas(e.clientX, e.clientY)
+
+                // Capture original positions of ALL selected vertices at drag start
+                const origPositions = new Map<number, { x: number; y: number }>()
+                for (const vi of store.selectedVertexIndices) {
+                    const vert = node.vectorNetwork.vertices[vi]
+                    if (vert) origPositions.set(vi, { x: vert.x, y: vert.y })
+                }
+                // Ensure the clicked vertex is included
+                if (!origPositions.has(idx)) {
+                    origPositions.set(idx, { x: v.x, y: v.y })
+                }
+
                 dragRef.current = {
                     type: 'vertex',
                     index: idx,
@@ -128,6 +142,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                     startCanvasY: canvas.y,
                     origX: v.x,
                     origY: v.y,
+                    origPositions,
                 }
 
                 store.beginBatch()
@@ -142,18 +157,10 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                     const st = useEditorStore.getState()
                     const nodeId = st.vectorEditNodeId
                     if (!nodeId) return
-                    const n = findNodeById(st.nodes, nodeId) as VectorNode | null
-                    if (!n) return
                     for (const vi of st.selectedVertexIndices) {
-                        const orig = n.vectorNetwork.vertices[vi]
+                        const orig = drag.origPositions?.get(vi)
                         if (!orig) continue
-                        // For the dragged vertex we use the stored original;
-                        // for others we compute relative delta each frame
-                        if (vi === drag.index) {
-                            st.updateVertex(nodeId, vi, { x: drag.origX + dx, y: drag.origY + dy })
-                        } else {
-                            st.updateVertex(nodeId, vi, { x: orig.x + dx, y: orig.y + dy })
-                        }
+                        st.updateVertex(nodeId, vi, { x: orig.x + dx, y: orig.y + dy })
                     }
                 }
 
@@ -474,7 +481,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             {/* Interactive SVG layer — handles clicks */}
             <svg
                 className="absolute inset-0"
-                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 32 }}
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 32, pointerEvents: 'none' }}
             >
                 {/* All clickable elements in a group with pointer-events: all */}
                 <g style={{ pointerEvents: 'all' }}>

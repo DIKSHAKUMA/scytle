@@ -463,6 +463,13 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             if (activeTool === 'select') {
                 const target = e.target as HTMLElement
 
+                // Single-click while in vector edit mode → exit it (recomputes bbox, shows selection frame)
+                const currentVectorEditId = useEditorStore.getState().vectorEditNodeId
+                if (currentVectorEditId) {
+                    useEditorStore.getState().exitVectorEditMode()
+                    return
+                }
+
                 // Check if clicking a resize handle
                 const handleDir = target.dataset.handle as HandleDirection | undefined
                 const handleNodeId = target.dataset.nodeHandle
