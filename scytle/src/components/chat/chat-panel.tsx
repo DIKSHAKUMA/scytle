@@ -10,7 +10,7 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
@@ -190,6 +190,41 @@ function extractChatFonts(
 // Tool side-effect handler
 // ══════════════════════════════════════════════════════════
 
+/**
+ * Track which tool invocations have already been applied to the canvas/store.
+ * Keyed by toolCallId (unique per invocation, provided by assistant-ui).
+ * Persisted to localStorage so dedup survives page reloads — prevents
+ * historical tool results from re-applying when switching threads.
+ */
+const APPLIED_KEY = 'scytle:applied-tool-calls'
+
+function loadAppliedSet(): Set<string> {
+    try {
+        const raw = localStorage.getItem(APPLIED_KEY)
+        return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+        return new Set()
+    }
+}
+
+function persistAppliedSet(set: Set<string>): void {
+    try {
+        // Keep last 500 entries to prevent unbounded growth
+        const arr = Array.from(set)
+        const trimmed = arr.length > 500 ? arr.slice(-500) : arr
+        localStorage.setItem(APPLIED_KEY, JSON.stringify(trimmed))
+    } catch { /* quota exceeded — silently ignore */ }
+}
+
+/** Check + mark a tool call as applied. Returns true if already applied. */
+function markToolApplied(toolCallId: string): boolean {
+    const set = loadAppliedSet()
+    if (set.has(toolCallId)) return true
+    set.add(toolCallId)
+    persistAppliedSet(set)
+    return false
+}
+
 async function applyToolResult(toolName: string, result: any): Promise<void> {
     if (!result) return
 
@@ -343,15 +378,12 @@ function StatusIcon({ status }: { status: { type: string } }) {
 
 const UpdateThemeToolUI = makeAssistantToolUI({
     toolName: 'updateTheme',
-    render: ({ args, result, status }) => {
-        const wasRunning = useRef(false)
-
+    render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
-            if (status.type === 'running') wasRunning.current = true
-            if (status.type === 'complete' && result && wasRunning.current) {
+            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 applyToolResult('updateTheme', result)
             }
-        }, [status.type, result])
+        }, [status.type, result, toolCallId])
 
         const theme = (result as any)?.theme || args
         return (
@@ -383,15 +415,12 @@ const UpdateThemeToolUI = makeAssistantToolUI({
 
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
-    render: ({ args, result, status }) => {
-        const wasRunning = useRef(false)
-
+    render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
-            if (status.type === 'running') wasRunning.current = true
-            if (status.type === 'complete' && result && wasRunning.current) {
+            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 applyToolResult('generateSection', result)
             }
-        }, [status.type, result])
+        }, [status.type, result, toolCallId])
 
         return (
             <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
@@ -413,15 +442,12 @@ const GenerateSectionToolUI = makeAssistantToolUI({
 
 const EditNodeToolUI = makeAssistantToolUI({
     toolName: 'editNode',
-    render: ({ args, result, status }) => {
-        const wasRunning = useRef(false)
-
+    render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
-            if (status.type === 'running') wasRunning.current = true
-            if (status.type === 'complete' && result && wasRunning.current) {
+            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 applyToolResult('editNode', result)
             }
-        }, [status.type, result])
+        }, [status.type, result, toolCallId])
 
         return (
             <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
