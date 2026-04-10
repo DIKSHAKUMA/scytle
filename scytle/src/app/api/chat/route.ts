@@ -12,7 +12,7 @@
  */
 
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai'
-import { resolveModel, installProxyFixer, DEFAULT_MODEL } from '@/lib/ai/providers'
+import { resolveModel, installProxyFixer, DEFAULT_MODEL, MODELS } from '@/lib/ai/providers'
 import { buildSystemPrompt, type SystemPromptContext } from '@/lib/ai/prompts/system'
 import { ALL_TOOLS } from '@/lib/ai/tools'
 
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
 
     // Resolve model — assistant-ui sends config.modelName, fallback to model key
     const selectedModel = config?.modelName || modelKey || DEFAULT_MODEL
+    const modelDef = MODELS.find(m => m.key === selectedModel)
     let resolvedModel
     try {
       resolvedModel = resolveModel(selectedModel)
@@ -63,8 +64,20 @@ export async function POST(req: Request) {
     // Convert UIMessages (from useChat) → model messages (for the provider)
     const modelMessages = await convertToModelMessages(messages)
 
-    // Determine if model supports reasoning (Claude via proxy)
-    const isProxy = selectedModel.startsWith('claude')
+    // Determine provider from model definition for provider-specific options
+    const provider = modelDef?.provider || 'proxy'
+
+    // Provider-specific options: enable thinking/reasoning for each provider
+    let providerOptions: Record<string, any>
+    if (provider === 'proxy') {
+      providerOptions = { openai: { reasoningEffort: 'high' } }
+    } else if (provider === 'vertex-global') {
+      // Gemini 3.x supports thinkingLevel
+      providerOptions = { vertex: { thinkingConfig: { thinkingLevel: 'high' } } }
+    } else {
+      // Gemini 2.5 supports thinkingBudget
+      providerOptions = { vertex: { thinkingConfig: { thinkingBudget: 8192 } } }
+    }
 
     // Stream the response with tools + agent loop
     const result = streamText({
@@ -73,12 +86,7 @@ export async function POST(req: Request) {
       messages: modelMessages,
       stopWhen: stepCountIs(20),
       tools: ALL_TOOLS,
-      // Enable reasoning for Claude models via OpenAI-compatible provider
-      ...(isProxy && {
-        providerOptions: {
-          openai: { reasoningEffort: 'high' },
-        },
-      }),
+      providerOptions,
       onStepFinish({ toolCalls }) {
         if (toolCalls.length > 0) {
           console.log(
@@ -95,8 +103,20 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('[chat] Error:', error.message)
 
-    // Handle specific error types
-    if (error.message?.includes('rate limit') || error.status === 429) {
+    const msg = error.message || ''
+
+    // Proxy credentials exhausted (gameron proxy overloaded)
+    if (msg.includes('credentials exhausted') || msg.includes('proxy_all_credentials_exhausted')) {
+      return new Response(
+        JSON.stringify({
+          error: 'AI service is temporarily busy. Please try again in a moment or switch to Gemini Pro.',
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Rate limit (proxy or Vertex)
+    if (msg.includes('rate limit') || error.status === 429 || msg.includes('RESOURCE_EXHAUSTED')) {
       return new Response(
         JSON.stringify({
           error: 'Rate limited. Try again in a moment or switch to a different model.',
@@ -105,8 +125,18 @@ export async function POST(req: Request) {
       )
     }
 
+    // Vertex AI auth errors
+    if (msg.includes('PERMISSION_DENIED') || msg.includes('UNAUTHENTICATED')) {
+      return new Response(
+        JSON.stringify({
+          error: 'Google Cloud authentication error. Please check your Vertex AI credentials.',
+        }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ error: msg || 'Internal server error' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }

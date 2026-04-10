@@ -10,7 +10,7 @@
 export interface ModelDef {
   key: string
   displayName: string
-  provider: 'proxy' | 'vertex'
+  provider: 'proxy' | 'vertex' | 'vertex-global'
   proxyModelId: string
   tier: 'pro' | 'standard' | 'lite'
   capabilities: string[]
@@ -18,7 +18,24 @@ export interface ModelDef {
 }
 
 export const MODELS: ModelDef[] = [
-  // Claude via proxy — PRIMARY (tool calling works)
+  // Gemini via Vertex — full multimodal (vision + thinking + tools)
+  {
+    key: 'gemini-pro',
+    displayName: 'Gemini 3.1 Pro',
+    provider: 'vertex-global',
+    proxyModelId: 'gemini-3.1-pro-preview',
+    tier: 'pro',
+    capabilities: ['thinking', 'vision', 'coding', 'long-context'],
+  },
+  {
+    key: 'gemini-2.5-pro',
+    displayName: 'Gemini 2.5 Pro',
+    provider: 'vertex',
+    proxyModelId: 'gemini-2.5-pro',
+    tier: 'pro',
+    capabilities: ['thinking', 'vision', 'coding', 'long-context'],
+  },
+  // Claude via proxy
   {
     key: 'claude-sonnet',
     displayName: 'Claude Sonnet 4.6',
@@ -26,16 +43,6 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'claude-sonnet-4.6',
     tier: 'standard',
     capabilities: ['thinking', 'vision', 'coding', 'fast'],
-    badge: 'Recommended',
-  },
-  {
-    key: 'claude-haiku',
-    displayName: 'Claude Haiku 4.5',
-    provider: 'proxy',
-    proxyModelId: 'claude-haiku-4.5',
-    tier: 'lite',
-    capabilities: ['fast', 'coding'],
-    badge: 'Fast',
   },
   {
     key: 'claude-opus',
@@ -44,18 +51,7 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'claude-opus-4.6',
     tier: 'pro',
     capabilities: ['thinking', 'vision', 'coding'],
-    badge: 'Best',
-  },
-  // Gemini via Vertex — text-only fallback
-  {
-    key: 'gemini-pro',
-    displayName: 'Gemini 3.1 Pro',
-    provider: 'vertex',
-    proxyModelId: 'gemini-3.1-pro-preview',
-    tier: 'pro',
-    capabilities: ['thinking', 'vision', 'coding', 'long-context'],
-    badge: 'Free',
   },
 ]
 
-export const DEFAULT_MODEL = 'claude-sonnet'
+export const DEFAULT_MODEL = 'gemini-pro'

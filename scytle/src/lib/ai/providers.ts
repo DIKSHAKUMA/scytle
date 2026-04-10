@@ -26,8 +26,14 @@ const proxy = createOpenAI({
   name: 'gameron-proxy',
 })
 
-// Google Vertex AI — text-only fallback
-const vertex = createVertex({
+// Google Vertex AI — full multimodal (vision + thinking + tools)
+// Gemini 2.5 models run on us-central1, Gemini 3.x requires the global endpoint
+const vertexRegional = createVertex({
+  project: process.env.GOOGLE_CLOUD_PROJECT || 'composed-cogency-glb3w',
+  location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+})
+
+const vertexGlobal = createVertex({
   project: process.env.GOOGLE_CLOUD_PROJECT || 'composed-cogency-glb3w',
   location: 'global',
 })
@@ -42,7 +48,9 @@ export function resolveModel(key: string) {
     case 'proxy':
       return proxy.chat(model.proxyModelId)
     case 'vertex':
-      return vertex(model.proxyModelId)
+      return vertexRegional(model.proxyModelId)
+    case 'vertex-global':
+      return vertexGlobal(model.proxyModelId)
     default:
       throw new Error(`Unknown provider: ${model.provider}`)
   }
@@ -51,7 +59,7 @@ export function resolveModel(key: string) {
 export function getEnabledModels(): ModelDef[] {
   return MODELS.filter(m => {
     if (m.provider === 'proxy') return !!process.env.ANTHROPIC_API_KEY
-    if (m.provider === 'vertex') return !!process.env.GOOGLE_CLOUD_PROJECT
+    if (m.provider === 'vertex' || m.provider === 'vertex-global') return !!process.env.GOOGLE_CLOUD_PROJECT
     return false
   })
 }
