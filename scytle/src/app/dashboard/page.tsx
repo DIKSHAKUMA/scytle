@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
     Plus,
     FolderOpen,
@@ -32,6 +33,17 @@ import {
 import { useProjectStore, useAuthStore } from '@/store'
 import type { Project } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
+
+/** Generate a default project name like "Untitled Project 4" */
+function nextProjectName(projects: Project[]): string {
+    const prefix = 'Untitled Project'
+    const nums = projects
+        .map(p => p.name.match(/^Untitled Project\s*(\d*)$/)?.[1])
+        .filter(Boolean)
+        .map(n => parseInt(n || '1', 10))
+    const next = nums.length ? Math.max(...nums) + 1 : 1
+    return `${prefix} ${next}`
+}
 
 type StatusFilter = 'all' | 'draft' | 'in-progress' | 'completed'
 
@@ -78,14 +90,30 @@ function getGradient(index: number): string {
 }
 
 export default function DashboardPage() {
+    const router = useRouter()
     const { user, setUser } = useAuthStore()
-    const { projects, isLoading, fetchProjects, deleteProject } = useProjectStore()
+    const { projects, isLoading, fetchProjects, deleteProject, createProject } = useProjectStore()
 
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
     const [authChecked, setAuthChecked] = useState(false)
     const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [mounted, setMounted] = useState(false)
+    const [isCreating, setIsCreating] = useState(false)
+
+    // Create a blank project and navigate straight to the canvas
+    const handleNewProject = useCallback(async () => {
+        if (isCreating) return
+        setIsCreating(true)
+        try {
+            const project = await createProject({ name: nextProjectName(projects) })
+            if (project) {
+                router.push(`/project/${project.projectId}`)
+            }
+        } finally {
+            setIsCreating(false)
+        }
+    }, [createProject, projects, router, isCreating])
 
     // Check authentication on mount
     useEffect(() => {
@@ -97,7 +125,6 @@ export default function DashboardPage() {
                 const { getUser } = await import('@/lib/appwrite')
                 const currentUser = await getUser()
                 if (cancelled) return
-                console.log('📊 Dashboard auth check:', currentUser?.email || 'no user')
                 if (currentUser) {
                     setIsAuthenticated(true)
                     setUser(currentUser)
@@ -204,18 +231,22 @@ export default function DashboardPage() {
                                 transform: mounted ? 'translateY(0)' : 'translateY(12px)',
                             }}
                         >
-                            <Link href="/dashboard/new">
-                                <button className="group inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]">
-                                    <Plus className="w-4 h-4" />
-                                    New Project
-                                </button>
-                            </Link>
-                            <Link href="/dashboard/new">
-                                <button className="group inline-flex items-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/20 hover:shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
-                                    <Sparkles className="w-3.5 h-3.5 text-accent" />
-                                    AI Generate
-                                </button>
-                            </Link>
+                            <button
+                                onClick={handleNewProject}
+                                disabled={isCreating}
+                                className="group inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                            >
+                                {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                New Project
+                            </button>
+                            <button
+                                onClick={handleNewProject}
+                                disabled={isCreating}
+                                className="group inline-flex items-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/20 hover:shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                            >
+                                <Sparkles className="w-3.5 h-3.5 text-accent" />
+                                AI Generate
+                            </button>
                             <Link href="/dashboard/templates">
                                 <button className="group inline-flex items-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/20 hover:shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
                                     <LayoutTemplate className="w-3.5 h-3.5" />
@@ -312,13 +343,15 @@ export default function DashboardPage() {
                             <p className="text-muted-foreground text-sm text-center max-w-xs mb-6 leading-relaxed">
                                 Describe your idea and let AI generate a complete sitemap, wireframes, and design for you.
                             </p>
-                            <Link href="/dashboard/new">
-                                <button className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-6 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]">
-                                    <Plus className="w-4 h-4" />
-                                    New Project
-                                    <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-                                </button>
-                            </Link>
+                            <button
+                                onClick={handleNewProject}
+                                disabled={isCreating}
+                                className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-6 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                            >
+                                {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                New Project
+                                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+                            </button>
                         </div>
                     ) : filteredProjects.length === 0 ? (
                         /* No Search Results */
@@ -433,7 +466,7 @@ export default function DashboardPage() {
                             })}
 
                             {/* New Project Card */}
-                            <Link href="/dashboard/new" className="group block">
+                            <button onClick={handleNewProject} disabled={isCreating} className="group block text-left w-full">
                                 <div
                                     className="h-full min-h-[232px] rounded-xl border border-dashed border-border/60 bg-muted/20 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:border-accent/40 hover:bg-accent/[0.03]"
                                     style={{
@@ -444,13 +477,13 @@ export default function DashboardPage() {
                                     }}
                                 >
                                     <div className="w-10 h-10 rounded-xl bg-muted/60 flex items-center justify-center group-hover:bg-accent/10 group-hover:scale-110 transition-all duration-300">
-                                        <Plus className="w-5 h-5 text-muted-foreground group-hover:text-accent transition-colors" />
+                                        {isCreating ? <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" /> : <Plus className="w-5 h-5 text-muted-foreground group-hover:text-accent transition-colors" />}
                                     </div>
                                     <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
                                         New Project
                                     </span>
                                 </div>
-                            </Link>
+                            </button>
                         </div>
                     )}
                 </div>

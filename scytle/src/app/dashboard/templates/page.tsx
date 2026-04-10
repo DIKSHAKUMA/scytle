@@ -192,12 +192,18 @@ export default function TemplatesPage() {
                         <p className="text-muted-foreground mb-4">
                             Don&apos;t see what you need?
                         </p>
-                        <Link href="/dashboard/new">
-                            <Button variant="outline" className="gap-2">
-                                Start from scratch with AI
-                                <ArrowRight className="w-4 h-4" />
-                            </Button>
-                        </Link>
+                        <Button
+                            variant="outline"
+                            className="gap-2"
+                            disabled={isLoading}
+                            onClick={async () => {
+                                const project = await createProject({ name: 'Untitled Project' })
+                                if (project) router.push(`/project/${project.projectId}`)
+                            }}
+                        >
+                            Start from scratch with AI
+                            <ArrowRight className="w-4 h-4" />
+                        </Button>
                     </div>
                 </div>
             </div>

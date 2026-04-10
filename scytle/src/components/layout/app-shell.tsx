@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { useState, useCallback } from 'react'
 import {
     Zap,
     LayoutDashboard,
@@ -12,6 +13,7 @@ import {
     User,
     CreditCard,
     HelpCircle,
+    Loader2,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -24,7 +26,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useProjectStore } from '@/store'
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -38,7 +40,29 @@ interface AppShellProps {
 
 export function AppShell({ children, hideNav = false }: AppShellProps) {
     const pathname = usePathname()
+    const router = useRouter()
     const { user, logout } = useAuthStore()
+    const { projects, createProject } = useProjectStore()
+    const [isCreating, setIsCreating] = useState(false)
+
+    const handleNewProject = useCallback(async () => {
+        if (isCreating) return
+        setIsCreating(true)
+        try {
+            const prefix = 'Untitled Project'
+            const nums = projects
+                .map(p => p.name.match(/^Untitled Project\s*(\d*)$/)?.[1])
+                .filter(Boolean)
+                .map(n => parseInt(n || '1', 10))
+            const next = nums.length ? Math.max(...nums) + 1 : 1
+            const project = await createProject({ name: `${prefix} ${next}` })
+            if (project) {
+                router.push(`/project/${project.projectId}`)
+            }
+        } finally {
+            setIsCreating(false)
+        }
+    }, [createProject, projects, router, isCreating])
 
     const initials = user?.name
         ?.split(' ')
@@ -90,12 +114,14 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5">
-                        <Link href="/dashboard/new">
-                            <button className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity">
-                                <Plus className="w-3.5 h-3.5" />
-                                <span className="hidden sm:inline">New</span>
-                            </button>
-                        </Link>
+                        <button
+                            onClick={handleNewProject}
+                            disabled={isCreating}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+                        >
+                            {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            <span className="hidden sm:inline">New</span>
+                        </button>
 
                         {/* User Menu */}
                         <DropdownMenu>
