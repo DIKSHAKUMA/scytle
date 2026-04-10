@@ -31,15 +31,13 @@ function LoginForm() {
         const checkAuth = async () => {
             try {
                 const user = await getUser()
-                console.log('🔍 Login page auth check:', user?.email || 'no user')
                 if (user) {
-                    console.log('✅ Already logged in, redirecting to:', redirectUrl)
                     setIsRedirecting(true)
                     window.location.replace(redirectUrl)
                     return
                 }
             } catch (error) {
-                console.log('🔍 Login page auth check error:', error)
+                // Auth check failed — show login form
             }
             setIsCheckingAuth(false)
         }
@@ -51,9 +49,7 @@ function LoginForm() {
         clearError()
 
         const success = await login(email, password)
-        console.log('🚀 Login returned:', success)
         if (success) {
-            console.log('🚀 Redirecting to:', redirectUrl)
             setIsRedirecting(true)
             window.location.replace(redirectUrl)
         }

@@ -107,7 +107,6 @@ export function PagePanel({ nodeId }: PagePanelProps) {
             }
 
             const data = await response.json()
-            console.log('🤖 Generated page:', data)
 
             // Update node with generated sections
             if (data.page?.sections) {

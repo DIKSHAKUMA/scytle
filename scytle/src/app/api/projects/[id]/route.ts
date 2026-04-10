@@ -166,8 +166,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             wireframeData: doc.wireframeData || null,
         }
 
-        console.log('✅ Project updated:', project.projectId)
-
         return NextResponse.json({ project })
     } catch (error) {
         console.error('❌ Failed to update project:', error)
@@ -206,8 +204,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
         // Delete project
         await databases.deleteDocument(DATABASE_ID, COLLECTIONS.PROJECTS, id)
-
-        console.log('✅ Project deleted:', id)
 
         return NextResponse.json({ success: true })
     } catch (error) {

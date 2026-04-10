@@ -247,7 +247,6 @@ function persistData(data: StyleGuideData) {
     _saveTimer = setTimeout(() => {
         try {
             localStorage.setItem(getStorageKey(), JSON.stringify(data))
-            console.log('💾 Style guide persisted to localStorage')
         } catch {
             // Storage full or not available — ignore
         }

@@ -20,13 +20,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const result = await convertTailwindToInline(html)
 
-    if (result.unresolvedClasses.length > 0) {
-      console.log(
-        `[tailwind-to-inline] ${result.unresolvedClasses.length} unresolved:`,
-        result.unresolvedClasses.slice(0, 10).join(', ')
-      )
-    }
-
     return NextResponse.json(result)
   } catch (error: any) {
     console.error('[tailwind-to-inline] Error:', error.message)

@@ -108,7 +108,6 @@ function ProjectEditor() {
             }
 
             setInitialPromptSent(true)
-            console.log('💬 Initial prompt stored for chat:', prompt.substring(0, 80))
         }
     }, [projectReady, canvasLoaded, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, initialPromptSent, urlProductType, projectId])
 

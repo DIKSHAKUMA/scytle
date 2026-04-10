@@ -93,14 +93,12 @@ export async function login(email: string, password: string) {
             const existingSession = await account.getSession('current')
             if (existingSession) {
                 await account.deleteSession('current')
-                console.log('🔄 Cleared existing session before login')
             }
         } catch {
             // No existing session, that's fine
         }
 
         const session = await account.createEmailPasswordSession(email, password)
-        console.log('✅ Logged in successfully')
         return { success: true, session }
     } catch (error) {
         console.error('❌ Login failed:', error)
@@ -118,7 +116,6 @@ export async function signup(email: string, password: string, name: string) {
             const existingSession = await account.getSession('current')
             if (existingSession) {
                 await account.deleteSession('current')
-                console.log('🔄 Cleared existing session before signup')
             }
         } catch {
             // No existing session, that's fine
@@ -130,7 +127,6 @@ export async function signup(email: string, password: string, name: string) {
         // Create session
         await account.createEmailPasswordSession(email, password)
 
-        console.log('✅ Account created successfully')
         return { success: true, user }
     } catch (error) {
         console.error('❌ Signup failed:', error)
@@ -144,7 +140,6 @@ export async function signup(email: string, password: string, name: string) {
 export async function logout() {
     try {
         await account.deleteSession('current')
-        console.log('✅ Logged out successfully')
         return { success: true }
     } catch (error) {
         console.error('❌ Logout failed:', error)
@@ -170,7 +165,6 @@ export async function resetPassword(email: string) {
     try {
         const resetUrl = `${window.location.origin}/reset-password`
         await account.createRecovery(email, resetUrl)
-        console.log('✅ Password reset email sent')
         return { success: true }
     } catch (error) {
         console.error('❌ Password reset failed:', error)

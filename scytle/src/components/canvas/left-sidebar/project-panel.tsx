@@ -86,7 +86,6 @@ export function ProjectPanel() {
             }
 
             const data = await response.json()
-            console.log('🤖 Generated sitemap:', data)
 
             // Load the generated sitemap into both stores
             if (data.sitemap?.pages) {

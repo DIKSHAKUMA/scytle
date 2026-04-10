@@ -102,8 +102,6 @@ export async function POST(request: NextRequest) {
             updatedAt: doc.updatedAt,
         }
 
-        console.log('✅ Project created:', project.projectId)
-
         return NextResponse.json({ project }, { status: 201 })
     } catch (error) {
         console.error('❌ Failed to create project:', error)

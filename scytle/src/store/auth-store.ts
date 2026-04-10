@@ -55,9 +55,7 @@ export const useAuthStore = create<AuthState>()(
                     state.error = null
                 })
 
-                console.log('🔐 Attempting login for:', email)
                 const result = await appwriteLogin(email, password)
-                console.log('🔐 Login result:', result.success ? 'Success' : 'Failed', result.error || '')
 
                 if (result.success) {
                     const user = await getUser()
@@ -79,7 +77,6 @@ export const useAuthStore = create<AuthState>()(
                         state.isAuthenticated = true
                         state.isLoading = false
                     })
-                    console.log('🔐 Session verified after login')
                     return true
                 }
 
@@ -168,7 +165,6 @@ export const useAuthStore = create<AuthState>()(
 
                 try {
                     const user = await getUser()
-                    console.log('🔍 checkSession result:', user ? `User: ${user.email}` : 'No user')
                     set(state => {
                         state.user = user
                         state.isAuthenticated = !!user
