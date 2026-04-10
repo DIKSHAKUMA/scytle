@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useRef } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import type { VectorEditTool } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
@@ -27,6 +27,58 @@ interface DragInfo {
     origPositions?: Map<number, { x: number; y: number }>
 }
 
+/** Point in 2D space */
+interface Pt { x: number; y: number }
+
+/** Ray-casting point-in-polygon test */
+function pointInPolygon(pt: Pt, poly: Pt[]): boolean {
+    let inside = false
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y
+        const xj = poly[j].x, yj = poly[j].y
+        const intersect = yi > pt.y !== yj > pt.y &&
+            pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi
+        if (intersect) inside = !inside
+    }
+    return inside
+}
+
+/**
+ * Given a bezier segment, compute ~20 sample points along the curve
+ * so we can find the closest point for bend-drag and cut-on-segment.
+ */
+function sampleBezier(p0: Pt, cp1: Pt, cp2: Pt, p1: Pt, steps = 20): Pt[] {
+    const pts: Pt[] = []
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        const mt = 1 - t
+        pts.push({
+            x: mt * mt * mt * p0.x + 3 * mt * mt * t * cp1.x + 3 * mt * t * t * cp2.x + t * t * t * p1.x,
+            y: mt * mt * mt * p0.y + 3 * mt * mt * t * cp1.y + 3 * mt * t * t * cp2.y + t * t * t * p1.y,
+        })
+    }
+    return pts
+}
+
+/** Find t parameter on a bezier segment closest to a given screen point */
+function closestTOnSegment(
+    screenPt: Pt,
+    p0: Pt, cp1: Pt, cp2: Pt, p1: Pt,
+    steps = 50,
+): number {
+    let bestT = 0
+    let bestDist = Infinity
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps
+        const mt = 1 - t
+        const x = mt * mt * mt * p0.x + 3 * mt * mt * t * cp1.x + 3 * mt * t * t * cp2.x + t * t * t * p1.x
+        const y = mt * mt * mt * p0.y + 3 * mt * mt * t * cp1.y + 3 * mt * t * t * cp2.y + t * t * t * p1.y
+        const d = (x - screenPt.x) ** 2 + (y - screenPt.y) ** 2
+        if (d < bestDist) { bestDist = d; bestT = t }
+    }
+    return bestT
+}
+
 /**
  * AnchorPointOverlay — renders interactive anchor points, bezier handles,
  * and segment hit targets for vector edit mode.
@@ -47,6 +99,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const nodes = useEditorStore((s) => s.nodes)
 
     const dragRef = useRef<DragInfo | null>(null)
+    // Lasso tool state — screen-space polygon being drawn
+    const [lassoPoints, setLassoPoints] = useState<Pt[]>([])
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -56,6 +110,299 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             y: (clientY - panY) / zoom,
         }),
         [zoom, panX, panY],
+    )
+
+    // ── Lasso tool: freeform vertex selection ───────────────
+
+    const handleLassoPointerDown = useCallback(
+        (e: React.PointerEvent) => {
+            e.stopPropagation()
+            e.preventDefault()
+            const additive = e.shiftKey
+            const startPt = { x: e.clientX, y: e.clientY }
+            setLassoPoints([startPt])
+
+            const onMove = (me: PointerEvent) => {
+                setLassoPoints((prev) => [...prev, { x: me.clientX, y: me.clientY }])
+            }
+
+            const onUp = () => {
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+
+                setLassoPoints((finalPoly) => {
+                    if (finalPoly.length >= 3) {
+                        const st = useEditorStore.getState()
+                        const nodeId = st.vectorEditNodeId
+                        if (nodeId) {
+                            const node = findNodeById(st.nodes, nodeId) as VectorNode | null
+                            if (node) {
+                                const { x: nx, y: ny } = node
+                                const z = st.zoom
+                                const px = st.panX
+                                const py = st.panY
+                                // Find which vertex screen positions fall inside the lasso polygon
+                                const inside: number[] = []
+                                node.vectorNetwork.vertices.forEach((v, vi) => {
+                                    const sx = (nx + v.x) * z + px
+                                    const sy = (ny + v.y) * z + py
+                                    if (pointInPolygon({ x: sx, y: sy }, finalPoly)) {
+                                        inside.push(vi)
+                                    }
+                                })
+                                if (inside.length > 0) {
+                                    st.selectVertices(inside, additive)
+                                } else if (!additive) {
+                                    st.deselectVertices()
+                                }
+                            }
+                        }
+                    }
+                    return []
+                })
+            }
+
+            window.addEventListener('pointermove', onMove)
+            window.addEventListener('pointerup', onUp)
+        },
+        [],
+    )
+
+    // ── Paint tool: click region to toggle fill ─────────────
+
+    const handlePaintClick = useCallback(
+        (e: React.MouseEvent) => {
+            e.stopPropagation()
+            const store = useEditorStore.getState()
+            const nodeId = store.vectorEditNodeId
+            if (!nodeId) return
+            const node = findNodeById(store.nodes, nodeId) as VectorNode | null
+            if (!node) return
+
+            const vn = node.vectorNetwork
+            if (!vn.regions || vn.regions.length === 0) return
+
+            // Convert click to canvas space (relative to node origin)
+            const cx = (e.clientX - store.panX) / store.zoom - node.x
+            const cy = (e.clientY - store.panY) / store.zoom - node.y
+
+            // Find which region the click falls in by testing the boundary polygon
+            let clickedRegionIdx = -1
+            for (let ri = 0; ri < vn.regions.length; ri++) {
+                const region = vn.regions[ri]
+                const poly: Pt[] = []
+                for (const segIdx of region.loops[0] ?? []) {
+                    const seg = vn.segments[segIdx]
+                    if (!seg) continue
+                    const v = vn.vertices[seg.start]
+                    if (v) poly.push({ x: v.x, y: v.y })
+                }
+                if (poly.length >= 3 && pointInPolygon({ x: cx, y: cy }, poly)) {
+                    clickedRegionIdx = ri
+                    break
+                }
+            }
+
+            if (clickedRegionIdx === -1) return
+
+            // Toggle: if region has its own fills array, remove it (revert to node fills);
+            // if not, add the node's current fill as a region-level override
+            const updatedRegions = vn.regions.map((r, ri) => {
+                if (ri !== clickedRegionIdx) return r
+                if (r.fills && r.fills.length > 0) {
+                    // Has fill → remove it (empty array = no fill for this region)
+                    return { ...r, fills: [] }
+                } else {
+                    // No fill → copy current node fills
+                    return { ...r, fills: node.fills.length > 0 ? [...node.fills] : [{ type: 'solid' as const, color: '#000000', opacity: 1 }] }
+                }
+            })
+            store.updateVectorNetwork(nodeId, { ...vn, regions: updatedRegions })
+        },
+        [],
+    )
+
+    // ── Bend tool: click+drag segment to shape curve ────────
+
+    const handleBendSegmentPointerDown = useCallback(
+        (e: React.PointerEvent, segIdx: number) => {
+            e.stopPropagation()
+            e.preventDefault()
+            const store = useEditorStore.getState()
+            if (store.vectorEditTool !== 'bend' || !store.vectorEditNodeId) return
+            const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
+            if (!node) return
+            const seg = node.vectorNetwork.segments[segIdx]
+            if (!seg) return
+
+            const startV = node.vectorNetwork.vertices[seg.start]
+            const endV = node.vectorNetwork.vertices[seg.end]
+            if (!startV || !endV) return
+
+            // If segment is straight, add default curve handles first
+            const ts = seg.tangentStart ?? { x: 0, y: 0 }
+            const te = seg.tangentEnd ?? { x: 0, y: 0 }
+            const wasStraight = ts.x === 0 && ts.y === 0 && te.x === 0 && te.y === 0
+            if (wasStraight) {
+                const dx = endV.x - startV.x
+                const dy = endV.y - startV.y
+                const updatedSegs = [...node.vectorNetwork.segments]
+                updatedSegs[segIdx] = {
+                    ...seg,
+                    tangentStart: { x: dx / 3, y: dy / 3 },
+                    tangentEnd: { x: -dx / 3, y: -dy / 3 },
+                }
+                store.updateVectorNetwork(store.vectorEditNodeId, {
+                    ...node.vectorNetwork,
+                    segments: updatedSegs,
+                })
+            }
+
+            store.beginBatch()
+
+            // Track drag: adjust the midpoint of the curve perpendicular to segment
+            const startClient = { x: e.clientX, y: e.clientY }
+
+            const onMove = (me: PointerEvent) => {
+                const st = useEditorStore.getState()
+                const nId = st.vectorEditNodeId
+                if (!nId) return
+                const n = findNodeById(st.nodes, nId) as VectorNode | null
+                if (!n) return
+                const s = n.vectorNetwork.segments[segIdx]
+                if (!s) return
+                const sv = n.vectorNetwork.vertices[s.start]
+                const ev = n.vectorNetwork.vertices[s.end]
+                if (!sv || !ev) return
+
+                // Delta in canvas space
+                const dx = (me.clientX - startClient.x) / st.zoom
+                const dy = (me.clientY - startClient.y) / st.zoom
+
+                // Segment direction vector (normalized)
+                const segDx = ev.x - sv.x
+                const segDy = ev.y - sv.y
+                const len = Math.sqrt(segDx * segDx + segDy * segDy) || 1
+
+                // Project drag onto perpendicular of segment to control curve bulge
+                const perpX = -segDy / len
+                const perpY = segDx / len
+                const proj = dx * perpX + dy * perpY
+
+                const updatedSegs = [...n.vectorNetwork.segments]
+                updatedSegs[segIdx] = {
+                    ...s,
+                    tangentStart: { x: segDx / 3 + perpX * proj, y: segDy / 3 + perpY * proj },
+                    tangentEnd: { x: -segDx / 3 + perpX * proj, y: -segDy / 3 + perpY * proj },
+                }
+                st.updateVectorNetwork(nId, { ...n.vectorNetwork, segments: updatedSegs })
+            }
+
+            const onUp = () => {
+                useEditorStore.getState().endBatch()
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+            }
+
+            window.addEventListener('pointermove', onMove)
+            window.addEventListener('pointerup', onUp)
+        },
+        [],
+    )
+
+    // ── Cut tool: click segment to insert vertex + split ────
+
+    const handleCutSegmentClick = useCallback(
+        (e: React.MouseEvent, segIdx: number) => {
+            e.stopPropagation()
+            const store = useEditorStore.getState()
+            if (store.vectorEditTool !== 'cut' || !store.vectorEditNodeId) return
+            const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
+            if (!node) return
+            const net = node.vectorNetwork
+            const seg = net.segments[segIdx]
+            if (!seg) return
+
+            const startV = net.vertices[seg.start]
+            const endV = net.vertices[seg.end]
+            if (!startV || !endV) return
+
+            // Find t closest to click point on this segment
+            const z = store.zoom
+            const px = store.panX
+            const py = store.panY
+            const nx = node.x
+            const ny = node.y
+
+            const toScreen = (vx: number, vy: number): Pt => ({
+                x: (nx + vx) * z + px,
+                y: (ny + vy) * z + py,
+            })
+
+            const a = toScreen(startV.x, startV.y)
+            const b = toScreen(endV.x, endV.y)
+            const ts = seg.tangentStart ?? { x: 0, y: 0 }
+            const te = seg.tangentEnd ?? { x: 0, y: 0 }
+            const cp1 = toScreen(startV.x + ts.x, startV.y + ts.y)
+            const cp2 = toScreen(endV.x + te.x, endV.y + te.y)
+
+            const clickPt = { x: e.clientX, y: e.clientY }
+            const t = closestTOnSegment(clickPt, a, cp1, cp2, b)
+
+            // Evaluate point on bezier at t (in canvas space)
+            const mt = 1 - t
+            const newX = mt * mt * mt * startV.x + 3 * mt * mt * t * (startV.x + ts.x) +
+                3 * mt * t * t * (endV.x + te.x) + t * t * t * endV.x
+            const newY = mt * mt * mt * startV.y + 3 * mt * mt * t * (startV.y + ts.y) +
+                3 * mt * t * t * (endV.y + te.y) + t * t * t * endV.y
+
+            // Insert new vertex at this position
+            const newVertIdx = net.vertices.length
+            const newVertex: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
+
+            // Split the segment: seg.start → newVert, newVert → seg.end
+            // Subdivide bezier tangents using de Casteljau at t
+            const p0 = { x: startV.x, y: startV.y }
+            const p1 = { x: startV.x + ts.x, y: startV.y + ts.y }
+            const p2 = { x: endV.x + te.x, y: endV.y + te.y }
+            const p3 = { x: endV.x, y: endV.y }
+
+            const q0 = p0
+            const q1 = { x: p0.x + t * (p1.x - p0.x), y: p0.y + t * (p1.y - p0.y) }
+            const q2 = {
+                x: p0.x + t * (p1.x - p0.x) + t * (p1.x + t * (p2.x - p1.x) - p0.x - t * (p1.x - p0.x)),
+                y: p0.y + t * (p1.y - p0.y) + t * (p1.y + t * (p2.y - p1.y) - p0.y - t * (p1.y - p0.y)),
+            }
+            const r1 = { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) }
+            const r2 = {
+                x: p1.x + t * (p2.x - p1.x) + t * (p2.x + t * (p3.x - p2.x) - p1.x - t * (p2.x - p1.x)),
+                y: p1.y + t * (p2.y - p1.y) + t * (p2.y + t * (p3.y - p2.y) - p1.y - t * (p2.y - p1.y)),
+            }
+            const r3 = p3
+
+            const firstHalf = {
+                start: seg.start,
+                end: newVertIdx,
+                tangentStart: { x: q1.x - q0.x, y: q1.y - q0.y },
+                tangentEnd: { x: q2.x - newX, y: q2.y - newY },
+            }
+            const secondHalf = {
+                start: newVertIdx,
+                end: seg.end,
+                tangentStart: { x: r1.x - newX, y: r1.y - newY },
+                tangentEnd: { x: r2.x - r3.x, y: r2.y - r3.y },
+            }
+
+            const newSegments = net.segments.map((s, si) => si === segIdx ? firstHalf : s)
+            newSegments.splice(segIdx + 1, 0, secondHalf)
+
+            store.updateVectorNetwork(store.vectorEditNodeId, {
+                ...net,
+                vertices: [...net.vertices, newVertex],
+                segments: newSegments,
+            })
+        },
+        [],
     )
 
     // ── Move tool: vertex drag ──────────────────────────────
@@ -485,7 +832,29 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             >
                 {/* All clickable elements in a group with pointer-events: all */}
                 <g style={{ pointerEvents: 'all' }}>
-                    {/* Invisible fat segment hit targets — for bend tool clicks AND double-click from any tool */}
+                    {/* Full-canvas transparent background hit target for lasso drag */}
+                    {vectorEditTool === 'lasso' && (
+                        <rect
+                            x={-9999} y={-9999} width={99999} height={99999}
+                            fill="transparent"
+                            style={{ cursor: 'crosshair' }}
+                            onPointerDown={handleLassoPointerDown}
+                        />
+                    )}
+
+                    {/* Lasso polygon being drawn */}
+                    {lassoPoints.length >= 2 && (
+                        <polyline
+                            points={lassoPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+                            fill="rgba(59,130,246,0.1)"
+                            stroke={BLUE}
+                            strokeWidth={1}
+                            strokeDasharray="4 2"
+                            style={{ pointerEvents: 'none' }}
+                        />
+                    )}
+
+                    {/* Invisible fat segment hit targets */}
                     {vn.segments.map((seg: VectorSegment, si: number) => {
                         const startV = vn.vertices[seg.start]
                         const endV = vn.vertices[seg.end]
@@ -500,8 +869,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                             (ts && (ts.x !== 0 || ts.y !== 0)) ||
                             (te && (te.x !== 0 || te.y !== 0))
 
-                        // Show pointer cursor in bend mode, default otherwise
-                        const cursor = vectorEditTool === 'bend' ? 'pointer' : 'default'
+                        const cursor = (vectorEditTool === 'bend' || vectorEditTool === 'cut') ? 'crosshair' : 'default'
 
                         if (hasCurve) {
                             const cp1 = ts ? toScreen(startV.x + ts.x, startV.y + ts.y) : a
@@ -514,7 +882,11 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                     stroke="transparent"
                                     strokeWidth={SEGMENT_HIT_WIDTH}
                                     style={{ cursor }}
-                                    onClick={(e) => handleSegmentClick(e, si)}
+                                    onPointerDown={(e) => vectorEditTool === 'bend' ? handleBendSegmentPointerDown(e, si) : undefined}
+                                    onClick={(e) => {
+                                        if (vectorEditTool === 'cut') handleCutSegmentClick(e, si)
+                                        else handleSegmentClick(e, si)
+                                    }}
                                     onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
                                 />
                             )
@@ -527,7 +899,11 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                 stroke="transparent"
                                 strokeWidth={SEGMENT_HIT_WIDTH}
                                 style={{ cursor }}
-                                onClick={(e) => handleSegmentClick(e, si)}
+                                onPointerDown={(e) => vectorEditTool === 'bend' ? handleBendSegmentPointerDown(e, si) : undefined}
+                                onClick={(e) => {
+                                    if (vectorEditTool === 'cut') handleCutSegmentClick(e, si)
+                                    else handleSegmentClick(e, si)
+                                }}
                                 onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
                             />
                         )
@@ -593,6 +969,15 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                     })}
                 </g>
             </svg>
+
+            {/* Paint tool: full-canvas overlay to capture region clicks */}
+            {vectorEditTool === 'paint' && (
+                <div
+                    className="absolute inset-0"
+                    style={{ zIndex: 33, cursor: 'crosshair' }}
+                    onClick={handlePaintClick}
+                />
+            )}
         </>
     )
 })
