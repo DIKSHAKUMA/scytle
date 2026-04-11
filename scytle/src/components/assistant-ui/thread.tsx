@@ -63,7 +63,7 @@ export const Thread: FC = () => {
     >
       <ThreadPrimitive.Viewport
         turnAnchor="top"
-        className="aui-thread-viewport relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth px-3 pt-4"
+        className="aui-thread-viewport relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth scrollbar-none px-3 pt-4"
       >
         <AuiIf condition={(s) => s.thread.isLoading}>
           <ThreadLoading />
