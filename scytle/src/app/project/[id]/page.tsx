@@ -6,7 +6,7 @@ import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
 import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
 import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { canvasSync } from '@/lib/sync'
 import { createJWT } from '@/lib/appwrite'
 import type { ProductType, AiModel } from '@/types'
@@ -43,7 +43,6 @@ function ProjectEditor() {
 
     const [authChecked, setAuthChecked] = useState(false)
     const [canvasLoaded, setCanvasLoaded] = useState(false)
-    const [genError, setGenError] = useState<string | null>(null)
 
     // Centralized keyboard shortcuts (tools, zoom, clipboard, undo/redo, z-order, etc.)
     useKeyboardShortcuts()
@@ -242,24 +241,6 @@ function ProjectEditor() {
                 <div className="flex-1 relative overflow-hidden">
                     <EditorCanvas showToolbar={false} />
                     <ZoomControls />
-
-                    {/* Empty canvas prompt — directs user to chat */}
-                    {!hasNodes && authChecked && !projectLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none">
-                            <div className="flex flex-col items-center gap-4 text-center pointer-events-auto">
-                                {genError && (
-                                    <p className="text-sm text-destructive mb-2">{genError}</p>
-                                )}
-                                <div className="flex items-center gap-2 px-5 py-2.5 bg-muted/50 border border-border/50 rounded-lg text-sm text-muted-foreground">
-                                    <Sparkles className="w-4 h-4" />
-                                    Use the Chat panel to generate your design
-                                </div>
-                                <p className="text-xs text-muted-foreground max-w-xs">
-                                    Open the Chat tab on the left and describe what you want to build
-                                </p>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 {/* Right panel: Design (properties) / Theme tabs */}
