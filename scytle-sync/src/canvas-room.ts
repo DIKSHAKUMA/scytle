@@ -241,6 +241,13 @@ export class CanvasRoom extends DurableObject<Env> {
         break
       case 'viewport':
         break
+      // Chat thread sync — broadcast-only (no DO storage, Appwrite is the DB)
+      case 'chat:thread:create':
+      case 'chat:thread:delete':
+      case 'chat:thread:rename':
+      case 'chat:thread:archive':
+        this.broadcast(ws, { ...msg, userId: user.userId } as ServerMessage)
+        break
       default:
         this.sendTo(ws, { type: 'error', message: `Unknown message type` })
     }

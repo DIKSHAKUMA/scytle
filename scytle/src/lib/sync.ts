@@ -39,6 +39,11 @@ type ClientMessage =
   | { type: 'page:update'; pageId: string; changes: Partial<SyncPage> }
   | { type: 'page:reorder'; pageIds: string[] }
   | { type: 'page:switch'; pageId: string }
+  // Chat thread sync
+  | { type: 'chat:thread:create'; thread: { remoteId: string; status: string; title?: string } }
+  | { type: 'chat:thread:delete'; threadId: string }
+  | { type: 'chat:thread:rename'; threadId: string; title: string }
+  | { type: 'chat:thread:archive'; threadId: string; status: 'regular' | 'archived' }
 
 interface InitState {
   pages: Array<SyncPage & { nodes: SyncNode[] }>
@@ -58,6 +63,11 @@ type ServerMessage =
   | { type: 'page:reorder'; pageIds: string[]; userId: string }
   | { type: 'presence'; users: Array<{ userId: string; pageId: string }> }
   | { type: 'error'; message: string }
+  // Chat thread sync
+  | { type: 'chat:thread:create'; thread: { remoteId: string; status: string; title?: string }; userId: string }
+  | { type: 'chat:thread:delete'; threadId: string; userId: string }
+  | { type: 'chat:thread:rename'; threadId: string; title: string; userId: string }
+  | { type: 'chat:thread:archive'; threadId: string; status: 'regular' | 'archived'; userId: string }
 
 // ============================================================
 // Sync URL
@@ -87,6 +97,9 @@ class CanvasSync {
   // Batch incoming updates to avoid "Maximum update depth exceeded"
   private pendingUpdates: Map<string, Record<string, unknown>> = new Map()
   private updateRafId: ReturnType<typeof requestAnimationFrame> | null = null
+
+  // Chat sync listeners — notified when another browser sends chat events
+  private chatListeners: Set<(msg: ServerMessage) => void> = new Set()
 
   /**
    * Flag to suppress outgoing sync messages.
@@ -222,6 +235,33 @@ class CanvasSync {
 
   sendPageSwitch(pageId: string): void {
     this.send({ type: 'page:switch', pageId })
+  }
+
+  // ── Chat sync methods ──────────────────────────────────────
+
+  sendChatThreadCreate(thread: { remoteId: string; status: string; title?: string }): void {
+    this.send({ type: 'chat:thread:create', thread })
+  }
+
+  sendChatThreadDelete(threadId: string): void {
+    this.send({ type: 'chat:thread:delete', threadId })
+  }
+
+  sendChatThreadRename(threadId: string, title: string): void {
+    this.send({ type: 'chat:thread:rename', threadId, title })
+  }
+
+  sendChatThreadArchive(threadId: string, status: 'regular' | 'archived'): void {
+    this.send({ type: 'chat:thread:archive', threadId, status })
+  }
+
+  /**
+   * Register a listener for chat events from other browsers.
+   * Returns an unsubscribe function.
+   */
+  onChatMessage(fn: (msg: ServerMessage) => void): () => void {
+    this.chatListeners.add(fn)
+    return () => this.chatListeners.delete(fn)
   }
 
   // ── Internal: WebSocket lifecycle ───────────────────────────
@@ -364,6 +404,12 @@ class CanvasSync {
       case 'presence':
         // TODO: wire up presence UI
         break
+      case 'chat:thread:create':
+      case 'chat:thread:delete':
+      case 'chat:thread:rename':
+      case 'chat:thread:archive':
+        for (const fn of this.chatListeners) fn(msg)
+        break
       case 'error':
         console.error('🔄 Sync: server error:', msg.message)
         break
@@ -393,7 +439,7 @@ class CanvasSync {
         this.setState!((draft: Record<string, unknown>) => {
           draft.pages = pages
           draft.activePageId = activePage?.id || ''
-          draft.nodes = activePage?.nodes || []
+          draft.nodes = [...(activePage?.nodes || [])]
           draft.canvasColor = activePage?.canvasColor || '#F5F5F5'
           draft.zoom = activePage?.zoom || 1
           draft.panX = activePage?.panX || 0
@@ -562,7 +608,7 @@ class CanvasSync {
       this.setState!((draft: Record<string, unknown>) => {
         draft.pages = pages
         draft.activePageId = activePage?.id || ''
-        draft.nodes = activePage?.nodes || []
+        draft.nodes = [...(activePage?.nodes || [])]
         draft.canvasColor = activePage?.canvasColor || '#F5F5F5'
         draft.zoom = activePage?.zoom || 1
         draft.panX = activePage?.panX || 0
@@ -652,12 +698,16 @@ class CanvasSync {
       this.setState!((draft: Record<string, unknown>) => {
         const pages = draft.pages as Array<{ id: string; nodes: ScytleNode[] }>
         const page = pages.find((p) => p.id === pageId)
-        if (page) {
+        const nodeId = (node as unknown as ScytleNode).id
+        if (page && !page.nodes.some((n) => n.id === nodeId)) {
           page.nodes.push(node as unknown as ScytleNode)
         }
         // If it's the active page, also update the flat nodes array
         if (pageId === draft.activePageId) {
-          ;(draft.nodes as ScytleNode[]).push(node as unknown as ScytleNode)
+          const flatNodes = draft.nodes as ScytleNode[]
+          if (!flatNodes.some((n) => n.id === nodeId)) {
+            flatNodes.push(node as unknown as ScytleNode)
+          }
         }
         draft.hasEverHadNodes = true
       }, false, 'sync:add')
@@ -742,7 +792,7 @@ class CanvasSync {
         if (draft.activePageId === pageId && pages.length > 0) {
           const newActive = pages[0]
           draft.activePageId = newActive.id
-          draft.nodes = newActive.nodes
+          draft.nodes = [...newActive.nodes]
           draft.canvasColor = (newActive as Record<string, unknown>).canvasColor
           draft.zoom = (newActive as Record<string, unknown>).zoom
           draft.panX = (newActive as Record<string, unknown>).panX

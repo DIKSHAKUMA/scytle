@@ -10,7 +10,7 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
@@ -29,6 +29,7 @@ import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
 import { parseHtml } from '@/lib/parser'
 import { createProjectThreadAdapter } from '@/lib/chat-persistence'
+import { ChatSyncBridge } from '@/components/chat/chat-sync-bridge'
 import type { ScytleNode, FrameNode } from '@/types/canvas'
 import type { SystemPromptContext } from '@/lib/ai/prompts/system'
 
@@ -388,8 +389,12 @@ function StatusIcon({ status }: { status: { type: string } }) {
 const UpdateThemeToolUI = makeAssistantToolUI({
     toolName: 'updateTheme',
     render: ({ args, result, status, toolCallId }) => {
+        // Track if this tool was live (mounted while running) vs loaded from history
+        const wasLiveRef = useRef(status.type === 'running')
+        if (status.type === 'running') wasLiveRef.current = true
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
+            if (status.type === 'complete' && result && wasLiveRef.current && !markToolApplied(toolCallId)) {
                 enqueueToolResult('updateTheme', result)
             }
         }, [status.type, result, toolCallId])
@@ -425,8 +430,11 @@ const UpdateThemeToolUI = makeAssistantToolUI({
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
     render: ({ args, result, status, toolCallId }) => {
+        const wasLiveRef = useRef(status.type === 'running')
+        if (status.type === 'running') wasLiveRef.current = true
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
+            if (status.type === 'complete' && result && wasLiveRef.current && !markToolApplied(toolCallId)) {
                 enqueueToolResult('generateSection', result)
             }
         }, [status.type, result, toolCallId])
@@ -452,8 +460,11 @@ const GenerateSectionToolUI = makeAssistantToolUI({
 const EditNodeToolUI = makeAssistantToolUI({
     toolName: 'editNode',
     render: ({ args, result, status, toolCallId }) => {
+        const wasLiveRef = useRef(status.type === 'running')
+        if (status.type === 'running') wasLiveRef.current = true
+
         useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
+            if (status.type === 'complete' && result && wasLiveRef.current && !markToolApplied(toolCallId)) {
                 enqueueToolResult('editNode', result)
             }
         }, [status.type, result, toolCallId])
@@ -547,6 +558,9 @@ export function ChatPanel() {
 
     return (
         <AssistantRuntimeProvider runtime={runtime}>
+            {/* Cross-browser thread list sync via WebSocket */}
+            <ChatSyncBridge />
+
             {/* Tool side-effects + rich visual cards */}
             <UpdateThemeToolUI />
             <GenerateSectionToolUI />

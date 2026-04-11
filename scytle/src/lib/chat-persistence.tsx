@@ -1,14 +1,17 @@
 'use client'
 
 /**
- * Chat Persistence — localStorage cache + Appwrite server sync
+ * Chat Persistence — Appwrite-first with localStorage cache
  *
- * localStorage is the fast read/write cache.
- * Appwrite is the server of truth — synced on load and after writes.
+ * Appwrite is the server of truth for threads & messages.
+ * localStorage is a fast read cache for instant UI.
  *
- * Per project:
- *   - Thread list:  scytle:${projectId}:threads     → StoredThread[]
- *   - Messages:     scytle:${projectId}:msg:${tid}  → StoredMessageRepo
+ * Write flow:  localStorage (optimistic) → debounce → Appwrite API
+ * Read flow:   localStorage cache → return immediately → background server refresh
+ *
+ * Per project cache keys:
+ *   - Thread list:  scytle:${projectId}:threads      → StoredThread[]
+ *   - Messages:     scytle:${projectId}:msg:${tid}   → StoredMessageRepo
  */
 
 import {
@@ -33,6 +36,7 @@ import type {
     MessageStorageEntry,
 } from '@assistant-ui/core'
 import { createJWT } from '@/lib/appwrite'
+import { canvasSync } from '@/lib/sync'
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -70,7 +74,7 @@ type StoredMessageRepo = {
     messages: StoredMessageEntry[]
 }
 
-// ── localStorage helpers ────────────────────────────────────
+// ── localStorage cache helpers ─────────────────────────────
 
 function threadsKey(projectId: string) {
     return `scytle:${projectId}:threads`
@@ -80,7 +84,7 @@ function messagesKey(projectId: string, threadId: string) {
     return `scytle:${projectId}:msg:${threadId}`
 }
 
-function loadThreads(projectId: string): StoredThread[] {
+function loadThreadsCache(projectId: string): StoredThread[] {
     try {
         const raw = localStorage.getItem(threadsKey(projectId))
         return raw ? (JSON.parse(raw) as StoredThread[]) : []
@@ -89,11 +93,15 @@ function loadThreads(projectId: string): StoredThread[] {
     }
 }
 
-function saveThreads(projectId: string, threads: StoredThread[]) {
-    localStorage.setItem(threadsKey(projectId), JSON.stringify(threads))
+function saveThreadsCache(projectId: string, threads: StoredThread[]) {
+    try {
+        localStorage.setItem(threadsKey(projectId), JSON.stringify(threads))
+    } catch {
+        // localStorage full — non-critical, server is the truth
+    }
 }
 
-function loadMessages(projectId: string, threadId: string): StoredMessageRepo {
+function loadMessagesCache(projectId: string, threadId: string): StoredMessageRepo {
     try {
         const raw = localStorage.getItem(messagesKey(projectId, threadId))
         return raw ? (JSON.parse(raw) as StoredMessageRepo) : { messages: [] }
@@ -102,111 +110,326 @@ function loadMessages(projectId: string, threadId: string): StoredMessageRepo {
     }
 }
 
-function saveMessages(projectId: string, threadId: string, repo: StoredMessageRepo) {
-    localStorage.setItem(messagesKey(projectId, threadId), JSON.stringify(repo))
-}
-
-// ── Server sync (Appwrite) ──────────────────────────────────
-
-/** Debounce timer per project */
-const _syncTimers = new Map<string, ReturnType<typeof setTimeout>>()
-
 /**
- * Collect all localStorage data for a project and save to server.
- * Debounced to avoid excessive API calls during rapid writes.
+ * Trim tool-invocation results to avoid blowing up localStorage.
+ * Full tool results (HTML, node trees, images) are already applied to the canvas.
  */
-function scheduleSyncToServer(projectId: string) {
-    const existing = _syncTimers.get(projectId)
-    if (existing) clearTimeout(existing)
+function trimLargeContent(content: Record<string, unknown>): Record<string, unknown> {
+    if (!content.parts || !Array.isArray(content.parts)) return content
 
-    _syncTimers.set(projectId, setTimeout(() => {
-        _syncTimers.delete(projectId)
-        syncToServer(projectId)
-    }, 2000))
+    const trimmedParts = (content.parts as Array<Record<string, unknown>>).map((part) => {
+        if (part.type === 'tool-invocation' && part.result != null) {
+            const result = part.result as Record<string, unknown>
+            const summary: Record<string, unknown> = {}
+            for (const [k, v] of Object.entries(result)) {
+                if (typeof v === 'boolean' || typeof v === 'number') {
+                    summary[k] = v
+                } else if (typeof v === 'string' && v.length <= 200) {
+                    summary[k] = v
+                } else if (typeof v === 'string') {
+                    summary[k] = v.slice(0, 100) + '…'
+                }
+            }
+            return { ...part, result: summary }
+        }
+        return part
+    })
+
+    return { ...content, parts: trimmedParts }
 }
 
-async function syncToServer(projectId: string) {
+function saveMessagesCache(projectId: string, threadId: string, repo: StoredMessageRepo) {
     try {
-        const jwt = await createJWT()
-        if (!jwt) return
-
-        const threads = loadThreads(projectId)
-        const messages: Record<string, StoredMessageRepo> = {}
-
-        for (const thread of threads) {
-            const repo = loadMessages(projectId, thread.remoteId)
-            if (repo.messages.length > 0) {
-                messages[thread.remoteId] = repo
-            }
+        localStorage.setItem(messagesKey(projectId, threadId), JSON.stringify(repo))
+    } catch {
+        // QuotaExceededError — trim and retry
+        const trimmed: StoredMessageRepo = {
+            headId: repo.headId,
+            messages: repo.messages.map((m) => ({
+                ...m,
+                content: trimLargeContent(m.content),
+            })),
         }
-
-        await fetch(`/api/projects/${projectId}/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${jwt.jwt}`,
-            },
-            body: JSON.stringify({ threads, messages }),
-        })
-    } catch (e) {
-        console.warn('Failed to sync chat to server:', e)
+        try {
+            localStorage.setItem(messagesKey(projectId, threadId), JSON.stringify(trimmed))
+        } catch {
+            // Still too large — skip cache, server has the data
+        }
     }
 }
 
-/**
- * Load data from server and populate localStorage (if server has newer data).
- * Called once on adapter creation.
- */
-async function syncFromServer(projectId: string): Promise<void> {
+// ── Server API helpers ─────────────────────────────────────
+
+async function getAuthHeader(): Promise<string | null> {
     try {
         const jwt = await createJWT()
-        if (!jwt) return
+        return jwt ? `Bearer ${jwt.jwt}` : null
+    } catch {
+        return null
+    }
+}
 
-        const res = await fetch(`/api/projects/${projectId}/chat`, {
-            headers: { 'Authorization': `Bearer ${jwt.jwt}` },
+// ── Thread server sync ─────────────────────────────────────
+
+const _threadSyncTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleThreadSync(
+    projectId: string,
+    threadId: string,
+    action: 'create' | 'update' | 'delete',
+    data?: Record<string, unknown>,
+) {
+    const key = `thread:${threadId}:${action}`
+    const existing = _threadSyncTimers.get(key)
+    if (existing) clearTimeout(existing)
+
+    _threadSyncTimers.set(key, setTimeout(async () => {
+        _threadSyncTimers.delete(key)
+        const auth = await getAuthHeader()
+        if (!auth) return
+
+        try {
+            if (action === 'create') {
+                await fetch(`/api/projects/${projectId}/threads`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({ threadId, ...data }),
+                })
+            } else if (action === 'update') {
+                await fetch(`/api/projects/${projectId}/threads/${threadId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify(data),
+                })
+            } else if (action === 'delete') {
+                await fetch(`/api/projects/${projectId}/threads/${threadId}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: auth },
+                })
+            }
+        } catch (e) {
+            console.warn(`Failed to sync thread ${action}:`, e)
+        }
+    }, 500))
+}
+
+// ── Message server sync ────────────────────────────────────
+
+const _msgSyncTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function scheduleMessageSync(
+    projectId: string,
+    threadId: string,
+    entry: StoredMessageEntry,
+    isHead: boolean,
+) {
+    const key = `msg:${threadId}:${entry.id}`
+    const existing = _msgSyncTimers.get(key)
+    if (existing) clearTimeout(existing)
+
+    _msgSyncTimers.set(key, setTimeout(async () => {
+        _msgSyncTimers.delete(key)
+        const auth = await getAuthHeader()
+        if (!auth) return
+
+        try {
+            // Trim before sending to server
+            const trimmedContent = trimLargeContent(entry.content)
+            await fetch(`/api/projects/${projectId}/threads/${threadId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: auth },
+                body: JSON.stringify({
+                    id: entry.id,
+                    parentId: entry.parent_id,
+                    format: entry.format,
+                    content: trimmedContent,
+                    isHead,
+                }),
+            })
+        } catch (e) {
+            console.warn('Failed to sync message:', e)
+        }
+    }, 1000))
+}
+
+// ── Server refresh (background) ────────────────────────────
+
+/**
+ * Fetch threads from new API, update localStorage cache.
+ * Also attempts migration from old AI_CONVERSATIONS if no threads found.
+ */
+async function refreshThreadsFromServer(projectId: string): Promise<void> {
+    const auth = await getAuthHeader()
+    if (!auth) return
+
+    try {
+        const res = await fetch(`/api/projects/${projectId}/threads`, {
+            headers: { Authorization: auth },
         })
         if (!res.ok) return
 
         const data = await res.json()
-        const serverThreads: StoredThread[] = data.threads ?? []
-        const serverMessages: Record<string, StoredMessageRepo> = data.messages ?? {}
+        const serverThreads: StoredThread[] = (data.threads ?? []).map((t: any) => ({
+            remoteId: t.remoteId,
+            status: t.status,
+            title: t.title,
+        }))
 
-        if (serverThreads.length === 0) return
+        if (serverThreads.length === 0) {
+            // Try migration from old system
+            await migrateFromOldSystem(projectId, auth)
+            return
+        }
 
-        // Merge: server threads that don't exist locally get added
-        const localThreads = loadThreads(projectId)
-        const localIds = new Set(localThreads.map((t) => t.remoteId))
-        let merged = [...localThreads]
+        // Server is truth — replace cache
+        saveThreadsCache(projectId, serverThreads)
+    } catch (e) {
+        console.warn('Failed to refresh threads from server:', e)
+    }
+}
 
-        for (const st of serverThreads) {
-            if (!localIds.has(st.remoteId)) {
-                merged.push(st)
-            } else {
-                // Update title from server if local doesn't have one
-                const local = merged.find((t) => t.remoteId === st.remoteId)
-                if (local && !local.title && st.title) {
-                    local.title = st.title
+/**
+ * Fetch messages for a thread from server, update cache.
+ */
+async function refreshMessagesFromServer(projectId: string, threadId: string): Promise<void> {
+    const auth = await getAuthHeader()
+    if (!auth) return
+
+    try {
+        const res = await fetch(`/api/projects/${projectId}/threads/${threadId}/messages`, {
+            headers: { Authorization: auth },
+        })
+        if (!res.ok) return
+
+        const data = await res.json()
+        const repo: StoredMessageRepo = {
+            headId: data.headId,
+            messages: data.messages ?? [],
+        }
+
+        if (repo.messages.length > 0) {
+            saveMessagesCache(projectId, threadId, repo)
+        }
+    } catch (e) {
+        console.warn('Failed to refresh messages from server:', e)
+    }
+}
+
+// ── Migration from old AI_CONVERSATIONS ────────────────────
+
+async function migrateFromOldSystem(projectId: string, auth: string): Promise<void> {
+    const migrationKey = `scytle:${projectId}:migrated_v2`
+    if (localStorage.getItem(migrationKey)) return
+
+    try {
+        // Fetch old data
+        const res = await fetch(`/api/projects/${projectId}/chat`, {
+            headers: { Authorization: auth },
+        })
+        if (!res.ok) return
+
+        const old = await res.json()
+        const oldThreads: StoredThread[] = old.threads ?? []
+        const oldMessages: Record<string, StoredMessageRepo> = old.messages ?? {}
+
+        if (oldThreads.length === 0) {
+            // Also check localStorage for data that never made it to server
+            const localThreads = loadThreadsCache(projectId)
+            if (localThreads.length === 0) {
+                localStorage.setItem(migrationKey, Date.now().toString())
+                return
+            }
+            // Use local data for migration
+            for (const thread of localThreads) {
+                oldThreads.push(thread)
+            }
+            for (const thread of localThreads) {
+                const localRepo = loadMessagesCache(projectId, thread.remoteId)
+                if (localRepo.messages.length > 0) {
+                    oldMessages[thread.remoteId] = localRepo
                 }
             }
         }
 
-        saveThreads(projectId, merged)
-
-        // Merge messages: server messages for threads with empty local get written
-        for (const [threadId, serverRepo] of Object.entries(serverMessages)) {
-            const localRepo = loadMessages(projectId, threadId)
-            if (localRepo.messages.length === 0 && serverRepo.messages.length > 0) {
-                saveMessages(projectId, threadId, serverRepo)
+        // Migrate threads to new API
+        for (const thread of oldThreads) {
+            try {
+                await fetch(`/api/projects/${projectId}/threads`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({
+                        threadId: thread.remoteId,
+                        status: thread.status,
+                        title: thread.title,
+                    }),
+                })
+            } catch {
+                // Continue migrating other threads
             }
         }
+
+        // Migrate messages
+        for (const [threadId, repo] of Object.entries(oldMessages)) {
+            if (repo.messages.length === 0) continue
+            try {
+                await fetch(`/api/projects/${projectId}/threads/${threadId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: auth },
+                    body: JSON.stringify({
+                        batch: true,
+                        messages: repo.messages,
+                        headId: repo.headId,
+                    }),
+                })
+            } catch {
+                // Continue migrating other threads
+            }
+        }
+
+        // Update cache from newly migrated server data
+        await refreshThreadsFromServer(projectId)
+
+        localStorage.setItem(migrationKey, Date.now().toString())
     } catch (e) {
-        console.warn('Failed to load chat from server:', e)
+        console.warn('Migration from old system failed:', e)
     }
+}
+
+// ── Topological sort for message loading ───────────────────
+
+function topoSortMessages(messages: StoredMessageEntry[]): StoredMessageEntry[] {
+    const idSet = new Set(messages.map((e) => e.id))
+    const sorted: StoredMessageEntry[] = []
+    const placed = new Set<string | null>([null])
+    const remaining = [...messages]
+    let prevLen = -1
+
+    while (remaining.length > 0 && remaining.length !== prevLen) {
+        prevLen = remaining.length
+        for (let i = remaining.length - 1; i >= 0; i--) {
+            const entry = remaining[i]!
+            if (placed.has(entry.parent_id) || !idSet.has(entry.parent_id!)) {
+                if (entry.parent_id && !idSet.has(entry.parent_id)) {
+                    entry.parent_id = null
+                }
+                sorted.push(entry)
+                placed.add(entry.id)
+                remaining.splice(i, 1)
+            }
+        }
+    }
+
+    for (const entry of remaining) {
+        entry.parent_id = null
+        sorted.push(entry)
+    }
+
+    return sorted
 }
 
 // ── History adapter (per-thread message load/save) ──────────
 
-class LocalStorageHistoryAdapter implements ThreadHistoryAdapter {
+class ChatHistoryAdapter implements ThreadHistoryAdapter {
     constructor(
         private projectId: string,
         private aui: ReturnType<typeof useAui>,
@@ -238,16 +461,22 @@ class LocalStorageHistoryAdapter implements ThreadHistoryAdapter {
                 if (!remoteId) return { messages: [] }
 
                 try {
-                    const stored = loadMessages(self.projectId, remoteId)
+                    // Always fetch fresh from server to ensure cross-browser sync
+                    await refreshMessagesFromServer(self.projectId, remoteId)
+                    const stored = loadMessagesCache(self.projectId, remoteId)
+
                     if (stored.messages.length === 0) return { messages: [] }
+
+                    const filtered = stored.messages
+                        .filter((entry) => entry.format === formatAdapter.format)
+
+                    const sorted = topoSortMessages(filtered)
 
                     return {
                         headId: stored.headId,
-                        messages: stored.messages
-                            .filter((entry) => entry.format === formatAdapter.format)
-                            .map((entry) =>
-                                formatAdapter.decode(entry as MessageStorageEntry<TStorageFormat>),
-                            ),
+                        messages: sorted.map((entry) =>
+                            formatAdapter.decode(entry as MessageStorageEntry<TStorageFormat>),
+                        ),
                     }
                 } catch (e) {
                     console.error('Failed to load chat history:', e)
@@ -258,7 +487,7 @@ class LocalStorageHistoryAdapter implements ThreadHistoryAdapter {
             async append(item: MessageFormatItem<TMessage>): Promise<void> {
                 const remoteId = await self._getOrInitRemoteId()
 
-                const stored = loadMessages(self.projectId, remoteId)
+                const stored = loadMessagesCache(self.projectId, remoteId)
                 const id = formatAdapter.getId(item.message)
                 const encoded = formatAdapter.encode(item)
                 const entry: StoredMessageEntry = {
@@ -276,15 +505,17 @@ class LocalStorageHistoryAdapter implements ThreadHistoryAdapter {
                 }
                 stored.headId = id
 
-                saveMessages(self.projectId, remoteId, stored)
-                scheduleSyncToServer(self.projectId)
+                // 1. Cache locally (optimistic)
+                saveMessagesCache(self.projectId, remoteId, stored)
+                // 2. Sync to server (debounced)
+                scheduleMessageSync(self.projectId, remoteId, entry, true)
             },
 
             async update(item: MessageFormatItem<TMessage>, localMessageId: string): Promise<void> {
                 const remoteId = self._getRemoteId()
                 if (!remoteId) return
 
-                const stored = loadMessages(self.projectId, remoteId)
+                const stored = loadMessagesCache(self.projectId, remoteId)
                 const id = formatAdapter.getId(item.message)
                 const encoded = formatAdapter.encode(item)
                 const entry: StoredMessageEntry = {
@@ -300,8 +531,8 @@ class LocalStorageHistoryAdapter implements ThreadHistoryAdapter {
                 }
                 if (idx >= 0) {
                     stored.messages[idx] = entry
-                    saveMessages(self.projectId, remoteId, stored)
-                    scheduleSyncToServer(self.projectId)
+                    saveMessagesCache(self.projectId, remoteId, stored)
+                    scheduleMessageSync(self.projectId, remoteId, entry, false)
                 }
             },
         }
@@ -314,7 +545,7 @@ function createHistoryProvider(projectId: string): FC<PropsWithChildren> {
     const Provider: FC<PropsWithChildren> = ({ children }) => {
         const aui = useAui()
         const history = useMemo(
-            () => new LocalStorageHistoryAdapter(projectId, aui),
+            () => new ChatHistoryAdapter(projectId, aui),
             // eslint-disable-next-line react-hooks/exhaustive-deps
             [projectId],
         )
@@ -352,14 +583,50 @@ function extractTitleFromMessages(
 export function createProjectThreadAdapter(
     projectId: string,
 ): RemoteThreadListAdapter {
-    // Fire-and-forget: pull server data into localStorage on creation
-    syncFromServer(projectId)
+    // Fetch server threads on creation — list() awaits this
+    let syncDone = refreshThreadsFromServer(projectId)
+
+    // Listen for chat thread changes from other browsers via the WebSocket
+    if (typeof window !== 'undefined') {
+        canvasSync.onChatMessage((msg) => {
+            if (msg.type === 'chat:thread:create') {
+                const threads = loadThreadsCache(projectId)
+                if (!threads.some((t) => t.remoteId === msg.thread.remoteId)) {
+                    threads.unshift(msg.thread as StoredThread)
+                    saveThreadsCache(projectId, threads)
+                }
+            } else if (msg.type === 'chat:thread:delete') {
+                const threads = loadThreadsCache(projectId)
+                saveThreadsCache(projectId, threads.filter((t) => t.remoteId !== msg.threadId))
+                localStorage.removeItem(messagesKey(projectId, msg.threadId))
+            } else if (msg.type === 'chat:thread:rename') {
+                const threads = loadThreadsCache(projectId)
+                const t = threads.find((th) => th.remoteId === msg.threadId)
+                if (t) {
+                    t.title = msg.title
+                    saveThreadsCache(projectId, threads)
+                }
+            } else if (msg.type === 'chat:thread:archive') {
+                const threads = loadThreadsCache(projectId)
+                const t = threads.find((th) => th.remoteId === msg.threadId)
+                if (t) {
+                    t.status = msg.status
+                    saveThreadsCache(projectId, threads)
+                }
+            }
+
+            // Signal the ChatSyncBridge to force assistant-ui to re-fetch thread list
+            window.dispatchEvent(new CustomEvent('chat:threads-changed'))
+        })
+    }
 
     return {
         unstable_Provider: createHistoryProvider(projectId),
 
         async list(): Promise<RemoteThreadListResponse> {
-            const threads = loadThreads(projectId)
+            // Always wait for the latest server fetch
+            await syncDone
+            const threads = loadThreadsCache(projectId)
             return {
                 threads: threads.map((t) => ({
                     remoteId: t.remoteId,
@@ -370,55 +637,78 @@ export function createProjectThreadAdapter(
         },
 
         async initialize(threadId: string): Promise<RemoteThreadInitializeResponse> {
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             if (!threads.some((t) => t.remoteId === threadId)) {
                 threads.unshift({ remoteId: threadId, status: 'regular' })
-                saveThreads(projectId, threads)
-                scheduleSyncToServer(projectId)
+                saveThreadsCache(projectId, threads)
+                // Create on server immediately (must exist before messages arrive)
+                const auth = await getAuthHeader()
+                if (auth) {
+                    fetch(`/api/projects/${projectId}/threads`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: auth },
+                        body: JSON.stringify({ threadId, status: 'regular' }),
+                    }).catch(() => {})
+                }
+                // Notify other browsers via WebSocket
+                canvasSync.sendChatThreadCreate({ remoteId: threadId, status: 'regular' })
             }
             return { remoteId: threadId, externalId: undefined }
         },
 
         async rename(remoteId: string, newTitle: string): Promise<void> {
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             const thread = threads.find((t) => t.remoteId === remoteId)
             if (thread) {
                 thread.title = newTitle
-                saveThreads(projectId, threads)
-                scheduleSyncToServer(projectId)
+                saveThreadsCache(projectId, threads)
+                scheduleThreadSync(projectId, remoteId, 'update', { title: newTitle })
+                canvasSync.sendChatThreadRename(remoteId, newTitle)
             }
         },
 
         async archive(remoteId: string): Promise<void> {
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             const thread = threads.find((t) => t.remoteId === remoteId)
             if (thread) {
                 thread.status = 'archived'
-                saveThreads(projectId, threads)
-                scheduleSyncToServer(projectId)
+                saveThreadsCache(projectId, threads)
+                scheduleThreadSync(projectId, remoteId, 'update', { status: 'archived' })
+                canvasSync.sendChatThreadArchive(remoteId, 'archived')
             }
         },
 
         async unarchive(remoteId: string): Promise<void> {
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             const thread = threads.find((t) => t.remoteId === remoteId)
             if (thread) {
                 thread.status = 'regular'
-                saveThreads(projectId, threads)
-                scheduleSyncToServer(projectId)
+                saveThreadsCache(projectId, threads)
+                scheduleThreadSync(projectId, remoteId, 'update', { status: 'regular' })
+                canvasSync.sendChatThreadArchive(remoteId, 'regular')
             }
         },
 
         async delete(remoteId: string): Promise<void> {
-            const threads = loadThreads(projectId)
+            // Remove from cache
+            const threads = loadThreadsCache(projectId)
             const filtered = threads.filter((t) => t.remoteId !== remoteId)
-            saveThreads(projectId, filtered)
+            saveThreadsCache(projectId, filtered)
             localStorage.removeItem(messagesKey(projectId, remoteId))
-            scheduleSyncToServer(projectId)
+            // Delete from server immediately (no debounce for destructive actions)
+            const auth = await getAuthHeader()
+            if (auth) {
+                fetch(`/api/projects/${projectId}/threads/${remoteId}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: auth },
+                }).catch(() => {})
+            }
+            // Notify other browsers via WebSocket
+            canvasSync.sendChatThreadDelete(remoteId)
         },
 
         async fetch(threadId: string): Promise<RemoteThreadMetadata> {
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             const thread = threads.find((t) => t.remoteId === threadId)
             if (!thread) throw new Error('Thread not found')
             return {
@@ -434,12 +724,13 @@ export function createProjectThreadAdapter(
         ): Promise<AssistantStream> {
             const title = extractTitleFromMessages(messages)
 
-            const threads = loadThreads(projectId)
+            const threads = loadThreadsCache(projectId)
             const thread = threads.find((t) => t.remoteId === remoteId)
             if (thread) {
                 thread.title = title
-                saveThreads(projectId, threads)
-                scheduleSyncToServer(projectId)
+                saveThreadsCache(projectId, threads)
+                scheduleThreadSync(projectId, remoteId, 'update', { title })
+                canvasSync.sendChatThreadRename(remoteId, title)
             }
 
             return createAssistantStream((controller) => {

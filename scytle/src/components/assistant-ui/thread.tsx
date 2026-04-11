@@ -34,6 +34,7 @@ import {
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
+  Loader2,
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -64,7 +65,11 @@ export const Thread: FC = () => {
         turnAnchor="top"
         className="aui-thread-viewport relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth px-3 pt-4"
       >
-        <AuiIf condition={(s) => s.thread.isEmpty}>
+        <AuiIf condition={(s) => s.thread.isLoading}>
+          <ThreadLoading />
+        </AuiIf>
+
+        <AuiIf condition={(s) => !s.thread.isLoading && s.thread.isEmpty}>
           <ThreadWelcome />
         </AuiIf>
 
@@ -100,6 +105,15 @@ const ThreadScrollToBottom: FC = () => {
         <ArrowDownIcon />
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
+  );
+};
+
+const ThreadLoading: FC = () => {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2">
+      <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <p className="text-xs text-muted-foreground">Loading messages...</p>
+    </div>
   );
 };
 

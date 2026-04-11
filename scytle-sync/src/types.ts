@@ -38,6 +38,11 @@ export type ClientMessage =
   | { type: 'page:reorder'; pageIds: string[] }
   | { type: 'page:switch'; pageId: string }
   | { type: 'viewport'; zoom: number; panX: number; panY: number }
+  // Chat thread sync (broadcast-only, no DO storage)
+  | { type: 'chat:thread:create'; thread: { remoteId: string; status: string; title?: string } }
+  | { type: 'chat:thread:delete'; threadId: string }
+  | { type: 'chat:thread:rename'; threadId: string; title: string }
+  | { type: 'chat:thread:archive'; threadId: string; status: 'regular' | 'archived' }
 
 // ============================================================
 // Server → Client Messages
@@ -61,6 +66,11 @@ export type ServerMessage =
   | { type: 'page:reorder'; pageIds: string[]; userId: string }
   | { type: 'presence'; users: Array<{ userId: string; pageId: string }> }
   | { type: 'error'; message: string }
+  // Chat thread sync (broadcast-only)
+  | { type: 'chat:thread:create'; thread: { remoteId: string; status: string; title?: string }; userId: string }
+  | { type: 'chat:thread:delete'; threadId: string; userId: string }
+  | { type: 'chat:thread:rename'; threadId: string; title: string; userId: string }
+  | { type: 'chat:thread:archive'; threadId: string; status: 'regular' | 'archived'; userId: string }
 
 // ============================================================
 // Environment Bindings

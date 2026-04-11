@@ -63,6 +63,8 @@ export const COLLECTIONS = {
     STYLE_GUIDES: 'style_guides',
     RESEARCH_DATA: 'research_data',
     AI_CONVERSATIONS: 'ai_conversations',
+    AI_THREADS: 'ai_threads',
+    AI_MESSAGES: 'ai_messages',
     SHARES: 'shares',
 } as const
 
