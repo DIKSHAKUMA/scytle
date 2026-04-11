@@ -6,11 +6,9 @@ import type { VectorEditTool } from '@/store/editor-store'
 import {
     MousePointer2,
     Lasso,
-    Combine,
     PaintBucket,
     Spline,
     Scissors,
-    WrapText,
     X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -34,10 +32,8 @@ const TOOL_GROUPS: ToolDef[][] = [
     // Group 2: Editing tools
     [
         { id: 'paint', label: 'Paint', shortcut: '\u21E7B', icon: <PaintBucket size={ICON_SIZE} /> },
-        { id: 'shape-builder', label: 'Shape Builder', shortcut: 'J', icon: <Combine size={ICON_SIZE} /> },
         { id: 'bend', label: 'Bend', shortcut: '\u2318', icon: <Spline size={ICON_SIZE} /> },
         { id: 'cut', label: 'Cut', shortcut: 'C', icon: <Scissors size={ICON_SIZE} /> },
-        { id: 'variable-width', label: 'Variable Width', shortcut: 'W', icon: <WrapText size={ICON_SIZE} /> },
     ],
 ]
 

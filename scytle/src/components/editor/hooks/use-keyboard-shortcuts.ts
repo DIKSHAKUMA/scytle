@@ -386,7 +386,6 @@ export function useKeyboardShortcuts() {
                     const vectorToolMap: Record<string, import('@/store/editor-store').VectorEditTool> = {
                         v: 'move',
                         q: 'lasso',
-                        m: 'shape-builder',
                         x: 'cut',
                     }
                     const vtool = vectorToolMap[key]
@@ -395,10 +394,9 @@ export function useKeyboardShortcuts() {
                         store.setVectorEditTool(vtool)
                         return
                     }
-                    // Shift+B → paint, Shift+W → variable-width
+                    // Shift+B → paint
                     if (shift) {
                         if (key === 'b') { e.preventDefault(); store.setVectorEditTool('paint'); return }
-                        if (key === 'w') { e.preventDefault(); store.setVectorEditTool('variable-width'); return }
                     }
                 }
                 // Don't fall through to main tool switch while in vector edit

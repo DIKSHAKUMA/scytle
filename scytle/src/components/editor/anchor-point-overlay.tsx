@@ -11,6 +11,13 @@ const HANDLE_R = 4
 const BLUE = '#3b82f6'
 const WHITE = '#ffffff'
 const SEGMENT_HIT_WIDTH = 12 // px — invisible fat stroke for click target
+const CORNER_HANDLE_SIZE = 8
+const EDGE_HIT = 8
+
+// Water-drop SVG cursor for the paint tool
+const PAINT_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Cpath fill='%23ffffff' stroke='%23000000' stroke-width='1.5' d='M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z'/%3E%3C/svg%3E") 10 18, crosshair`
+
+type BBoxHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'body'
 
 /** State tracked during a vertex/handle drag */
 interface DragInfo {
@@ -99,16 +106,24 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const nodes = useEditorStore((s) => s.nodes)
 
     const dragRef = useRef<DragInfo | null>(null)
-    // Lasso tool state — screen-space polygon being drawn
+    // Ref to the SVG root to get bounding rect for coordinate conversion
+    const svgRef = useRef<SVGSVGElement | null>(null)
+    // Lasso tool state — container-relative polygon being drawn
     const [lassoPoints, setLassoPoints] = useState<Pt[]>([])
 
     // ── Helpers ──────────────────────────────────────────────
 
     const screenToCanvas = useCallback(
-        (clientX: number, clientY: number) => ({
-            x: (clientX - panX) / zoom,
-            y: (clientY - panY) / zoom,
-        }),
+        (clientX: number, clientY: number) => {
+            const rect = svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect()
+                ?? svgRef.current?.getBoundingClientRect()
+            const offsetX = rect?.left ?? 0
+            const offsetY = rect?.top ?? 0
+            return {
+                x: (clientX - offsetX - panX) / zoom,
+                y: (clientY - offsetY - panY) / zoom,
+            }
+        },
         [zoom, panX, panY],
     )
 
@@ -119,44 +134,55 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             e.stopPropagation()
             e.preventDefault()
             const additive = e.shiftKey
-            const startPt = { x: e.clientX, y: e.clientY }
+
+            // Get the canvas container offset so we can store container-relative coords
+            const containerRect = svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect()
+                ?? svgRef.current?.getBoundingClientRect()
+            const offsetX = containerRect?.left ?? 0
+            const offsetY = containerRect?.top ?? 0
+
+            const startPt = { x: e.clientX - offsetX, y: e.clientY - offsetY }
             setLassoPoints([startPt])
 
             const onMove = (me: PointerEvent) => {
-                setLassoPoints((prev) => [...prev, { x: me.clientX, y: me.clientY }])
+                setLassoPoints((prev) => [...prev, { x: me.clientX - offsetX, y: me.clientY - offsetY }])
             }
 
-            const onUp = () => {
+            const onUp = (ue: PointerEvent) => {
                 window.removeEventListener('pointermove', onMove)
                 window.removeEventListener('pointerup', onUp)
 
+                // Collect final polygon snapshot synchronously via ref, then clear lasso
                 setLassoPoints((finalPoly) => {
+                    // Schedule the selection update outside of setState to avoid setState-in-render
                     if (finalPoly.length >= 3) {
-                        const st = useEditorStore.getState()
-                        const nodeId = st.vectorEditNodeId
-                        if (nodeId) {
+                        setTimeout(() => {
+                            const st = useEditorStore.getState()
+                            const nodeId = st.vectorEditNodeId
+                            if (!nodeId) return
                             const node = findNodeById(st.nodes, nodeId) as VectorNode | null
-                            if (node) {
-                                const { x: nx, y: ny } = node
-                                const z = st.zoom
-                                const px = st.panX
-                                const py = st.panY
-                                // Find which vertex screen positions fall inside the lasso polygon
-                                const inside: number[] = []
-                                node.vectorNetwork.vertices.forEach((v, vi) => {
-                                    const sx = (nx + v.x) * z + px
-                                    const sy = (ny + v.y) * z + py
-                                    if (pointInPolygon({ x: sx, y: sy }, finalPoly)) {
-                                        inside.push(vi)
-                                    }
-                                })
-                                if (inside.length > 0) {
-                                    st.selectVertices(inside, additive)
-                                } else if (!additive) {
-                                    st.deselectVertices()
+                            if (!node) return
+
+                            const z = st.zoom
+                            const px = st.panX
+                            const py = st.panY
+                            // Vertex screen positions are also container-relative (same space as lasso)
+                            const inside: number[] = []
+                            node.vectorNetwork.vertices.forEach((v, vi) => {
+                                const sx = (node.x + v.x) * z + px
+                                const sy = (node.y + v.y) * z + py
+                                if (pointInPolygon({ x: sx, y: sy }, finalPoly)) {
+                                    inside.push(vi)
                                 }
+                            })
+                            if (inside.length > 0) {
+                                st.selectVertices(inside, additive)
+                                // Auto-switch to move tool so user can drag selected vertices
+                                st.setVectorEditTool('move')
+                            } else if (!additive) {
+                                st.deselectVertices()
                             }
-                        }
+                        }, 0)
                     }
                     return []
                 })
@@ -168,11 +194,12 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
         [],
     )
 
-    // ── Paint tool: click region to toggle fill ─────────────
+    // ── Paint tool: click to toggle fill on closed region ───
 
     const handlePaintClick = useCallback(
-        (e: React.MouseEvent) => {
+        (e: React.PointerEvent) => {
             e.stopPropagation()
+            e.preventDefault()
             const store = useEditorStore.getState()
             const nodeId = store.vectorEditNodeId
             if (!nodeId) return
@@ -180,44 +207,84 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             if (!node) return
 
             const vn = node.vectorNetwork
-            if (!vn.regions || vn.regions.length === 0) return
 
-            // Convert click to canvas space (relative to node origin)
-            const cx = (e.clientX - store.panX) / store.zoom - node.x
-            const cy = (e.clientY - store.panY) / store.zoom - node.y
+            // Convert click to canvas space relative to node origin
+            const containerRect = svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect()
+                ?? svgRef.current?.getBoundingClientRect()
+            const offsetX = containerRect?.left ?? 0
+            const offsetY = containerRect?.top ?? 0
+            const cx = (e.clientX - offsetX - store.panX) / store.zoom - node.x
+            const cy = (e.clientY - offsetY - store.panY) / store.zoom - node.y
 
-            // Find which region the click falls in by testing the boundary polygon
-            let clickedRegionIdx = -1
-            for (let ri = 0; ri < vn.regions.length; ri++) {
-                const region = vn.regions[ri]
-                const poly: Pt[] = []
-                for (const segIdx of region.loops[0] ?? []) {
-                    const seg = vn.segments[segIdx]
-                    if (!seg) continue
-                    const v = vn.vertices[seg.start]
-                    if (v) poly.push({ x: v.x, y: v.y })
-                }
-                if (poly.length >= 3 && pointInPolygon({ x: cx, y: cy }, poly)) {
-                    clickedRegionIdx = ri
-                    break
+            // Build closed loops from segments: trace adjacency graph, find cycles
+            // Each cycle is a candidate fill region
+            // Build adjacency: vertexIdx → [connected vertexIdx via segIdx]
+            const adj = new Map<number, { neighbor: number; segIdx: number }[]>()
+            vn.segments.forEach((seg, si) => {
+                if (!adj.has(seg.start)) adj.set(seg.start, [])
+                if (!adj.has(seg.end)) adj.set(seg.end, [])
+                adj.get(seg.start)!.push({ neighbor: seg.end, segIdx: si })
+                adj.get(seg.end)!.push({ neighbor: seg.start, segIdx: si })
+            })
+
+            // Find the smallest closed loop enclosing the click point
+            // Use a simple DFS to collect loops of 3+ vertices
+            const visited = new Set<string>()
+            const loops: number[][] = []
+
+            const dfs = (path: number[], startIdx: number) => {
+                const cur = path[path.length - 1]
+                const neighbors = adj.get(cur) ?? []
+                for (const { neighbor } of neighbors) {
+                    if (neighbor === startIdx && path.length >= 3) {
+                        loops.push([...path])
+                        continue
+                    }
+                    if (path.includes(neighbor)) continue
+                    const key = [...path, neighbor].sort((a, b) => a - b).join(',')
+                    if (visited.has(key)) continue
+                    visited.add(key)
+                    path.push(neighbor)
+                    dfs(path, startIdx)
+                    path.pop()
                 }
             }
 
-            if (clickedRegionIdx === -1) return
+            for (const startIdx of adj.keys()) {
+                dfs([startIdx], startIdx)
+            }
 
-            // Toggle: if region has its own fills array, remove it (revert to node fills);
-            // if not, add the node's current fill as a region-level override
-            const updatedRegions = vn.regions.map((r, ri) => {
-                if (ri !== clickedRegionIdx) return r
-                if (r.fills && r.fills.length > 0) {
-                    // Has fill → remove it (empty array = no fill for this region)
-                    return { ...r, fills: [] }
-                } else {
-                    // No fill → copy current node fills
-                    return { ...r, fills: node.fills.length > 0 ? [...node.fills] : [{ type: 'solid' as const, color: '#000000', opacity: 1 }] }
+            // Find smallest loop that contains the click point
+            let bestLoop: number[] | null = null
+            let bestArea = Infinity
+            for (const loop of loops) {
+                const poly = loop.map((vi) => {
+                    const v = vn.vertices[vi]
+                    return v ? { x: v.x, y: v.y } : null
+                }).filter(Boolean) as Pt[]
+                if (poly.length < 3) continue
+                if (!pointInPolygon({ x: cx, y: cy }, poly)) continue
+                // Compute area to pick smallest enclosing loop
+                let area = 0
+                for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                    area += poly[j].x * poly[i].y - poly[i].x * poly[j].y
                 }
+                area = Math.abs(area) / 2
+                if (area < bestArea) { bestArea = area; bestLoop = loop }
+            }
+
+            if (!bestLoop) {
+                // No closed loop found — paint only applies to closed paths
+                return
+            }
+
+            // Toggle node fill (paint applies to the whole node since we don't have per-region fills in renderer)
+            const hasFill = node.fills.length > 0 && node.fills.some((f) => (f.opacity ?? 1) > 0)
+            store.updateNode(nodeId, {
+                fills: hasFill
+                    ? node.fills.map((f) => ({ ...f, opacity: 0 }))
+                    : [{ type: 'solid' as const, color: '#808080', opacity: 1 }],
             })
-            store.updateVectorNetwork(nodeId, { ...vn, regions: updatedRegions })
         },
         [],
     )
@@ -239,6 +306,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const endV = node.vectorNetwork.vertices[seg.end]
             if (!startV || !endV) return
 
+            store.beginBatch()
+
             // If segment is straight, add default curve handles first
             const ts = seg.tangentStart ?? { x: 0, y: 0 }
             const te = seg.tangentEnd ?? { x: 0, y: 0 }
@@ -258,12 +327,15 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 })
             }
 
-            store.beginBatch()
-
             // Track drag: adjust the midpoint of the curve perpendicular to segment
             const startClient = { x: e.clientX, y: e.clientY }
+            let didDrag = false
 
             const onMove = (me: PointerEvent) => {
+                const distSq = (me.clientX - startClient.x) ** 2 + (me.clientY - startClient.y) ** 2
+                if (distSq < 4) return // ignore tiny jitter
+                didDrag = true
+
                 const st = useEditorStore.getState()
                 const nId = st.vectorEditNodeId
                 if (!nId) return
@@ -302,6 +374,38 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 useEditorStore.getState().endBatch()
                 window.removeEventListener('pointermove', onMove)
                 window.removeEventListener('pointerup', onUp)
+
+                // If no drag happened → it was a click: toggle straight/curved
+                if (!didDrag) {
+                    const st2 = useEditorStore.getState()
+                    const nId2 = st2.vectorEditNodeId
+                    if (!nId2) return
+                    const n2 = findNodeById(st2.nodes, nId2) as VectorNode | null
+                    if (!n2) return
+                    const net2 = n2.vectorNetwork
+                    const s2 = net2.segments[segIdx]
+                    if (!s2) return
+                    const ts2 = s2.tangentStart ?? { x: 0, y: 0 }
+                    const te2 = s2.tangentEnd ?? { x: 0, y: 0 }
+                    const isCurved = ts2.x !== 0 || ts2.y !== 0 || te2.x !== 0 || te2.y !== 0
+                    const updSegs = [...net2.segments]
+                    if (isCurved) {
+                        updSegs[segIdx] = { ...s2, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }
+                    } else {
+                        const v0 = net2.vertices[s2.start]
+                        const v1 = net2.vertices[s2.end]
+                        if (v0 && v1) {
+                            const dx2 = v1.x - v0.x
+                            const dy2 = v1.y - v0.y
+                            updSegs[segIdx] = {
+                                ...s2,
+                                tangentStart: { x: dx2 / 3, y: dy2 / 3 },
+                                tangentEnd: { x: -dx2 / 3, y: -dy2 / 3 },
+                            }
+                        }
+                    }
+                    st2.updateVectorNetwork(nId2, { ...net2, segments: updSegs })
+                }
             }
 
             window.addEventListener('pointermove', onMove)
@@ -312,9 +416,10 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
 
     // ── Cut tool: click segment to insert vertex + split ────
 
-    const handleCutSegmentClick = useCallback(
-        (e: React.MouseEvent, segIdx: number) => {
+    const handleCutSegmentPointerDown = useCallback(
+        (e: React.PointerEvent, segIdx: number) => {
             e.stopPropagation()
+            e.preventDefault()
             const store = useEditorStore.getState()
             if (store.vectorEditTool !== 'cut' || !store.vectorEditNodeId) return
             const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
@@ -346,7 +451,10 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const cp1 = toScreen(startV.x + ts.x, startV.y + ts.y)
             const cp2 = toScreen(endV.x + te.x, endV.y + te.y)
 
-            const clickPt = { x: e.clientX, y: e.clientY }
+            const clickPt = {
+                x: e.clientX - (svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect().left ?? 0),
+                y: e.clientY - (svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect().top ?? 0),
+            }
             const t = closestTOnSegment(clickPt, a, cp1, cp2, b)
 
             // Evaluate point on bezier at t (in canvas space)
@@ -356,11 +464,13 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const newY = mt * mt * mt * startV.y + 3 * mt * mt * t * (startV.y + ts.y) +
                 3 * mt * t * t * (endV.y + te.y) + t * t * t * endV.y
 
-            // Insert new vertex at this position
-            const newVertIdx = net.vertices.length
-            const newVertex: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
+            // TWO coincident vertices at the cut point — both halves kept, path breaks here
+            // newVert1 = end of first half, newVert2 = start of second half (same position)
+            const newVert1Idx = net.vertices.length
+            const newVert2Idx = net.vertices.length + 1
+            const newVertex1: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
+            const newVertex2: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
 
-            // Split the segment: seg.start → newVert, newVert → seg.end
             // Subdivide bezier tangents using de Casteljau at t
             const p0 = { x: startV.x, y: startV.y }
             const p1 = { x: startV.x + ts.x, y: startV.y + ts.y }
@@ -380,14 +490,16 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             }
             const r3 = p3
 
+            // First half: seg.start → newVert1
             const firstHalf = {
                 start: seg.start,
-                end: newVertIdx,
+                end: newVert1Idx,
                 tangentStart: { x: q1.x - q0.x, y: q1.y - q0.y },
                 tangentEnd: { x: q2.x - newX, y: q2.y - newY },
             }
+            // Second half: newVert2 → seg.end (no segment connecting newVert1 to newVert2 — that's the break)
             const secondHalf = {
-                start: newVertIdx,
+                start: newVert2Idx,
                 end: seg.end,
                 tangentStart: { x: r1.x - newX, y: r1.y - newY },
                 tangentEnd: { x: r2.x - r3.x, y: r2.y - r3.y },
@@ -398,9 +510,16 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
 
             store.updateVectorNetwork(store.vectorEditNodeId, {
                 ...net,
-                vertices: [...net.vertices, newVertex],
+                vertices: [...net.vertices, newVertex1, newVertex2],
                 segments: newSegments,
+                regions: [], // path is now open — remove all fills
             })
+            // Path is now open — clear node-level fills too
+            store.updateNode(store.vectorEditNodeId, { fills: [] })
+            // Select newVert2 (start of second half) — shows as one orange dot at cut point
+            // Drag it to pull the second half away and open the gap
+            store.selectVertices([newVert2Idx], false)
+            store.setVectorEditTool('move')
         },
         [],
     )
@@ -462,8 +581,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const additive = e.shiftKey
             store.selectVertices([idx], additive)
 
-            // Move tool: begin drag
-            if (tool === 'move' && store.vectorEditNodeId) {
+            // Move tool OR bend tool: begin vertex drag
+            if ((tool === 'move' || tool === 'bend') && store.vectorEditNodeId) {
                 const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
                 if (!node) return
                 const v = node.vectorNetwork.vertices[idx]
@@ -532,7 +651,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             e.stopPropagation()
             e.preventDefault()
             const store = useEditorStore.getState()
-            if (store.vectorEditTool !== 'move' || !store.vectorEditNodeId) return
+            // Allow handle drag in move AND bend modes
+            if ((store.vectorEditTool !== 'move' && store.vectorEditTool !== 'bend') || !store.vectorEditNodeId) return
 
             const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
             if (!node) return
@@ -604,19 +724,6 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
 
     // ── Bend segment: click or double-click → toggle curve ───
     // Works in bend tool mode OR with double-click from any tool
-
-    const handleSegmentClick = useCallback(
-        (e: React.MouseEvent, segIdx: number) => {
-            e.stopPropagation()
-            const store = useEditorStore.getState()
-
-            // Only bend tool can single-click toggle
-            if (store.vectorEditTool !== 'bend' || !store.vectorEditNodeId) return
-
-            toggleSegmentCurve(store.vectorEditNodeId, segIdx)
-        },
-        [],
-    )
 
     const handleSegmentDoubleClick = useCallback(
         (e: React.MouseEvent, segIdx: number) => {
@@ -706,6 +813,99 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
         [],
     )
 
+    // ── Lasso bbox: move + resize selected vertices ──────────
+
+    const handleBBoxPointerDown = useCallback(
+        (e: React.PointerEvent, handle: BBoxHandle) => {
+            e.stopPropagation()
+            e.preventDefault()
+            const store = useEditorStore.getState()
+            const nodeId = store.vectorEditNodeId
+            if (!nodeId) return
+            const node = findNodeById(store.nodes, nodeId) as VectorNode | null
+            if (!node) return
+
+            const selIdxs = [...store.selectedVertexIndices]
+            if (selIdxs.length === 0) return
+
+            // Snapshot original positions + bbox at drag start
+            const origPositions = new Map<number, { x: number; y: number }>()
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+            for (const vi of selIdxs) {
+                const v = node.vectorNetwork.vertices[vi]
+                if (!v) continue
+                origPositions.set(vi, { x: v.x, y: v.y })
+                if (v.x < minX) minX = v.x
+                if (v.y < minY) minY = v.y
+                if (v.x > maxX) maxX = v.x
+                if (v.y > maxY) maxY = v.y
+            }
+            const origW = maxX - minX || 1
+            const origH = maxY - minY || 1
+
+            const startClient = { x: e.clientX, y: e.clientY }
+            store.beginBatch()
+
+            const onMove = (me: PointerEvent) => {
+                const st = useEditorStore.getState()
+                const nId = st.vectorEditNodeId
+                if (!nId) return
+
+                // Delta in canvas space
+                const dx = (me.clientX - startClient.x) / st.zoom
+                const dy = (me.clientY - startClient.y) / st.zoom
+
+                if (handle === 'body') {
+                    // Translate all selected vertices
+                    for (const vi of selIdxs) {
+                        const orig = origPositions.get(vi)
+                        if (!orig) continue
+                        st.updateVertex(nId, vi, { x: orig.x + dx, y: orig.y + dy })
+                    }
+                } else {
+                    // Scale selected vertices relative to the bbox
+                    // Determine which edges are being dragged
+                    const scaleLeft = handle === 'nw' || handle === 'w' || handle === 'sw'
+                    const scaleRight = handle === 'ne' || handle === 'e' || handle === 'se'
+                    const scaleTop = handle === 'nw' || handle === 'n' || handle === 'ne'
+                    const scaleBottom = handle === 'sw' || handle === 's' || handle === 'se'
+
+                    // New bbox dimensions
+                    let newMinX = minX, newMaxX = maxX, newMinY = minY, newMaxY = maxY
+                    if (scaleLeft) newMinX = minX + dx
+                    if (scaleRight) newMaxX = maxX + dx
+                    if (scaleTop) newMinY = minY + dy
+                    if (scaleBottom) newMaxY = maxY + dy
+
+                    const newW = newMaxX - newMinX || 1
+                    const newH = newMaxY - newMinY || 1
+
+                    for (const vi of selIdxs) {
+                        const orig = origPositions.get(vi)
+                        if (!orig) continue
+                        // Normalized position within original bbox
+                        const tx = origW > 0 ? (orig.x - minX) / origW : 0
+                        const ty = origH > 0 ? (orig.y - minY) / origH : 0
+                        st.updateVertex(nId, vi, {
+                            x: newMinX + tx * newW,
+                            y: newMinY + ty * newH,
+                        })
+                    }
+                }
+            }
+
+            const onUp = () => {
+                useEditorStore.getState().endBatch()
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+            }
+
+            window.addEventListener('pointermove', onMove)
+            window.addEventListener('pointerup', onUp)
+        },
+        [],
+    )
+
     // ── Render ───────────────────────────────────────────────
 
     if (!vectorEditNodeId) return null
@@ -728,11 +928,9 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const toolCursors: Record<VectorEditTool, string> = {
         'move': 'default',
         'lasso': 'crosshair',
-        'shape-builder': 'crosshair',
-        'paint': 'crosshair',
+        'paint': PAINT_CURSOR,
         'bend': 'pointer',
         'cut': 'crosshair',
-        'variable-width': 'crosshair',
     }
     const toolCursor = toolCursors[vectorEditTool] || 'default'
 
@@ -740,9 +938,35 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
         <>
             {/* Decorative SVG layer — non-interactive */}
             <svg
+                ref={svgRef}
                 className="absolute inset-0 pointer-events-none"
                 style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 31 }}
             >
+                {/* Bounding box outline around selected vertices — in lasso or move mode */}
+                {(vectorEditTool === 'lasso' || vectorEditTool === 'move') && selectedVertexIndices.length >= 2 && (() => {
+                    const screenPts = selectedVertexIndices.map((vi) => {
+                        const v = vn.vertices[vi]
+                        if (!v) return null
+                        return toScreen(v.x, v.y)
+                    }).filter(Boolean) as { x: number; y: number }[]
+                    if (screenPts.length < 2) return null
+                    const minSX = Math.min(...screenPts.map((p) => p.x))
+                    const minSY = Math.min(...screenPts.map((p) => p.y))
+                    const maxSX = Math.max(...screenPts.map((p) => p.x))
+                    const maxSY = Math.max(...screenPts.map((p) => p.y))
+                    const PAD = 6
+                    return (
+                        <rect
+                            x={minSX - PAD} y={minSY - PAD}
+                            width={(maxSX - minSX) + PAD * 2}
+                            height={(maxSY - minSY) + PAD * 2}
+                            fill="none"
+                            stroke={BLUE}
+                            strokeWidth={1}
+                            strokeDasharray="4 2"
+                        />
+                    )
+                })()}
                 {/* Segment lines (thin blue for visibility) */}
                 {vn.segments.map((seg: VectorSegment, si: number) => {
                     const startV = vn.vertices[seg.start]
@@ -828,16 +1052,16 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             {/* Interactive SVG layer — handles clicks */}
             <svg
                 className="absolute inset-0"
-                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 32, pointerEvents: 'none' }}
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 29, pointerEvents: 'none' }}
             >
                 {/* All clickable elements in a group with pointer-events: all */}
                 <g style={{ pointerEvents: 'all' }}>
-                    {/* Full-canvas transparent background hit target for lasso drag */}
+                    {/* Lasso background — transparent hit zone */}
                     {vectorEditTool === 'lasso' && (
                         <rect
                             x={-9999} y={-9999} width={99999} height={99999}
                             fill="transparent"
-                            style={{ cursor: 'crosshair' }}
+                            style={{ cursor: 'crosshair', pointerEvents: 'all' }}
                             onPointerDown={handleLassoPointerDown}
                         />
                     )}
@@ -882,10 +1106,10 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                     stroke="transparent"
                                     strokeWidth={SEGMENT_HIT_WIDTH}
                                     style={{ cursor }}
-                                    onPointerDown={(e) => vectorEditTool === 'bend' ? handleBendSegmentPointerDown(e, si) : undefined}
-                                    onClick={(e) => {
-                                        if (vectorEditTool === 'cut') handleCutSegmentClick(e, si)
-                                        else handleSegmentClick(e, si)
+                                    onPointerDown={(e) => {
+                                        e.stopPropagation()
+                                        if (vectorEditTool === 'bend') handleBendSegmentPointerDown(e, si)
+                                        else if (vectorEditTool === 'cut') handleCutSegmentPointerDown(e, si)
                                     }}
                                     onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
                                 />
@@ -899,10 +1123,10 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                 stroke="transparent"
                                 strokeWidth={SEGMENT_HIT_WIDTH}
                                 style={{ cursor }}
-                                onPointerDown={(e) => vectorEditTool === 'bend' ? handleBendSegmentPointerDown(e, si) : undefined}
-                                onClick={(e) => {
-                                    if (vectorEditTool === 'cut') handleCutSegmentClick(e, si)
-                                    else handleSegmentClick(e, si)
+                                onPointerDown={(e) => {
+                                    e.stopPropagation()
+                                    if (vectorEditTool === 'bend') handleBendSegmentPointerDown(e, si)
+                                    else if (vectorEditTool === 'cut') handleCutSegmentPointerDown(e, si)
                                 }}
                                 onDoubleClick={(e) => handleSegmentDoubleClick(e, si)}
                             />
@@ -970,12 +1194,94 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 </g>
             </svg>
 
+            {/* Lasso bounding box: interactive move + resize frame for selected vertices */}
+            {(vectorEditTool === 'lasso' || vectorEditTool === 'move') && selectedVertexIndices.length >= 2 && (() => {
+                const screenPts = selectedVertexIndices.map((vi) => {
+                    const v = vn.vertices[vi]
+                    if (!v) return null
+                    return toScreen(v.x, v.y)
+                }).filter(Boolean) as { x: number; y: number }[]
+                if (screenPts.length < 2) return null
+                const minSX = Math.min(...screenPts.map((p) => p.x))
+                const minSY = Math.min(...screenPts.map((p) => p.y))
+                const maxSX = Math.max(...screenPts.map((p) => p.x))
+                const maxSY = Math.max(...screenPts.map((p) => p.y))
+                const PAD = 6
+                const bx = minSX - PAD
+                const by = minSY - PAD
+                const bw = (maxSX - minSX) + PAD * 2
+                const bh = (maxSY - minSY) + PAD * 2
+                const H = CORNER_HANDLE_SIZE
+                const halfH = H / 2
+
+                const corners: { key: BBoxHandle; left: number; top: number; cursor: string }[] = [
+                    { key: 'nw', left: bx - halfH, top: by - halfH, cursor: 'nwse-resize' },
+                    { key: 'ne', left: bx + bw - halfH, top: by - halfH, cursor: 'nesw-resize' },
+                    { key: 'se', left: bx + bw - halfH, top: by + bh - halfH, cursor: 'nwse-resize' },
+                    { key: 'sw', left: bx - halfH, top: by + bh - halfH, cursor: 'nesw-resize' },
+                ]
+                const edges: { key: BBoxHandle; left: number; top: number; width: number; height: number; cursor: string }[] = [
+                    { key: 'n', left: bx + EDGE_HIT, top: by - EDGE_HIT / 2, width: bw - EDGE_HIT * 2, height: EDGE_HIT, cursor: 'ns-resize' },
+                    { key: 's', left: bx + EDGE_HIT, top: by + bh - EDGE_HIT / 2, width: bw - EDGE_HIT * 2, height: EDGE_HIT, cursor: 'ns-resize' },
+                    { key: 'w', left: bx - EDGE_HIT / 2, top: by + EDGE_HIT, width: EDGE_HIT, height: bh - EDGE_HIT * 2, cursor: 'ew-resize' },
+                    { key: 'e', left: bx + bw - EDGE_HIT / 2, top: by + EDGE_HIT, width: EDGE_HIT, height: bh - EDGE_HIT * 2, cursor: 'ew-resize' },
+                ]
+
+                return (
+                    <>
+                        {/* Draggable body — move selected vertices */}
+                        <div
+                            style={{
+                                position: 'absolute',
+                                left: bx, top: by,
+                                width: bw, height: bh,
+                                cursor: 'move',
+                                zIndex: 32,
+                            }}
+                            onPointerDown={(e) => handleBBoxPointerDown(e, 'body')}
+                        />
+                        {/* Corner handles */}
+                        {corners.map((c) => (
+                            <div
+                                key={c.key}
+                                style={{
+                                    position: 'absolute',
+                                    left: c.left, top: c.top,
+                                    width: H, height: H,
+                                    backgroundColor: WHITE,
+                                    border: `1.5px solid ${BLUE}`,
+                                    borderRadius: 1,
+                                    cursor: c.cursor,
+                                    zIndex: 33,
+                                    pointerEvents: 'auto',
+                                }}
+                                onPointerDown={(e) => handleBBoxPointerDown(e, c.key)}
+                            />
+                        ))}
+                        {/* Edge hit zones */}
+                        {edges.map((ed) => (
+                            <div
+                                key={ed.key}
+                                style={{
+                                    position: 'absolute',
+                                    left: ed.left, top: ed.top,
+                                    width: ed.width, height: ed.height,
+                                    cursor: ed.cursor,
+                                    zIndex: 33,
+                                }}
+                                onPointerDown={(e) => handleBBoxPointerDown(e, ed.key)}
+                            />
+                        ))}
+                    </>
+                )
+            })()}
+
             {/* Paint tool: full-canvas overlay to capture region clicks */}
             {vectorEditTool === 'paint' && (
                 <div
                     className="absolute inset-0"
-                    style={{ zIndex: 33, cursor: 'crosshair' }}
-                    onClick={handlePaintClick}
+                    style={{ zIndex: 29, cursor: PAINT_CURSOR }}
+                    onPointerDown={handlePaintClick}
                 />
             )}
         </>

@@ -123,7 +123,7 @@ function createEditorPage(name: string): EditorPage {
 // ============================================================
 
 /** Sub-tools available within vector edit mode (overlay toolbar) */
-export type VectorEditTool = 'move' | 'lasso' | 'shape-builder' | 'paint' | 'bend' | 'cut' | 'variable-width'
+export type VectorEditTool = 'move' | 'lasso' | 'paint' | 'bend' | 'cut'
 
 /** Live state while the pen tool is actively placing vertices */
 export interface PenDrawingState {
@@ -1766,6 +1766,10 @@ export const useEditorStore = create<EditorState>()(
             setVectorEditTool: (tool) =>
                 set(
                     (state) => {
+                        // Clear vertex selection when leaving lasso, but not when auto-switching to move
+                        if (state.vectorEditTool === 'lasso' && tool !== 'lasso' && tool !== 'move') {
+                            state.selectedVertexIndices = []
+                        }
                         state.vectorEditTool = tool
                     },
                     false,

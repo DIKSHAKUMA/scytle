@@ -827,6 +827,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     return (
         <div
             ref={viewportRef}
+            data-canvas-viewport
             className="relative w-full h-full overflow-hidden select-none"
             style={{
                 cursor,
