@@ -183,8 +183,8 @@ const Composer: FC = () => {
 
 const ComposerAction: FC = () => {
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <div className="flex items-center gap-1">
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
         <ComposerAddAttachment />
         <ModelSelector
           models={MODEL_OPTIONS}
@@ -193,6 +193,7 @@ const ComposerAction: FC = () => {
           size="sm"
         />
       </div>
+      <div className="shrink-0">
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send asChild>
           <TooltipIconButton
@@ -221,6 +222,7 @@ const ComposerAction: FC = () => {
           </Button>
         </ComposerPrimitive.Cancel>
       </AuiIf>
+      </div>
     </div>
   );
 };
