@@ -11,486 +11,260 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // Browser preview iframe floats on the canvas next to the parsed frame
 // ═══════════════════════════════════════════════════════════════
 
-const DEFAULT_HTML = `<div>
+const DEFAULT_HTML = `
+<div>
+<!-- ============ NAVBAR (flex) ============ -->
+<nav class="flex items-center justify-between px-8 py-4 bg-slate-900 text-white">
+  <div class="text-xl font-bold tracking-tight">Scytle<span class="text-cyan-400">.</span>ai</div>
+  <div class="flex gap-6 text-sm font-medium">
+    <a class="hover:text-cyan-400" href="#">Products</a>
+    <a class="hover:text-cyan-400" href="#">Solutions</a>
+    <a class="hover:text-cyan-400" href="#">Pricing</a>
+    <a class="hover:text-cyan-400" href="#">Docs</a>
+  </div>
+  <div class="flex gap-3">
+    <button class="px-4 py-2 text-sm border border-slate-600 rounded-lg hover:bg-slate-800">Log in</button>
+    <button class="px-4 py-2 text-sm bg-cyan-500 rounded-lg font-semibold hover:bg-cyan-400">Sign up</button>
+  </div>
+</nav>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 1. NAVIGATION                              -->
-  <!-- ═══════════════════════════════════════════ -->
-  <nav class="flex items-center justify-between px-10 py-4 bg-white border-b border-gray-100">
-    <div class="flex items-center gap-3">
-      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-        <span class="text-white text-sm font-bold">N</span>
-      </div>
-      <span class="text-lg font-bold text-gray-900">Nexus</span>
+<!-- ============ HERO (relative + absolute badge) ============ -->
+<section class="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white px-8 py-24 overflow-hidden">
+  <div class="absolute top-6 right-8 bg-cyan-500 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">New</div>
+  <div class="absolute -bottom-20 -left-20 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl"></div>
+  <div class="absolute top-10 right-1/4 w-48 h-48 bg-indigo-500/15 rounded-full blur-2xl"></div>
+  <div class="max-w-3xl mx-auto text-center relative z-10">
+    <h1 class="text-5xl font-extrabold leading-tight mb-6">Build interfaces <span class="text-cyan-400">10x faster</span> with AI</h1>
+    <p class="text-lg text-slate-300 mb-10 max-w-xl mx-auto">Design, prototype, and ship production-ready layouts in minutes. Powered by an intelligent canvas engine.</p>
+    <div class="flex justify-center gap-4">
+      <button class="px-8 py-3 bg-cyan-500 rounded-xl font-bold text-base hover:bg-cyan-400">Get Started Free</button>
+      <button class="px-8 py-3 border border-slate-500 rounded-xl font-semibold text-base hover:bg-white/5">Watch Demo</button>
     </div>
-    <div class="flex items-center gap-8">
-      <a class="text-sm font-medium text-gray-600">Product</a>
-      <a class="text-sm font-medium text-gray-600">Solutions</a>
-      <a class="text-sm font-medium text-gray-600">Pricing</a>
-      <a class="text-sm font-medium text-gray-600">Docs</a>
-      <a class="text-sm font-medium text-gray-600">Blog</a>
-    </div>
-    <div class="flex items-center gap-3">
-      <a class="text-sm font-medium text-gray-700">Log in</a>
-      <button class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Start Free</button>
-    </div>
-  </nav>
+  </div>
+</section>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 2. HERO with absolute decorations          -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="relative bg-gradient-to-br from-indigo-50 via-white to-purple-50 px-16 py-28 overflow-hidden">
-    <div class="absolute top-0 right-0 w-96 h-96 bg-indigo-200 rounded-full opacity-20 -translate-y-1/2 translate-x-1/3"></div>
-    <div class="absolute bottom-0 left-0 w-72 h-72 bg-purple-200 rounded-full opacity-20 translate-y-1/2 -translate-x-1/4"></div>
+<!-- ============ STATS (4-col grid) ============ -->
+<section class="grid grid-cols-4 gap-0 bg-slate-50 border-y border-slate-200">
+  <div class="flex flex-col items-center py-10 border-r border-slate-200">
+    <span class="text-4xl font-extrabold text-slate-900">50K+</span>
+    <span class="text-sm text-slate-500 mt-1">Active Users</span>
+  </div>
+  <div class="flex flex-col items-center py-10 border-r border-slate-200">
+    <span class="text-4xl font-extrabold text-slate-900">2M+</span>
+    <span class="text-sm text-slate-500 mt-1">Designs Created</span>
+  </div>
+  <div class="flex flex-col items-center py-10 border-r border-slate-200">
+    <span class="text-4xl font-extrabold text-slate-900">99.9%</span>
+    <span class="text-sm text-slate-500 mt-1">Uptime</span>
+  </div>
+  <div class="flex flex-col items-center py-10">
+    <span class="text-4xl font-extrabold text-slate-900">4.9★</span>
+    <span class="text-sm text-slate-500 mt-1">User Rating</span>
+  </div>
+</section>
 
-    <div class="relative z-10 max-w-6xl mx-auto grid grid-cols-2 gap-16 items-center">
+<!-- ============ FEATURES — asymmetric grid (2 cols, 3 rows) ============ -->
+<section class="px-8 py-20 bg-white">
+  <h2 class="text-3xl font-bold text-center mb-4">Everything you need</h2>
+  <p class="text-slate-500 text-center mb-14 max-w-lg mx-auto">A complete design-to-code platform with intelligent tools built for speed.</p>
+  <div class="grid grid-cols-2 grid-rows-3 gap-6 max-w-5xl mx-auto">
+    <!-- tall left card spanning 2 rows -->
+    <div class="row-span-2 bg-gradient-to-b from-indigo-600 to-indigo-800 rounded-2xl p-8 text-white flex flex-col justify-between">
       <div>
-        <div class="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 px-4 py-1.5 rounded-full text-xs font-semibold mb-6">
-          <div class="w-2 h-2 bg-indigo-500 rounded-full"></div>
-          Now in public beta
-        </div>
-        <h1 class="text-6xl font-extrabold text-gray-900 leading-tight tracking-tight">Build faster.<br/>Ship smarter.<br/>Scale effortlessly.</h1>
-        <p class="text-lg text-gray-500 mt-6 max-w-md leading-relaxed">The all-in-one platform for modern teams. Automate workflows, collaborate in real-time, and deploy with confidence.</p>
-        <div class="flex items-center gap-4 mt-8">
-          <button class="bg-indigo-600 text-white px-8 py-3.5 rounded-lg text-sm font-bold">Start Free Trial</button>
-          <button class="border border-gray-300 text-gray-700 px-8 py-3.5 rounded-lg text-sm font-semibold flex items-center gap-2">
-            <div class="w-5 h-5 bg-gray-400 rounded-full"></div>
-            Watch Demo
-          </button>
-        </div>
+        <div class="text-sm font-semibold uppercase tracking-wider text-indigo-200 mb-3">AI Canvas</div>
+        <h3 class="text-2xl font-bold mb-3">Intelligent layout engine</h3>
+        <p class="text-indigo-100 text-sm leading-relaxed">Our AI understands design intent and generates pixel-perfect layouts with proper spacing, alignment, and responsive behavior.</p>
       </div>
+      <div class="mt-6 h-36 bg-indigo-700/50 rounded-xl border border-indigo-500/30"></div>
+    </div>
+    <!-- top right -->
+    <div class="bg-slate-50 rounded-2xl p-8 border border-slate-200">
+      <div class="text-sm font-semibold uppercase tracking-wider text-cyan-600 mb-3">Parser</div>
+      <h3 class="text-xl font-bold text-slate-900 mb-2">HTML to Canvas nodes</h3>
+      <p class="text-slate-500 text-sm leading-relaxed">Paste any Tailwind HTML and see it rendered as editable canvas objects in real-time.</p>
+    </div>
+    <!-- middle right -->
+    <div class="bg-slate-50 rounded-2xl p-8 border border-slate-200">
+      <div class="text-sm font-semibold uppercase tracking-wider text-emerald-600 mb-3">Themes</div>
+      <h3 class="text-xl font-bold text-slate-900 mb-2">Multi-mode variables</h3>
+      <p class="text-slate-500 text-sm leading-relaxed">Light, dark, brand modes per frame. Same variable, different contexts — like Figma but simpler.</p>
+    </div>
+    <!-- bottom full-width row -->
+    <div class="col-span-2 bg-slate-900 rounded-2xl p-8 text-white flex items-center gap-8">
+      <div class="flex-1">
+        <div class="text-sm font-semibold uppercase tracking-wider text-cyan-400 mb-3">Collaboration</div>
+        <h3 class="text-2xl font-bold mb-2">Real-time multiplayer</h3>
+        <p class="text-slate-400 text-sm leading-relaxed">Powered by Cloudflare Durable Objects. See cursors, selections, and changes live across your team.</p>
+      </div>
+      <div class="w-64 h-28 bg-slate-800 rounded-xl border border-slate-700 flex-shrink-0"></div>
+    </div>
+  </div>
+</section>
 
-      <div class="relative">
-        <div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-xl">
-          <div class="flex items-center justify-between mb-6">
-            <div>
-              <p class="text-sm font-semibold text-gray-900">Project Overview</p>
-              <p class="text-xs text-gray-400 mt-1">Last 30 days</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="w-8 h-8 bg-gray-100 rounded-lg"></div>
-              <div class="w-8 h-8 bg-gray-100 rounded-lg"></div>
-            </div>
-          </div>
-          <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="bg-indigo-50 rounded-xl p-4">
-              <p class="text-2xl font-bold text-indigo-600">2,847</p>
-              <p class="text-xs text-gray-500 mt-1">Active users</p>
-            </div>
-            <div class="bg-green-50 rounded-xl p-4">
-              <p class="text-2xl font-bold text-green-600">98.5%</p>
-              <p class="text-xs text-gray-500 mt-1">Uptime</p>
-            </div>
-            <div class="bg-purple-50 rounded-xl p-4">
-              <p class="text-2xl font-bold text-purple-600">1.2s</p>
-              <p class="text-xs text-gray-500 mt-1">Avg response</p>
-            </div>
-          </div>
-          <div class="w-full h-40 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl"></div>
-        </div>
+<!-- ============ DASHBOARD PREVIEW — complex grid (3 cols with varying spans) ============ -->
+<section class="px-8 py-20 bg-slate-50">
+  <h2 class="text-3xl font-bold text-center mb-14">Dashboard-ready components</h2>
+  <div class="grid grid-cols-3 gap-5 max-w-5xl mx-auto">
+    <!-- wide card top -->
+    <div class="col-span-2 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-slate-900">Revenue Overview</h3>
+        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-medium">+12.5%</span>
+      </div>
+      <div class="h-40 bg-gradient-to-r from-cyan-50 to-indigo-50 rounded-lg border border-slate-100"></div>
+    </div>
+    <!-- small card top-right -->
+    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+      <h3 class="font-bold text-slate-900 mb-2">Active Now</h3>
+      <div class="text-4xl font-extrabold text-indigo-600">1,247</div>
+      <div class="text-xs text-slate-400 mt-2">+89 in last hour</div>
+    </div>
+    <!-- bottom 3 equal cards -->
+    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+      <div class="relative h-24 mb-4 bg-amber-50 rounded-lg">
+        <div class="absolute top-2 left-3 text-xs font-semibold text-amber-700">Conversions</div>
+        <div class="absolute bottom-3 right-3 text-2xl font-bold text-amber-600">8.4%</div>
+      </div>
+      <p class="text-xs text-slate-500">Across all funnels this week</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+      <div class="relative h-24 mb-4 bg-rose-50 rounded-lg">
+        <div class="absolute top-2 left-3 text-xs font-semibold text-rose-700">Churn Rate</div>
+        <div class="absolute bottom-3 right-3 text-2xl font-bold text-rose-600">2.1%</div>
+      </div>
+      <p class="text-xs text-slate-500">Down 0.3% from last month</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+      <div class="relative h-24 mb-4 bg-emerald-50 rounded-lg">
+        <div class="absolute top-2 left-3 text-xs font-semibold text-emerald-700">NPS Score</div>
+        <div class="absolute bottom-3 right-3 text-2xl font-bold text-emerald-600">72</div>
+      </div>
+      <p class="text-xs text-slate-500">Excellent — top quartile</p>
+    </div>
+  </div>
+</section>
 
-        <div class="absolute -bottom-6 -left-8 bg-white rounded-xl border border-gray-200 p-4 shadow-lg flex items-center gap-3 w-64">
-          <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <span class="text-white text-sm font-bold">+</span>
-          </div>
-          <div>
-            <p class="text-sm font-semibold text-gray-900">Deploy successful</p>
-            <p class="text-xs text-gray-400">Production - 2m ago</p>
-          </div>
-        </div>
-
-        <div class="absolute -top-4 -right-4 flex items-center">
-          <div class="w-10 h-10 bg-indigo-400 rounded-full border-2 border-white"></div>
-          <div class="w-10 h-10 bg-pink-400 rounded-full border-2 border-white -ml-3"></div>
-          <div class="w-10 h-10 bg-amber-400 rounded-full border-2 border-white -ml-3"></div>
-          <div class="w-10 h-10 bg-gray-300 rounded-full border-2 border-white -ml-3 flex items-center justify-center">
-            <span class="text-xs font-bold text-gray-600">+5</span>
-          </div>
-        </div>
+<!-- ============ COMPARISON — flex row with absolute overlays ============ -->
+<section class="px-8 py-20 bg-white">
+  <h2 class="text-3xl font-bold text-center mb-14">Before & After</h2>
+  <div class="flex gap-8 max-w-5xl mx-auto">
+    <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 p-6">
+      <div class="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full z-10">Before</div>
+      <div class="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-red-500/10 to-transparent"></div>
+      <div class="h-48 bg-slate-200 rounded-lg mb-4"></div>
+      <div class="flex gap-3">
+        <div class="h-8 flex-1 bg-slate-200 rounded"></div>
+        <div class="h-8 flex-1 bg-slate-200 rounded"></div>
       </div>
     </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 3. TRUSTED BY logos                        -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="px-16 py-12 bg-white border-b border-gray-100">
-    <div class="max-w-5xl mx-auto flex items-center justify-between">
-      <span class="text-xs text-gray-400 uppercase tracking-wider font-medium">Trusted by leading teams</span>
-      <div class="flex items-center gap-8">
-        <div class="w-24 h-8 bg-gray-100 rounded"></div>
-        <div class="w-20 h-8 bg-gray-100 rounded"></div>
-        <div class="w-28 h-8 bg-gray-100 rounded"></div>
-        <div class="w-20 h-8 bg-gray-100 rounded"></div>
-        <div class="w-24 h-8 bg-gray-100 rounded"></div>
+    <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 p-6">
+      <div class="absolute top-4 left-4 bg-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full z-10">After</div>
+      <div class="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-cyan-500/10 to-transparent"></div>
+      <div class="h-48 bg-slate-800 rounded-lg mb-4 border border-slate-700"></div>
+      <div class="flex gap-3">
+        <div class="h-8 flex-1 bg-slate-800 rounded border border-slate-700"></div>
+        <div class="h-8 flex-1 bg-slate-800 rounded border border-slate-700"></div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 4. FEATURES: Grid with mixed col spans     -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="px-16 py-20 bg-white">
-    <div class="text-center mb-16">
-      <p class="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">Features</p>
-      <h2 class="text-4xl font-bold text-gray-900">Everything you need to ship</h2>
-      <p class="text-lg text-gray-500 mt-4 max-w-2xl mx-auto">Powerful tools designed for modern development teams. From planning to production.</p>
+<!-- ============ PRICING — 3-col grid with absolute "popular" badge ============ -->
+<section class="px-8 py-20 bg-slate-50">
+  <h2 class="text-3xl font-bold text-center mb-4">Simple pricing</h2>
+  <p class="text-slate-500 text-center mb-14">No hidden fees. Cancel anytime.</p>
+  <div class="grid grid-cols-3 gap-6 max-w-4xl mx-auto items-start">
+    <div class="bg-white rounded-2xl p-8 border border-slate-200">
+      <h3 class="font-bold text-slate-900 mb-1">Free</h3>
+      <div class="text-3xl font-extrabold text-slate-900 mb-4">$0<span class="text-sm font-normal text-slate-400">/mo</span></div>
+      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
+        <span>3 projects</span>
+        <span>Basic AI generation</span>
+        <span>Community support</span>
+      </div>
+      <button class="w-full py-3 border border-slate-300 rounded-xl font-semibold text-sm">Get Started</button>
     </div>
-
-    <div class="grid grid-cols-3 gap-6 max-w-6xl mx-auto">
-      <div class="col-span-2 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-8 text-white relative overflow-hidden">
-        <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500 rounded-full opacity-30 translate-x-1/3 -translate-y-1/3"></div>
-        <div class="relative z-10">
-          <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-4">
-            <div class="w-6 h-6 bg-white rounded"></div>
-          </div>
-          <h3 class="text-2xl font-bold mb-2">Real-time Collaboration</h3>
-          <p class="text-indigo-200 text-sm max-w-md">Work together seamlessly with live cursors, instant updates, and zero-conflict editing. Built for distributed teams.</p>
-        </div>
+    <div class="relative bg-white rounded-2xl p-8 border-2 border-cyan-500 shadow-lg shadow-cyan-500/10">
+      <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-500 text-white text-xs font-bold px-4 py-1 rounded-full">Most Popular</div>
+      <h3 class="font-bold text-slate-900 mb-1">Pro</h3>
+      <div class="text-3xl font-extrabold text-slate-900 mb-4">$19<span class="text-sm font-normal text-slate-400">/mo</span></div>
+      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
+        <span>Unlimited projects</span>
+        <span>Advanced AI + themes</span>
+        <span>Real-time collaboration</span>
+        <span>Priority support</span>
       </div>
-
-      <div class="bg-gray-50 rounded-2xl p-8">
-        <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-          <div class="w-6 h-6 bg-green-500 rounded"></div>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">CI/CD Pipeline</h3>
-        <p class="text-sm text-gray-500">Automated builds, tests, and deployments. Push to deploy in seconds.</p>
-      </div>
-
-      <div class="bg-gray-50 rounded-2xl p-8">
-        <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
-          <div class="w-6 h-6 bg-purple-500 rounded"></div>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Analytics</h3>
-        <p class="text-sm text-gray-500">Track performance, identify bottlenecks, and make data-driven decisions.</p>
-      </div>
-
-      <div class="bg-gray-50 rounded-2xl p-8">
-        <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4">
-          <div class="w-6 h-6 bg-amber-500 rounded"></div>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Integrations</h3>
-        <p class="text-sm text-gray-500">Connect with Slack, GitHub, Jira, and 200+ tools your team already uses.</p>
-      </div>
-
-      <div class="bg-gray-50 rounded-2xl p-8">
-        <div class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center mb-4">
-          <div class="w-6 h-6 bg-rose-500 rounded"></div>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Security</h3>
-        <p class="text-sm text-gray-500">SOC 2 compliant, end-to-end encryption, and role-based access controls.</p>
-      </div>
+      <button class="w-full py-3 bg-cyan-500 text-white rounded-xl font-bold text-sm">Upgrade to Pro</button>
     </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 5. HOW IT WORKS: 3-step flow               -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="px-16 py-20 bg-gray-50">
-    <div class="text-center mb-16">
-      <p class="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">How it works</p>
-      <h2 class="text-4xl font-bold text-gray-900">Up and running in minutes</h2>
+    <div class="bg-white rounded-2xl p-8 border border-slate-200">
+      <h3 class="font-bold text-slate-900 mb-1">Enterprise</h3>
+      <div class="text-3xl font-extrabold text-slate-900 mb-4">Custom</div>
+      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
+        <span>Everything in Pro</span>
+        <span>SSO & SCIM</span>
+        <span>Dedicated support</span>
+        <span>Custom integrations</span>
+      </div>
+      <button class="w-full py-3 border border-slate-300 rounded-xl font-semibold text-sm">Contact Sales</button>
     </div>
+  </div>
+</section>
 
-    <div class="max-w-5xl mx-auto grid grid-cols-3 gap-12">
-      <div class="text-center">
-        <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <span class="text-white text-2xl font-bold">1</span>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Connect your repo</h3>
-        <p class="text-sm text-gray-500">Link your GitHub, GitLab, or Bitbucket repository in one click. We auto-detect your stack.</p>
-      </div>
+<!-- ============ CTA (flex center + absolute decorations) ============ -->
+<section class="relative bg-slate-900 text-white px-8 py-24 overflow-hidden">
+  <div class="absolute top-0 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl"></div>
+  <div class="absolute bottom-0 right-1/4 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl"></div>
+  <div class="relative z-10 flex flex-col items-center text-center">
+    <h2 class="text-4xl font-extrabold mb-4">Ready to build?</h2>
+    <p class="text-slate-400 mb-8 max-w-md">Join thousands of teams shipping faster with Scytle.</p>
+    <div class="flex gap-4">
+      <button class="px-8 py-3 bg-cyan-500 rounded-xl font-bold hover:bg-cyan-400">Start for Free</button>
+      <button class="px-8 py-3 border border-slate-600 rounded-xl font-semibold hover:bg-white/5">Talk to Sales</button>
+    </div>
+  </div>
+</section>
 
-      <div class="text-center">
-        <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <span class="text-white text-2xl font-bold">2</span>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Configure pipelines</h3>
-        <p class="text-sm text-gray-500">Set up build, test, and deploy pipelines with our visual editor. No YAML needed.</p>
-      </div>
-
-      <div class="text-center">
-        <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <span class="text-white text-2xl font-bold">3</span>
-        </div>
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Ship with confidence</h3>
-        <p class="text-sm text-gray-500">Preview deployments, run checks, and push to production. Rollback instantly if needed.</p>
+<!-- ============ FOOTER — complex grid (4 cols + full-width bottom) ============ -->
+<footer class="bg-slate-950 text-slate-400 px-8 pt-16 pb-8">
+  <div class="grid grid-cols-4 gap-8 max-w-5xl mx-auto mb-12">
+    <div>
+      <div class="text-white font-bold text-lg mb-4">Scytle<span class="text-cyan-400">.</span>ai</div>
+      <p class="text-sm leading-relaxed">AI-powered design tool for modern teams. Build, collaborate, and ship.</p>
+    </div>
+    <div>
+      <h4 class="text-white font-semibold text-sm mb-4">Product</h4>
+      <div class="flex flex-col gap-2 text-sm">
+        <a href="#">Features</a>
+        <a href="#">Pricing</a>
+        <a href="#">Changelog</a>
+        <a href="#">Roadmap</a>
       </div>
     </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 6. STATS: dark bg, space-between, max-w    -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="bg-gray-900 px-16 py-16">
-    <div class="max-w-5xl mx-auto flex justify-between items-center">
-      <div class="text-center">
-        <p class="text-4xl font-extrabold text-white">10K+</p>
-        <p class="text-sm text-gray-400 mt-2">Teams worldwide</p>
-      </div>
-      <div class="text-center">
-        <p class="text-4xl font-extrabold text-white">50M+</p>
-        <p class="text-sm text-gray-400 mt-2">Tasks completed</p>
-      </div>
-      <div class="text-center">
-        <p class="text-4xl font-extrabold text-white">99.99%</p>
-        <p class="text-sm text-gray-400 mt-2">Uptime</p>
-      </div>
-      <div class="text-center">
-        <p class="text-4xl font-extrabold text-white">4.9/5</p>
-        <p class="text-sm text-gray-400 mt-2">User rating</p>
+    <div>
+      <h4 class="text-white font-semibold text-sm mb-4">Resources</h4>
+      <div class="flex flex-col gap-2 text-sm">
+        <a href="#">Documentation</a>
+        <a href="#">API Reference</a>
+        <a href="#">Blog</a>
+        <a href="#">Community</a>
       </div>
     </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 7. TESTIMONIALS: 3-column cards            -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="px-16 py-20 bg-gray-50">
-    <div class="text-center mb-16">
-      <p class="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">Testimonials</p>
-      <h2 class="text-4xl font-bold text-gray-900">Loved by teams everywhere</h2>
-    </div>
-
-    <div class="max-w-6xl mx-auto grid grid-cols-3 gap-8">
-      <div class="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm">
-        <div class="flex items-center gap-3 mb-6">
-          <div class="w-12 h-12 bg-indigo-100 rounded-full"></div>
-          <div>
-            <p class="text-sm font-semibold text-gray-900">Sarah Chen</p>
-            <p class="text-xs text-gray-400">CTO at Velocity</p>
-          </div>
-        </div>
-        <p class="text-sm text-gray-600 leading-relaxed">"Nexus cut our deployment time by 60%. The automation engine is incredibly powerful and the UI is a joy to use."</p>
-        <div class="flex gap-1 mt-4">
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm">
-        <div class="flex items-center gap-3 mb-6">
-          <div class="w-12 h-12 bg-green-100 rounded-full"></div>
-          <div>
-            <p class="text-sm font-semibold text-gray-900">Marcus Johnson</p>
-            <p class="text-xs text-gray-400">VP Eng at CloudScale</p>
-          </div>
-        </div>
-        <p class="text-sm text-gray-600 leading-relaxed">"We migrated our entire infrastructure pipeline to Nexus. The integrations are top-notch. Slack, GitHub, Jira, everything just works."</p>
-        <div class="flex gap-1 mt-4">
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-2xl p-8 border border-gray-100 shadow-sm">
-        <div class="flex items-center gap-3 mb-6">
-          <div class="w-12 h-12 bg-purple-100 rounded-full"></div>
-          <div>
-            <p class="text-sm font-semibold text-gray-900">Elena Rodriguez</p>
-            <p class="text-xs text-gray-400">Engineering Lead at Prism</p>
-          </div>
-        </div>
-        <p class="text-sm text-gray-600 leading-relaxed">"Security was our top concern. Nexus checked every box: SOC 2, GDPR, and the audit logs are fantastic."</p>
-        <div class="flex gap-1 mt-4">
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-          <div class="w-4 h-4 bg-amber-400 rounded-sm"></div>
-        </div>
+    <div>
+      <h4 class="text-white font-semibold text-sm mb-4">Company</h4>
+      <div class="flex flex-col gap-2 text-sm">
+        <a href="#">About</a>
+        <a href="#">Careers</a>
+        <a href="#">Contact</a>
+        <a href="#">Legal</a>
       </div>
     </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 8. PRICING: 3-tier cards                   -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="px-16 py-20 bg-white">
-    <div class="text-center mb-16">
-      <p class="text-sm font-semibold text-indigo-600 uppercase tracking-wider mb-3">Pricing</p>
-      <h2 class="text-4xl font-bold text-gray-900">Simple, transparent pricing</h2>
-      <p class="text-lg text-gray-500 mt-4">No hidden fees. Cancel anytime.</p>
-    </div>
-
-    <div class="max-w-5xl mx-auto grid grid-cols-3 gap-8">
-      <!-- Free tier -->
-      <div class="bg-white rounded-2xl p-8 border border-gray-200">
-        <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Free</p>
-        <div class="mt-4 mb-6">
-          <span class="text-5xl font-extrabold text-gray-900">$0</span>
-          <span class="text-sm text-gray-400 ml-1">/month</span>
-        </div>
-        <p class="text-sm text-gray-500 mb-8">For individuals and side projects.</p>
-        <button class="w-full border border-gray-300 text-gray-700 py-3 rounded-lg text-sm font-semibold">Get Started</button>
-        <div class="mt-8 flex flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Up to 3 projects</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">1 GB storage</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Community support</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Pro tier (highlighted) -->
-      <div class="bg-indigo-600 rounded-2xl p-8 text-white relative overflow-hidden shadow-xl">
-        <div class="absolute top-4 right-4 bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full">Popular</div>
-        <p class="text-sm font-semibold text-indigo-200 uppercase tracking-wider">Pro</p>
-        <div class="mt-4 mb-6">
-          <span class="text-5xl font-extrabold text-white">$29</span>
-          <span class="text-sm text-indigo-200 ml-1">/month</span>
-        </div>
-        <p class="text-sm text-indigo-200 mb-8">For growing teams that need more power.</p>
-        <button class="w-full bg-white text-indigo-600 py-3 rounded-lg text-sm font-bold">Start Free Trial</button>
-        <div class="mt-8 flex flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-white rounded-full"></div></div>
-            <span class="text-sm text-indigo-100">Unlimited projects</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-white rounded-full"></div></div>
-            <span class="text-sm text-indigo-100">100 GB storage</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-white rounded-full"></div></div>
-            <span class="text-sm text-indigo-100">Priority support</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-white rounded-full"></div></div>
-            <span class="text-sm text-indigo-100">Advanced analytics</span>
-          </div>
-        </div>
-
-        <div class="mt-8 bg-white/10 rounded-xl p-4">
-          <div class="flex items-center justify-between">
-            <p class="text-xs text-indigo-200">Team productivity</p>
-            <p class="text-lg font-bold">+47%</p>
-          </div>
-          <div class="w-full h-2 bg-white/10 rounded-full mt-2">
-            <div class="w-3/4 h-2 bg-white rounded-full"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Enterprise tier -->
-      <div class="bg-white rounded-2xl p-8 border border-gray-200">
-        <p class="text-sm font-semibold text-gray-500 uppercase tracking-wider">Enterprise</p>
-        <div class="mt-4 mb-6">
-          <span class="text-5xl font-extrabold text-gray-900">Custom</span>
-        </div>
-        <p class="text-sm text-gray-500 mb-8">For organizations with advanced needs.</p>
-        <button class="w-full border border-gray-300 text-gray-700 py-3 rounded-lg text-sm font-semibold">Contact Sales</button>
-        <div class="mt-8 flex flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Everything in Pro</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Unlimited storage</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">SSO + SAML</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Dedicated support</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0"><div class="w-2 h-2 bg-green-500 rounded-full"></div></div>
-            <span class="text-sm text-gray-600">Custom SLA</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 9. CTA BANNER: gradient with button        -->
-  <!-- ═══════════════════════════════════════════ -->
-  <section class="relative bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 px-16 py-24 text-center overflow-hidden">
-    <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500 rounded-full opacity-20"></div>
-    <div class="absolute bottom-0 right-0 translate-x-1/3 translate-y-1/3 w-72 h-72 bg-indigo-400 rounded-full opacity-20"></div>
-    <div class="relative z-10 max-w-2xl mx-auto">
-      <h2 class="text-4xl font-extrabold text-white mb-4">Ready to accelerate your workflow?</h2>
-      <p class="text-lg text-indigo-200 mb-8">Join 10,000+ teams shipping faster with Nexus.</p>
-      <div class="flex items-center justify-center gap-4">
-        <button class="bg-white text-indigo-600 px-8 py-3.5 rounded-lg text-sm font-bold">Start Free Trial</button>
-        <button class="border border-white/30 text-white px-8 py-3.5 rounded-lg text-sm font-semibold">Talk to Sales</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- 10. FOOTER: multi-column links             -->
-  <!-- ═══════════════════════════════════════════ -->
-  <footer class="bg-gray-900 px-16 py-16 text-gray-400">
-    <div class="max-w-6xl mx-auto grid grid-cols-5 gap-8">
-      <div class="col-span-2">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-            <span class="text-white text-sm font-bold">N</span>
-          </div>
-          <span class="text-lg font-bold text-white">Nexus</span>
-        </div>
-        <p class="text-sm text-gray-500 max-w-xs leading-relaxed">The all-in-one platform for modern teams. Build, ship, and scale with confidence.</p>
-      </div>
-
-      <div>
-        <p class="text-sm font-semibold text-white mb-4">Product</p>
-        <div class="flex flex-col gap-2">
-          <a class="text-sm text-gray-400">Features</a>
-          <a class="text-sm text-gray-400">Pricing</a>
-          <a class="text-sm text-gray-400">Integrations</a>
-          <a class="text-sm text-gray-400">Changelog</a>
-        </div>
-      </div>
-
-      <div>
-        <p class="text-sm font-semibold text-white mb-4">Company</p>
-        <div class="flex flex-col gap-2">
-          <a class="text-sm text-gray-400">About</a>
-          <a class="text-sm text-gray-400">Blog</a>
-          <a class="text-sm text-gray-400">Careers</a>
-          <a class="text-sm text-gray-400">Press</a>
-        </div>
-      </div>
-
-      <div>
-        <p class="text-sm font-semibold text-white mb-4">Legal</p>
-        <div class="flex flex-col gap-2">
-          <a class="text-sm text-gray-400">Privacy</a>
-          <a class="text-sm text-gray-400">Terms</a>
-          <a class="text-sm text-gray-400">Security</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="max-w-6xl mx-auto mt-12 pt-8 border-t border-gray-800 flex items-center justify-between">
-      <p class="text-xs text-gray-500">2025 Nexus Inc. All rights reserved.</p>
-      <div class="flex items-center gap-4">
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-        <div class="w-8 h-8 bg-gray-800 rounded-full"></div>
-      </div>
-    </div>
-  </footer>
-
-</div>`
+  </div>
+  <div class="border-t border-slate-800 pt-6 text-center text-xs text-slate-600">
+    &copy; 2026 Scytle.ai — All rights reserved.
+  </div>
+</footer>
+</div>
+`
 
 const PAGE_WIDTH = 1440
 const PREVIEW_GAP = 100

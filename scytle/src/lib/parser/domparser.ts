@@ -116,6 +116,90 @@ function eff(csVal: string, inheritedVal?: string): string {
 }
 
 // ═══════════════════════════════════════════════════
+// AI Output Protection
+// ═══════════════════════════════════════════════════
+
+/**
+ * Mark all AI-generated nodes as "detached" from theme variables
+ * and clear any refs assigned during Pass 1 exact-matching.
+ *
+ * The AI intentionally chose specific colors, spacing, fonts, etc.
+ * Without this, the renderer would resolve refs against the theme
+ * variable table and override the AI's values — causing the design
+ * to look different in the real editor vs the test page.
+ *
+ * We clear refs AND set detached flags so that:
+ * 1. The renderer uses the AI's literal values (no ref → fallback)
+ * 2. relinkNodes() skips all properties (detached → skip)
+ *
+ * Users can later manually re-link specific properties to theme
+ * variables via the UI if they want theme-controlled values.
+ */
+function detachAIGeneratedValues(nodes: ScytleNode[]): void {
+    for (const node of nodes) {
+        switch (node.type) {
+            case 'frame': {
+                // Protect fill colors — also clear any Pass 1 refs so
+                // the renderer uses the AI's literal value, not the theme's
+                for (const fill of node.fills) {
+                    if (fill.type === 'solid') {
+                        fill.detached = true
+                        fill.colorRef = undefined
+                    }
+                }
+                // Protect border color
+                if (node.border) {
+                    node.border.detached = true
+                    node.border.colorRef = undefined
+                }
+                // Protect spacing & layout — clear refs so renderer
+                // uses original parsed values instead of theme values
+                node.paddingDetached = true
+                node.paddingRef = undefined
+                node.borderRadiusDetached = true
+                node.borderRadiusRef = undefined
+                node.shadowDetached = true
+                node.shadowRef = undefined
+                if (node.layout) {
+                    node.layout.gapDetached = true
+                    node.layout.gapRef = undefined
+                }
+                // Recurse into children
+                if (node.children) {
+                    detachAIGeneratedValues(node.children)
+                }
+                break
+            }
+            case 'text': {
+                node.colorDetached = true
+                node.colorRef = undefined
+                node.fontFamilyDetached = true
+                node.fontFamilyRef = undefined
+                node.fontSizeDetached = true
+                node.fontSizeRef = undefined
+                node.fontWeightDetached = true
+                node.fontWeightRef = undefined
+                break
+            }
+            case 'image': {
+                node.borderRadiusDetached = true
+                node.borderRadiusRef = undefined
+                break
+            }
+            case 'vector': {
+                for (const fill of node.fills) {
+                    if (fill.type === 'solid') {
+                        fill.detached = true
+                        fill.colorRef = undefined
+                    }
+                }
+                break
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════
 // Public API
 // ═══════════════════════════════════════════════════
 
@@ -200,8 +284,14 @@ export async function parseHtmlViaDOMParser(
     // Assign sequential positions to children
     assignChildPositions(pageFrame)
 
-    // Run semantic relinker AFTER building the full tree
+    // Protect AI-generated values from semantic relinking.
+    // The AI intentionally chose specific colors, spacing, fonts, etc.
+    // Pass 1 (LinkMaps exact-match) already ran during parsing and linked
+    // any values that genuinely match theme variables. Setting detached flags
+    // ensures relinkNodes() skips all properties instead of force-fitting
+    // every value into the nearest theme bucket.
     if (options?.variableTable && options?.themeMode) {
+        detachAIGeneratedValues(pageFrame.children)
         relinkNodes(
             pageFrame.children,
             options.variableTable,
