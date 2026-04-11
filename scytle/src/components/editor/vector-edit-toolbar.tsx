@@ -48,6 +48,8 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
     const vectorEditTool = useEditorStore((s) => s.vectorEditTool)
     const setVectorEditTool = useEditorStore((s) => s.setVectorEditTool)
     const exitVectorEditMode = useEditorStore((s) => s.exitVectorEditMode)
+    const enterVectorEditMode = useEditorStore((s) => s.enterVectorEditMode)
+    const commitPenAndEnterVectorEdit = useEditorStore((s) => s.commitPenAndEnterVectorEdit)
     const activeTool = useEditorStore((s) => s.activeTool)
     const setActiveTool = useEditorStore((s) => s.setActiveTool)
     const commitPenPath = useEditorStore((s) => s.commitPenPath)
@@ -55,6 +57,20 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
     const setPenDrawingState = useEditorStore((s) => s.setPenDrawingState)
 
     const [hoveredTool, setHoveredTool] = useState<VectorEditTool | 'close' | null>(null)
+
+    /** When clicking a tool while pen is active, commit the path and enter vector edit mode first */
+    const handleToolClick = useCallback((toolId: VectorEditTool) => {
+        const store = useEditorStore.getState()
+
+        // Pen tool active (open or closed path) → commit + enter vector edit atomically
+        if (store.activeTool === 'pen') {
+            commitPenAndEnterVectorEdit(toolId)
+            return
+        }
+
+        // Already in vector edit mode — just switch tool
+        setVectorEditTool(toolId)
+    }, [commitPenAndEnterVectorEdit, setVectorEditTool])
 
     const handleClose = useCallback(() => {
         if (vectorEditNodeId) {
@@ -115,7 +131,7 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
                                         ? 'bg-blue-500 text-white'
                                         : 'text-neutral-300 hover:text-white hover:bg-neutral-700',
                                 )}
-                                onClick={() => setVectorEditTool(tool.id)}
+                                onClick={() => handleToolClick(tool.id)}
                                 onMouseEnter={() => setHoveredTool(tool.id)}
                                 onMouseLeave={() => setHoveredTool(null)}
                             >

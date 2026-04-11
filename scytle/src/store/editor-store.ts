@@ -229,6 +229,8 @@ interface EditorState {
     selectedVertexIndices: number[]
     /** Live in-progress pen drawing state (null when not actively drawing) */
     penDrawingState: PenDrawingState | null
+    /** NodeId of the last path committed via pen tool click-to-close (cleared when tool changes) */
+    lastPenCommittedNodeId: string | null
 
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
@@ -360,6 +362,12 @@ interface EditorState {
     setPenDrawingState: (state: PenDrawingState | null) => void
     /** Commit the pen drawing state into the VectorNode and finalize bounding box */
     commitPenPath: () => void
+    /**
+     * Commit pen path (if still drawing) or use lastPenCommittedNodeId (if closed),
+     * then enter vector edit mode on that node and activate the given tool.
+     * Used by the vector edit toolbar when pen tool is active.
+     */
+    commitPenAndEnterVectorEdit: (tool: VectorEditTool) => void
 
     // Page management -----------------------------------------
     addPage: (name?: string) => string
@@ -402,6 +410,7 @@ export const useEditorStore = create<EditorState>()(
             vectorEditTool: 'move' as VectorEditTool,
             selectedVertexIndices: [] as number[],
             penDrawingState: null as PenDrawingState | null,
+            lastPenCommittedNodeId: null as string | null,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -564,6 +573,10 @@ export const useEditorStore = create<EditorState>()(
                             state.vectorEditNodeId = null
                             state.vectorEditTool = 'move'
                             state.selectedVertexIndices = []
+                        }
+                        // Clear last committed pen node when switching away from pen
+                        if (tool !== 'pen') {
+                            state.lastPenCommittedNodeId = null
                         }
                     },
                     false,
@@ -1990,6 +2003,8 @@ export const useEditorStore = create<EditorState>()(
 
                         // Clear drawing state
                         state.penDrawingState = null
+                        // Remember committed node so toolbar can enter vector edit mode
+                        state.lastPenCommittedNodeId = ps.nodeId
 
                         // Figma behavior: stay in pen tool after closing/committing a path
                         // so the user can immediately draw another shape.
@@ -2002,6 +2017,85 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'commitPenPath'
+                ),
+
+            commitPenAndEnterVectorEdit: (tool) =>
+                set(
+                    (state) => {
+                        let nodeId: string | null = null
+
+                        // Case 1: still drawing (open path)
+                        const ps = state.penDrawingState
+                        if (ps && ps.vertices.length >= 2) {
+                            nodeId = ps.nodeId
+                            // Inline commitPenPath logic
+                            const node = findNodeById(state.nodes, ps.nodeId)
+                            if (node && node.type === 'vector') {
+                                _snap(state)
+                                const vn = (node as VectorNode).vectorNetwork
+                                vn.vertices = ps.vertices
+                                vn.segments = ps.segments
+                                if (ps.vertices.length > 0) {
+                                    let minX = Infinity, minY = Infinity
+                                    let maxX = -Infinity, maxY = -Infinity
+                                    for (const v of ps.vertices) {
+                                        if (v.x < minX) minX = v.x
+                                        if (v.y < minY) minY = v.y
+                                        if (v.x > maxX) maxX = v.x
+                                        if (v.y > maxY) maxY = v.y
+                                    }
+                                    for (const seg of ps.segments) {
+                                        const sv = ps.vertices[seg.start]
+                                        const ev = ps.vertices[seg.end]
+                                        if (!sv || !ev) continue
+                                        if (seg.tangentStart) {
+                                            const cpX = sv.x + seg.tangentStart.x
+                                            const cpY = sv.y + seg.tangentStart.y
+                                            if (cpX < minX) minX = cpX
+                                            if (cpY < minY) minY = cpY
+                                            if (cpX > maxX) maxX = cpX
+                                            if (cpY > maxY) maxY = cpY
+                                        }
+                                        if (seg.tangentEnd) {
+                                            const cpX = ev.x + seg.tangentEnd.x
+                                            const cpY = ev.y + seg.tangentEnd.y
+                                            if (cpX < minX) minX = cpX
+                                            if (cpY < minY) minY = cpY
+                                            if (cpX > maxX) maxX = cpX
+                                            if (cpY > maxY) maxY = cpY
+                                        }
+                                    }
+                                    for (const v of vn.vertices) {
+                                        v.x -= minX
+                                        v.y -= minY
+                                    }
+                                    node.x += minX
+                                    node.y += minY
+                                    node.width = Math.max(maxX - minX, 1)
+                                    node.height = Math.max(maxY - minY, 1)
+                                }
+                            }
+                            state.penDrawingState = null
+                        } else if (!ps && state.lastPenCommittedNodeId) {
+                            // Case 2: path already closed (click-to-close)
+                            nodeId = state.lastPenCommittedNodeId
+                        }
+
+                        if (!nodeId) return
+
+                        // Enter vector edit mode on the node
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+
+                        state.vectorEditNodeId = nodeId
+                        state.vectorEditTool = tool
+                        state.selectedVertexIndices = []
+                        state.activeTool = 'select'
+                        state.selectedIds = [nodeId]
+                        state.lastPenCommittedNodeId = null
+                    },
+                    false,
+                    'commitPenAndEnterVectorEdit'
                 ),
         })),
         { name: 'editor-store' }
