@@ -574,8 +574,8 @@ export function ChatPanel() {
                     <Thread />
                 </div>
 
-                {/* New thread button at very bottom, below composer */}
-                <div className="shrink-0 border-t border-border/30 px-3 py-1.5">
+                {/* Thread pills — horizontal scroll at bottom */}
+                <div className="shrink-0 border-t border-border/30 px-2 py-1.5">
                     <ThreadList />
                 </div>
             </div>

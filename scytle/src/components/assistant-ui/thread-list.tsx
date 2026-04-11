@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   AuiIf,
   ThreadListItemMorePrimitive,
@@ -9,6 +8,7 @@ import {
 } from "@assistant-ui/react";
 import {
   ArchiveIcon,
+  Loader2,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
@@ -18,10 +18,10 @@ import { type FC, useCallback, useRef, useState } from "react";
 
 export const ThreadList: FC = () => {
   return (
-    <ThreadListPrimitive.Root className="aui-root aui-thread-list-root flex flex-col gap-1">
+    <ThreadListPrimitive.Root className="aui-root aui-thread-list-root flex items-center gap-1.5 overflow-x-auto overflow-y-hidden scrollbar-none">
       <ThreadListNew />
       <AuiIf condition={(s) => s.threads.isLoading}>
-        <ThreadListSkeleton />
+        <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
       </AuiIf>
       <AuiIf condition={(s) => !s.threads.isLoading}>
         <ThreadListPrimitive.Items>
@@ -36,29 +36,12 @@ const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
       <button
-        className="aui-thread-list-new flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="aui-thread-list-new flex shrink-0 items-center gap-1 rounded-full border border-border/60 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
-        <PlusIcon className="size-4" />
-        New thread
+        <PlusIcon className="size-3" />
+        New
       </button>
     </ThreadListPrimitive.New>
-  );
-};
-
-const ThreadListSkeleton: FC = () => {
-  return (
-    <div className="flex items-center justify-center py-3">
-      <svg
-        className="size-4 animate-spin text-muted-foreground"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-      </svg>
-      <span className="ml-2 text-xs text-muted-foreground">Loading threads...</span>
-    </div>
   );
 };
 
@@ -69,7 +52,6 @@ const ThreadListItem: FC = () => {
 
   const handleRename = useCallback(() => {
     setIsRenaming(true);
-    // Focus input after render
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
@@ -86,10 +68,10 @@ const ThreadListItem: FC = () => {
 
   if (isRenaming) {
     return (
-      <div className="flex h-9 items-center px-3">
+      <div className="flex shrink-0 items-center rounded-full border border-ring px-2.5 py-1">
         <input
           ref={inputRef}
-          className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
+          className="w-24 min-w-0 bg-transparent text-xs outline-none"
           defaultValue={runtime.getState().title ?? ""}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -105,9 +87,9 @@ const ThreadListItem: FC = () => {
   }
 
   return (
-    <ThreadListItemPrimitive.Root className="aui-thread-list-item group flex h-9 items-center gap-2 rounded-lg transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none data-active:bg-muted">
-      <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger flex h-full min-w-0 flex-1 items-center px-3 text-start text-sm">
-        <span className="aui-thread-list-item-title min-w-0 flex-1 truncate">
+    <ThreadListItemPrimitive.Root className="aui-thread-list-item group relative flex shrink-0 items-center rounded-full border border-border/60 transition-colors hover:bg-muted data-active:border-foreground/20 data-active:bg-muted">
+      <ThreadListItemPrimitive.Trigger className="aui-thread-list-item-trigger flex items-center px-2.5 py-1 text-xs">
+        <span className="aui-thread-list-item-title max-w-28 truncate">
           <ThreadListItemPrimitive.Title fallback="New Chat" />
         </span>
       </ThreadListItemPrimitive.Trigger>
@@ -123,14 +105,14 @@ const ThreadListItemMore: FC<{ onRename: () => void }> = ({ onRename }) => {
         <Button
           variant="ghost"
           size="icon"
-          className="aui-thread-list-item-more mr-2 size-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:bg-accent data-[state=open]:opacity-100 group-data-active:opacity-100"
+          className="aui-thread-list-item-more -ml-0.5 mr-0.5 size-5 shrink-0 rounded-full p-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 group-data-active:opacity-100"
         >
-          <MoreHorizontalIcon className="size-4" />
+          <MoreHorizontalIcon className="size-3" />
           <span className="sr-only">More options</span>
         </Button>
       </ThreadListItemMorePrimitive.Trigger>
       <ThreadListItemMorePrimitive.Content
-        side="bottom"
+        side="top"
         align="start"
         className="aui-thread-list-item-more-content z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       >
