@@ -211,6 +211,7 @@ const LOGICAL_TO_PHYSICAL: Record<string, string[]> = {
   'border-block-style': ['border-top-style', 'border-bottom-style'],
   'border-inline-color': ['border-left-color', 'border-right-color'],
   'border-block-color': ['border-top-color', 'border-bottom-color'],
+  'inset': ['top', 'right', 'bottom', 'left'],
   'inset-inline': ['left', 'right'],
   'inset-block': ['top', 'bottom'],
   'inset-inline-start': ['left'],
@@ -544,6 +545,28 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
 
     // Convert logical CSS properties to physical (padding-inline → padding-left/right, etc.)
     mergedProps = logicalToPhysical(mergedProps)
+
+    // Expand flex shorthand to longhands — DOMParser may not reliably expand
+    // inline shorthand properties. This ensures flexGrow/flexShrink/flexBasis are readable.
+    if (mergedProps['flex'] && !mergedProps['flex-grow']) {
+      const flexVal = mergedProps['flex'].trim()
+      if (flexVal === 'none') {
+        mergedProps['flex-grow'] = '0'
+        mergedProps['flex-shrink'] = '0'
+        mergedProps['flex-basis'] = 'auto'
+      } else if (flexVal === 'auto') {
+        mergedProps['flex-grow'] = '1'
+        mergedProps['flex-shrink'] = '1'
+        mergedProps['flex-basis'] = 'auto'
+      } else {
+        const parts = flexVal.split(/\s+/)
+        if (parts.length >= 1 && !isNaN(Number(parts[0]))) {
+          mergedProps['flex-grow'] = parts[0]
+          if (parts.length >= 2) mergedProps['flex-shrink'] = parts[1]
+          if (parts.length >= 3) mergedProps['flex-basis'] = parts[2]
+        }
+      }
+    }
 
     // Resolve remaining theme vars and convert units
     for (const [prop, value] of Object.entries(mergedProps)) {

@@ -5,10 +5,7 @@
 import type { FrameNode } from '@/types/canvas'
 import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
-// Legacy iframe parser (kept as fallback)
-export { parseHtmlToNodesViaIframe } from './iframe-parser'
-
-// New DOMParser-based parser
+// DOMParser-based parser (primary and only parser)
 export { parseHtmlViaDOMParser } from './domparser'
 
 // Shared utilities
@@ -27,7 +24,7 @@ export interface ParseHtmlOptions {
 }
 
 // ════════════════════════════════════════════════════
-// Main Parse Function (DOMParser + iframe fallback)
+// Main Parse Function (DOMParser only)
 // ════════════════════════════════════════════════════
 
 /**
@@ -36,24 +33,17 @@ export interface ParseHtmlOptions {
  * Pipeline:
  *   1. Convert Tailwind classes → inline styles (server API)
  *   2. Parse with DOMParser (reads element.style, preserves CSS intent)
- *   3. Falls back to iframe parser if DOMParser fails
  *
- * ~100-200ms total vs 5-13s for the iframe approach.
+ * ~100-200ms total.
  */
 export async function parseHtml(
     html: string,
     pageName: string = 'Page',
     options?: ParseHtmlOptions,
 ): Promise<FrameNode> {
-    try {
-        const inlinedHtml = await convertTailwindClasses(html)
-        const { parseHtmlViaDOMParser } = await import('./domparser')
-        return await parseHtmlViaDOMParser(inlinedHtml, pageName, options)
-    } catch (error) {
-        console.warn('[parseHtml] DOMParser failed, falling back to iframe:', error)
-        const { parseHtmlToNodesViaIframe } = await import('./iframe-parser')
-        return parseHtmlToNodesViaIframe(html, pageName, options)
-    }
+    const inlinedHtml = await convertTailwindClasses(html)
+    const { parseHtmlViaDOMParser } = await import('./domparser')
+    return parseHtmlViaDOMParser(inlinedHtml, pageName, options)
 }
 
 /**

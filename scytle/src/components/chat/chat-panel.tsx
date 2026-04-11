@@ -39,6 +39,15 @@ import type { SystemPromptContext } from '@/lib/ai/prompts/system'
 /** ID of the page frame that sections are appended into during generation */
 let _activePageFrameId: string | null = null
 
+/** Promise queue to serialize applyToolResult calls — prevents race conditions
+ *  when multiple generateSection calls fire within milliseconds of each other. */
+let _applyQueue: Promise<void> = Promise.resolve()
+
+/** Enqueue a tool result to be applied in order. */
+function enqueueToolResult(toolName: string, result: any): void {
+    _applyQueue = _applyQueue.then(() => applyToolResult(toolName, result)).catch(console.error)
+}
+
 /** Reset when starting a new conversation / thread */
 export function resetActivePageFrame() {
     _activePageFrameId = null
@@ -381,7 +390,7 @@ const UpdateThemeToolUI = makeAssistantToolUI({
     render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
-                applyToolResult('updateTheme', result)
+                enqueueToolResult('updateTheme', result)
             }
         }, [status.type, result, toolCallId])
 
@@ -418,7 +427,7 @@ const GenerateSectionToolUI = makeAssistantToolUI({
     render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
-                applyToolResult('generateSection', result)
+                enqueueToolResult('generateSection', result)
             }
         }, [status.type, result, toolCallId])
 
@@ -445,7 +454,7 @@ const EditNodeToolUI = makeAssistantToolUI({
     render: ({ args, result, status, toolCallId }) => {
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
-                applyToolResult('editNode', result)
+                enqueueToolResult('editNode', result)
             }
         }, [status.type, result, toolCallId])
 

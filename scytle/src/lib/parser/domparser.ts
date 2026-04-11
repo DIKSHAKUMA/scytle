@@ -5,8 +5,7 @@
  * mapping CSS properties to ScytleNode properties. The HTML is expected to have
  * Tailwind classes already converted to inline styles before reaching this parser.
  *
- * Key difference from iframe-parser.ts:
- *   - No iframe, no getComputedStyle, no getBoundingClientRect
+ * Approach:
  *   - Reads el.style (CSSStyleDeclaration from inline styles)
  *   - Sizing inferred from CSS values (width:100% → fill, Npx → fixed, etc.)
  *   - Dimensions estimated (not measured)
@@ -30,6 +29,56 @@ import {
 import { relinkNodes } from '@/lib/theme/relink-nodes'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
 import { estimateTextHeight } from './size-utils'
+
+// ═══════════════════════════════════════════════════
+// Viewport Unit Resolution
+// ═══════════════════════════════════════════════════
+
+/** Module-level root width, set per parse call. Used for viewport unit resolution. */
+let _rootWidth = 1440
+
+/** Approximate viewport height from rootWidth assuming 16:9 aspect ratio. */
+function viewportHeight(): number {
+    return Math.round(_rootWidth * 9 / 16)
+}
+
+/**
+ * Resolve a CSS length value to pixels. Handles px, viewport units (vh/vw/dvh/dvw/vmin/vmax).
+ * Returns NaN for values it can't resolve (%, auto, etc.).
+ */
+function resolveLength(value: string): number {
+    if (!value) return NaN
+    const num = parseFloat(value)
+    if (isNaN(num)) return NaN
+
+    if (value.endsWith('px')) return num
+    if (value.endsWith('dvh') || value.endsWith('vh')) return (num / 100) * viewportHeight()
+    if (value.endsWith('dvw') || value.endsWith('vw')) return (num / 100) * _rootWidth
+    if (value.endsWith('vmin')) return (num / 100) * Math.min(_rootWidth, viewportHeight())
+    if (value.endsWith('vmax')) return (num / 100) * Math.max(_rootWidth, viewportHeight())
+
+    return NaN
+}
+
+/**
+ * Resolve a child's percentage height against its parent's known height.
+ * Walks up to the parent element and reads its inline height/min-height.
+ * Falls back to containerWidth as a rough approximation.
+ */
+function resolveParentHeight(el: HTMLElement, containerWidth: number): number {
+    const parent = el.parentElement
+    if (parent) {
+        const ps = parent.style
+        // Check explicit px height first
+        const h = resolveLength(ps.height)
+        if (!isNaN(h) && h > 0) return h
+        // Check min-height as fallback
+        const mh = resolveLength(ps.minHeight)
+        if (!isNaN(mh) && mh > 0) return mh
+    }
+    // Last resort: use containerWidth (square-ish approximation)
+    return containerWidth
+}
 
 // ═══════════════════════════════════════════════════
 // Types
@@ -204,7 +253,7 @@ function detachAIGeneratedValues(nodes: ScytleNode[]): void {
 // ═══════════════════════════════════════════════════
 
 /**
- * Parse HTML into a ScytleNode tree using DOMParser (no iframe needed).
+ * Parse HTML into a ScytleNode tree using DOMParser.
  *
  * This reads inline styles directly from element.style, which works because
  * the HTML has already been processed through tailwind-to-inline to convert
@@ -216,6 +265,7 @@ export async function parseHtmlViaDOMParser(
     options?: DOMParserOptions,
 ): Promise<FrameNode> {
     const width = options?.rootWidth ?? 1440
+    _rootWidth = width  // Set for viewport unit resolution
 
     // Fix self-closing tags: <div /> → <div></div>
     // DOMParser (text/html) handles void elements (img, br, hr, input) natively,
@@ -573,6 +623,13 @@ function buildContainerNode(
         }
     }
 
+    // ── Merge image + absolute gradient overlay ──
+    // Common web pattern: <div class="relative"> <img .../> <div class="absolute inset-0 bg-gradient-...">text</div> </div>
+    // In Figma, this is one frame with stacked fills [image, gradient] + text children.
+    if ((cs.position === 'relative' || cs.position === 'static' || !cs.position) && children.length >= 2) {
+        mergeImageWithGradientOverlay(children)
+    }
+
     const fills = extractFills(cs)
     const border = extractBorder(cs)
     const borderRadius = extractBorderRadius(cs)
@@ -593,14 +650,14 @@ function buildContainerNode(
     let estWidth = sizing.horizontal === 'fixed'
         ? (cs.width?.endsWith('%')
             ? (parseFloat(cs.width) / 100) * containerWidth  // Resolve percentage against parent
-            : (parseFloat(cs.width) || containerWidth))
+            : (resolveLength(cs.width) || parseFloat(cs.width) || containerWidth))
         : sizing.horizontal === 'hug'
             ? estimateContainerWidth(children, padding, layout)
             : containerWidth
     let estHeight = sizing.vertical === 'fixed'
         ? (cs.height?.endsWith('%')
-            ? (parseFloat(cs.height) / 100) * containerWidth  // Approximate: use width for height %
-            : (parseFloat(cs.height) || estimateContainerHeight(children, padding, layout)))
+            ? (parseFloat(cs.height) / 100) * resolveParentHeight(el, containerWidth)
+            : (resolveLength(cs.height) || parseFloat(cs.height) || estimateContainerHeight(children, padding, layout)))
         : estimateContainerHeight(children, padding, layout)
 
 
@@ -650,18 +707,15 @@ function buildContainerNode(
         shadowRef: lm && shadows.length > 0 ? matchShadow(shadows, lm) : undefined,
         opacity: parseOpacity(cs.opacity),
         ...(extractLayerBlur(cs.filter)),
-        overflow: (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.overflowY === 'hidden')
+        overflow: (cs.overflow === 'hidden' || cs.overflow === 'clip' || cs.overflowX === 'hidden' || cs.overflowX === 'clip' || cs.overflowY === 'hidden' || cs.overflowY === 'clip')
             ? 'hidden'
             : 'visible',
         rotation: 0,
         sizing,
         positioning: cs.position === 'absolute' || cs.position === 'fixed' ? 'absolute' : 'auto',
         ...extractMinMaxConstraints(cs),
-        ...(cs.flexGrow && cs.flexGrow !== '0' ? { layoutGrow: parseFloat(cs.flexGrow) } : {}),
-        ...(cs.flexShrink && cs.flexShrink !== '1' ? { flexShrink: parseFloat(cs.flexShrink) } : {}),
-        ...(cs.flexBasis && cs.flexBasis !== 'auto' && cs.flexBasis !== '0px'
-            ? { flexBasis: parseFloat(cs.flexBasis) }
-            : {}),
+        ...extractFlexItemProps(cs),
+        ...mapAlignSelf(cs.alignSelf),
         margin: extractMargin(cs),
         autoMargin: extractAutoMargin(el),
         // Grid child spans (col-span-2, row-span-2, etc.)
@@ -694,6 +748,87 @@ function buildContainerNode(
     return frame
 }
 
+/**
+ * Merge image + absolute gradient overlay into a single frame with stacked fills.
+ *
+ * Detects the common web pattern:
+ *   <div class="relative">
+ *     <img src="..." class="w-full h-full object-cover" />
+ *     <div class="absolute inset-0" style="background: linear-gradient(...)">
+ *       <span>text overlay</span>
+ *     </div>
+ *   </div>
+ *
+ * In Figma, this becomes one frame with fills: [image, gradient] and the
+ * overlay's text children promoted into it. Mutates `children` in place.
+ */
+function mergeImageWithGradientOverlay(children: ScytleNode[]): void {
+    // Find first image frame (has exactly one image fill, no text children)
+    const imgIdx = children.findIndex(c =>
+        c.type === 'frame' &&
+        c.fills?.length === 1 &&
+        c.fills[0].type === 'image' &&
+        (c as FrameNode).children.length === 0
+    )
+    if (imgIdx === -1) return
+
+    // Find first absolute overlay with gradient or semi-transparent solid fill
+    const overlayIdx = children.findIndex((c, i) =>
+        i !== imgIdx &&
+        c.type === 'frame' &&
+        c.positioning === 'absolute' &&
+        c.fills &&
+        c.fills.length > 0 &&
+        c.fills.every(f => f.type === 'gradient' || (f.type === 'solid' && (f.opacity ?? 1) < 1))
+    )
+    if (overlayIdx === -1) return
+
+    const imgFrame = children[imgIdx] as FrameNode
+    const overlay = children[overlayIdx] as FrameNode
+
+    // Merge: stack overlay fills on top of image fill
+    imgFrame.fills = [...(imgFrame.fills || []), ...(overlay.fills || [])]
+
+    // Promote overlay's children into the image frame
+    if (overlay.children.length > 0) {
+        imgFrame.children = [...overlay.children]
+        // Image frame needs layout to position the promoted children
+        imgFrame.layout = overlay.layout?.mode !== 'none' ? overlay.layout : { mode: 'flex', direction: 'column', gap: 0 }
+        imgFrame.padding = overlay.padding || { top: 0, right: 0, bottom: 0, left: 0 }
+    }
+
+    // Inherit overflow hidden so gradient clips to image bounds
+    imgFrame.overflow = 'hidden'
+
+    // Remove the overlay from children
+    children.splice(overlayIdx, 1)
+}
+
+/** Infer image sizing from CSS. */
+function inferImageSizing(cs: CSSStyleDeclaration, el: HTMLImageElement): Sizing {
+    const widthVal = cs.width
+    const heightVal = cs.height
+    const isAbs = cs.position === 'absolute' || cs.position === 'fixed'
+
+    let horizontal: Sizing['horizontal'] = 'fill'  // images default to fill
+    if (widthVal && widthVal.endsWith('px')) {
+        horizontal = 'fixed'
+    } else if (widthVal && (widthVal === '100%' || (widthVal.endsWith('%') && parseFloat(widthVal) >= 99.5))) {
+        horizontal = 'fill'
+    } else if (el.getAttribute('width')) {
+        horizontal = 'fixed'
+    }
+
+    let vertical: Sizing['vertical'] = 'fixed'  // images default to fixed height
+    if (heightVal && (heightVal === '100%' || (heightVal.endsWith('%') && parseFloat(heightVal) >= 99.5))) {
+        vertical = 'fill'  // 100% height → fill (works for both abs and normal flow in flex containers)
+    } else if (heightVal && (heightVal.endsWith('px') || /\d+d?v[hw]/.test(heightVal))) {
+        vertical = 'fixed'
+    }
+
+    return { horizontal, vertical }
+}
+
 function buildImageNode(
     el: HTMLImageElement,
     cs: CSSStyleDeclaration,
@@ -701,12 +836,33 @@ function buildImageNode(
 ): ScytleNode {
     const src = el.src || el.getAttribute('data-src') || el.getAttribute('src') || ''
     const alt = el.alt || el.getAttribute('alt') || ''
-    const width = parseFloat(cs.width) || parseInt(el.getAttribute('width') || '') || 300
-    const height = parseFloat(cs.height) || parseInt(el.getAttribute('height') || '') || 200
+
+    // Resolve width: percentage → parentWidth, viewport units → px, px → px
+    let width: number
+    const widthVal = cs.width
+    if (widthVal && (widthVal === '100%' || (widthVal.endsWith('%') && parseFloat(widthVal) >= 99.5))) {
+        width = parentWidth
+    } else if (widthVal && widthVal.endsWith('%')) {
+        width = (parseFloat(widthVal) / 100) * parentWidth
+    } else {
+        width = resolveLength(widthVal) || parseFloat(widthVal) || parseInt(el.getAttribute('width') || '') || parentWidth
+    }
+
+    // Resolve height similarly
+    let height: number
+    const heightVal = cs.height
+    if (heightVal && (heightVal === '100%' || (heightVal.endsWith('%') && parseFloat(heightVal) >= 99.5))) {
+        height = width * 2 / 3  // Fallback aspect ratio for 100% height
+    } else {
+        height = resolveLength(heightVal) || parseFloat(heightVal) || parseInt(el.getAttribute('height') || '') || Math.round(width * 2 / 3)
+    }
+
+    // Determine sizing from CSS
+    const sizing = inferImageSizing(cs, el)
 
     // Handle aspect-ratio CSS property
     let finalHeight = height
-    if (cs.aspectRatio && cs.aspectRatio !== 'auto' && height === 200 && width > 0) {
+    if (cs.aspectRatio && cs.aspectRatio !== 'auto' && width > 0) {
         const parts = cs.aspectRatio.split('/')
         if (parts.length === 2) {
             const ratio = parseFloat(parts[0]) / parseFloat(parts[1])
@@ -728,13 +884,14 @@ function buildImageNode(
                 visible: true,
                 opacity: 1,
             }],
-            sizing: { horizontal: 'fill', vertical: 'fixed' },
+            sizing,
             borderRadius: extractBorderRadius(cs),
             opacity: parseOpacity(cs.opacity),
             overflow: 'hidden',
             children: [],
             layout: { mode: 'none' },
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
+            positioning: cs.position === 'absolute' || cs.position === 'fixed' ? 'absolute' : 'auto',
         })
     }
 
@@ -748,7 +905,7 @@ function buildImageNode(
         fit: 'cover',
         isPlaceholder: true,
         placeholderLabel: alt || 'Image',
-        sizing: { horizontal: 'fill', vertical: 'fixed' },
+        sizing,
         borderRadius: extractBorderRadius(cs),
         opacity: parseOpacity(cs.opacity),
     })
@@ -1050,8 +1207,13 @@ function rgbToHex(rgb: string): string {
         return 'transparent'
     }
 
-    // Already hex
-    if (rgb.startsWith('#')) return normalizeHex(rgb)
+    // Already hex — strip alpha channel from 8-digit (#RRGGBBAA) and 4-digit (#RGBA)
+    if (rgb.startsWith('#')) {
+        const h = rgb.trim()
+        if (h.length === 9) return normalizeHex(h.slice(0, 7))  // #RRGGBBAA → #RRGGBB
+        if (h.length === 5) return normalizeHex(h.slice(0, 4))  // #RGBA → #RGB
+        return normalizeHex(h)
+    }
 
     // ── color-mix MUST be checked BEFORE rgb/rgba, because the browser transforms
     //    color-mix(in oklab, #fff 10%, transparent) to
@@ -1184,6 +1346,16 @@ function rgbToOpacity(rgb: string): number {
     if (!rgb) return 1
     if (rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') return 0
 
+    // 8-digit hex: #RRGGBBAA → extract alpha from last 2 hex digits
+    if (rgb.startsWith('#') && rgb.length === 9) {
+        return parseInt(rgb.slice(7, 9), 16) / 255
+    }
+    // 4-digit hex: #RGBA → extract alpha from last hex digit
+    if (rgb.startsWith('#') && rgb.length === 5) {
+        const a = rgb[4]
+        return parseInt(a + a, 16) / 255
+    }
+
     // rgba(r, g, b, a) — comma-separated
     const rgbaMatch = rgb.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/)
     if (rgbaMatch) return parseFloat(rgbaMatch[1])
@@ -1256,6 +1428,8 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
             align: mapAlignItems(cs.alignItems),
             wrap: cs.flexWrap === 'wrap' ? true : undefined,
             gap: parseFloat(cs.gap) || 0,
+            columnGap: parseFloat(cs.columnGap) || undefined,
+            rowGap: parseFloat(cs.rowGap) || undefined,
         }
     }
 
@@ -1267,9 +1441,10 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
         : undefined
 
     // Exception: TEXT_ONLY_TAGS (p, h1-h6) with mixed inline children should flow horizontally
+    // Enable wrap so inline spans don't overflow the container (e.g. large font titles)
     // Exception: button/a with text should center content
     if (tag && TEXT_ONLY_TAGS.has(tag)) {
-        return { mode: 'flex', direction: 'row', gap: 0, align: 'baseline' as Layout['align'], justify: flexAlign as Layout['justify'] }
+        return { mode: 'flex', direction: 'row', gap: 0, wrap: true, align: 'baseline' as Layout['align'], justify: flexAlign as Layout['justify'] }
     }
     if (tag === 'button' || tag === 'a') {
         return { mode: 'flex', direction: 'row', gap: 0, justify: 'center', align: 'center' }
@@ -1394,7 +1569,7 @@ function parsePxOrPercent(val: string, refSize: number): number {
 
 /**
  * Detect auto margins by reading el.style directly.
- * Unlike iframe-parser, no display:none trick needed — we read inline style values.
+ * No display:none trick needed — we read inline style values.
  */
 function extractAutoMargin(el: HTMLElement): { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean } | undefined {
     const s = el.style
@@ -1422,6 +1597,43 @@ function extractAutoMargin(el: HTMLElement): { top?: boolean; right?: boolean; b
 
     const hasAny = auto.top || auto.right || auto.bottom || auto.left
     return hasAny ? auto : undefined
+}
+
+/**
+ * Extract flex item properties (grow, shrink, basis) from computed style.
+ * Reads longhands first; falls back to parsing the `flex` shorthand.
+ * This handles Tailwind's `flex-1` → `flex: 1 1 0%` which may not
+ * always expand to longhands depending on the DOMParser environment.
+ */
+function extractFlexItemProps(cs: CSSStyleDeclaration): {
+    layoutGrow?: number; flexShrink?: number; flexBasis?: number
+} {
+    const result: { layoutGrow?: number; flexShrink?: number; flexBasis?: number } = {}
+
+    let grow = parseFloat(cs.flexGrow)
+    let shrink = parseFloat(cs.flexShrink)
+    let basis = cs.flexBasis
+
+    // Fall back to parsing shorthand: "grow shrink basis" or "grow" or "none"
+    if (isNaN(grow) && cs.flex && cs.flex !== 'none' && cs.flex !== 'auto' && cs.flex !== 'initial') {
+        const parts = cs.flex.trim().split(/\s+/)
+        if (parts.length >= 1) grow = parseFloat(parts[0]) || 0
+        if (parts.length >= 2) shrink = parseFloat(parts[1])
+        if (parts.length >= 3) basis = parts[2]
+    }
+
+    if (!isNaN(grow) && grow > 0) result.layoutGrow = grow
+    if (!isNaN(shrink) && shrink !== 1) result.flexShrink = shrink
+    if (basis && basis !== 'auto') {
+        if (basis === '0px' || basis === '0%' || basis === '0') {
+            result.flexBasis = 0 // Critical for flex-1 (flex: 1 1 0%) — equal split
+        } else {
+            const basisNum = parseFloat(basis)
+            if (!isNaN(basisNum) && basisNum > 0) result.flexBasis = basisNum
+        }
+    }
+
+    return result
 }
 
 function extractMinMaxConstraints(cs: CSSStyleDeclaration): {
@@ -1483,10 +1695,27 @@ function extractCssPosition(cs: CSSStyleDeclaration): {
     let hConstraint: LayoutConstraints['horizontal'] = 'left'
     let vConstraint: LayoutConstraints['vertical'] = 'top'
 
-    const hasLeft = cs.left && cs.left !== 'auto'
-    const hasRight = cs.right && cs.right !== 'auto'
-    const hasTop = cs.top && cs.top !== 'auto'
-    const hasBottom = cs.bottom && cs.bottom !== 'auto'
+    let hasLeft = cs.left && cs.left !== 'auto'
+    let hasRight = cs.right && cs.right !== 'auto'
+    let hasTop = cs.top && cs.top !== 'auto'
+    let hasBottom = cs.bottom && cs.bottom !== 'auto'
+
+    // Safety net: if DOMParser didn't expand `inset` shorthand to longhands,
+    // parse it manually. Tailwind's `inset-0` → `inset: 0px`.
+    if (!hasLeft && !hasRight && !hasTop && !hasBottom) {
+        const insetVal = (cs as unknown as Record<string, string>).inset
+        if (insetVal && insetVal !== 'auto') {
+            const parts = insetVal.trim().split(/\s+/)
+            const top = parts[0]
+            const right = parts[1] ?? parts[0]
+            const bottom = parts[2] ?? parts[0]
+            const left = parts[3] ?? parts[1] ?? parts[0]
+            if (top !== 'auto') { hasTop = true; cssPosition.top = top }
+            if (right !== 'auto') { hasRight = true; cssPosition.right = right }
+            if (bottom !== 'auto') { hasBottom = true; cssPosition.bottom = bottom }
+            if (left !== 'auto') { hasLeft = true; cssPosition.left = left }
+        }
+    }
 
     if (hasLeft) { cssPosition.left = cs.left; hConstraint = 'left' }
     if (hasRight) { cssPosition.right = cs.right; hConstraint = hasLeft ? 'leftRight' : 'right' }
@@ -1993,6 +2222,42 @@ function inferContainerSizing(
 ): Sizing {
     const isAbsoluteOrFixed = cs.position === 'absolute' || cs.position === 'fixed'
 
+    // ── Absolute/fixed elements: determine sizing from position + dimensions ──
+    if (isAbsoluteOrFixed) {
+        const widthVal = cs.width
+        const heightVal = cs.height
+
+        // Check if inset/left+right/top+bottom constrain both edges → fill
+        const hasLeft = (cs.left && cs.left !== 'auto') || false
+        const hasRight = (cs.right && cs.right !== 'auto') || false
+        const hasTop = (cs.top && cs.top !== 'auto') || false
+        const hasBottom = (cs.bottom && cs.bottom !== 'auto') || false
+        const insetVal = (cs as unknown as Record<string, string>).inset
+        const hasInset = !!insetVal && insetVal !== 'auto'
+
+        let horizontal: Sizing['horizontal'] = 'hug'
+        if (widthVal && widthVal.endsWith('px')) {
+            horizontal = 'fixed'
+        } else if (widthVal && (widthVal === '100%' || (widthVal.endsWith('%') && parseFloat(widthVal) >= 99.5))) {
+            horizontal = 'fill'
+        } else if (hasInset || (hasLeft && hasRight)) {
+            horizontal = 'fill'
+        }
+
+        let vertical: Sizing['vertical'] = 'hug'
+        if (heightVal && heightVal.endsWith('px')) {
+            vertical = 'fixed'
+        } else if (heightVal && (heightVal === '100%' || (heightVal.endsWith('%') && parseFloat(heightVal) >= 99.5))) {
+            vertical = 'fill'
+        } else if (heightVal && /\d+v[hw]/.test(heightVal)) {
+            vertical = 'fixed'  // viewport units → fixed, resolved later
+        } else if (hasInset || (hasTop && hasBottom)) {
+            vertical = 'fill'
+        }
+
+        return { horizontal, vertical }
+    }
+
     // Read parent's inline style for context
     const parentEl = el.parentElement
     const parentStyle = parentEl?.style
@@ -2017,6 +2282,11 @@ function inferContainerSizing(
         return val.endsWith('%') && n >= 99.5
     }
 
+    // Helper: check if value is a fixed length (px, viewport units, or non-100% percentages)
+    const isFixedLength = (val: string) =>
+        val.endsWith('px') || /\d+d?v[hwminax]+$/.test(val) ||
+        (val.endsWith('%') && !isFull(val))
+
     // Helper: check if cross-axis is stretched
     const isCrossStretched = () => {
         const alignSelf = cs.alignSelf
@@ -2032,7 +2302,9 @@ function inferContainerSizing(
     if (parentIsGrid) {
         horizontal = 'fill'
     } else if (parentIsFlexRow) {
-        if (parseFloat(cs.flexGrow) > 0 || cs.flex === '1' || cs.flex?.startsWith('1 ')) {
+        const fgRow = parseFloat(cs.flexGrow)
+        const flexGrowsRow = (!isNaN(fgRow) && fgRow > 0) || cs.flex === '1' || cs.flex?.startsWith('1 ')
+        if (flexGrowsRow) {
             horizontal = 'fill'
         } else if (widthVal && widthVal.endsWith('px')) {
             horizontal = 'fixed'
@@ -2081,9 +2353,11 @@ function inferContainerSizing(
 
     // ── Vertical sizing ──
     if (parentIsFlexCol) {
-        if (parseFloat(cs.flexGrow) > 0 || cs.flex === '1' || cs.flex?.startsWith('1 ')) {
+        const fgCol = parseFloat(cs.flexGrow)
+        const flexGrowsCol = (!isNaN(fgCol) && fgCol > 0) || cs.flex === '1' || cs.flex?.startsWith('1 ')
+        if (flexGrowsCol) {
             vertical = 'fill'
-        } else if (heightVal && heightVal.endsWith('px')) {
+        } else if (heightVal && isFixedLength(heightVal)) {
             vertical = 'fixed'
         } else if (heightVal && isFull(heightVal)) {
             vertical = 'fill'
@@ -2094,12 +2368,12 @@ function inferContainerSizing(
         if (isCrossStretched()) {
             if (!heightVal || heightVal === 'auto' || heightVal === '') {
                 vertical = 'fill'
-            } else if (heightVal.endsWith('px')) {
+            } else if (isFixedLength(heightVal)) {
                 vertical = 'fixed'
             } else if (isFull(heightVal)) {
                 vertical = 'fill'
             }
-        } else if (heightVal && heightVal.endsWith('px')) {
+        } else if (heightVal && isFixedLength(heightVal)) {
             vertical = 'fixed'
         } else if (heightVal && isFull(heightVal)) {
             vertical = 'fill'
@@ -2108,7 +2382,7 @@ function inferContainerSizing(
         }
     } else if (parentIsGrid && heightVal && isFull(heightVal)) {
         vertical = 'fill'
-    } else if (heightVal && heightVal.endsWith('px')) {
+    } else if (heightVal && isFixedLength(heightVal)) {
         vertical = 'fixed'
     } else if (heightVal && isFull(heightVal)) {
         vertical = 'fill'
@@ -2339,6 +2613,17 @@ function mapAlignItems(value: string): Layout['align'] {
     }
 }
 
+function mapAlignSelf(value: string): { alignSelf?: 'auto' | 'start' | 'center' | 'end' | 'stretch' | 'baseline' } {
+    switch (value) {
+        case 'flex-start': case 'start': return { alignSelf: 'start' }
+        case 'flex-end': case 'end': return { alignSelf: 'end' }
+        case 'center': return { alignSelf: 'center' }
+        case 'stretch': return { alignSelf: 'stretch' }
+        case 'baseline': return { alignSelf: 'baseline' }
+        default: return {}
+    }
+}
+
 function mapTextAlign(value: string): TextNode['textAlign'] {
     switch (value) {
         case 'left': case 'start': return 'left'
@@ -2390,7 +2675,7 @@ function inferHtmlTag(tag: string): TextNode['htmlTag'] | undefined {
 
 /**
  * Resolve currentColor in SVG by walking the parent chain's el.style.color.
- * Unlike iframe-parser which uses getComputedStyle, we walk up element.style.
+ * Walk up element.style to resolve currentColor.
  */
 function resolveCurrentColor(el: SVGSVGElement, cs: CSSStyleDeclaration): string | undefined {
     const fill = el.getAttribute('fill')

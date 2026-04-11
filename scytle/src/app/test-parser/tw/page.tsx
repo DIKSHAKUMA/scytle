@@ -12,257 +12,129 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<div>
-<!-- ============ NAVBAR (flex) ============ -->
-<nav class="flex items-center justify-between px-8 py-4 bg-slate-900 text-white">
-  <div class="text-xl font-bold tracking-tight">Scytle<span class="text-cyan-400">.</span>ai</div>
-  <div class="flex gap-6 text-sm font-medium">
-    <a class="hover:text-cyan-400" href="#">Products</a>
-    <a class="hover:text-cyan-400" href="#">Solutions</a>
-    <a class="hover:text-cyan-400" href="#">Pricing</a>
-    <a class="hover:text-cyan-400" href="#">Docs</a>
-  </div>
-  <div class="flex gap-3">
-    <button class="px-4 py-2 text-sm border border-slate-600 rounded-lg hover:bg-slate-800">Log in</button>
-    <button class="px-4 py-2 text-sm bg-cyan-500 rounded-lg font-semibold hover:bg-cyan-400">Sign up</button>
-  </div>
-</nav>
+<div style="font-family: system-ui, sans-serif">
 
-<!-- ============ HERO (relative + absolute badge) ============ -->
-<section class="relative bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white px-8 py-24 overflow-hidden">
-  <div class="absolute top-6 right-8 bg-cyan-500 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">New</div>
-  <div class="absolute -bottom-20 -left-20 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl"></div>
-  <div class="absolute top-10 right-1/4 w-48 h-48 bg-indigo-500/15 rounded-full blur-2xl"></div>
-  <div class="max-w-3xl mx-auto text-center relative z-10">
-    <h1 class="text-5xl font-extrabold leading-tight mb-6">Build interfaces <span class="text-cyan-400">10x faster</span> with AI</h1>
-    <p class="text-lg text-slate-300 mb-10 max-w-xl mx-auto">Design, prototype, and ship production-ready layouts in minutes. Powered by an intelligent canvas engine.</p>
-    <div class="flex justify-center gap-4">
-      <button class="px-8 py-3 bg-cyan-500 rounded-xl font-bold text-base hover:bg-cyan-400">Get Started Free</button>
-      <button class="px-8 py-3 border border-slate-500 rounded-xl font-semibold text-base hover:bg-white/5">Watch Demo</button>
+<!-- ═══ TEST 1: Hero with 2-column grid — inner content frame sizing ═══ -->
+<section class="w-full bg-[#0F172A]">
+  <div class="grid grid-cols-2 gap-16 px-16 py-16" style="min-height: 500px">
+    <div class="flex flex-col justify-center gap-4">
+      <span class="text-sm font-semibold text-[#0D9488] uppercase tracking-widest">240+ Verified Brands</span>
+      <h1 class="text-5xl font-bold text-white" style="line-height: 1.15">Discover Brands Worth Buying From.</h1>
+      <p class="text-base text-[#94A3B8]">BrandHub connects shoppers with the world's most thoughtful, independent, and celebrated brands — all in one curated marketplace.</p>
+      <div class="flex gap-3 mt-4">
+        <div class="bg-[#0D9488] text-white font-semibold px-6 py-3 text-sm" style="border-radius: 8px">Search</div>
+      </div>
+      <div class="flex gap-6 mt-4">
+        <div class="flex flex-col gap-1">
+          <span class="text-2xl font-bold text-[#0D9488]">240+</span>
+          <span class="text-sm text-[#94A3B8]">New brands this month</span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-2xl font-bold text-[#0D9488]">2.4M</span>
+          <span class="text-sm text-[#94A3B8]">Shoppers</span>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center justify-center" style="position: relative; overflow: hidden; border-radius: 16px">
+      <img src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&h=400&fit=crop" alt="Brand product" class="w-full h-full object-cover" />
     </div>
   </div>
 </section>
 
-<!-- ============ STATS (4-col grid) ============ -->
-<section class="grid grid-cols-4 gap-0 bg-slate-50 border-y border-slate-200">
-  <div class="flex flex-col items-center py-10 border-r border-slate-200">
-    <span class="text-4xl font-extrabold text-slate-900">50K+</span>
-    <span class="text-sm text-slate-500 mt-1">Active Users</span>
-  </div>
-  <div class="flex flex-col items-center py-10 border-r border-slate-200">
-    <span class="text-4xl font-extrabold text-slate-900">2M+</span>
-    <span class="text-sm text-slate-500 mt-1">Designs Created</span>
-  </div>
-  <div class="flex flex-col items-center py-10 border-r border-slate-200">
-    <span class="text-4xl font-extrabold text-slate-900">99.9%</span>
-    <span class="text-sm text-slate-500 mt-1">Uptime</span>
-  </div>
-  <div class="flex flex-col items-center py-10">
-    <span class="text-4xl font-extrabold text-slate-900">4.9★</span>
-    <span class="text-sm text-slate-500 mt-1">User Rating</span>
-  </div>
-</section>
-
-<!-- ============ FEATURES — asymmetric grid (2 cols, 3 rows) ============ -->
-<section class="px-8 py-20 bg-white">
-  <h2 class="text-3xl font-bold text-center mb-4">Everything you need</h2>
-  <p class="text-slate-500 text-center mb-14 max-w-lg mx-auto">A complete design-to-code platform with intelligent tools built for speed.</p>
-  <div class="grid grid-cols-2 grid-rows-3 gap-6 max-w-5xl mx-auto">
-    <!-- tall left card spanning 2 rows -->
-    <div class="row-span-2 bg-gradient-to-b from-indigo-600 to-indigo-800 rounded-2xl p-8 text-white flex flex-col justify-between">
-      <div>
-        <div class="text-sm font-semibold uppercase tracking-wider text-indigo-200 mb-3">AI Canvas</div>
-        <h3 class="text-2xl font-bold mb-3">Intelligent layout engine</h3>
-        <p class="text-indigo-100 text-sm leading-relaxed">Our AI understands design intent and generates pixel-perfect layouts with proper spacing, alignment, and responsive behavior.</p>
+<!-- ═══ TEST 2: Revenue chart — bars with percentage heights inside flex-col ═══ -->
+<section class="w-full bg-[#1E293B] px-16 py-16">
+  <div class="bg-[#0F172A] p-8 flex flex-col gap-6" style="border-radius: 16px">
+    <div class="flex justify-between items-center">
+      <h3 class="text-xl font-bold text-white">Revenue Overview</h3>
+      <div class="bg-[#0D9488] text-white text-xs font-semibold px-3 py-1" style="border-radius: 6px">This Month</div>
+    </div>
+    <!-- Chart bars: each bar has explicit height -->
+    <div class="flex items-end gap-2" style="height: 200px">
+      <div class="flex-1 bg-[#0D9488]" style="height: 40%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 65%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 45%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 70%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 55%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 80%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 30%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 90%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 50%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 75%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 60%; border-radius: 4px 4px 0 0"></div>
+      <div class="flex-1 bg-[#0D9488]" style="height: 95%; border-radius: 4px 4px 0 0"></div>
+    </div>
+    <div class="flex justify-between">
+      <div class="flex flex-col">
+        <span class="text-3xl font-bold text-white">$48,290</span>
+        <span class="text-sm text-[#94A3B8]">Total revenue this month</span>
       </div>
-      <div class="mt-6 h-36 bg-indigo-700/50 rounded-xl border border-indigo-500/30"></div>
-    </div>
-    <!-- top right -->
-    <div class="bg-slate-50 rounded-2xl p-8 border border-slate-200">
-      <div class="text-sm font-semibold uppercase tracking-wider text-cyan-600 mb-3">Parser</div>
-      <h3 class="text-xl font-bold text-slate-900 mb-2">HTML to Canvas nodes</h3>
-      <p class="text-slate-500 text-sm leading-relaxed">Paste any Tailwind HTML and see it rendered as editable canvas objects in real-time.</p>
-    </div>
-    <!-- middle right -->
-    <div class="bg-slate-50 rounded-2xl p-8 border border-slate-200">
-      <div class="text-sm font-semibold uppercase tracking-wider text-emerald-600 mb-3">Themes</div>
-      <h3 class="text-xl font-bold text-slate-900 mb-2">Multi-mode variables</h3>
-      <p class="text-slate-500 text-sm leading-relaxed">Light, dark, brand modes per frame. Same variable, different contexts — like Figma but simpler.</p>
-    </div>
-    <!-- bottom full-width row -->
-    <div class="col-span-2 bg-slate-900 rounded-2xl p-8 text-white flex items-center gap-8">
-      <div class="flex-1">
-        <div class="text-sm font-semibold uppercase tracking-wider text-cyan-400 mb-3">Collaboration</div>
-        <h3 class="text-2xl font-bold mb-2">Real-time multiplayer</h3>
-        <p class="text-slate-400 text-sm leading-relaxed">Powered by Cloudflare Durable Objects. See cursors, selections, and changes live across your team.</p>
-      </div>
-      <div class="w-64 h-28 bg-slate-800 rounded-xl border border-slate-700 flex-shrink-0"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ DASHBOARD PREVIEW — complex grid (3 cols with varying spans) ============ -->
-<section class="px-8 py-20 bg-slate-50">
-  <h2 class="text-3xl font-bold text-center mb-14">Dashboard-ready components</h2>
-  <div class="grid grid-cols-3 gap-5 max-w-5xl mx-auto">
-    <!-- wide card top -->
-    <div class="col-span-2 bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-bold text-slate-900">Revenue Overview</h3>
-        <span class="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-medium">+12.5%</span>
-      </div>
-      <div class="h-40 bg-gradient-to-r from-cyan-50 to-indigo-50 rounded-lg border border-slate-100"></div>
-    </div>
-    <!-- small card top-right -->
-    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
-      <h3 class="font-bold text-slate-900 mb-2">Active Now</h3>
-      <div class="text-4xl font-extrabold text-indigo-600">1,247</div>
-      <div class="text-xs text-slate-400 mt-2">+89 in last hour</div>
-    </div>
-    <!-- bottom 3 equal cards -->
-    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-      <div class="relative h-24 mb-4 bg-amber-50 rounded-lg">
-        <div class="absolute top-2 left-3 text-xs font-semibold text-amber-700">Conversions</div>
-        <div class="absolute bottom-3 right-3 text-2xl font-bold text-amber-600">8.4%</div>
-      </div>
-      <p class="text-xs text-slate-500">Across all funnels this week</p>
-    </div>
-    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-      <div class="relative h-24 mb-4 bg-rose-50 rounded-lg">
-        <div class="absolute top-2 left-3 text-xs font-semibold text-rose-700">Churn Rate</div>
-        <div class="absolute bottom-3 right-3 text-2xl font-bold text-rose-600">2.1%</div>
-      </div>
-      <p class="text-xs text-slate-500">Down 0.3% from last month</p>
-    </div>
-    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
-      <div class="relative h-24 mb-4 bg-emerald-50 rounded-lg">
-        <div class="absolute top-2 left-3 text-xs font-semibold text-emerald-700">NPS Score</div>
-        <div class="absolute bottom-3 right-3 text-2xl font-bold text-emerald-600">72</div>
-      </div>
-      <p class="text-xs text-slate-500">Excellent — top quartile</p>
-    </div>
-  </div>
-</section>
-
-<!-- ============ COMPARISON — flex row with absolute overlays ============ -->
-<section class="px-8 py-20 bg-white">
-  <h2 class="text-3xl font-bold text-center mb-14">Before & After</h2>
-  <div class="flex gap-8 max-w-5xl mx-auto">
-    <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 p-6">
-      <div class="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full z-10">Before</div>
-      <div class="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-red-500/10 to-transparent"></div>
-      <div class="h-48 bg-slate-200 rounded-lg mb-4"></div>
-      <div class="flex gap-3">
-        <div class="h-8 flex-1 bg-slate-200 rounded"></div>
-        <div class="h-8 flex-1 bg-slate-200 rounded"></div>
-      </div>
-    </div>
-    <div class="flex-1 relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-700 p-6">
-      <div class="absolute top-4 left-4 bg-cyan-500 text-white text-xs font-bold px-3 py-1 rounded-full z-10">After</div>
-      <div class="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-cyan-500/10 to-transparent"></div>
-      <div class="h-48 bg-slate-800 rounded-lg mb-4 border border-slate-700"></div>
-      <div class="flex gap-3">
-        <div class="h-8 flex-1 bg-slate-800 rounded border border-slate-700"></div>
-        <div class="h-8 flex-1 bg-slate-800 rounded border border-slate-700"></div>
+      <div class="flex flex-col items-end">
+        <span class="text-3xl font-bold text-[#0D9488]">1,247</span>
+        <span class="text-sm text-[#94A3B8]">Orders processed</span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ============ PRICING — 3-col grid with absolute "popular" badge ============ -->
-<section class="px-8 py-20 bg-slate-50">
-  <h2 class="text-3xl font-bold text-center mb-4">Simple pricing</h2>
-  <p class="text-slate-500 text-center mb-14">No hidden fees. Cancel anytime.</p>
-  <div class="grid grid-cols-3 gap-6 max-w-4xl mx-auto items-start">
-    <div class="bg-white rounded-2xl p-8 border border-slate-200">
-      <h3 class="font-bold text-slate-900 mb-1">Free</h3>
-      <div class="text-3xl font-extrabold text-slate-900 mb-4">$0<span class="text-sm font-normal text-slate-400">/mo</span></div>
-      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
-        <span>3 projects</span>
-        <span>Basic AI generation</span>
-        <span>Community support</span>
-      </div>
-      <button class="w-full py-3 border border-slate-300 rounded-xl font-semibold text-sm">Get Started</button>
+<!-- ═══ TEST 3: Footer with inherited text-white on links ═══ -->
+<footer class="w-full bg-[#0F172A] text-white px-16 py-12">
+  <div class="grid grid-cols-4 gap-8 mb-8">
+    <div class="flex flex-col gap-2">
+      <span class="text-lg font-bold text-white">BrandHub</span>
+      <p class="text-sm text-[#94A3B8]">The world's most trusted marketplace for discovering and shopping from verified independent brands.</p>
     </div>
-    <div class="relative bg-white rounded-2xl p-8 border-2 border-cyan-500 shadow-lg shadow-cyan-500/10">
-      <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-cyan-500 text-white text-xs font-bold px-4 py-1 rounded-full">Most Popular</div>
-      <h3 class="font-bold text-slate-900 mb-1">Pro</h3>
-      <div class="text-3xl font-extrabold text-slate-900 mb-4">$19<span class="text-sm font-normal text-slate-400">/mo</span></div>
-      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
-        <span>Unlimited projects</span>
-        <span>Advanced AI + themes</span>
-        <span>Real-time collaboration</span>
-        <span>Priority support</span>
-      </div>
-      <button class="w-full py-3 bg-cyan-500 text-white rounded-xl font-bold text-sm">Upgrade to Pro</button>
+    <div class="flex flex-col gap-2">
+      <span class="text-sm font-semibold text-white uppercase tracking-wider">Discover</span>
+      <a class="text-sm text-[#94A3B8]">All Brands</a>
+      <a class="text-sm text-[#94A3B8]">New Arrivals</a>
+      <a class="text-sm text-[#94A3B8]">Collections</a>
+      <a class="text-sm text-[#94A3B8]">Deals</a>
     </div>
-    <div class="bg-white rounded-2xl p-8 border border-slate-200">
-      <h3 class="font-bold text-slate-900 mb-1">Enterprise</h3>
-      <div class="text-3xl font-extrabold text-slate-900 mb-4">Custom</div>
-      <div class="flex flex-col gap-2 text-sm text-slate-600 mb-8">
-        <span>Everything in Pro</span>
-        <span>SSO & SCIM</span>
-        <span>Dedicated support</span>
-        <span>Custom integrations</span>
-      </div>
-      <button class="w-full py-3 border border-slate-300 rounded-xl font-semibold text-sm">Contact Sales</button>
+    <div class="flex flex-col gap-2">
+      <span class="text-sm font-semibold text-white uppercase tracking-wider">For Brands</span>
+      <a class="text-sm text-[#94A3B8]">List Your Brand</a>
+      <a class="text-sm text-[#94A3B8]">Analytics Dashboard</a>
+      <a class="text-sm text-[#94A3B8]">Pricing</a>
+    </div>
+    <div class="flex flex-col gap-2">
+      <span class="text-sm font-semibold text-white uppercase tracking-wider">Company</span>
+      <a class="text-sm text-[#94A3B8]">About</a>
+      <a class="text-sm text-[#94A3B8]">Careers</a>
+      <a class="text-sm text-[#94A3B8]">Contact</a>
     </div>
   </div>
-</section>
-
-<!-- ============ CTA (flex center + absolute decorations) ============ -->
-<section class="relative bg-slate-900 text-white px-8 py-24 overflow-hidden">
-  <div class="absolute top-0 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl"></div>
-  <div class="absolute bottom-0 right-1/4 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl"></div>
-  <div class="relative z-10 flex flex-col items-center text-center">
-    <h2 class="text-4xl font-extrabold mb-4">Ready to build?</h2>
-    <p class="text-slate-400 mb-8 max-w-md">Join thousands of teams shipping faster with Scytle.</p>
+  <div class="flex justify-between pt-8" style="border-top: 1px solid #334155">
+    <span class="text-sm text-[#64748B]">© 2025 BrandHub, Inc. All rights reserved.</span>
     <div class="flex gap-4">
-      <button class="px-8 py-3 bg-cyan-500 rounded-xl font-bold hover:bg-cyan-400">Start for Free</button>
-      <button class="px-8 py-3 border border-slate-600 rounded-xl font-semibold hover:bg-white/5">Talk to Sales</button>
+      <a class="text-sm text-[#64748B]">Privacy Policy</a>
+      <a class="text-sm text-[#64748B]">Terms of Service</a>
+      <a class="text-sm text-[#64748B]">Cookie Settings</a>
     </div>
-  </div>
-</section>
-
-<!-- ============ FOOTER — complex grid (4 cols + full-width bottom) ============ -->
-<footer class="bg-slate-950 text-slate-400 px-8 pt-16 pb-8">
-  <div class="grid grid-cols-4 gap-8 max-w-5xl mx-auto mb-12">
-    <div>
-      <div class="text-white font-bold text-lg mb-4">Scytle<span class="text-cyan-400">.</span>ai</div>
-      <p class="text-sm leading-relaxed">AI-powered design tool for modern teams. Build, collaborate, and ship.</p>
-    </div>
-    <div>
-      <h4 class="text-white font-semibold text-sm mb-4">Product</h4>
-      <div class="flex flex-col gap-2 text-sm">
-        <a href="#">Features</a>
-        <a href="#">Pricing</a>
-        <a href="#">Changelog</a>
-        <a href="#">Roadmap</a>
-      </div>
-    </div>
-    <div>
-      <h4 class="text-white font-semibold text-sm mb-4">Resources</h4>
-      <div class="flex flex-col gap-2 text-sm">
-        <a href="#">Documentation</a>
-        <a href="#">API Reference</a>
-        <a href="#">Blog</a>
-        <a href="#">Community</a>
-      </div>
-    </div>
-    <div>
-      <h4 class="text-white font-semibold text-sm mb-4">Company</h4>
-      <div class="flex flex-col gap-2 text-sm">
-        <a href="#">About</a>
-        <a href="#">Careers</a>
-        <a href="#">Contact</a>
-        <a href="#">Legal</a>
-      </div>
-    </div>
-  </div>
-  <div class="border-t border-slate-800 pt-6 text-center text-xs text-slate-600">
-    &copy; 2026 Scytle.ai — All rights reserved.
   </div>
 </footer>
+
+<!-- ═══ TEST 4: Feature cards in 2-col grid with icon + text (94% Revenue Share pattern) ═══ -->
+<section class="w-full bg-[#F8FAFC] px-16 py-16">
+  <div class="grid grid-cols-2 gap-6">
+    <div class="bg-white p-6 flex flex-col gap-3" style="border-radius: 16px; border: 1px solid #E2E8F0">
+      <div class="w-10 h-10 bg-[#0D9488] flex items-center justify-center" style="border-radius: 8px">
+        <span class="text-white text-lg font-bold">📊</span>
+      </div>
+      <h3 class="text-lg font-bold text-[#0F172A]">Audience Matching</h3>
+      <p class="text-sm text-[#64748B]">Our algorithm surfaces your brand to shoppers who share your values, aesthetics, and price point.</p>
+      <a class="text-sm font-semibold text-[#0D9488]">See the algorithm →</a>
+    </div>
+    <div class="bg-[#0D9488] p-6 flex flex-col gap-3" style="border-radius: 16px">
+      <div class="w-10 h-10 bg-white flex items-center justify-center" style="border-radius: 8px">
+        <span class="text-[#0D9488] text-lg font-bold">💰</span>
+      </div>
+      <h3 class="text-lg font-bold text-white">94% Revenue Share</h3>
+      <p class="text-sm text-white" style="opacity: 0.85">Keep 94 cents of every dollar. No monthly fees. No setup cost. We only succeed when you succeed.</p>
+      <a class="text-sm font-semibold text-white">Compare to competitors →</a>
+    </div>
+  </div>
+</section>
+
 </div>
 `
 

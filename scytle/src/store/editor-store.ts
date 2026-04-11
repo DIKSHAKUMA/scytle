@@ -1501,7 +1501,7 @@ export const useEditorStore = create<EditorState>()(
                         draft.pages.splice(idx, 1)
                         if (wasActive && nextPage) {
                             draft.activePageId = nextPage.id
-                            draft.nodes = nextPage.nodes
+                            draft.nodes = [...nextPage.nodes]
                             draft.canvasColor = nextPage.canvasColor
                             draft.zoom = nextPage.zoom
                             draft.panX = nextPage.panX
@@ -1558,7 +1558,7 @@ export const useEditorStore = create<EditorState>()(
                         draft.pages.splice(sourceIdx + 1, 0, newPage)
                         // Switch to the new page
                         draft.activePageId = newPage.id
-                        draft.nodes = newPage.nodes
+                        draft.nodes = [...newPage.nodes]
                         draft.canvasColor = newPage.canvasColor
                         draft.zoom = newPage.zoom
                         draft.panX = newPage.panX
@@ -1628,7 +1628,7 @@ export const useEditorStore = create<EditorState>()(
                         }
                         // Load target page
                         draft.activePageId = target.id
-                        draft.nodes = target.nodes
+                        draft.nodes = [...target.nodes]
                         draft.canvasColor = target.canvasColor
                         draft.zoom = target.zoom
                         draft.panX = target.panX

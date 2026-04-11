@@ -639,7 +639,7 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
         s.flexShrink = node.flexShrink
     }
     if (node.flexBasis != null) {
-        s.flexBasis = `calc(${node.flexBasis}px * var(--z, 1))`
+        s.flexBasis = node.flexBasis === 0 ? '0px' : `calc(${node.flexBasis}px * var(--z, 1))`
     }
     if (node.order != null) {
         s.order = node.order
