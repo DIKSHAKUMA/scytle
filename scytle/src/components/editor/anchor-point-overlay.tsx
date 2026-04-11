@@ -201,90 +201,93 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             e.stopPropagation()
             e.preventDefault()
             const store = useEditorStore.getState()
-            const nodeId = store.vectorEditNodeId
-            if (!nodeId) return
-            const node = findNodeById(store.nodes, nodeId) as VectorNode | null
-            if (!node) return
 
-            const vn = node.vectorNetwork
-
-            // Convert click to canvas space relative to node origin
             const containerRect = svgRef.current?.closest('[data-canvas-viewport]')?.getBoundingClientRect()
                 ?? svgRef.current?.getBoundingClientRect()
             const offsetX = containerRect?.left ?? 0
             const offsetY = containerRect?.top ?? 0
-            const cx = (e.clientX - offsetX - store.panX) / store.zoom - node.x
-            const cy = (e.clientY - offsetY - store.panY) / store.zoom - node.y
+            // Click position in canvas space (absolute)
+            const canvasX = (e.clientX - offsetX - store.panX) / store.zoom
+            const canvasY = (e.clientY - offsetY - store.panY) / store.zoom
 
-            // Build closed loops from segments: trace adjacency graph, find cycles
-            // Each cycle is a candidate fill region
-            // Build adjacency: vertexIdx → [connected vertexIdx via segIdx]
-            const adj = new Map<number, { neighbor: number; segIdx: number }[]>()
-            vn.segments.forEach((seg, si) => {
-                if (!adj.has(seg.start)) adj.set(seg.start, [])
-                if (!adj.has(seg.end)) adj.set(seg.end, [])
-                adj.get(seg.start)!.push({ neighbor: seg.end, segIdx: si })
-                adj.get(seg.end)!.push({ neighbor: seg.start, segIdx: si })
-            })
+            // Helper: check if click is inside a vector node's closed loops
+            const applyPaintToNode = (nodeId: string, targetNode: VectorNode) => {
+                const vn = targetNode.vectorNetwork
+                const cx = canvasX - targetNode.x
+                const cy = canvasY - targetNode.y
 
-            // Find the smallest closed loop enclosing the click point
-            // Use a simple DFS to collect loops of 3+ vertices
-            const visited = new Set<string>()
-            const loops: number[][] = []
+                const adj = new Map<number, { neighbor: number; segIdx: number }[]>()
+                vn.segments.forEach((seg, si) => {
+                    if (!adj.has(seg.start)) adj.set(seg.start, [])
+                    if (!adj.has(seg.end)) adj.set(seg.end, [])
+                    adj.get(seg.start)!.push({ neighbor: seg.end, segIdx: si })
+                    adj.get(seg.end)!.push({ neighbor: seg.start, segIdx: si })
+                })
 
-            const dfs = (path: number[], startIdx: number) => {
-                const cur = path[path.length - 1]
-                const neighbors = adj.get(cur) ?? []
-                for (const { neighbor } of neighbors) {
-                    if (neighbor === startIdx && path.length >= 3) {
-                        loops.push([...path])
-                        continue
+                const visited = new Set<string>()
+                const loops: number[][] = []
+                const dfs = (path: number[], startIdx: number) => {
+                    const cur = path[path.length - 1]
+                    const neighbors = adj.get(cur) ?? []
+                    for (const { neighbor } of neighbors) {
+                        if (neighbor === startIdx && path.length >= 3) { loops.push([...path]); continue }
+                        if (path.includes(neighbor)) continue
+                        const key = [...path, neighbor].sort((a, b) => a - b).join(',')
+                        if (visited.has(key)) continue
+                        visited.add(key)
+                        path.push(neighbor)
+                        dfs(path, startIdx)
+                        path.pop()
                     }
-                    if (path.includes(neighbor)) continue
-                    const key = [...path, neighbor].sort((a, b) => a - b).join(',')
-                    if (visited.has(key)) continue
-                    visited.add(key)
-                    path.push(neighbor)
-                    dfs(path, startIdx)
-                    path.pop()
+                }
+                for (const startIdx of adj.keys()) dfs([startIdx], startIdx)
+
+                let bestLoop: number[] | null = null
+                let bestArea = Infinity
+                for (const loop of loops) {
+                    const poly = loop.map((vi) => {
+                        const v = vn.vertices[vi]
+                        return v ? { x: v.x, y: v.y } : null
+                    }).filter(Boolean) as Pt[]
+                    if (poly.length < 3) continue
+                    if (!pointInPolygon({ x: cx, y: cy }, poly)) continue
+                    let area = 0
+                    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                        area += poly[j].x * poly[i].y - poly[i].x * poly[j].y
+                    }
+                    area = Math.abs(area) / 2
+                    if (area < bestArea) { bestArea = area; bestLoop = loop }
+                }
+
+                if (!bestLoop) return false
+
+                // Switch active node if needed
+                if (nodeId !== store.vectorEditNodeId) {
+                    store.enterVectorEditMode(nodeId)
+                    store.setVectorEditTool('paint')
+                }
+
+                const hasFill = targetNode.fills.length > 0 && targetNode.fills.some((f) => (f.opacity ?? 1) > 0)
+                store.updateNode(nodeId, {
+                    fills: hasFill
+                        ? targetNode.fills.map((f) => ({ ...f, opacity: 0 }))
+                        : [{ type: 'solid' as const, color: '#808080', opacity: 1 }],
+                })
+                return true
+            }
+
+            // Try active node first
+            const activeNode = findNodeById(store.nodes, store.vectorEditNodeId ?? '') as VectorNode | null
+            if (activeNode && activeNode.type === 'vector') {
+                if (applyPaintToNode(activeNode.id, activeNode)) return
+            }
+
+            // Try all other vector nodes
+            for (const n of store.nodes) {
+                if (n.type === 'vector' && n.id !== store.vectorEditNodeId) {
+                    if (applyPaintToNode(n.id, n as VectorNode)) return
                 }
             }
-
-            for (const startIdx of adj.keys()) {
-                dfs([startIdx], startIdx)
-            }
-
-            // Find smallest loop that contains the click point
-            let bestLoop: number[] | null = null
-            let bestArea = Infinity
-            for (const loop of loops) {
-                const poly = loop.map((vi) => {
-                    const v = vn.vertices[vi]
-                    return v ? { x: v.x, y: v.y } : null
-                }).filter(Boolean) as Pt[]
-                if (poly.length < 3) continue
-                if (!pointInPolygon({ x: cx, y: cy }, poly)) continue
-                // Compute area to pick smallest enclosing loop
-                let area = 0
-                for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-                    area += poly[j].x * poly[i].y - poly[i].x * poly[j].y
-                }
-                area = Math.abs(area) / 2
-                if (area < bestArea) { bestArea = area; bestLoop = loop }
-            }
-
-            if (!bestLoop) {
-                // No closed loop found — paint only applies to closed paths
-                return
-            }
-
-            // Toggle node fill (paint applies to the whole node since we don't have per-region fills in renderer)
-            const hasFill = node.fills.length > 0 && node.fills.some((f) => (f.opacity ?? 1) > 0)
-            store.updateNode(nodeId, {
-                fills: hasFill
-                    ? node.fills.map((f) => ({ ...f, opacity: 0 }))
-                    : [{ type: 'solid' as const, color: '#808080', opacity: 1 }],
-            })
         },
         [],
     )
@@ -917,9 +920,13 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const nodeX = node.x
     const nodeY = node.y
 
-    const toScreen = (vx: number, vy: number) => ({
-        x: (nodeX + vx) * zoom + panX,
-        y: (nodeY + vy) * zoom + panY,
+    // All OTHER vector nodes on canvas (ghost display)
+    const otherVectorNodes = nodes
+        .filter((n) => n.type === 'vector' && n.id !== vectorEditNodeId) as VectorNode[]
+
+    const toScreen = (vx: number, vy: number, ox = nodeX, oy = nodeY) => ({
+        x: (ox + vx) * zoom + panX,
+        y: (oy + vy) * zoom + panY,
     })
 
     const selectedSet = new Set(selectedVertexIndices)
@@ -936,6 +943,122 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
 
     return (
         <>
+            {/* Ghost SVG layer — shows anchor points/segments of ALL other vector nodes */}
+            <svg
+                className="absolute inset-0 pointer-events-none"
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 30 }}
+            >
+                {otherVectorNodes.map((gn) => {
+                    const gvn = gn.vectorNetwork
+                    const gx = gn.x
+                    const gy = gn.y
+                    const ts = (vx: number, vy: number) => toScreen(vx, vy, gx, gy)
+                    return (
+                        <g key={`ghost-${gn.id}`} opacity={0.45}>
+                            {/* Ghost segments */}
+                            {gvn.segments.map((seg: VectorSegment, si: number) => {
+                                const sv = gvn.vertices[seg.start]
+                                const ev = gvn.vertices[seg.end]
+                                if (!sv || !ev) return null
+                                const a = ts(sv.x, sv.y)
+                                const b = ts(ev.x, ev.y)
+                                const tStart = seg.tangentStart
+                                const tEnd = seg.tangentEnd
+                                const hasCurve = (tStart && (tStart.x !== 0 || tStart.y !== 0)) || (tEnd && (tEnd.x !== 0 || tEnd.y !== 0))
+                                if (hasCurve) {
+                                    const cp1 = tStart ? ts(sv.x + tStart.x, sv.y + tStart.y) : a
+                                    const cp2 = tEnd ? ts(ev.x + tEnd.x, ev.y + tEnd.y) : b
+                                    return <path key={`gs-${si}`} d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`} fill="none" stroke={BLUE} strokeWidth={1} />
+                                }
+                                return <line key={`gs-${si}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={BLUE} strokeWidth={1} />
+                            })}
+                            {/* Ghost anchor points — same style as active node */}
+                            {gvn.vertices.map((v: VectorVertex, vi: number) => {
+                                const pos = ts(v.x, v.y)
+                                return <circle key={`ga-${vi}`} cx={pos.x} cy={pos.y} r={ANCHOR_SIZE / 2} fill={WHITE} stroke={BLUE} strokeWidth={1.5} />
+                            })}
+                        </g>
+                    )
+                })}
+            </svg>
+
+            {/* Ghost interactive layer — clicking a ghost node switches to editing it + forwards the action */}
+            <svg
+                className="absolute inset-0"
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 30, pointerEvents: 'none' }}
+            >
+                <g style={{ pointerEvents: 'all' }}>
+                    {otherVectorNodes.map((gn) => {
+                        const gvn = gn.vectorNetwork
+                        const gx = gn.x
+                        const gy = gn.y
+                        const ts = (vx: number, vy: number) => toScreen(vx, vy, gx, gy)
+
+                        const switchToNode = (e: React.PointerEvent) => {
+                            const store = useEditorStore.getState()
+                            store.enterVectorEditMode(gn.id)
+                            store.setVectorEditTool(vectorEditTool)
+                        }
+
+                        return (
+                            <g key={`ghost-hit-${gn.id}`}>
+                                {/* Fat transparent hit zones on ghost segments */}
+                                {gvn.segments.map((seg: VectorSegment, si: number) => {
+                                    const sv = gvn.vertices[seg.start]
+                                    const ev = gvn.vertices[seg.end]
+                                    if (!sv || !ev) return null
+                                    const a = ts(sv.x, sv.y)
+                                    const b = ts(ev.x, ev.y)
+                                    const tStart = seg.tangentStart
+                                    const tEnd = seg.tangentEnd
+                                    const hasCurve = (tStart && (tStart.x !== 0 || tStart.y !== 0)) || (tEnd && (tEnd.x !== 0 || tEnd.y !== 0))
+
+                                    const handleSegClick = (e: React.PointerEvent) => {
+                                        e.stopPropagation()
+                                        e.preventDefault()
+                                        switchToNode(e)
+                                        // Forward to appropriate tool handler now that node is switched
+                                        if (vectorEditTool === 'bend') handleBendSegmentPointerDown(e, si)
+                                        else if (vectorEditTool === 'cut') handleCutSegmentPointerDown(e, si)
+                                        else if (vectorEditTool === 'lasso') handleLassoPointerDown(e)
+                                    }
+
+                                    if (hasCurve) {
+                                        const cp1 = tStart ? ts(sv.x + tStart.x, sv.y + tStart.y) : a
+                                        const cp2 = tEnd ? ts(ev.x + tEnd.x, ev.y + tEnd.y) : b
+                                        return <path key={`gsh-${si}`} d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`} fill="none" stroke="transparent" strokeWidth={SEGMENT_HIT_WIDTH} style={{ cursor: toolCursor }} onPointerDown={handleSegClick} />
+                                    }
+                                    return <line key={`gsh-${si}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={SEGMENT_HIT_WIDTH} style={{ cursor: toolCursor }} onPointerDown={handleSegClick} />
+                                })}
+                                {/* Ghost anchor hit zones — switch node + forward vertex action */}
+                                {gvn.vertices.map((v: VectorVertex, vi: number) => {
+                                    const pos = ts(v.x, v.y)
+                                    return (
+                                        <circle
+                                            key={`gah-${vi}`}
+                                            cx={pos.x} cy={pos.y} r={ANCHOR_SIZE}
+                                            fill="transparent"
+                                            style={{ cursor: toolCursor }}
+                                            onPointerDown={(e) => {
+                                                e.stopPropagation()
+                                                e.preventDefault()
+                                                switchToNode(e)
+                                                // Forward vertex action for cut/move/lasso
+                                                if (vectorEditTool === 'cut' || vectorEditTool === 'move') {
+                                                    handleVertexPointerDown(e, vi)
+                                                } else if (vectorEditTool === 'lasso') {
+                                                    handleLassoPointerDown(e)
+                                                }
+                                            }}
+                                        />
+                                    )
+                                })}
+                            </g>
+                        )
+                    })}
+                </g>
+            </svg>
+
             {/* Decorative SVG layer — non-interactive */}
             <svg
                 ref={svgRef}
