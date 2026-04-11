@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import type { VectorEditTool } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
@@ -100,6 +100,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
     const vectorEditTool = useEditorStore((s) => s.vectorEditTool)
     const selectedVertexIndices = useEditorStore((s) => s.selectedVertexIndices)
+    const activeTool = useEditorStore((s) => s.activeTool)
     const zoom = useEditorStore((s) => s.zoom)
     const panX = useEditorStore((s) => s.panX)
     const panY = useEditorStore((s) => s.panY)
@@ -110,6 +111,11 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
     const svgRef = useRef<SVGSVGElement | null>(null)
     // Lasso tool state — container-relative polygon being drawn
     const [lassoPoints, setLassoPoints] = useState<Pt[]>([])
+
+    // Clear lasso state when switching to a different vector node
+    useEffect(() => {
+        setLassoPoints([])
+    }, [vectorEditNodeId])
 
     // ── Helpers ──────────────────────────────────────────────
 
@@ -149,8 +155,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             }
 
             const onUp = (ue: PointerEvent) => {
-                window.removeEventListener('pointermove', onMove)
-                window.removeEventListener('pointerup', onUp)
+                window.removeEventListener('pointermove', onMove, true)
+                window.removeEventListener('pointerup', onUp, true)
 
                 // Collect final polygon snapshot synchronously via ref, then clear lasso
                 setLassoPoints((finalPoly) => {
@@ -188,8 +194,9 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                 })
             }
 
-            window.addEventListener('pointermove', onMove)
-            window.addEventListener('pointerup', onUp)
+            // Use CAPTURE phase (true) so events arrive before canvas steals pointer capture
+            window.addEventListener('pointermove', onMove, true)
+            window.addEventListener('pointerup', onUp, true)
         },
         [],
     )
@@ -522,7 +529,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             // Select newVert2 (start of second half) — shows as one orange dot at cut point
             // Drag it to pull the second half away and open the gap
             store.selectVertices([newVert2Idx], false)
-            store.setVectorEditTool('move')
+            // Keep cut tool active for consecutive cuts
         },
         [],
     )
@@ -536,10 +543,14 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const store = useEditorStore.getState()
             const tool = store.vectorEditTool
 
-            // Cut tool: split path at vertex
+            // Cut tool: split path at vertex (but if vertex is already selected, allow drag instead)
             if (tool === 'cut' && store.vectorEditNodeId) {
-                handleCutVertex(store.vectorEditNodeId, idx)
-                return
+                const isAlreadySelected = store.selectedVertexIndices.includes(idx)
+                if (!isAlreadySelected) {
+                    handleCutVertex(store.vectorEditNodeId, idx)
+                    return
+                }
+                // Fall through to drag logic for already-selected vertices
             }
 
             // Ctrl+click (or Cmd+click on Mac): toggle corner/smooth point
@@ -584,8 +595,8 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             const additive = e.shiftKey
             store.selectVertices([idx], additive)
 
-            // Move tool OR bend tool: begin vertex drag
-            if ((tool === 'move' || tool === 'bend') && store.vectorEditNodeId) {
+            // Move tool, bend tool, or cut tool (after selecting cut result): begin vertex drag
+            if ((tool === 'move' || tool === 'bend' || tool === 'cut') && store.vectorEditNodeId) {
                 const node = findNodeById(store.nodes, store.vectorEditNodeId) as VectorNode | null
                 if (!node) return
                 const v = node.vectorNetwork.vertices[idx]
@@ -911,9 +922,60 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
 
     // ── Render ───────────────────────────────────────────────
 
-    if (!vectorEditNodeId) return null
+    // Show overlay in vector edit mode OR when pen tool is active (to show ghost anchors)
+    const isPenMode = !vectorEditNodeId && activeTool === 'pen'
 
-    const node = findNodeById(nodes, vectorEditNodeId)
+    if (!vectorEditNodeId && !isPenMode) return null
+
+    // In pen mode (no active vector edit node), show ghost anchors for ALL vector nodes
+    if (isPenMode) {
+        const allVectorNodes = nodes.filter((n) => n.type === 'vector') as VectorNode[]
+        if (allVectorNodes.length === 0) return null
+
+        return (
+            <svg
+                ref={svgRef}
+                className="absolute inset-0 pointer-events-none"
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 30 }}
+            >
+                {allVectorNodes.map((gn) => {
+                    const gvn = gn.vectorNetwork
+                    const gx = gn.x
+                    const gy = gn.y
+                    const gs = (vx: number, vy: number) => ({
+                        x: (gx + vx) * zoom + panX,
+                        y: (gy + vy) * zoom + panY,
+                    })
+                    return (
+                        <g key={`pen-ghost-${gn.id}`}>
+                            {gvn.segments.map((seg: VectorSegment, si: number) => {
+                                const sv = gvn.vertices[seg.start]
+                                const ev = gvn.vertices[seg.end]
+                                if (!sv || !ev) return null
+                                const a = gs(sv.x, sv.y)
+                                const b = gs(ev.x, ev.y)
+                                const tStart = seg.tangentStart
+                                const tEnd = seg.tangentEnd
+                                const hasCurve = (tStart && (tStart.x !== 0 || tStart.y !== 0)) || (tEnd && (tEnd.x !== 0 || tEnd.y !== 0))
+                                if (hasCurve) {
+                                    const cp1 = tStart ? gs(sv.x + tStart.x, sv.y + tStart.y) : a
+                                    const cp2 = tEnd ? gs(ev.x + tEnd.x, ev.y + tEnd.y) : b
+                                    return <path key={`pgs-${si}`} d={`M ${a.x} ${a.y} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${b.x} ${b.y}`} fill="none" stroke={BLUE} strokeWidth={1} />
+                                }
+                                return <line key={`pgs-${si}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={BLUE} strokeWidth={1} />
+                            })}
+                            {gvn.vertices.map((v: VectorVertex, vi: number) => {
+                                const pos = gs(v.x, v.y)
+                                return <circle key={`pga-${vi}`} cx={pos.x} cy={pos.y} r={ANCHOR_SIZE / 2} fill={WHITE} stroke={BLUE} strokeWidth={1.5} />
+                            })}
+                        </g>
+                    )
+                })}
+            </svg>
+        )
+    }
+
+    const node = findNodeById(nodes, vectorEditNodeId!)
     if (!node || node.type !== 'vector') return null
 
     const vn = (node as VectorNode).vectorNetwork
@@ -939,14 +1001,14 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
         'bend': 'pointer',
         'cut': 'crosshair',
     }
-    const toolCursor = toolCursors[vectorEditTool] || 'default'
+    const toolCursor = activeTool === 'pen' ? 'crosshair' : (toolCursors[vectorEditTool] || 'default')
 
     return (
         <>
-            {/* Ghost SVG layer — shows anchor points/segments of ALL other vector nodes */}
+            {/* Ghost SVG layer — shows anchor points/segments of ALL other vector nodes (decorative, no interaction) */}
             <svg
                 className="absolute inset-0 pointer-events-none"
-                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 30 }}
+                style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 28 }}
             >
                 {otherVectorNodes.map((gn) => {
                     const gvn = gn.vectorNetwork
@@ -954,7 +1016,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                     const gy = gn.y
                     const ts = (vx: number, vy: number) => toScreen(vx, vy, gx, gy)
                     return (
-                        <g key={`ghost-${gn.id}`} opacity={0.45}>
+                        <g key={`ghost-${gn.id}`}>
                             {/* Ghost segments */}
                             {gvn.segments.map((seg: VectorSegment, si: number) => {
                                 const sv = gvn.vertices[seg.start]
@@ -1020,7 +1082,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                         // Forward to appropriate tool handler now that node is switched
                                         if (vectorEditTool === 'bend') handleBendSegmentPointerDown(e, si)
                                         else if (vectorEditTool === 'cut') handleCutSegmentPointerDown(e, si)
-                                        else if (vectorEditTool === 'lasso') handleLassoPointerDown(e)
+                                        // Lasso: just switch node, user draws lasso on next interaction
                                     }
 
                                     if (hasCurve) {
@@ -1043,12 +1105,11 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                                                 e.stopPropagation()
                                                 e.preventDefault()
                                                 switchToNode(e)
-                                                // Forward vertex action for cut/move/lasso
+                                                // Forward vertex action for cut/move
                                                 if (vectorEditTool === 'cut' || vectorEditTool === 'move') {
                                                     handleVertexPointerDown(e, vi)
-                                                } else if (vectorEditTool === 'lasso') {
-                                                    handleLassoPointerDown(e)
                                                 }
+                                                // Lasso/bend: just switch node, user interacts on next gesture
                                             }}
                                         />
                                     )
@@ -1179,27 +1240,6 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
             >
                 {/* All clickable elements in a group with pointer-events: all */}
                 <g style={{ pointerEvents: 'all' }}>
-                    {/* Lasso background — transparent hit zone */}
-                    {vectorEditTool === 'lasso' && (
-                        <rect
-                            x={-9999} y={-9999} width={99999} height={99999}
-                            fill="transparent"
-                            style={{ cursor: 'crosshair', pointerEvents: 'all' }}
-                            onPointerDown={handleLassoPointerDown}
-                        />
-                    )}
-
-                    {/* Lasso polygon being drawn */}
-                    {lassoPoints.length >= 2 && (
-                        <polyline
-                            points={lassoPoints.map((p) => `${p.x},${p.y}`).join(' ')}
-                            fill="rgba(59,130,246,0.1)"
-                            stroke={BLUE}
-                            strokeWidth={1}
-                            strokeDasharray="4 2"
-                            style={{ pointerEvents: 'none' }}
-                        />
-                    )}
 
                     {/* Invisible fat segment hit targets */}
                     {vn.segments.map((seg: VectorSegment, si: number) => {
@@ -1314,6 +1354,7 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                             />
                         )
                     })}
+
                 </g>
             </svg>
 
@@ -1406,6 +1447,31 @@ export const AnchorPointOverlay = memo(function AnchorPointOverlay() {
                     style={{ zIndex: 29, cursor: PAINT_CURSOR }}
                     onPointerDown={handlePaintClick}
                 />
+            )}
+
+            {/* Lasso tool: full-canvas overlay to capture freeform selection drags */}
+            {vectorEditTool === 'lasso' && (
+                <div
+                    className="absolute inset-0"
+                    style={{ zIndex: 999, cursor: 'crosshair', pointerEvents: 'auto' }}
+                    onPointerDown={handleLassoPointerDown}
+                />
+            )}
+
+            {/* Lasso polygon being drawn — screen-space SVG overlay */}
+            {lassoPoints.length >= 2 && (
+                <svg
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 34 }}
+                >
+                    <polyline
+                        points={lassoPoints.map((p) => `${p.x},${p.y}`).join(' ')}
+                        fill="rgba(59,130,246,0.1)"
+                        stroke={BLUE}
+                        strokeWidth={1}
+                        strokeDasharray="4 2"
+                    />
+                </svg>
             )}
         </>
     )

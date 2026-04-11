@@ -149,6 +149,14 @@ export interface PenDrawingState {
     /** Active alignment snap guides — orange lines shown when cursor aligns with an existing vertex.
      *  vertexX/vertexY is the canvas position of the anchor that triggered the snap. */
     _alignGuides?: Array<{ axis: 'x' | 'y'; value: number; vertexX: number; vertexY: number }>
+    /** When extending from an existing vertex, the index in the EXISTING vector network.
+     *  Vertices[0] in penDrawingState is a copy of this vertex. On commit, new
+     *  vertices/segments merge into the existing network instead of replacing it. */
+    _extendFromVertexIndex?: number
+    /** When connecting to an existing vertex (extend → existing vertex), the
+     *  LAST vertex in penDrawingState maps to this existing vertex index.
+     *  On commit, the segment end is remapped instead of adding a new vertex. */
+    _extendToVertexIndex?: number
 }
 
 
@@ -358,6 +366,8 @@ interface EditorState {
     deleteSelectedVertices: (nodeId: string) => void
     /** Replace the entire VectorNetwork on a node */
     updateVectorNetwork: (nodeId: string, network: VectorNetwork) => void
+    /** Insert a new anchor point on a segment (keeps path connected, no break) */
+    insertPointOnSegment: (nodeId: string, segIdx: number, t: number) => void
     /** Update or clear the live pen drawing state */
     setPenDrawingState: (state: PenDrawingState | null) => void
     /** Commit the pen drawing state into the VectorNode and finalize bounding box */
@@ -1905,6 +1915,97 @@ export const useEditorStore = create<EditorState>()(
                     'updateVectorNetwork'
                 ),
 
+            insertPointOnSegment: (nodeId, segIdx, t) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        _snap(state)
+                        const net = (node as VectorNode).vectorNetwork
+                        const seg = net.segments[segIdx]
+                        if (!seg) return
+
+                        const startV = net.vertices[seg.start]
+                        const endV = net.vertices[seg.end]
+                        if (!startV || !endV) return
+
+                        const ts = seg.tangentStart ?? { x: 0, y: 0 }
+                        const te = seg.tangentEnd ?? { x: 0, y: 0 }
+
+                        // Evaluate position on bezier at t
+                        const mt = 1 - t
+                        const newX = mt * mt * mt * startV.x + 3 * mt * mt * t * (startV.x + ts.x) +
+                            3 * mt * t * t * (endV.x + te.x) + t * t * t * endV.x
+                        const newY = mt * mt * mt * startV.y + 3 * mt * mt * t * (startV.y + ts.y) +
+                            3 * mt * t * t * (endV.y + te.y) + t * t * t * endV.y
+
+                        // Single new vertex (connected — no break)
+                        const newVertIdx = net.vertices.length
+                        const newVertex: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
+
+                        // de Casteljau subdivision at t
+                        const p0 = { x: startV.x, y: startV.y }
+                        const p1 = { x: startV.x + ts.x, y: startV.y + ts.y }
+                        const p2 = { x: endV.x + te.x, y: endV.y + te.y }
+                        const p3 = { x: endV.x, y: endV.y }
+
+                        const q1 = { x: p0.x + t * (p1.x - p0.x), y: p0.y + t * (p1.y - p0.y) }
+                        const r2 = { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) }
+                        const r3_pre = { x: p2.x + t * (p3.x - p2.x), y: p2.y + t * (p3.y - p2.y) }
+                        const q2 = { x: q1.x + t * (r2.x - q1.x), y: q1.y + t * (r2.y - q1.y) }
+                        const r2b = { x: r2.x + t * (r3_pre.x - r2.x), y: r2.y + t * (r3_pre.y - r2.y) }
+
+                        // First half: seg.start → newVertex (connected)
+                        const firstHalf: VectorSegment = {
+                            start: seg.start,
+                            end: newVertIdx,
+                            tangentStart: { x: q1.x - p0.x, y: q1.y - p0.y },
+                            tangentEnd: { x: q2.x - newX, y: q2.y - newY },
+                        }
+                        // Second half: newVertex → seg.end (connected)
+                        const secondHalf: VectorSegment = {
+                            start: newVertIdx,
+                            end: seg.end,
+                            tangentStart: { x: r2b.x - newX, y: r2b.y - newY },
+                            tangentEnd: { x: r3_pre.x - p3.x, y: r3_pre.y - p3.y },
+                        }
+
+                        // Replace original segment with two halves
+                        net.vertices.push(newVertex)
+                        net.segments.splice(segIdx, 1, firstHalf, secondHalf)
+
+                        // If pen tool is active, start drawing from the new vertex
+                        // so user can continue placing points with dashed preview line
+                        if (state.activeTool === 'pen') {
+                            // Pen tool uses canvas-absolute coords, so convert node-relative to absolute
+                            const absX = node.x + newX
+                            const absY = node.y + newY
+                            state.penDrawingState = {
+                                nodeId,
+                                vertices: [{ x: absX, y: absY }],
+                                segments: [],
+                                isDrawing: true,
+                                cursorX: absX,
+                                cursorY: absY,
+                                nearStartPoint: false,
+                                _extendFromVertexIndex: newVertIdx,
+                            }
+                            state.vectorEditNodeId = null
+                            state.vectorEditTool = 'move'
+                            state.selectedVertexIndices = []
+                            state.selectedIds = [nodeId]
+                        } else {
+                            // Enter vector edit mode on this node and select the new vertex
+                            state.vectorEditNodeId = nodeId
+                            state.vectorEditTool = 'move'
+                            state.selectedVertexIndices = [newVertIdx]
+                            state.selectedIds = [nodeId]
+                        }
+                    },
+                    false,
+                    'insertPointOnSegment'
+                ),
+
             setPenDrawingState: (penState) =>
                 set(
                     (state) => {
@@ -1922,10 +2023,12 @@ export const useEditorStore = create<EditorState>()(
 
                         // Need at least 2 vertices for a valid path
                         if (ps.vertices.length < 2) {
-                            // Delete the empty vector node
-                            const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
-                            if (idx !== -1) state.nodes.splice(idx, 1)
-                            state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            // Delete the empty vector node (only if we created it, not extending)
+                            if (ps._extendFromVertexIndex == null) {
+                                const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
+                                if (idx !== -1) state.nodes.splice(idx, 1)
+                                state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            }
                             state.penDrawingState = null
                             return
                         }
@@ -1937,18 +2040,54 @@ export const useEditorStore = create<EditorState>()(
 
                         const vn = (node as VectorNode).vectorNetwork
 
-                        // Transfer vertices and segments from drawing state
-                        vn.vertices = ps.vertices
-                        vn.segments = ps.segments
+                        // ── Extend mode: merge new vertices/segments into existing network ──
+                        if (ps._extendFromVertexIndex != null) {
+                            const existingVertexCount = vn.vertices.length
+                            // Skip ps.vertices[0] — it's a copy of the extend-from vertex
+                            // Also skip the last vertex if _extendToVertexIndex is set (it maps to existing)
+                            const hasExtendTo = ps._extendToVertexIndex != null
+                            const newVertices = hasExtendTo
+                                ? ps.vertices.slice(1, -1)  // skip first AND last
+                                : ps.vertices.slice(1)       // skip first only
+                            const baseIdx = existingVertexCount
 
-                        // Recalculate bounding box from vertices AND bezier control points
-                        // This ensures the entire shape fits within the frame bounds
-                        if (ps.vertices.length > 0) {
+                            // Convert new vertices from canvas-absolute to node-relative coords
+                            for (const nv of newVertices) {
+                                nv.x -= node.x
+                                nv.y -= node.y
+                                vn.vertices.push(nv)
+                            }
+
+                            // Remap and append segments
+                            const lastPsIdx = ps.vertices.length - 1
+                            for (const seg of ps.segments) {
+                                const remapIdx = (i: number) => {
+                                    if (i === 0) return ps._extendFromVertexIndex!
+                                    if (hasExtendTo && i === lastPsIdx) return ps._extendToVertexIndex!
+                                    return baseIdx + (i - 1)
+                                }
+                                vn.segments.push({
+                                    start: remapIdx(seg.start),
+                                    end: remapIdx(seg.end),
+                                    ...(seg.tangentStart ? { tangentStart: seg.tangentStart } : {}),
+                                    ...(seg.tangentEnd ? { tangentEnd: seg.tangentEnd } : {}),
+                                })
+                            }
+
+                            // Recompute bounding box for the whole node
+                            _recomputeVectorBBox(node as VectorNode)
+                        } else {
+                            // ── Normal mode: replace entire network ──
+                            vn.vertices = ps.vertices
+                            vn.segments = ps.segments
+
+                            // Recalculate bounding box from ALL vertices AND bezier control points
+                            if (vn.vertices.length > 0) {
                             let minX = Infinity, minY = Infinity
                             let maxX = -Infinity, maxY = -Infinity
 
                             // Include vertex positions
-                            for (const v of ps.vertices) {
+                            for (const v of vn.vertices) {
                                 if (v.x < minX) minX = v.x
                                 if (v.y < minY) minY = v.y
                                 if (v.x > maxX) maxX = v.x
@@ -1956,9 +2095,9 @@ export const useEditorStore = create<EditorState>()(
                             }
 
                             // Include bezier control points (tangent extents)
-                            for (const seg of ps.segments) {
-                                const startV = ps.vertices[seg.start]
-                                const endV = ps.vertices[seg.end]
+                            for (const seg of vn.segments) {
+                                const startV = vn.vertices[seg.start]
+                                const endV = vn.vertices[seg.end]
                                 if (!startV || !endV) continue
 
                                 if (seg.tangentStart) {
@@ -2000,6 +2139,7 @@ export const useEditorStore = create<EditorState>()(
                             node.width = Math.max(maxX - minX, 1)
                             node.height = Math.max(maxY - minY, 1)
                         }
+                        } // end normal mode else
 
                         // Clear drawing state
                         state.penDrawingState = null

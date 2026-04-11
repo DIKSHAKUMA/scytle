@@ -394,6 +394,13 @@ export function useKeyboardShortcuts() {
                         store.setVectorEditTool(vtool)
                         return
                     }
+                    // P → activate pen tool (exit vector edit mode so pen gets full control)
+                    if (key === 'p') {
+                        e.preventDefault()
+                        store.exitVectorEditMode()
+                        store.setActiveTool('pen')
+                        return
+                    }
                     // Shift+B → paint
                     if (shift) {
                         if (key === 'b') { e.preventDefault(); store.setVectorEditTool('paint'); return }

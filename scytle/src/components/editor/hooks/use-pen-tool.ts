@@ -1,7 +1,13 @@
 import { useCallback, useRef } from 'react'
 import { useEditorStore } from '@/store/editor-store'
-import { createVector } from '@/types/canvas'
-import type { VectorVertex, VectorSegment } from '@/types/canvas'
+import { createVector, findNodeById } from '@/types/canvas'
+import type { VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
+
+/** Screen-space distance (px) within which pen tool clicks "hit" an existing segment */
+const SEGMENT_HIT_THRESHOLD_PX = 8
+
+/** Screen-space distance (px) within which pen tool clicks "hit" an existing vertex */
+const VERTEX_HIT_THRESHOLD_PX = 8
 
 /** Constrain a point to the nearest 45° angle relative to an origin */
 function constrainTo45(origin: { x: number; y: number }, point: { x: number; y: number }): { x: number; y: number } {
@@ -25,6 +31,92 @@ const CLOSE_THRESHOLD_PX = 8
 
 /** Minimum drag distance (px) to trigger bezier handle creation */
 const DRAG_THRESHOLD_PX = 3
+
+/**
+ * Find the closest segment across all vector nodes to a screen-space point.
+ * Returns the node, segment index, parameter t, and screen distance.
+ */
+function findClosestSegmentHit(
+    screenX: number,
+    screenY: number,
+    store: ReturnType<typeof useEditorStore.getState>,
+): { nodeId: string; segIdx: number; t: number; dist: number } | null {
+    const { nodes, zoom, panX, panY } = store
+    let best: { nodeId: string; segIdx: number; t: number; dist: number } | null = null
+
+    for (const n of nodes) {
+        if (n.type !== 'vector') continue
+        const vn = (n as VectorNode).vectorNetwork
+        const nx = n.x
+        const ny = n.y
+        const toScreen = (vx: number, vy: number) => ({
+            x: (nx + vx) * zoom + panX,
+            y: (ny + vy) * zoom + panY,
+        })
+
+        for (let si = 0; si < vn.segments.length; si++) {
+            const seg = vn.segments[si]
+            const sv = vn.vertices[seg.start]
+            const ev = vn.vertices[seg.end]
+            if (!sv || !ev) continue
+
+            const ts = seg.tangentStart ?? { x: 0, y: 0 }
+            const te = seg.tangentEnd ?? { x: 0, y: 0 }
+            const p0 = toScreen(sv.x, sv.y)
+            const cp1 = toScreen(sv.x + ts.x, sv.y + ts.y)
+            const cp2 = toScreen(ev.x + te.x, ev.y + te.y)
+            const p3 = toScreen(ev.x, ev.y)
+
+            // Find closest t on this bezier
+            const steps = 50
+            let bestT = 0
+            let bestDist = Infinity
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps
+                const mt = 1 - t
+                const bx = mt * mt * mt * p0.x + 3 * mt * mt * t * cp1.x + 3 * mt * t * t * cp2.x + t * t * t * p3.x
+                const by = mt * mt * mt * p0.y + 3 * mt * mt * t * cp1.y + 3 * mt * t * t * cp2.y + t * t * t * p3.y
+                const d = Math.sqrt((bx - screenX) ** 2 + (by - screenY) ** 2)
+                if (d < bestDist) { bestDist = d; bestT = t }
+            }
+
+            if (!best || bestDist < best.dist) {
+                best = { nodeId: n.id, segIdx: si, t: bestT, dist: bestDist }
+            }
+        }
+    }
+
+    return best
+}
+
+/**
+ * Find the closest vertex across all vector nodes to a screen-space point.
+ * Returns the node, vertex index, and screen distance.
+ */
+function findClosestVertexHit(
+    screenX: number,
+    screenY: number,
+    store: ReturnType<typeof useEditorStore.getState>,
+): { nodeId: string; vertexIdx: number; dist: number; canvasPos: { x: number; y: number } } | null {
+    const { nodes, zoom, panX, panY } = store
+    let best: { nodeId: string; vertexIdx: number; dist: number; canvasPos: { x: number; y: number } } | null = null
+
+    for (const n of nodes) {
+        if (n.type !== 'vector') continue
+        const vn = (n as VectorNode).vectorNetwork
+        for (let vi = 0; vi < vn.vertices.length; vi++) {
+            const v = vn.vertices[vi]
+            const sx = (n.x + v.x) * zoom + panX
+            const sy = (n.y + v.y) * zoom + panY
+            const d = Math.sqrt((sx - screenX) ** 2 + (sy - screenY) ** 2)
+            if (!best || d < best.dist) {
+                best = { nodeId: n.id, vertexIdx: vi, dist: d, canvasPos: { x: n.x + v.x, y: n.y + v.y } }
+            }
+        }
+    }
+
+    return best
+}
 
 /** State tracked between pointerdown and pointerup during a single click-drag */
 interface DragState {
@@ -91,6 +183,155 @@ export function usePenTool(
             if (e.shiftKey && ps && ps.vertices.length > 0) {
                 const lastV = ps.vertices[ps.vertices.length - 1]
                 constrainedPos = constrainTo45(lastV, pos)
+            }
+
+            // ── Extend mode: click near segment/vertex → insert + connect with a line ──
+            if (ps && ps._extendFromVertexIndex != null && ps.vertices.length === 1 && ps.segments.length === 0) {
+                console.log('[EXTEND] In extend mode. extendFrom:', ps._extendFromVertexIndex, 'nodeId:', ps.nodeId)
+                const containerRect = (e.currentTarget as HTMLElement)?.closest?.('[data-canvas-viewport]')?.getBoundingClientRect()
+                    ?? (e.currentTarget as HTMLElement)?.getBoundingClientRect()
+                const screenX = e.clientX - (containerRect?.left ?? 0)
+                const screenY = e.clientY - (containerRect?.top ?? 0)
+                console.log('[EXTEND] screenX:', screenX, 'screenY:', screenY)
+
+                // Check vertex hit first — connect directly to existing vertex
+                const vertexHit = findClosestVertexHit(screenX, screenY, store)
+                console.log('[EXTEND] vertexHit:', vertexHit ? { nodeId: vertexHit.nodeId, idx: vertexHit.vertexIdx, dist: vertexHit.dist } : null)
+                if (vertexHit && vertexHit.dist < VERTEX_HIT_THRESHOLD_PX && vertexHit.nodeId === ps.nodeId) {
+                    console.log('[EXTEND] → vertex hit on same node! Connecting.')
+                    e.preventDefault()
+                    // Snap to the existing vertex position — add it as vertex[1] and a connecting segment
+                    const newIdx = ps.vertices.length
+                    const newVertex: VectorVertex = { x: vertexHit.canvasPos.x, y: vertexHit.canvasPos.y }
+                    const newSegment: VectorSegment = {
+                        start: newIdx - 1,
+                        end: newIdx,
+                        ...(ps._outgoingTangent ? { tangentStart: ps._outgoingTangent } : {}),
+                    }
+                    // Commit immediately — this creates a line from extend vertex to target vertex
+                    store.setPenDrawingState({
+                        ...ps,
+                        vertices: [...ps.vertices, newVertex],
+                        segments: [...ps.segments, newSegment],
+                        _outgoingTangent: undefined,
+                        // Override extend target: the second vertex maps to vertexHit.vertexIdx
+                        _extendToVertexIndex: vertexHit.vertexIdx,
+                    } as typeof ps)
+                    store.commitPenPath()
+                    lastCommittedNodeIdRef.current = ps.nodeId
+                    dragRef.current = null
+                    return
+                }
+
+                // Check segment hit — insert point on segment, then connect with a line
+                const hit = findClosestSegmentHit(screenX, screenY, store)
+                console.log('[EXTEND] segmentHit:', hit ? { nodeId: hit.nodeId, segIdx: hit.segIdx, dist: hit.dist, t: hit.t } : null)
+                if (hit && hit.dist < SEGMENT_HIT_THRESHOLD_PX && hit.nodeId === ps.nodeId) {
+                    console.log('[EXTEND] → segment hit on same node! Insert + connect.')
+                    e.preventDefault()
+                    const extendFromIdx = ps._extendFromVertexIndex!
+                    const outgoingTangent = ps._outgoingTangent
+                    const hitNodeId = hit.nodeId
+                    // First: insert the point on the segment (this modifies the vector network inside immer)
+                    store.insertPointOnSegment(hitNodeId, hit.segIdx, hit.t)
+                    // Now add the connecting segment and set up new extend — must use set() for immer
+                    useEditorStore.setState((state) => {
+                        const node = findNodeById(state.nodes, hitNodeId) as VectorNode | null
+                        if (!node) return
+                        const insertedVertIdx = node.vectorNetwork.vertices.length - 1
+                        const insertedVert = node.vectorNetwork.vertices[insertedVertIdx]
+                        console.log('[EXTEND] Adding connecting segment:', extendFromIdx, '→', insertedVertIdx)
+                        // Add segment from original extend vertex → newly inserted vertex
+                        node.vectorNetwork.segments.push({
+                            start: extendFromIdx,
+                            end: insertedVertIdx,
+                            ...(outgoingTangent ? { tangentStart: outgoingTangent } : {}),
+                        })
+                        // Start a new extend from the inserted point
+                        const absX = node.x + insertedVert.x
+                        const absY = node.y + insertedVert.y
+                        state.penDrawingState = {
+                            nodeId: hitNodeId,
+                            vertices: [{ x: absX, y: absY }],
+                            segments: [],
+                            isDrawing: true,
+                            cursorX: absX,
+                            cursorY: absY,
+                            nearStartPoint: false,
+                            _extendFromVertexIndex: insertedVertIdx,
+                        }
+                        console.log('[EXTEND] New extend started from insertedVertIdx:', insertedVertIdx)
+                    })
+                    dragRef.current = null
+                    return
+                }
+                console.log('[EXTEND] No hit — falling through to normal append logic')
+                // If not near segment/vertex, fall through to normal append logic below
+            } else if (ps && ps._extendFromVertexIndex != null) {
+                console.log('[EXTEND-SKIP] Has _extendFromVertexIndex but conditions not met:', {
+                    vertexCount: ps.vertices.length,
+                    segmentCount: ps.segments.length,
+                })
+            }
+
+            // ── Click near existing segment → insert anchor point ──
+            // Works when not drawing, or when only 1 vertex placed (no edges yet)
+            if (!ps || (ps && ps.vertices.length <= 1 && ps.segments.length === 0 && ps._extendFromVertexIndex == null)) {
+                // Get the container offset for screen-space hit detection
+                const containerRect = (e.currentTarget as HTMLElement)?.closest?.('[data-canvas-viewport]')?.getBoundingClientRect()
+                    ?? (e.currentTarget as HTMLElement)?.getBoundingClientRect()
+                const screenX = e.clientX - (containerRect?.left ?? 0)
+                const screenY = e.clientY - (containerRect?.top ?? 0)
+
+                // ── Click near existing vertex → start extending from that vertex ──
+                const vertexHit = findClosestVertexHit(screenX, screenY, store)
+                if (vertexHit && vertexHit.dist < VERTEX_HIT_THRESHOLD_PX) {
+                    e.preventDefault()
+                    // If we had a 1-vertex pen node with no edges, clean it up
+                    // BUT NOT if it's an extend-from-vertex (that nodeId is the original shape!)
+                    if (ps && ps.vertices.length <= 1 && ps._extendFromVertexIndex == null) {
+                        store.deleteNode(ps.nodeId)
+                        store.setPenDrawingState(null)
+                    } else if (ps && ps._extendFromVertexIndex != null) {
+                        store.setPenDrawingState(null)
+                    }
+                    // Start drawing from the existing vertex — create penDrawingState
+                    // with vertex[0] being a copy of the clicked vertex. On commit,
+                    // new vertices/segments merge into the existing vector network.
+                    const vertex: VectorVertex = { x: vertexHit.canvasPos.x, y: vertexHit.canvasPos.y }
+                    store.setPenDrawingState({
+                        nodeId: vertexHit.nodeId,
+                        vertices: [vertex],
+                        segments: [],
+                        isDrawing: true,
+                        cursorX: vertexHit.canvasPos.x,
+                        cursorY: vertexHit.canvasPos.y,
+                        nearStartPoint: false,
+                        _extendFromVertexIndex: vertexHit.vertexIdx,
+                    })
+                    dragRef.current = {
+                        anchorPos: vertexHit.canvasPos,
+                        isFirstVertex: true,
+                        vertexIndex: 0,
+                        isDragging: false,
+                    }
+                    return
+                }
+
+                const hit = findClosestSegmentHit(screenX, screenY, store)
+                if (hit && hit.dist < SEGMENT_HIT_THRESHOLD_PX) {
+                    e.preventDefault()
+                    // If we had a 1-vertex pen node with no edges, clean it up
+                    // BUT NOT if it's an extend-from-vertex (that nodeId is the original shape!)
+                    if (ps && ps.vertices.length <= 1 && ps._extendFromVertexIndex == null) {
+                        store.deleteNode(ps.nodeId)
+                        store.setPenDrawingState(null)
+                    } else if (ps && ps._extendFromVertexIndex != null) {
+                        store.setPenDrawingState(null)
+                    }
+                    store.insertPointOnSegment(hit.nodeId, hit.segIdx, hit.t)
+                    return
+                }
             }
 
             if (!ps) {
