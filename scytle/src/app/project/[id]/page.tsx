@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
-import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
+import { EditorCanvas } from '@/components/editor'
 import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
 import { Loader2 } from 'lucide-react'
 import { canvasSync } from '@/lib/sync'
@@ -43,9 +43,6 @@ function ProjectEditor() {
 
     const [authChecked, setAuthChecked] = useState(false)
     const [canvasLoaded, setCanvasLoaded] = useState(false)
-
-    // Centralized keyboard shortcuts (tools, zoom, clipboard, undo/redo, z-order, etc.)
-    useKeyboardShortcuts()
 
     // Helper: auto-zoom to fit all nodes on canvas
     const zoomToFitAll = useCallback(() => {

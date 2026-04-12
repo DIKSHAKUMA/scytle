@@ -69,6 +69,10 @@ interface InternalDragState {
     gridCol: number
     /** Grid cell placement: current row (1-based) */
     gridRow: number
+    /** Grid cell placement: original column before drag (for swap) */
+    originalGridCol: number | null
+    /** Grid cell placement: original row before drag (for swap) */
+    originalGridRow: number | null
 }
 
 const INITIAL_STATE: InternalDragState = {
@@ -88,6 +92,8 @@ const INITIAL_STATE: InternalDragState = {
     shiftHeld: false,
     gridCol: 1,
     gridRow: 1,
+    originalGridCol: null,
+    originalGridRow: null,
 }
 
 // ============================================================
@@ -347,8 +353,10 @@ export function useNodeDrag(
                 pointerId,
                 additionalNodes,
                 shiftHeld,
-                gridCol: 1,
-                gridRow: 1,
+                gridCol: node.gridColumnStart ?? 1,
+                gridRow: node.gridRowStart ?? 1,
+                originalGridCol: node.gridColumnStart ?? null,
+                originalGridRow: node.gridRowStart ?? null,
             }
         },
         []
@@ -596,11 +604,63 @@ export function useNodeDrag(
             }
 
             if (s.mode === 'grid-place' && s.parentId) {
-                // Commit grid cell placement
-                useEditorStore.getState().updateNode(s.nodeId, {
-                    gridColumnStart: s.gridCol,
-                    gridRowStart: s.gridRow,
-                })
+                // Commit grid cell placement — swap with any occupant
+                const store = useEditorStore.getState()
+                const parent = findNodeById(store.nodes, s.parentId) as FrameNode | undefined
+
+                if (parent) {
+                    // Find any child already occupying the target cell
+                    const occupant = parent.children.find(c => {
+                        if (c.id === s.nodeId) return false
+                        // Check explicitly placed children
+                        if (c.gridColumnStart === s.gridCol && c.gridRowStart === s.gridRow) return true
+                        // Check auto-placed children (no explicit position) —
+                        // their visual cell is determined by DOM order (index)
+                        if (c.gridColumnStart == null && c.gridRowStart == null) {
+                            const childIdx = parent.children.indexOf(c)
+                            const colCount = parent.layout?.columnTracks?.length
+                                ?? (typeof parent.layout?.columns === 'number' ? parent.layout.columns : 2)
+                            const autoCol = (childIdx % colCount) + 1
+                            const autoRow = Math.floor(childIdx / colCount) + 1
+                            return autoCol === s.gridCol && autoRow === s.gridRow
+                        }
+                        return false
+                    })
+
+                    store.beginBatch()
+
+                    if (occupant) {
+                        // Swap: give the occupant the dragged node's original position
+                        if (s.originalGridCol != null && s.originalGridRow != null) {
+                            // Dragged node had explicit position — swap positions
+                            store.updateNode(occupant.id, {
+                                gridColumnStart: s.originalGridCol,
+                                gridRowStart: s.originalGridRow,
+                            })
+                        } else {
+                            // Dragged node was auto-placed — give occupant explicit
+                            // position at the dragged node's original DOM-order cell
+                            const draggedIdx = parent.children.findIndex(c => c.id === s.nodeId)
+                            const colCount = parent.layout?.columnTracks?.length
+                                ?? (typeof parent.layout?.columns === 'number' ? parent.layout.columns : 2)
+                            const origAutoCol = (draggedIdx % colCount) + 1
+                            const origAutoRow = Math.floor(draggedIdx / colCount) + 1
+                            store.updateNode(occupant.id, {
+                                gridColumnStart: origAutoCol,
+                                gridRowStart: origAutoRow,
+                            })
+                        }
+                    }
+
+                    // Place the dragged node at the target cell
+                    store.updateNode(s.nodeId, {
+                        gridColumnStart: s.gridCol,
+                        gridRowStart: s.gridRow,
+                    })
+
+                    store.endBatch()
+                }
+
                 // Clear grid highlight
                 useEditorStore.getState().setGridHighlight(null)
             }
