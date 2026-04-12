@@ -13,6 +13,8 @@ interface ImageRendererProps {
     isTopLevel?: boolean
     parentDirection?: 'row' | 'column'
     parentLayoutMode?: 'flex' | 'grid' | 'none'
+    /** Explicit z-index override (reverse canvas stacking) */
+    zIndex?: number
 }
 
 // ============================================================
@@ -24,12 +26,13 @@ export const ImageRenderer = memo(function ImageRenderer({
     isTopLevel = false,
     parentDirection,
     parentLayoutMode,
+    zIndex,
 }: ImageRendererProps) {
     const variables = useVariableStore(s => s.variables)
     const collections = useVariableStore(s => s.collections)
     const activeModeId = useVariableStore(s => s.activeModeId)
     const varCtx: VarCtx = { modeId: activeModeId ?? '', variables, collections }
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx, zIndex)
 
     // ── Placeholder ───────────────────────────────────────────
     if (node.isPlaceholder || !node.src) {

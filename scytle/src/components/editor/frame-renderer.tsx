@@ -13,6 +13,8 @@ interface FrameRendererProps {
     isTopLevel?: boolean
     parentDirection?: 'row' | 'column'
     parentLayoutMode?: 'flex' | 'grid' | 'none'
+    /** Explicit z-index override (reverse canvas stacking) */
+    zIndex?: number
 }
 
 // ============================================================
@@ -24,6 +26,7 @@ export const FrameRenderer = memo(function FrameRenderer({
     isTopLevel = false,
     parentDirection,
     parentLayoutMode,
+    zIndex,
 }: FrameRendererProps) {
     const variables = useVariableStore(s => s.variables)
     const collections = useVariableStore(s => s.collections)
@@ -32,7 +35,7 @@ export const FrameRenderer = memo(function FrameRenderer({
 
     // Merge base styles (position, sizing, visuals) with frame layout styles
     const style: CSSProperties = {
-        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx),
+        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx, zIndex),
         ...computeFrameLayoutStyles(node, varCtx),
     }
 
@@ -55,12 +58,13 @@ export const FrameRenderer = memo(function FrameRenderer({
 
     return (
         <div data-node-id={node.id} style={style}>
-            {node.children.map((child) => (
+            {node.children.map((child, index) => (
                 <NodeRenderer
                     key={child.id}
                     node={child}
                     parentDirection={childDirection}
                     parentLayoutMode={node.layout.mode}
+                    zIndex={node.layout.reverseZIndex ? node.children.length - index : undefined}
                 />
             ))}
         </div>

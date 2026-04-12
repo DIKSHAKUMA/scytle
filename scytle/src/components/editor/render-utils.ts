@@ -422,6 +422,8 @@ export function computeBaseStyles(
     parentDir?: 'row' | 'column',
     parentLayoutMode?: 'flex' | 'grid' | 'none',
     varCtx?: VarCtx,
+    /** Explicit z-index override (e.g. for reverse canvas stacking) */
+    zIndexOverride?: number,
 ): CSSProperties {
     const s: CSSProperties = { boxSizing: 'border-box' }
 
@@ -598,6 +600,12 @@ export function computeBaseStyles(
         s.margin = `${mt} ${mr} ${mb} ${ml}`
     }
 
+    // Explicit z-index override (reverse canvas stacking)
+    if (zIndexOverride != null) {
+        s.zIndex = zIndexOverride
+        if (!s.position) s.position = 'relative'
+    }
+
     return s
 }
 
@@ -628,13 +636,41 @@ export function computeFrameLayoutStyles(node: FrameNode, varCtx?: VarCtx): CSSP
             // New system: check boundVariables for itemSpacing
             const boundGap = nodeVarCtx ? resolveBoundNumber('itemSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
             const resolvedGap = boundGap ?? node.layout.gap
-            s.gap = `calc(${resolvedGap}px * var(--z, 1))`
+            const gapCSS = `calc(${resolvedGap}px * var(--z, 1))`
+            // Use longhand rowGap/columnGap to avoid React warning when
+            // counter-axis gap overrides one of them during wrap.
+            s.rowGap = gapCSS
+            s.columnGap = gapCSS
         }
         if (node.layout.justify)
             s.justifyContent = JUSTIFY_MAP[node.layout.justify] ?? node.layout.justify
         if (node.layout.align)
             s.alignItems = ALIGN_MAP[node.layout.align] ?? node.layout.align
-        if (node.layout.wrap) s.flexWrap = 'wrap'
+        if (node.layout.wrap) {
+            s.flexWrap = 'wrap'
+            // Counter-axis gap for wrapped flex (overrides the primary-axis gap set above)
+            const isRow = (node.layout.direction ?? 'column') === 'row'
+            const counterGapValue = isRow ? node.layout.rowGap : node.layout.columnGap
+            if (counterGapValue != null) {
+                const counterGapCSS = `calc(${counterGapValue}px * var(--z, 1))`
+                if (isRow) {
+                    s.rowGap = counterGapCSS
+                } else {
+                    s.columnGap = counterGapCSS
+                }
+            }
+            // Wrap alignment (align-content)
+            if (node.layout.wrapAlign) {
+                const WRAP_ALIGN_MAP: Record<string, string> = {
+                    start: 'flex-start',
+                    end: 'flex-end',
+                    center: 'center',
+                    between: 'space-between',
+                    stretch: 'stretch',
+                }
+                s.alignContent = WRAP_ALIGN_MAP[node.layout.wrapAlign] ?? node.layout.wrapAlign
+            }
+        }
     } else if (node.layout.mode === 'grid') {
         s.display = 'grid'
         // Track-based templates take priority over legacy columns/rows

@@ -157,6 +157,10 @@ export const LayoutSchema = z.object({
     rowTracks: z.array(GridTrackSchema).optional(),
     columnGap: z.number().optional(),
     rowGap: z.number().optional(),
+    /** Wrap content alignment (Figma: counterAxisAlignContent). Only relevant when wrap is true. */
+    wrapAlign: z.enum(['start', 'end', 'center', 'between', 'stretch']).optional(),
+    /** Reverse canvas stacking order (Figma: itemReverseZIndex). First child on top when true. */
+    reverseZIndex: z.boolean().optional(),
 })
 
 export const BorderRadiusSchema = z.union([
@@ -403,6 +407,8 @@ export interface BaseNodeProperties {
     // === NEW VARIABLE SYSTEM (Figma-clone) ===
     /** Bindings from node properties to variables. See BoundVariables type. */
     boundVariables?: BoundVariables
+    /** ID of the variable collection associated with this design (set on page frames) */
+    _variableCollectionId?: string
 
     /** Raw CSS position values for absolute elements (Paper-style deferred resolution).
      *  The canvas renderer resolves these against actual parent dimensions at render time,

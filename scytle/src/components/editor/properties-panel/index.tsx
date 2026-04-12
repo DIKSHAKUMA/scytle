@@ -13,7 +13,7 @@ import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode } from '@/t
 import { PositionSection, MarginSection } from './position-section'
 import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
-import { LayoutSection } from './layout-section'
+import { LayoutSection, AutoLayoutChildSection } from './layout-section'
 import { FillSection } from './fill-section'
 import { AppearanceSection, StrokeSection } from './border-section'
 import { TypographySection } from './typography-section'
@@ -98,6 +98,15 @@ export function PropertiesPanel() {
         const result = findParentOfNode(nodes, node.id)
         if (!result || !result.parent) return false
         return result.parent.layout.mode !== 'none'
+    }, [nodes, node])
+
+    // Get the parent frame node (for auto-layout child section)
+    const parentFrameNode = useMemo(() => {
+        if (!node) return null
+        const result = findParentOfNode(nodes, node.id)
+        if (!result || !result.parent) return null
+        if (result.parent.layout.mode === 'none') return null
+        return result.parent
     }, [nodes, node])
 
     // Stable update callback
@@ -187,6 +196,7 @@ export function PropertiesPanel() {
             <MarginSection node={node} onUpdate={onUpdate} />
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
+            {parentFrameNode && <AutoLayoutChildSection node={node} parentNode={parentFrameNode} onUpdate={onUpdate} />}
 
             <SizeSection node={node} onUpdate={onUpdate} />
 

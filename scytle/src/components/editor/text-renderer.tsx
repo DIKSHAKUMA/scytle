@@ -16,6 +16,8 @@ interface TextRendererProps {
     isTopLevel?: boolean
     parentDirection?: 'row' | 'column'
     parentLayoutMode?: 'flex' | 'grid' | 'none'
+    /** Explicit z-index override (reverse canvas stacking) */
+    zIndex?: number
 }
 
 // ============================================================
@@ -27,6 +29,7 @@ export const TextRenderer = memo(function TextRenderer({
     isTopLevel = false,
     parentDirection,
     parentLayoutMode,
+    zIndex,
 }: TextRendererProps) {
     // ── Inline editing state ──────────────────────────────────
     const editingNodeId = useEditorStore((s) => s.editingNodeId)
@@ -100,7 +103,7 @@ export const TextRenderer = memo(function TextRenderer({
     }, [commitEdit])
 
     // ── Styles ────────────────────────────────────────────────
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, undefined, zIndex)
 
     // ── Line height (unit-aware) ───────────────────────────────────────────────
     // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.

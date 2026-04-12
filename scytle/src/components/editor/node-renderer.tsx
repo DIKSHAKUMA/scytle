@@ -17,6 +17,8 @@ export interface NodeRendererProps {
     parentDirection?: 'row' | 'column'
     /** Parent layout mode — children of 'none' frames are absolutely positioned */
     parentLayoutMode?: 'flex' | 'grid' | 'none'
+    /** Explicit z-index override (used for reverse canvas stacking) */
+    zIndex?: number
 }
 
 // ============================================================
@@ -28,47 +30,60 @@ export const NodeRenderer = memo(function NodeRenderer({
     isTopLevel = false,
     parentDirection,
     parentLayoutMode,
+    zIndex,
 }: NodeRendererProps) {
     if (!node.visible) return null
 
+    let element: React.ReactElement | null = null
+
     switch (node.type) {
         case 'frame':
-            return (
+            element = (
                 <FrameRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
+                    zIndex={zIndex}
                 />
             )
+            break
         case 'text':
-            return (
+            element = (
                 <TextRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
+                    zIndex={zIndex}
                 />
             )
+            break
         case 'image':
-            return (
+            element = (
                 <ImageRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
+                    zIndex={zIndex}
                 />
             )
+            break
         case 'vector':
-            return (
+            element = (
                 <VectorRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
+                    zIndex={zIndex}
                 />
             )
+            break
         default:
             return null
     }
+
+    return element
 })

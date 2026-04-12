@@ -13,6 +13,8 @@ interface VectorRendererProps {
     isTopLevel?: boolean
     parentDirection?: 'row' | 'column'
     parentLayoutMode?: 'flex' | 'grid' | 'none'
+    /** Explicit z-index override (reverse canvas stacking) */
+    zIndex?: number
 }
 
 // ============================================================
@@ -37,12 +39,13 @@ export const VectorRenderer = memo(function VectorRenderer({
     isTopLevel = false,
     parentDirection,
     parentLayoutMode,
+    zIndex,
 }: VectorRendererProps) {
     // ── Wrapper styles — use computeBaseStyles for correct layout participation ──
     // computeBaseStyles handles: position, sizing (fixed/fill/hug), opacity,
     // rotation, flip, margins, min/max constraints — same as FrameRenderer/TextRenderer.
     // We strip background/border/shadow since VectorNode visuals are on the SVG path.
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, undefined, zIndex)
 
     const wrapStyle: CSSProperties = {
         ...baseStyle,

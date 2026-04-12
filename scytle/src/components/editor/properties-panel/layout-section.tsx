@@ -1,7 +1,7 @@
 'use client'
 
-import type { FrameNode, Layout, Padding, GridTrack } from '@/types/canvas'
-import { Section, NumberInput, Checkbox } from './inputs'
+import type { FrameNode, ScytleNode, Layout, Padding, GridTrack } from '@/types/canvas'
+import { Section, NumberInput, SelectInput, Checkbox } from './inputs'
 import {
     ArrowDown,
     ArrowRight,
@@ -646,7 +646,7 @@ function GapInput({
                 <NumberInput
                     value={resolvedGap}
                     onChange={(v) => handleGapChange({ gap: v })}
-                    min={0}
+                    min={-999}
                     step={1}
                     className="flex-1"
                 />
@@ -908,8 +908,8 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                     ))}
                 </div>
 
-                {/* Wrap toggle — only for horizontal flex */}
-                {mode === 'flex-row' && (
+                {/* Wrap toggle — for both horizontal and vertical flex */}
+                {(mode === 'flex-row' || mode === 'flex-col') && (
                     <button
                         className={cn(
                             'w-7 h-7 flex items-center justify-center rounded-sm transition-colors shrink-0',
@@ -947,6 +947,48 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                         </div>
                     </div>
 
+                    {/* Wrap-specific controls: counter-axis gap + wrap alignment */}
+                    {isFlex && layout.wrap && (
+                        <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-0.5 flex-1">
+                                <span className="cursor-ew-resize select-none flex items-center" title="Cross-axis gap">
+                                    {(layout.direction ?? 'column') === 'row'
+                                        ? <VerticalGapIcon />
+                                        : <HorizontalGapIcon />
+                                    }
+                                </span>
+                                <NumberInput
+                                    value={(layout.direction ?? 'column') === 'row'
+                                        ? (layout.rowGap ?? layout.gap ?? 0)
+                                        : (layout.columnGap ?? layout.gap ?? 0)
+                                    }
+                                    onChange={(v) => {
+                                        if ((layout.direction ?? 'column') === 'row') {
+                                            updateLayout({ rowGap: v })
+                                        } else {
+                                            updateLayout({ columnGap: v })
+                                        }
+                                    }}
+                                    min={0}
+                                    step={1}
+                                    className="flex-1"
+                                />
+                            </div>
+                            <SelectInput
+                                value={layout.wrapAlign ?? 'start'}
+                                options={[
+                                    { value: 'start', label: 'Start' },
+                                    { value: 'center', label: 'Center' },
+                                    { value: 'end', label: 'End' },
+                                    { value: 'between', label: 'Space' },
+                                    { value: 'stretch', label: 'Stretch' },
+                                ]}
+                                onChange={(v) => updateLayout({ wrapAlign: v === 'start' ? undefined : v as Layout['wrapAlign'] })}
+                                className="w-[70px]"
+                            />
+                        </div>
+                    )}
+
                     {/* Padding controls (Figma-style compact H/V with individual toggle) */}
                     <PaddingControls padding={padding} onChange={updatePadding} nodeId={node.id} />
                 </>
@@ -958,6 +1000,15 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                 onChange={(checked) => onUpdate({ overflow: checked ? 'hidden' : 'visible' })}
                 label="Clip content"
             />
+
+            {/* Reverse stacking order (Figma: first on top vs last on top) */}
+            {hasLayout && (
+                <Checkbox
+                    checked={layout.reverseZIndex ?? false}
+                    onChange={(checked) => updateLayout({ reverseZIndex: checked || undefined })}
+                    label="Reverse canvas stacking"
+                />
+            )}
         </Section>
 
         {/* Grid track lists — separate section below Auto layout (like Figma) */}
@@ -1025,5 +1076,129 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
             </div>
         )}
         </>
+    )
+}
+
+// ── Auto Layout Child section (shown when child is inside flex/grid) ──
+
+const ALIGN_SELF_OPTIONS = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'start', label: 'Start' },
+    { value: 'center', label: 'Center' },
+    { value: 'end', label: 'End' },
+    { value: 'stretch', label: 'Stretch' },
+    { value: 'baseline', label: 'Baseline' },
+]
+
+interface AutoLayoutChildSectionProps {
+    node: ScytleNode
+    parentNode: FrameNode
+    onUpdate: (updates: Record<string, unknown>) => void
+}
+
+export function AutoLayoutChildSection({ node, parentNode, onUpdate }: AutoLayoutChildSectionProps) {
+    const isFlexParent = parentNode.layout.mode === 'flex'
+    const isGridParent = parentNode.layout.mode === 'grid'
+    const updateNode = useEditorStore((s) => s.updateNode)
+
+    if (!isFlexParent && !isGridParent) return null
+
+    const isAbsolute = node.positioning === 'absolute'
+
+    // ── Grid child controls ─────────────────────────────────────
+    if (isGridParent) {
+        const colCount = parentNode.layout.columnTracks?.length
+            ?? (typeof parentNode.layout.columns === 'number' ? parentNode.layout.columns : 2)
+        const rowCount = parentNode.layout.rowTracks?.length
+            ?? (typeof parentNode.layout.rows === 'number' ? parentNode.layout.rows : undefined)
+
+        const colStart = (node as FrameNode).gridColumnStart ?? 1
+        const rowStart = (node as FrameNode).gridRowStart ?? 1
+        const colSpan = (node as FrameNode).gridColumnSpan ?? 1
+        const rowSpan = (node as FrameNode).gridRowSpan ?? 1
+
+        return (
+            <Section title="Grid child">
+                {!isAbsolute && (
+                    <div className="space-y-1.5">
+                        {/* Column: start + span */}
+                        <div className="flex items-center gap-1.5">
+                            <NumberInput
+                                label="Col"
+                                value={colStart}
+                                onChange={(v) => onUpdate({ gridColumnStart: v })}
+                                min={1}
+                                max={colCount}
+                                step={1}
+                                className="flex-1"
+                            />
+                            <NumberInput
+                                label="Span"
+                                value={colSpan === -1 ? colCount : colSpan}
+                                onChange={(v) => onUpdate({ gridColumnSpan: v >= colCount ? -1 : Math.max(1, v) })}
+                                min={1}
+                                max={colCount - colStart + 1}
+                                step={1}
+                                className="flex-1"
+                            />
+                        </div>
+
+                        {/* Row: start + span */}
+                        <div className="flex items-center gap-1.5">
+                            <NumberInput
+                                label="Row"
+                                value={rowStart}
+                                onChange={(v) => onUpdate({ gridRowStart: v })}
+                                min={1}
+                                max={rowCount ?? 999}
+                                step={1}
+                                className="flex-1"
+                            />
+                            <NumberInput
+                                label="Span"
+                                value={rowSpan === -1 ? (rowCount ?? 1) : rowSpan}
+                                onChange={(v) => onUpdate({ gridRowSpan: rowCount && v >= rowCount ? -1 : Math.max(1, v) })}
+                                min={1}
+                                max={rowCount ? rowCount - rowStart + 1 : 999}
+                                step={1}
+                                className="flex-1"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Ignore auto layout toggle */}
+                <Checkbox
+                    checked={isAbsolute}
+                    onChange={(checked) => onUpdate({ positioning: checked ? 'absolute' : 'auto' })}
+                    label="Ignore auto layout"
+                />
+            </Section>
+        )
+    }
+
+    // ── Flex child controls (Figma-style: simple align override + absolute toggle) ──
+    return (
+        <Section title="Auto layout child">
+            {!isAbsolute && (
+                <div className="space-y-1.5">
+                    {/* Align self override */}
+                    <SelectInput
+                        label="Align"
+                        value={(node as FrameNode).alignSelf ?? 'auto'}
+                        options={ALIGN_SELF_OPTIONS}
+                        onChange={(v) => onUpdate({ alignSelf: v === 'auto' ? undefined : v })}
+                        className="w-full"
+                    />
+                </div>
+            )}
+
+            {/* Ignore auto layout toggle */}
+            <Checkbox
+                checked={isAbsolute}
+                onChange={(checked) => onUpdate({ positioning: checked ? 'absolute' : 'auto' })}
+                label="Ignore auto layout"
+            />
+        </Section>
     )
 }
