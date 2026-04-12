@@ -8,10 +8,15 @@ import type {
     Border,
     BorderRadius,
     Padding,
+    GridTrack,
 } from '@/types/canvas'
 import { blendModeToCSS, hexOpacityToRgba, normaliseHex } from '@/lib/color-utils'
-import type { ThemeResolverCtx } from '@/lib/theme/theme-context'
-import { resolveColor, resolveNumber, resolveShadow, resolvePadding as resolvePaddingRef } from '@/lib/theme/theme-resolver'
+import type { Variable, VariableCollection, BoundVariables } from '@/lib/variables/types'
+import {
+    resolveBoundColor,
+    resolveBoundSimpleColor,
+    resolveBoundNumber,
+} from '@/lib/variables/resolve-for-render'
 
 // ============================================================
 // CSS Value Mappings
@@ -45,20 +50,29 @@ function hexToRgba(hex: string, opacity: number): string {
     return `rgba(${r},${g},${b},${opacity})`
 }
 
+/** Variable resolution context for the new Figma-clone system */
+export interface VarCtx {
+    boundVariables?: BoundVariables
+    modeId: string
+    variables: Map<string, Variable>
+    collections: Map<string, VariableCollection>
+}
+
 /** Build background CSS from a fills array.
  *  Supports multiple fills, per-fill opacity, and visibility.
  *  First fill in array = topmost visual layer (CSS background shorthand
  *  renders first background on top). */
-function computeBackground(fills: Fill[], themeCtx?: ThemeResolverCtx | null): CSSProperties {
+function computeBackground(fills: Fill[], varCtx?: VarCtx): CSSProperties {
     const visible = fills.filter((f) => f.visible !== false)
     if (visible.length === 0) return {}
 
     // Single solid fill fast path — no layering needed
     if (visible.length === 1 && visible[0].type === 'solid') {
         const fill = visible[0]
-        const color = fill.colorRef && themeCtx
-            ? resolveColor(fill.colorRef, fill.color, themeCtx.table, themeCtx.mode)
-            : fill.color
+        const fillIdx = fills.indexOf(fill)
+        // New system: check boundVariables first
+        const boundColor = varCtx ? resolveBoundColor('fills', fillIdx, varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+        const color = boundColor ?? fill.color
         return { backgroundColor: hexToRgba(color, fill.opacity ?? 1) }
     }
 
@@ -73,9 +87,9 @@ function computeBackground(fills: Fill[], themeCtx?: ThemeResolverCtx | null): C
             case 'solid': {
                 // Express as degenerate gradient so it works in backgroundImage
                 // (plain colors are not valid backgroundImage values in multi-layer context)
-                const resolved = fill.colorRef && themeCtx
-                    ? resolveColor(fill.colorRef, fill.color, themeCtx.table, themeCtx.mode)
-                    : fill.color
+                const fillIdx = fills.indexOf(fill)
+                const boundColor = varCtx ? resolveBoundColor('fills', fillIdx, varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+                const resolved = boundColor ?? fill.color
                 const color = hexToRgba(resolved, opacity)
                 images.push(`linear-gradient(${color}, ${color})`)
                 sizes.push('100% 100%')
@@ -176,15 +190,14 @@ function computeImageFillFilter(fill: ImageFill): string | undefined {
 }
 
 /** Build CSS box-shadow from shadows array, scaled via CSS custom property */
-function computeBoxShadow(shadows: Shadow[], themeCtx?: ThemeResolverCtx | null): string | undefined {
+function computeBoxShadow(shadows: Shadow[], varCtx?: VarCtx): string | undefined {
     const visible = shadows.filter((s) => s.visible !== false)
     if (visible.length === 0) return undefined
     return visible
-        .map((s) => {
+        .map((s, i) => {
             const inset = s.type === 'inner' ? 'inset ' : ''
-            const color = s.colorRef && themeCtx
-                ? resolveColor(s.colorRef, s.color, themeCtx.table, themeCtx.mode)
-                : s.color
+            const boundColor = varCtx ? resolveBoundColor('effects', i, varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+            const color = boundColor ?? s.color
             return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${color}`
         })
         .join(', ')
@@ -194,13 +207,12 @@ function computeBoxShadow(shadows: Shadow[], themeCtx?: ThemeResolverCtx | null)
  *  Uses box-shadow exclusively so it never affects layout (unlike CSS border).
  *  Only applicable for solid borders — dashed/dotted fall back to CSS border.
  *  Supports per-side borders via the `sides` property. */
-function computeBorderAsShadow(border: Border, themeCtx?: ThemeResolverCtx | null): string | undefined {
+function computeBorderAsShadow(border: Border, varCtx?: VarCtx): string | undefined {
     if (border.visible === false) return undefined
     if (border.style !== 'solid' || border.width === 0) return undefined
     const { width, position = 'inside' } = border
-    const rawColor = border.colorRef && themeCtx
-        ? resolveColor(border.colorRef, border.color, themeCtx.table, themeCtx.mode)
-        : border.color
+    const boundColor = varCtx ? resolveBoundSimpleColor('strokeColor', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+    const rawColor = boundColor ?? border.color
     // Always use rgba — avoids rendering quirks with raw hex in box-shadow at opacity=1
     const color = hexOpacityToRgba(normaliseHex(rawColor), border.opacity ?? 1)
     const w = `calc(${width}px * var(--z, 1))`
@@ -238,11 +250,10 @@ function computeBorderAsShadow(border: Border, themeCtx?: ThemeResolverCtx | nul
 /** Build border/outline CSS for non-solid styles (dashed/dotted).
  *  CSS `outline` is used for center/outside positions since `border` only supports inside
  *  (box-sizing: border-box shrinks content area). Outline is drawn outside the layout box. */
-function computeBorder(border?: Border, themeCtx?: ThemeResolverCtx | null): CSSProperties {
+function computeBorder(border?: Border, varCtx?: VarCtx): CSSProperties {
     if (!border || border.visible === false || border.style === 'solid') return {}
-    const rawColor = border.colorRef && themeCtx
-        ? resolveColor(border.colorRef, border.color, themeCtx.table, themeCtx.mode)
-        : border.color
+    const boundColor = varCtx ? resolveBoundSimpleColor('strokeColor', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+    const rawColor = boundColor ?? border.color
     // Always use rgba for consistency
     const color = hexOpacityToRgba(normaliseHex(rawColor), border.opacity ?? 1)
     const w = `calc(${border.width}px * var(--z, 1))`
@@ -284,11 +295,11 @@ function computeBorder(border?: Border, themeCtx?: ThemeResolverCtx | null): CSS
 }
 
 /** Build border-radius CSS, scaled via CSS custom property */
-function computeBorderRadius(br: BorderRadius, brRef?: string, themeCtx?: ThemeResolverCtx | null): CSSProperties {
+function computeBorderRadius(br: BorderRadius, varCtx?: VarCtx): CSSProperties {
     if (typeof br === 'number') {
-        const resolved = brRef && themeCtx
-            ? resolveNumber(brRef, br, themeCtx.table, themeCtx.mode)
-            : br
+        // New system: check boundVariables for topLeftRadius (uniform case)
+        const boundRadius = varCtx ? resolveBoundNumber('topLeftRadius', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections) : undefined
+        const resolved = boundRadius ?? br
         return resolved > 0 ? { borderRadius: `calc(${resolved}px * var(--z, 1))` } : {}
     }
     return {
@@ -300,13 +311,28 @@ function computeBorderRadius(br: BorderRadius, brRef?: string, themeCtx?: ThemeR
 }
 
 /** Build padding CSS from Padding object, scaled via CSS custom property */
-function computePadding(p: Padding, pRef?: string, themeCtx?: ThemeResolverCtx | null): CSSProperties {
-    const resolved = pRef && themeCtx
-        ? resolvePaddingRef(pRef, p, themeCtx.table, themeCtx.mode)
-        : p
-    if (resolved.top === 0 && resolved.right === 0 && resolved.bottom === 0 && resolved.left === 0) return {}
+function computePadding(p: Padding, varCtx?: VarCtx): CSSProperties {
+    // New system: check individual padding bindings
+    if (varCtx?.boundVariables) {
+        const pt = resolveBoundNumber('paddingTop', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections)
+        const pr = resolveBoundNumber('paddingRight', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections)
+        const pb = resolveBoundNumber('paddingBottom', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections)
+        const pl = resolveBoundNumber('paddingLeft', varCtx.boundVariables, varCtx.modeId, varCtx.variables, varCtx.collections)
+        if (pt !== undefined || pr !== undefined || pb !== undefined || pl !== undefined) {
+            const top = pt ?? p.top
+            const right = pr ?? p.right
+            const bottom = pb ?? p.bottom
+            const left = pl ?? p.left
+            if (top === 0 && right === 0 && bottom === 0 && left === 0) return {}
+            return {
+                padding: `calc(${top}px * var(--z, 1)) calc(${right}px * var(--z, 1)) calc(${bottom}px * var(--z, 1)) calc(${left}px * var(--z, 1))`,
+            }
+        }
+    }
+    // Direct value (no variable binding)
+    if (p.top === 0 && p.right === 0 && p.bottom === 0 && p.left === 0) return {}
     return {
-        padding: `calc(${resolved.top}px * var(--z, 1)) calc(${resolved.right}px * var(--z, 1)) calc(${resolved.bottom}px * var(--z, 1)) calc(${resolved.left}px * var(--z, 1))`,
+        padding: `calc(${p.top}px * var(--z, 1)) calc(${p.right}px * var(--z, 1)) calc(${p.bottom}px * var(--z, 1)) calc(${p.left}px * var(--z, 1))`,
     }
 }
 
@@ -395,7 +421,7 @@ export function computeBaseStyles(
     isTopLevel: boolean,
     parentDir?: 'row' | 'column',
     parentLayoutMode?: 'flex' | 'grid' | 'none',
-    themeCtx?: ThemeResolverCtx | null,
+    varCtx?: VarCtx,
 ): CSSProperties {
     const s: CSSProperties = { boxSizing: 'border-box' }
 
@@ -515,18 +541,21 @@ export function computeBaseStyles(
     if (node.rotation !== 0) transforms.push(`rotate(${node.rotation}deg)`)
     if (transforms.length > 0) s.transform = transforms.join(' ')
 
+    // Build varCtx from node's boundVariables (reuse passed-in varCtx with node's bindings)
+    const nodeVarCtx: VarCtx | undefined = varCtx ? { ...varCtx, boundVariables: node.boundVariables } : undefined
+
     // ── Visual properties ─────────────────────────────────────
-    Object.assign(s, computeBackground(node.fills, themeCtx))
-    Object.assign(s, computeBorder(node.border, themeCtx))      // handles dashed/dotted only
-    Object.assign(s, computeBorderRadius(node.borderRadius, node.borderRadiusRef, themeCtx))
+    Object.assign(s, computeBackground(node.fills, nodeVarCtx))
+    Object.assign(s, computeBorder(node.border, nodeVarCtx))      // handles dashed/dotted only
+    Object.assign(s, computeBorderRadius(node.borderRadius, nodeVarCtx))
 
     // ── Box shadow — merge stroke + drop/inner shadows ────────
     // Must be ONE declaration: a second s.boxShadow assignment would silently overwrite.
     // Solid border stroke uses box-shadow for layout-safe inside/center/outside positioning.
     const shadowParts: string[] = []
-    const borderShadow = node.border ? computeBorderAsShadow(node.border, themeCtx) : undefined
+    const borderShadow = node.border ? computeBorderAsShadow(node.border, nodeVarCtx) : undefined
     if (borderShadow) shadowParts.push(borderShadow)
-    const nodeShadow = computeBoxShadow(node.shadows, themeCtx)
+    const nodeShadow = computeBoxShadow(node.shadows, nodeVarCtx)
     if (nodeShadow) shadowParts.push(nodeShadow)
     if (shadowParts.length > 0) s.boxShadow = shadowParts.join(', ')
 
@@ -579,16 +608,26 @@ export function computeBaseStyles(
  * Note: Does NOT set position — that's handled by computeBaseStyles
  * and the frame renderer for mode:'none' positioning context.
  */
-export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolverCtx | null): CSSProperties {
+/** Convert GridTrack[] → CSS grid-template value (zoom-aware for px units) */
+function tracksToCSS(tracks: GridTrack[]): string {
+    return tracks.map(t => {
+        if (t.unit === 'auto') return 'auto'
+        if (t.unit === 'fr') return `${t.value}fr`
+        return `calc(${t.value}px * var(--z, 1))`
+    }).join(' ')
+}
+
+export function computeFrameLayoutStyles(node: FrameNode, varCtx?: VarCtx): CSSProperties {
     const s: CSSProperties = {}
+    const nodeVarCtx: VarCtx | undefined = varCtx ? { ...varCtx, boundVariables: node.boundVariables } : undefined
 
     if (node.layout.mode === 'flex') {
         s.display = 'flex'
         s.flexDirection = node.layout.direction ?? 'column'
         if (node.layout.gap != null) {
-            const resolvedGap = node.layout.gapRef && themeCtx
-                ? resolveNumber(node.layout.gapRef, node.layout.gap, themeCtx.table, themeCtx.mode)
-                : node.layout.gap
+            // New system: check boundVariables for itemSpacing
+            const boundGap = nodeVarCtx ? resolveBoundNumber('itemSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
+            const resolvedGap = boundGap ?? node.layout.gap
             s.gap = `calc(${resolvedGap}px * var(--z, 1))`
         }
         if (node.layout.justify)
@@ -598,13 +637,18 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
         if (node.layout.wrap) s.flexWrap = 'wrap'
     } else if (node.layout.mode === 'grid') {
         s.display = 'grid'
-        if (node.layout.columns != null) {
+        // Track-based templates take priority over legacy columns/rows
+        if (node.layout.columnTracks?.length) {
+            s.gridTemplateColumns = tracksToCSS(node.layout.columnTracks)
+        } else if (node.layout.columns != null) {
             s.gridTemplateColumns =
                 typeof node.layout.columns === 'number'
                     ? `repeat(${node.layout.columns}, 1fr)`
                     : node.layout.columns
         }
-        if (node.layout.rows != null) {
+        if (node.layout.rowTracks?.length) {
+            s.gridTemplateRows = tracksToCSS(node.layout.rowTracks)
+        } else if (node.layout.rows != null) {
             s.gridTemplateRows =
                 typeof node.layout.rows === 'number'
                     ? `repeat(${node.layout.rows}, 1fr)`
@@ -619,15 +663,13 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
         const gridColGap = node.layout.columnGap ?? node.layout.gap
         const gridRowGap = node.layout.rowGap ?? node.layout.gap
         if (gridColGap != null) {
-            const resolvedColGap = node.layout.gapRef && themeCtx
-                ? resolveNumber(node.layout.gapRef, gridColGap, themeCtx.table, themeCtx.mode)
-                : gridColGap
+            const boundColGap = nodeVarCtx ? resolveBoundNumber('itemSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
+            const resolvedColGap = boundColGap ?? gridColGap
             s.columnGap = `calc(${resolvedColGap}px * var(--z, 1))`
         }
         if (gridRowGap != null) {
-            const resolvedRowGap = node.layout.gapRef && themeCtx
-                ? resolveNumber(node.layout.gapRef, gridRowGap, themeCtx.table, themeCtx.mode)
-                : gridRowGap
+            const boundRowGap = nodeVarCtx ? resolveBoundNumber('counterAxisSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
+            const resolvedRowGap = boundRowGap ?? gridRowGap
             s.rowGap = `calc(${resolvedRowGap}px * var(--z, 1))`
         }
     }
@@ -652,19 +694,29 @@ export function computeFrameLayoutStyles(node: FrameNode, themeCtx?: ThemeResolv
     }
 
     // ── Grid child properties ────────────────────────────────
+    if (node.gridColumnStart != null) {
+        s.gridColumnStart = node.gridColumnStart
+    }
     if (node.gridColumnSpan != null) {
-        s.gridColumn = node.gridColumnSpan === -1
-            ? '1 / -1'
-            : `span ${node.gridColumnSpan}`
+        s.gridColumn = node.gridColumnStart != null
+            ? `${node.gridColumnStart} / span ${node.gridColumnSpan === -1 ? node.gridColumnSpan : node.gridColumnSpan}`
+            : node.gridColumnSpan === -1
+                ? '1 / -1'
+                : `span ${node.gridColumnSpan}`
+    }
+    if (node.gridRowStart != null) {
+        s.gridRowStart = node.gridRowStart
     }
     if (node.gridRowSpan != null) {
-        s.gridRow = node.gridRowSpan === -1
-            ? '1 / -1'
-            : `span ${node.gridRowSpan}`
+        s.gridRow = node.gridRowStart != null
+            ? `${node.gridRowStart} / span ${node.gridRowSpan === -1 ? node.gridRowSpan : node.gridRowSpan}`
+            : node.gridRowSpan === -1
+                ? '1 / -1'
+                : `span ${node.gridRowSpan}`
     }
 
     // Padding
-    Object.assign(s, computePadding(node.padding, node.paddingRef, themeCtx))
+    Object.assign(s, computePadding(node.padding, nodeVarCtx))
 
     // Overflow
     if (node.overflow === 'hidden') s.overflow = 'hidden'

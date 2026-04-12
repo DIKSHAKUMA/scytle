@@ -19,7 +19,8 @@ import { usePenTool } from './hooks/use-pen-tool'
 import { PenOverlay } from './pen-overlay'
 import { VectorEditToolbar } from './vector-edit-toolbar'
 import { AnchorPointOverlay } from './anchor-point-overlay'
-import { ThemeResolverProvider } from '@/lib/theme/theme-context'
+import { GridOverlay } from './grid-overlay'
+
 import type { HandleDirection } from './hooks/use-node-resize'
 
 // ============================================================
@@ -837,11 +838,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 className="absolute top-0 left-0"
                 style={{ '--z': zoom, '--px': panX, '--py': panY } as unknown as CSSProperties}
             >
-                <ThemeResolverProvider>
-                    {nodes.map((node) => (
-                        <NodeRenderer key={node.id} node={node} isTopLevel />
-                    ))}
-                </ThemeResolverProvider>
+                {nodes.map((node) => (
+                    <NodeRenderer key={node.id} node={node} isTopLevel />
+                ))}
 
                 {/* Frame draw preview (canvas coordinates scaled via CSS vars) */}
                 {drawState && (
@@ -864,6 +863,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             <PaddingOverlay viewportRef={viewportRef} />
             <CanvasPaddingZones viewportRef={viewportRef} />
             <CanvasGapZones viewportRef={viewportRef} />
+            <GridOverlay viewportRef={viewportRef} />
             <SelectionOverlay viewportRef={viewportRef} />
 
             {/* Gradient handles (shown when gradient fill picker is open) */}

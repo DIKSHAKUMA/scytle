@@ -1,17 +1,19 @@
 'use client'
 
-import type { FrameNode, Layout, Padding } from '@/types/canvas'
+import type { FrameNode, Layout, Padding, GridTrack } from '@/types/canvas'
 import { Section, NumberInput, Checkbox } from './inputs'
 import {
     ArrowDown,
     ArrowRight,
     LayoutGrid,
+    Minus,
     Move,
+    Plus,
     WrapText,
 } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { useThemeTable, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
+// (Old theme resolution removed — new variable system resolves via boundVariables)
 import { useEditorStore } from '@/store/editor-store'
 
 // ── Figma-style flow radio group ─────────────────────────────
@@ -29,7 +31,11 @@ function modeToLayout(mode: LayoutMode, prev: Layout): Partial<Layout> {
         case 'none': return { mode: 'none' }
         case 'flex-col': return { mode: 'flex', direction: 'column' }
         case 'flex-row': return { mode: 'flex', direction: 'row' }
-        case 'grid': return { mode: 'grid', columns: typeof prev.columns === 'number' ? prev.columns : 2 }
+        case 'grid': {
+            const cols = typeof prev.columns === 'number' ? prev.columns : 2
+            const tracks: GridTrack[] = Array.from({ length: cols }, () => ({ value: 1, unit: 'fr' as const }))
+            return { mode: 'grid', columns: cols, columnTracks: tracks }
+        }
     }
 }
 
@@ -583,18 +589,12 @@ function GapInput({
     const isSpaceBetween = layout.justify === 'between'
     const isGrid = layout.mode === 'grid'
 
-    // Theme resolution for gap
-    const { table, mode } = useThemeTable()
-    const resolvedGap = resolveDisplayNumber(layout.gapRef, layout.gap ?? 0, layout.gapDetached, table, mode)
+    // Use raw gap value directly (new variable system resolves via boundVariables)
+    const resolvedGap = layout.gap ?? 0
 
-    // Wrap onChange to auto-detach gap from theme
     const handleGapChange = useCallback((partial: Partial<Layout>) => {
-        if (isThemeLinked(layout.gapRef, layout.gapDetached)) {
-            onChange({ ...partial, gapRef: undefined, gapDetached: true })
-        } else {
-            onChange(partial)
-        }
-    }, [onChange, layout.gapRef, layout.gapDetached])
+        onChange(partial)
+    }, [onChange])
 
     // All hooks called unconditionally (React rules of hooks)
     const gapScrub = useScrub(resolvedGap, (v) => handleGapChange({ gap: v }))
@@ -665,6 +665,198 @@ function GapInput({
     )
 }
 
+// ── Grid track helpers ──────────────────────────────────────
+
+/** Convert legacy columns/rows to GridTrack[] */
+function legacyToTracks(value: number | string | undefined): GridTrack[] {
+    if (value == null) return [{ value: 1, unit: 'fr' }, { value: 1, unit: 'fr' }]
+    if (typeof value === 'number') {
+        return Array.from({ length: value }, () => ({ value: 1, unit: 'fr' as const }))
+    }
+    return value.split(/\s+/).map(parseTrackString)
+}
+
+function parseTrackString(s: string): GridTrack {
+    const t = s.trim()
+    if (t === 'auto') return { value: 0, unit: 'auto' }
+    if (t.endsWith('fr')) return { value: parseFloat(t) || 1, unit: 'fr' }
+    if (t.endsWith('px')) return { value: parseFloat(t) || 0, unit: 'px' }
+    return { value: parseFloat(t) || 1, unit: 'fr' }
+}
+
+const UNIT_OPTIONS: { value: GridTrack['unit']; label: string }[] = [
+    { value: 'fr', label: 'Fill' },
+    { value: 'auto', label: 'Hug' },
+    { value: 'px', label: 'Fixed' },
+]
+
+/** Read the browser's computed track sizes for a grid node */
+function getComputedTrackSizes(nodeId: string, axis: 'col' | 'row'): number[] {
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`) as HTMLElement | null
+    if (!el) return []
+    const style = window.getComputedStyle(el)
+    const raw = axis === 'col' ? style.gridTemplateColumns : style.gridTemplateRows
+    if (!raw || raw === 'none') return []
+    return raw.split(/\s+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
+}
+
+// ── Grid track list UI (Figma-style per-track controls) ─────
+
+function TrackListSection({
+    label,
+    axis,
+    tracks,
+    nodeId,
+    onChange,
+}: {
+    label: string
+    axis: 'col' | 'row'
+    tracks: GridTrack[]
+    nodeId: string
+    /** Called with new tracks array. If a track was removed, removedIndex is the 0-based index that was deleted. */
+    onChange: (tracks: GridTrack[], removedIndex?: number) => void
+}) {
+    const gridSelectedTrackAxis = useEditorStore((s) => s.gridSelectedTrackAxis)
+    const gridSelectedTrackIndex = useEditorStore((s) => s.gridSelectedTrackIndex)
+    const setGridSelectedTrack = useEditorStore((s) => s.setGridSelectedTrack)
+
+    const addTrack = () => {
+        onChange([...tracks, { value: 1, unit: 'fr' }])
+    }
+
+    const removeTrack = (index: number) => {
+        if (tracks.length <= 1) return
+        if (gridSelectedTrackAxis === axis && gridSelectedTrackIndex === index) {
+            setGridSelectedTrack(null)
+        }
+        onChange(tracks.filter((_, i) => i !== index), index)
+    }
+
+    const updateTrack = (index: number, update: Partial<GridTrack>) => {
+        const next = tracks.map((t, i) => {
+            if (i !== index) return t
+            const merged = { ...t, ...update }
+            if (update.unit && update.unit !== t.unit) {
+                // Unit changed — compute smart default
+                const computedSizes = getComputedTrackSizes(nodeId, axis)
+                const computedPx = computedSizes[i] ?? 100
+
+                if (merged.unit === 'auto') {
+                    merged.value = 0
+                } else if (merged.unit === 'px') {
+                    // Use current computed pixel size (Figma: "Fixed width (136)")
+                    merged.value = Math.round(computedPx)
+                } else if (merged.unit === 'fr') {
+                    merged.value = 1
+                }
+            }
+            return merged
+        })
+        onChange(next)
+    }
+
+    // Read computed sizes for displaying in Hug tracks
+    const computedSizes = nodeId ? getComputedTrackSizes(nodeId, axis) : []
+
+    return (
+        <div>
+            {/* Section header: label + add button */}
+            <div className="flex items-center justify-between py-1.5 border-t border-border/30">
+                <span className="text-[11px] font-medium text-foreground">{label}</span>
+                <button
+                    className="w-5 h-5 flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                    onClick={addTrack}
+                    title={`Add ${label.toLowerCase().slice(0, -1)}`}
+                >
+                    <Plus size={12} />
+                </button>
+            </div>
+
+            {/* Track rows */}
+            <div className="space-y-0.5">
+                {tracks.map((track, i) => {
+                    const isSelected = gridSelectedTrackAxis === axis && gridSelectedTrackIndex === i
+
+                    return (
+                        <div
+                            key={i}
+                            className={cn(
+                                'flex items-center gap-1 group rounded-sm px-0.5 -mx-0.5 transition-colors',
+                                isSelected ? 'bg-primary/10' : 'hover:bg-muted/30'
+                            )}
+                            onClick={() => setGridSelectedTrack(
+                                isSelected ? null : axis,
+                                isSelected ? null : i
+                            )}
+                        >
+                            {/* Track index */}
+                            <span className={cn(
+                                'text-[10px] w-4 text-center shrink-0 select-none',
+                                isSelected ? 'text-primary font-medium' : 'text-muted-foreground/60'
+                            )}>
+                                {i + 1}
+                            </span>
+
+                            {/* Unit dropdown (Figma style: "fr", "px", "auto") */}
+                            <select
+                                value={track.unit}
+                                onChange={(e) => {
+                                    e.stopPropagation()
+                                    updateTrack(i, { unit: e.target.value as GridTrack['unit'] })
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className={cn(
+                                    'h-7 rounded-sm text-[10px] px-1.5 outline-none cursor-pointer transition-colors appearance-none w-14 shrink-0',
+                                    isSelected
+                                        ? 'bg-primary/15 text-foreground'
+                                        : 'bg-muted/40 text-foreground hover:bg-muted/60'
+                                )}
+                            >
+                                {UNIT_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+
+                            {/* Value input — shows computed size for Hug, editable for Fill/Fixed */}
+                            <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+                                <NumberInput
+                                    value={track.unit === 'auto'
+                                        ? Math.round(computedSizes[i] ?? 0)
+                                        : track.value}
+                                    onChange={(v) => updateTrack(i, { value: Math.max(track.unit === 'fr' ? 0.1 : 1, v) })}
+                                    min={track.unit === 'fr' ? 0.1 : 0}
+                                    step={track.unit === 'fr' ? 0.1 : 1}
+                                    disabled={track.unit === 'auto'}
+                                    className="flex-1"
+                                />
+                            </div>
+
+                            {/* Remove button — visible on hover or when selected */}
+                            <button
+                                className={cn(
+                                    'w-5 h-5 flex items-center justify-center rounded-sm transition-colors shrink-0',
+                                    tracks.length <= 1
+                                        ? 'text-muted-foreground/20 cursor-not-allowed'
+                                        : isSelected
+                                            ? 'text-muted-foreground hover:text-foreground'
+                                            : 'text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 opacity-0 group-hover:opacity-100'
+                                )}
+                                onClick={(e) => { e.stopPropagation(); removeTrack(i) }}
+                                disabled={tracks.length <= 1}
+                                title="Remove track"
+                            >
+                                <Minus size={12} />
+                            </button>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 // ── Main component ───────────────────────────────────────────
 
 interface LayoutSectionProps {
@@ -679,6 +871,7 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
     const isGrid = layout.mode === 'grid'
     const hasLayout = isFlex || isGrid
     const isSpaceBetween = layout.justify === 'between'
+    const updateNode = useEditorStore((s) => s.updateNode)
 
     const updateLayout = (partialLayout: Partial<Layout>) => {
         onUpdate({ layout: { ...layout, ...partialLayout } })
@@ -689,6 +882,7 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
     }
 
     return (
+        <>
         <Section title={hasLayout ? 'Auto layout' : 'Layout'}>
             {/* Flow radio group — Figma: Freeform / Vertical / Horizontal / Grid */}
             <div className="flex items-center gap-1">
@@ -753,30 +947,6 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                         </div>
                     </div>
 
-                    {/* Grid-specific: Cols + Rows */}
-                    {isGrid && (
-                        <div className="flex gap-2 pt-0.5">
-                            <NumberInput
-                                label="Cols"
-                                value={typeof layout.columns === 'number' ? layout.columns : 2}
-                                onChange={(v) => updateLayout({ columns: v })}
-                                min={1}
-                                step={1}
-                                labelWidth="w-7"
-                                className="flex-1"
-                            />
-                            <NumberInput
-                                label="Rows"
-                                value={typeof layout.rows === 'number' ? layout.rows : 0}
-                                onChange={(v) => updateLayout({ rows: v > 0 ? v : undefined })}
-                                min={0}
-                                step={1}
-                                labelWidth="w-8"
-                                className="flex-1"
-                            />
-                        </div>
-                    )}
-
                     {/* Padding controls (Figma-style compact H/V with individual toggle) */}
                     <PaddingControls padding={padding} onChange={updatePadding} nodeId={node.id} />
                 </>
@@ -789,5 +959,71 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                 label="Clip content"
             />
         </Section>
+
+        {/* Grid track lists — separate section below Auto layout (like Figma) */}
+        {isGrid && (
+            <div className="border-b border-border/40 px-3 py-1">
+                <TrackListSection
+                    label="Columns"
+                    axis="col"
+                    nodeId={node.id}
+                    tracks={layout.columnTracks?.length ? layout.columnTracks : legacyToTracks(layout.columns)}
+                    onChange={(tracks, removedIndex) => {
+                        updateLayout({ columnTracks: tracks, columns: tracks.length })
+                        if (removedIndex != null && node.children) {
+                            for (const child of node.children) {
+                                const start = child.gridColumnStart
+                                const span = child.gridColumnSpan
+                                const updates: Record<string, unknown> = {}
+                                if (start != null && start > removedIndex + 1) {
+                                    updates.gridColumnStart = start - 1
+                                }
+                                if (span != null && span > 1 && span !== -1) {
+                                    const childEnd = (start ?? 1) + span - 1
+                                    if (childEnd > removedIndex + 1) {
+                                        updates.gridColumnSpan = Math.max(1, span - 1)
+                                    }
+                                }
+                                if (Object.keys(updates).length > 0) {
+                                    updateNode(child.id, updates)
+                                }
+                            }
+                        }
+                    }}
+                />
+                <TrackListSection
+                    label="Rows"
+                    axis="row"
+                    nodeId={node.id}
+                    tracks={layout.rowTracks?.length ? layout.rowTracks : (layout.rows != null ? legacyToTracks(layout.rows) : [])}
+                    onChange={(tracks, removedIndex) => {
+                        updateLayout({
+                            rowTracks: tracks.length > 0 ? tracks : undefined,
+                            rows: tracks.length > 0 ? tracks.length : undefined,
+                        })
+                        if (removedIndex != null && node.children) {
+                            for (const child of node.children) {
+                                const start = child.gridRowStart
+                                const span = child.gridRowSpan
+                                const updates: Record<string, unknown> = {}
+                                if (start != null && start > removedIndex + 1) {
+                                    updates.gridRowStart = start - 1
+                                }
+                                if (span != null && span > 1 && span !== -1) {
+                                    const childEnd = (start ?? 1) + span - 1
+                                    if (childEnd > removedIndex + 1) {
+                                        updates.gridRowSpan = Math.max(1, span - 1)
+                                    }
+                                }
+                                if (Object.keys(updates).length > 0) {
+                                    updateNode(child.id, updates)
+                                }
+                            }
+                        }
+                    }}
+                />
+            </div>
+        )}
+        </>
     )
 }

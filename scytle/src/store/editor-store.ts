@@ -4,9 +4,8 @@ import { devtools } from 'zustand/middleware'
 import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
-import { relinkNodes } from '@/lib/theme/relink-nodes'
+import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
 import { canvasSync } from '@/lib/sync'
-import type { VariableTable, ThemeMode } from '@/lib/theme/variable-table'
 
 // ============================================================
 // History constants
@@ -132,6 +131,20 @@ interface EditorState {
     /** Index of the gap being hovered (between child i and i+1) */
     gapOverlayIndex: number | null
 
+    // Grid cell highlight (during drag into grid) ----------------
+    /** ID of the grid container being targeted */
+    gridHighlightNodeId: string | null
+    /** 1-based column of the highlighted cell */
+    gridHighlightCol: number | null
+    /** 1-based row of the highlighted cell */
+    gridHighlightRow: number | null
+
+    // Grid track selection (click dot on canvas → selects track in panel)
+    /** 'col' or 'row' axis of the selected track */
+    gridSelectedTrackAxis: 'col' | 'row' | null
+    /** 0-based index of the selected track */
+    gridSelectedTrackIndex: number | null
+
     // Gradient editing ------------------------------------------
     /** Index of the fill being gradient-edited (within the selected node) */
     gradientEditingFillIdx: number | null
@@ -186,6 +199,12 @@ interface EditorState {
     // Gap overlay actions --------------------------------------
     setGapOverlay: (id: string | null, index?: number | null) => void
 
+    // Grid cell highlight actions --------------------------------
+    setGridHighlight: (nodeId: string | null, col?: number | null, row?: number | null) => void
+
+    // Grid track selection actions --------------------------------
+    setGridSelectedTrack: (axis: 'col' | 'row' | null, index?: number | null) => void
+
     // Gradient editing actions ----------------------------------
     setGradientEditingFillIdx: (idx: number | null) => void
 
@@ -239,7 +258,7 @@ interface EditorState {
     endBatch: () => void
 
     // Theme relink (called by theme sync subscription) ----------
-    _relinkTheme: (table: VariableTable, mode: ThemeMode) => void
+    _relinkTheme: () => void
 
     // Z-order actions -----------------------------------------
     bringForward: (id: string) => void
@@ -326,6 +345,11 @@ export const useEditorStore = create<EditorState>()(
             paddingOverlayDirection: null,
             gapOverlayNodeId: null,
             gapOverlayIndex: null,
+            gridHighlightNodeId: null,
+            gridHighlightCol: null,
+            gridHighlightRow: null,
+            gridSelectedTrackAxis: null,
+            gridSelectedTrackIndex: null,
             gradientEditingFillIdx: null,
             imageCropEditingFillIdx: null,
             fontPickerOpen: false,
@@ -531,6 +555,27 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setGapOverlay'
+                ),
+
+            setGridHighlight: (nodeId, col, row) =>
+                set(
+                    (state) => {
+                        state.gridHighlightNodeId = nodeId
+                        state.gridHighlightCol = nodeId ? (col ?? null) : null
+                        state.gridHighlightRow = nodeId ? (row ?? null) : null
+                    },
+                    false,
+                    'setGridHighlight'
+                ),
+
+            setGridSelectedTrack: (axis, index) =>
+                set(
+                    (state) => {
+                        state.gridSelectedTrackAxis = axis
+                        state.gridSelectedTrackIndex = axis ? (index ?? null) : null
+                    },
+                    false,
+                    'setGridSelectedTrack'
                 ),
 
             setGradientEditingFillIdx: (idx) =>
@@ -929,12 +974,15 @@ export const useEditorStore = create<EditorState>()(
                     'endBatch'
                 ),
 
-            _relinkTheme: (table, mode) =>
+            _relinkTheme: () =>
                 set(
                     (state) => {
                         if (state.nodes.length === 0) return
                         _snap(state)
-                        relinkNodes(state.nodes, table, mode)
+                        // Use new variable store for relinking
+                        const { useVariableStore } = require('@/store/variable-store')
+                        const { variables, collections, activeModeId } = useVariableStore.getState()
+                        relinkNodesWithVariables(state.nodes, variables, collections, activeModeId ?? '')
                     },
                     false,
                     'relinkTheme'
@@ -2106,19 +2154,19 @@ if (typeof window !== 'undefined') {
         _sgStoreLoaded = true
 
         // Dynamic import breaks the circular dep chain
-        import('@/store/style-guide-store').then(({ useStyleGuideStore }) => {
-            let prevTable = useStyleGuideStore.getState().variableTable
-            let prevMode = useStyleGuideStore.getState().themeMode
+        import('@/store/variable-store').then(({ useVariableStore }) => {
+            let prevVariables = useVariableStore.getState().variables
+            let prevModeId = useVariableStore.getState().activeModeId
 
-            useStyleGuideStore.subscribe((state) => {
-                const { variableTable, themeMode } = state
-                // Only relink when table or mode actually changed
-                if (variableTable === prevTable && themeMode === prevMode) return
-                prevTable = variableTable
-                prevMode = themeMode
+            useVariableStore.subscribe((state) => {
+                const { variables, activeModeId } = state
+                // Only relink when variables or mode actually changed
+                if (variables === prevVariables && activeModeId === prevModeId) return
+                prevVariables = variables
+                prevModeId = activeModeId
 
-                // Relink all nodes with the new theme (with undo support)
-                useEditorStore.getState()._relinkTheme(variableTable, themeMode)
+                // Relink all nodes with the new variables (with undo support)
+                useEditorStore.getState()._relinkTheme()
             })
         })
     }

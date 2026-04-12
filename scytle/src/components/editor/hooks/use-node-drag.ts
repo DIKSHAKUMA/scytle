@@ -37,7 +37,7 @@ export interface InsertIndicator {
 
 export interface DragInfo {
     isDragging: boolean
-    mode: 'freeform' | 'reorder' | null
+    mode: 'freeform' | 'reorder' | 'grid-place' | null
     indicator: InsertIndicator | null
     /** Canvas-space snap guide lines shown while dragging (x = vertical line, y = horizontal line) */
     snapLines: { axis: 'x' | 'y'; canvasPos: number }[]
@@ -50,7 +50,7 @@ interface InternalDragState {
     startPointerY: number
     startNodeX: number
     startNodeY: number
-    mode: 'freeform' | 'reorder'
+    mode: 'freeform' | 'reorder' | 'grid-place'
     /** Parent frame ID (null for top-level freeform) */
     parentId: string | null
     /** Flex direction of parent (for reorder) */
@@ -65,6 +65,10 @@ interface InternalDragState {
     additionalNodes: { id: string; startX: number; startY: number }[]
     /** Whether shift was held during pointer down (skip reduce-to-single on up) */
     shiftHeld: boolean
+    /** Grid cell placement: current column (1-based) */
+    gridCol: number
+    /** Grid cell placement: current row (1-based) */
+    gridRow: number
 }
 
 const INITIAL_STATE: InternalDragState = {
@@ -82,6 +86,8 @@ const INITIAL_STATE: InternalDragState = {
     pointerId: -1,
     additionalNodes: [],
     shiftHeld: false,
+    gridCol: 1,
+    gridRow: 1,
 }
 
 // ============================================================
@@ -211,6 +217,66 @@ function calculateIndicatorPosition(
 }
 
 // ============================================================
+// Grid cell detection helpers
+// ============================================================
+
+/** Parse "200px 400px 200px" into [200, 400, 200] */
+function parseComputedTrackSizes(computed: string): number[] {
+    if (!computed || computed === 'none') return []
+    return computed.split(/\s+/).map(s => parseFloat(s)).filter(n => !isNaN(n))
+}
+
+/**
+ * Determine which grid cell (1-based col, row) a screen-space point falls into.
+ * Returns null if the point is outside the grid.
+ */
+function getGridCellAtScreenPoint(
+    clientX: number,
+    clientY: number,
+    parentId: string,
+    viewportEl: HTMLElement
+): { col: number; row: number } | null {
+    const parentEl = viewportEl.querySelector(
+        `[data-node-id="${parentId}"]`
+    ) as HTMLElement | null
+    if (!parentEl) return null
+
+    const style = window.getComputedStyle(parentEl)
+    const colSizes = parseComputedTrackSizes(style.gridTemplateColumns)
+    const rowSizes = parseComputedTrackSizes(style.gridTemplateRows)
+    if (colSizes.length === 0 || rowSizes.length === 0) return null
+
+    const colGap = parseFloat(style.columnGap) || 0
+    const rowGap = parseFloat(style.rowGap) || 0
+
+    const rect = parentEl.getBoundingClientRect()
+    const relX = clientX - rect.left
+    const relY = clientY - rect.top
+
+    // Find column (1-based)
+    let col = 1
+    let accum = 0
+    for (let i = 0; i < colSizes.length; i++) {
+        accum += colSizes[i]
+        if (relX < accum) { col = i + 1; break }
+        accum += colGap
+        if (i === colSizes.length - 1) col = colSizes.length
+    }
+
+    // Find row (1-based)
+    let row = 1
+    accum = 0
+    for (let i = 0; i < rowSizes.length; i++) {
+        accum += rowSizes[i]
+        if (relY < accum) { row = i + 1; break }
+        accum += rowGap
+        if (i === rowSizes.length - 1) row = rowSizes.length
+    }
+
+    return { col, row }
+}
+
+// ============================================================
 // useNodeDrag hook
 // ============================================================
 
@@ -241,12 +307,16 @@ export function useNodeDrag(
             // - Top-level (no parent) → freeform
             // - Parent with layout.mode === 'none' → freeform (absolute children)
             // - Node with positioning === 'absolute' (ignoring auto layout) → freeform
-            // - Parent with layout.mode === 'flex' or 'grid' → reorder
-            const isReorder = !!parent && parent.layout.mode !== 'none' && node.positioning !== 'absolute'
+            // - Parent with layout.mode === 'grid' → grid-place (cell-based placement)
+            // - Parent with layout.mode === 'flex' → reorder
+            const isAbsolute = !parent || parent.layout.mode === 'none' || node.positioning === 'absolute'
+            const isGrid = !!parent && parent.layout.mode === 'grid' && node.positioning !== 'absolute'
+            const isReorder = !!parent && parent.layout.mode !== 'none' && !isGrid && node.positioning !== 'absolute'
+            const mode = isAbsolute ? 'freeform' : isGrid ? 'grid-place' : 'reorder'
 
             // Capture other selected nodes' starting positions (multi-select drag)
             const additionalNodes: { id: string; startX: number; startY: number }[] = []
-            if (!isReorder) {
+            if (mode === 'freeform') {
                 for (const selectedId of store.selectedIds) {
                     if (selectedId === nodeId) continue
                     const selectedNode = findNodeById(store.nodes, selectedId)
@@ -267,7 +337,7 @@ export function useNodeDrag(
                 startPointerY: pointerY,
                 startNodeX: node.x,
                 startNodeY: node.y,
-                mode: isReorder ? 'reorder' : 'freeform',
+                mode,
                 parentId: parent?.id ?? null,
                 parentDirection: isReorder
                     ? (parent!.layout.direction ?? 'column')
@@ -277,6 +347,8 @@ export function useNodeDrag(
                 pointerId,
                 additionalNodes,
                 shiftHeld,
+                gridCol: 1,
+                gridRow: 1,
             }
         },
         []
@@ -470,6 +542,24 @@ export function useNodeDrag(
                         snapLines: [],
                     })
                 }
+            } else if (s.mode === 'grid-place' && s.parentId) {
+                // Grid cell placement: detect which cell the pointer is over
+                const viewport = viewportRef.current
+                if (!viewport) return true
+
+                const cell = getGridCellAtScreenPoint(clientX, clientY, s.parentId, viewport)
+                if (cell && (cell.col !== s.gridCol || cell.row !== s.gridRow)) {
+                    s.gridCol = cell.col
+                    s.gridRow = cell.row
+                    // Update grid highlight in store for overlay rendering
+                    useEditorStore.getState().setGridHighlight(s.parentId, cell.col, cell.row)
+                    setDragInfo({
+                        isDragging: true,
+                        mode: 'grid-place',
+                        indicator: null,
+                        snapLines: [],
+                    })
+                }
             }
 
             return true // consumed
@@ -503,6 +593,16 @@ export function useNodeDrag(
                 useEditorStore
                     .getState()
                     .reorderNode(s.nodeId, s.currentGapIndex)
+            }
+
+            if (s.mode === 'grid-place' && s.parentId) {
+                // Commit grid cell placement
+                useEditorStore.getState().updateNode(s.nodeId, {
+                    gridColumnStart: s.gridCol,
+                    gridRowStart: s.gridRow,
+                })
+                // Clear grid highlight
+                useEditorStore.getState().setGridHighlight(null)
             }
 
             // Freeform: check reparent (into frame) or un-reparent (to top level)
@@ -558,6 +658,7 @@ export function useNodeDrag(
         // Reset
         stateRef.current = { ...INITIAL_STATE }
         _isDragActive = false
+        useEditorStore.getState().setGridHighlight(null)
         setDragInfo({ isDragging: false, mode: null, indicator: null, snapLines: [] })
 
         return true

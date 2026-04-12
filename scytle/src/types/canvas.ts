@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { generateId } from '@/lib/utils'
+import type { BoundVariables, ExplicitVariableModes } from '@/lib/variables/types'
 
 // ============================================================
 // Canvas Constants
@@ -31,10 +32,6 @@ export const SolidFillSchema = z.object({
     opacity: z.number().min(0).max(1).optional(),    // defaults to 1
     visible: z.boolean().optional(),                  // defaults to true
     blendMode: BlendModeSchema.optional(),            // defaults to 'NORMAL'
-    /** Theme variable ref (e.g. 'bg/primary', 'accent') — resolved at render time */
-    colorRef: z.string().optional(),
-    /** User detached this fill from theme — relinkNodes will skip it */
-    detached: z.boolean().optional(),
 })
 
 export const GradientStopSchema = z.object({
@@ -96,10 +93,6 @@ export const ShadowSchema = z.object({
     blur: z.number(),
     spread: z.number(),
     visible: z.boolean().optional(),
-    /** Theme variable ref for shadow color (e.g. 'accent') */
-    colorRef: z.string().optional(),
-    /** User detached this shadow from theme — relinkNodes will skip it */
-    detached: z.boolean().optional(),
 })
 
 export const BorderSchema = z.object({
@@ -112,10 +105,6 @@ export const BorderSchema = z.object({
     opacity: z.number().min(0).max(1).optional(),
     /** Stroke visibility toggle. Defaults to true. */
     visible: z.boolean().optional(),
-    /** Theme variable ref for border color (e.g. 'border') */
-    colorRef: z.string().optional(),
-    /** User detached this border from theme — relinkNodes will skip it */
-    detached: z.boolean().optional(),
     /** Which sides to render. Defaults to all sides if omitted. */
     sides: z.object({
         top: z.boolean(),
@@ -144,6 +133,15 @@ export const PaddingSchema = z.object({
     left: z.number(),
 })
 
+// ── Grid Track (Figma-quality per-track sizing) ─────────────
+
+export const GridTrackSchema = z.object({
+    value: z.number(),                     // e.g. 1, 200, 0 (ignored for auto)
+    unit: z.enum(['fr', 'px', 'auto']),    // fractional, fixed, or auto
+})
+
+export type GridTrack = z.infer<typeof GridTrackSchema>
+
 export const LayoutSchema = z.object({
     mode: z.enum(['flex', 'grid', 'none']),
     direction: z.enum(['row', 'column']).optional(),
@@ -151,12 +149,12 @@ export const LayoutSchema = z.object({
     align: z.enum(['start', 'end', 'center', 'stretch', 'baseline']).optional(),
     wrap: z.boolean().optional(),
     gap: z.number().optional(),
-    /** Theme variable ref for gap (e.g. 'spacing/gap') */
-    gapRef: z.string().optional(),
-    /** User detached gap from theme — relinkNodes will skip it */
-    gapDetached: z.boolean().optional(),
     columns: z.union([z.number(), z.string()]).optional(),
     rows: z.union([z.number(), z.string()]).optional(),
+    /** Per-track column definitions (overrides `columns` when present) */
+    columnTracks: z.array(GridTrackSchema).optional(),
+    /** Per-track row definitions (overrides `rows` when present) */
+    rowTracks: z.array(GridTrackSchema).optional(),
     columnGap: z.number().optional(),
     rowGap: z.number().optional(),
 })
@@ -371,25 +369,21 @@ export interface BaseNodeProperties {
     /** Layer blur in px (CSS filter: blur). 0 = no blur. */
     layerBlur?: number
 
-    // === THEME VARIABLE REFS ===
-    /** Theme ref for borderRadius (e.g. 'radius/md') */
-    borderRadiusRef?: string
-    /** User detached borderRadius from theme */
-    borderRadiusDetached?: boolean
-    /** Theme ref for padding (e.g. 'spacing/md') — scales all sides proportionally */
-    paddingRef?: string
-    /** User detached padding from theme */
-    paddingDetached?: boolean
-    /** Theme ref for the whole shadow set (e.g. 'shadow/md') */
-    shadowRef?: string
-    /** User detached shadow from theme */
-    shadowDetached?: boolean
-
     // === SPACING (for HTML/CSS compatibility) ===
     /** Margin (CSS spacing outside element borders) - preserved from HTML parsing */
     margin?: { top: number; right: number; bottom: number; left: number }
     /** Auto margin flags - when true, that margin edge uses 'auto' for centering */
     autoMargin?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean }
+
+    // === GRID CHILD PROPERTIES ===
+    /** Grid column span (col-span-2 = 2, col-span-full = -1) */
+    gridColumnSpan?: number
+    /** Grid row span (row-span-2 = 2, row-span-full = -1) */
+    gridRowSpan?: number
+    /** Explicit grid column start position (1-based) */
+    gridColumnStart?: number
+    /** Explicit grid row start position (1-based) */
+    gridRowStart?: number
 
     // === CONSTRAINTS (Phase 4) ===
     // Min/max dimensions (Figma: minWidth, maxWidth, minHeight, maxHeight)
@@ -405,6 +399,10 @@ export interface BaseNodeProperties {
      *  When set, the renderer uses this CSS value instead of the pixel width/height. */
     cssWidth?: string
     cssHeight?: string
+
+    // === NEW VARIABLE SYSTEM (Figma-clone) ===
+    /** Bindings from node properties to variables. See BoundVariables type. */
+    boundVariables?: BoundVariables
 
     /** Raw CSS position values for absolute elements (Paper-style deferred resolution).
      *  The canvas renderer resolves these against actual parent dimensions at render time,
@@ -440,11 +438,9 @@ export interface FrameNode extends BaseNodeProperties {
     /** Self alignment (overrides parent's alignItems) */
     alignSelf?: 'auto' | 'start' | 'center' | 'end' | 'stretch' | 'baseline'
 
-    // === GRID CHILD PROPERTIES ===
-    /** Grid column span (col-span-2 = 2, col-span-full = -1) */
-    gridColumnSpan?: number
-    /** Grid row span (row-span-2 = 2, row-span-full = -1) */
-    gridRowSpan?: number
+    // === NEW VARIABLE SYSTEM (Figma-clone) ===
+    /** Per-collection mode overrides. Children inherit unless they set their own. */
+    explicitVariableModes?: ExplicitVariableModes
 }
 
 /** Text leaf node — renders as heading/paragraph/span */
@@ -474,22 +470,6 @@ export interface TextNode extends BaseNodeProperties {
     /** Text truncation mode. 'ending' clips with ellipsis (use maxLines for line count). */
     textTruncation?: 'disabled' | 'ending'
     color: string
-    /** Theme ref for text color (e.g. 'text/primary') */
-    colorRef?: string
-    /** User detached text color from theme */
-    colorDetached?: boolean
-    /** Theme ref for font family (e.g. 'font/heading') */
-    fontFamilyRef?: string
-    /** User detached font family from theme */
-    fontFamilyDetached?: boolean
-    /** Theme ref for font size (e.g. 'fontSize/h1') */
-    fontSizeRef?: string
-    /** User detached font size from theme */
-    fontSizeDetached?: boolean
-    /** Theme ref for font weight (e.g. 'fontWeight/heading') */
-    fontWeightRef?: string
-    /** User detached font weight from theme */
-    fontWeightDetached?: boolean
     htmlTag?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'a' | 'li'
     /** Vertical trim mode (Figma "leading trim"). 'cap-height' trims line-box to cap-height + baseline. */
     leadingTrim?: 'none' | 'cap-height'
