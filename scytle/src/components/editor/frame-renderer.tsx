@@ -1,8 +1,8 @@
 import { memo, type CSSProperties } from 'react'
 import type { FrameNode } from '@/types/canvas'
-import { computeBaseStyles, computeFrameLayoutStyles } from './render-utils'
+import { computeBaseStyles, computeFrameLayoutStyles, type VarCtx } from './render-utils'
 import { NodeRenderer } from './node-renderer'
-import { useThemeResolver } from '@/lib/theme/theme-context'
+import { useVariableStore } from '@/store/variable-store'
 
 // ============================================================
 // Props
@@ -25,12 +25,15 @@ export const FrameRenderer = memo(function FrameRenderer({
     parentDirection,
     parentLayoutMode,
 }: FrameRendererProps) {
-    const themeCtx = useThemeResolver()
+    const variables = useVariableStore(s => s.variables)
+    const collections = useVariableStore(s => s.collections)
+    const activeModeId = useVariableStore(s => s.activeModeId)
+    const varCtx: VarCtx = { modeId: activeModeId ?? '', variables, collections }
 
     // Merge base styles (position, sizing, visuals) with frame layout styles
     const style: CSSProperties = {
-        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx),
-        ...computeFrameLayoutStyles(node, themeCtx),
+        ...computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx),
+        ...computeFrameLayoutStyles(node, varCtx),
     }
 
     // Freeform (mode: 'none') frames need a positioning context for absolute children

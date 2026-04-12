@@ -3,8 +3,9 @@ import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
 import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
-import { useThemeResolver } from '@/lib/theme/theme-context'
-import { resolveColor, resolveFont, resolveNumber } from '@/lib/theme/theme-resolver'
+import { useResolvedVariables } from '@/lib/variables/use-variables'
+import { isColorValue } from '@/lib/variables/types'
+import { colorValueToHex } from '@/lib/variables/resolve'
 
 // ============================================================
 // Props
@@ -32,22 +33,21 @@ export const TextRenderer = memo(function TextRenderer({
     const isEditing = editingNodeId === node.id
     const editRef = useRef<HTMLElement>(null)
 
-    // ── Theme resolver ─────────────────────────────────────────
-    const themeCtx = useThemeResolver()
+    // ── New variable system (resolves at render time via boundVariables) ──
+    const resolved = useResolvedVariables(node.boundVariables)
 
-    // ── Resolve theme refs (before font loading effect) ──────
-    const resolvedFontFamily = node.fontFamilyRef && themeCtx
-        ? resolveFont(node.fontFamilyRef, node.fontFamily, themeCtx.table, themeCtx.mode)
-        : node.fontFamily
-    const resolvedFontSize = node.fontSizeRef && themeCtx
-        ? resolveNumber(node.fontSizeRef, node.fontSize, themeCtx.table, themeCtx.mode)
-        : node.fontSize
-    const resolvedColor = node.colorRef && themeCtx
-        ? resolveColor(node.colorRef, node.color, themeCtx.table, themeCtx.mode)
-        : node.color
-    const resolvedFontWeight = node.fontWeightRef && themeCtx
-        ? resolveNumber(node.fontWeightRef, node.fontWeight, themeCtx.table, themeCtx.mode)
-        : node.fontWeight
+    // ── Resolve values: new variable system → raw node value ──
+    const resolvedFontFamily = (typeof resolved.fontFamily === 'string' ? resolved.fontFamily : undefined)
+        ?? node.fontFamily
+    const resolvedFontSize = (typeof resolved.fontSize === 'number' ? resolved.fontSize : undefined)
+        ?? node.fontSize
+    const resolvedColorRaw = resolved.color
+    const resolvedColor = (resolvedColorRaw !== undefined
+        ? (isColorValue(resolvedColorRaw) ? colorValueToHex(resolvedColorRaw) : typeof resolvedColorRaw === 'string' ? resolvedColorRaw : undefined)
+        : undefined)
+        ?? node.color
+    const resolvedFontWeight = (typeof resolved.fontWeight === 'number' ? resolved.fontWeight : undefined)
+        ?? node.fontWeight
 
     // ── Google Font loading ────────────────────────────────────
     // Load the font on mount and whenever fontFamily changes.
@@ -100,7 +100,7 @@ export const TextRenderer = memo(function TextRenderer({
     }, [commitEdit])
 
     // ── Styles ────────────────────────────────────────────────
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode)
 
     // ── Line height (unit-aware) ───────────────────────────────────────────────
     // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.

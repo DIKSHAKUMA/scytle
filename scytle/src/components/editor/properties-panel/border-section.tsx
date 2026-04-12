@@ -7,7 +7,7 @@ import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
-import { useThemeTable, resolveDisplayColor, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
+// (Old theme resolution removed — new variable system resolves via boundVariables)
 import { ThemeLinkBadge } from './theme-link-badge'
 import { useEditorStore } from '@/store/editor-store'
 
@@ -43,32 +43,24 @@ function RadiusCornerIcon({ size = 12 }: { size?: number }) {
 export function AppearanceSection({ node, onUpdate }: SectionProps) {
     const radius = node.borderRadius
 
-    // Theme resolution for border radius
-    const { table, mode } = useThemeTable()
+    // Use raw values directly (new variable system resolves via boundVariables)
     const isUniformRadius = typeof radius === 'number'
     const [perCorner, setPerCorner] = useState(!isUniformRadius)
     const rawUniformRadius = typeof radius === 'number' ? radius : radius.topLeft
-    const uniformRadius = isUniformRadius
-        ? resolveDisplayNumber(node.borderRadiusRef, rawUniformRadius, node.borderRadiusDetached, table, mode)
-        : rawUniformRadius
+    const uniformRadius = rawUniformRadius
 
     const updateRadius = (
         value: number | Partial<Record<'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft', number>>
     ) => {
         if (typeof value === 'number') {
-            // Auto-detach border radius from theme on user edit
-            if (isThemeLinked(node.borderRadiusRef, node.borderRadiusDetached)) {
-                onUpdate({ borderRadius: value, borderRadiusRef: undefined, borderRadiusDetached: true })
-            } else {
-                onUpdate({ borderRadius: value })
-            }
+            onUpdate({ borderRadius: value })
         } else {
             const current =
                 typeof radius === 'number'
                     ? { topLeft: radius, topRight: radius, bottomRight: radius, bottomLeft: radius }
                     : radius
-            // Per-corner always detaches
-            onUpdate({ borderRadius: { ...current, ...value }, borderRadiusRef: undefined, borderRadiusDetached: true })
+            // Per-corner update
+            onUpdate({ borderRadius: { ...current, ...value } })
         }
     }
 
@@ -238,9 +230,8 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
 
-    // Theme resolution for border color
-    const { table, mode } = useThemeTable()
-    const resolvedColor = resolveDisplayColor(border.colorRef, border.color, border.detached, table, mode)
+    // Use raw color directly (new variable system resolves via boundVariables)
+    const resolvedColor = border.color
 
     const fill = borderToFill({ ...border, color: resolvedColor })
     const isVisible = border.visible !== false
@@ -249,18 +240,12 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
 
     const handlePickerChange = useCallback((updated: Fill) => {
         if (updated.type === 'solid') {
-            const partial: Partial<Border> & { colorRef?: undefined; detached?: boolean } = {
+            onUpdate({
                 color: normaliseHex(updated.color),
                 opacity: updated.opacity ?? 1,
-            }
-            // Auto-detach from theme on user edit
-            if (isThemeLinked(border.colorRef, border.detached)) {
-                partial.colorRef = undefined
-                partial.detached = true
-            }
-            onUpdate(partial)
+            })
         }
-    }, [onUpdate, border.colorRef, border.detached])
+    }, [onUpdate])
 
     return (
         <div
@@ -285,7 +270,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
             />
 
             {/* Theme link indicator */}
-            <ThemeLinkBadge isLinked={isThemeLinked(border.colorRef, border.detached)} variableName={border.colorRef} />
+            <ThemeLinkBadge isLinked={false} />
 
             {/* Hex display — clickable to open picker */}
             <span

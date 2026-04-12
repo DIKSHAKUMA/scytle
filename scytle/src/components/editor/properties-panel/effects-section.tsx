@@ -7,7 +7,6 @@ import { Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
-import { useThemeTable, resolveDisplayColor, isThemeLinked } from './use-theme-resolved'
 import { ThemeLinkBadge } from './theme-link-badge'
 import { VariablePicker } from './variable-picker'
 import { useEditorStore } from '@/store/editor-store'
@@ -78,10 +77,6 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
     const [varPickerOpen, setVarPickerOpen] = useState(false)
     const [expanded, setExpanded] = useState(false)
 
-    // Theme resolution for shadow color
-    // shadow.color is rgba string, but shadow.colorRef resolves to hex from variable table
-    // We resolve the ref to get the theme hex, then use shadow's existing rgba for display when not linked
-    const { table, mode } = useThemeTable()
     // Memoize fill so ColorPicker doesn't get a new object reference every render
     const fill = useMemo(() => shadowColorToFill(shadow.color), [shadow.color])
     const isVisible = shadow.visible !== false
@@ -90,7 +85,7 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
 
     const handlePickerChange = useCallback((updated: Fill) => {
         if (updated.type === 'solid') {
-            const partial: Partial<Shadow> & { colorRef?: undefined; detached?: boolean } = {
+            const partial: Partial<Shadow> = {
                 color: fillToShadowColor(updated),
             }
             onUpdate(index, partial)
@@ -137,8 +132,7 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
                 {/* Theme link indicator + Variable picker */}
                 <span ref={badgeRef}>
                     <ThemeLinkBadge
-                        isLinked={isThemeLinked(shadow.colorRef, shadow.detached)}
-                        variableName={shadow.colorRef}
+                        isLinked={false}
                         showUnlinked
                         onClick={() => setVarPickerOpen(v => !v)}
                     />
@@ -146,13 +140,14 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
                 <VariablePicker
                     open={varPickerOpen}
                     anchorEl={badgeRef.current}
-                    scope="shadow.color"
-                    currentRef={shadow.colorRef}
-                    onBind={(key) => {
-                        onUpdate(index, { colorRef: key, detached: false })
+                    scope="EFFECT_COLOR"
+                    resolvedType="COLOR"
+                    currentVariableId={undefined}
+                    onBind={(_variableId) => {
+                        // TODO: Wire up boundVariables for effects
                     }}
                     onDetach={() => {
-                        onUpdate(index, { colorRef: undefined, detached: true })
+                        // TODO: Wire up boundVariables for effects
                     }}
                     onClose={() => setVarPickerOpen(false)}
                 />

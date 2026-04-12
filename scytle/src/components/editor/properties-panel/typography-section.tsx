@@ -20,7 +20,7 @@ import { FontSizeCombobox } from './typography/font-size-combobox'
 import { LineHeightInput } from './typography/line-height-input'
 import { LetterSpacingInput } from './typography/letter-spacing-input'
 import { ColorPicker } from './color-picker'
-import { useThemeTable, resolveDisplayColor, resolveDisplayFont, resolveDisplayNumber, isThemeLinked } from './use-theme-resolved'
+// (Old theme resolution removed — new variable system resolves via boundVariables)
 import { ThemeLinkBadge } from './theme-link-badge'
 import { VariablePicker } from './variable-picker'
 import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
@@ -139,12 +139,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const [fontVarPickerOpen, setFontVarPickerOpen] = useState(false)
     const [colorVarPickerOpen, setColorVarPickerOpen] = useState(false)
 
-    // Theme resolution — show resolved values in the Design tab
-    const { table, mode } = useThemeTable()
-    const displayFontFamily = resolveDisplayFont(node.fontFamilyRef, node.fontFamily, node.fontFamilyDetached, table, mode)
-    const displayFontSize = resolveDisplayNumber(node.fontSizeRef, node.fontSize, node.fontSizeDetached, table, mode)
-    const displayColor = resolveDisplayColor(node.colorRef, node.color, node.colorDetached, table, mode)
-    const displayFontWeight = resolveDisplayNumber(node.fontWeightRef, node.fontWeight, node.fontWeightDetached, table, mode)
+    // Use raw values directly (new variable system resolves via boundVariables at render time)
+    const displayFontFamily = node.fontFamily
+    const displayFontSize = node.fontSize
+    const displayColor = node.color
+    const displayFontWeight = node.fontWeight
 
     // Font picker state from store
     const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
@@ -162,8 +161,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
     const handleFontSelect = useCallback((family: string) => {
         savedFontRef.current = null
-        // Auto-detach font family from theme on user edit
-        onUpdate({ fontFamily: family, fontFamilyRef: undefined, fontFamilyDetached: true })
+        onUpdate({ fontFamily: family })
     }, [onUpdate])
 
     const handleFontPreview = useCallback((family: string | null) => {
@@ -213,8 +211,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const handleStyleSelect = useCallback((styleName: string) => {
         savedStyleRef.current = null
         const { fontWeight, fontStyle } = parseFontStyleName(styleName)
-        // Auto-detach font weight from theme on user edit
-        onUpdate({ fontStyleName: styleName, fontWeight, fontStyle, fontWeightRef: undefined, fontWeightDetached: true })
+        onUpdate({ fontStyleName: styleName, fontWeight, fontStyle })
     }, [onUpdate])
 
     const handleStylePickerClose = useCallback(() => {
@@ -268,8 +265,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             <div className="flex items-center gap-0.5">
                 <span ref={fontBadgeRef}>
                     <ThemeLinkBadge
-                        isLinked={isThemeLinked(node.fontFamilyRef, node.fontFamilyDetached)}
-                        variableName={node.fontFamilyRef}
+                        isLinked={false}
                         showUnlinked
                         onClick={() => setFontVarPickerOpen(v => !v)}
                     />
@@ -277,10 +273,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 <VariablePicker
                     open={fontVarPickerOpen}
                     anchorEl={fontBadgeRef.current}
-                    scope="text.fontFamily"
-                    currentRef={node.fontFamilyRef}
-                    onBind={(key) => onUpdate({ fontFamilyRef: key, fontFamilyDetached: false })}
-                    onDetach={() => onUpdate({ fontFamilyRef: undefined, fontFamilyDetached: true })}
+                    scope="FONT_FAMILY"
+                    resolvedType="STRING"
+                    currentVariableId={undefined}
+                    onBind={(_variableId) => { /* TODO: Wire up boundVariables for fontFamily */ }}
+                    onDetach={() => { /* TODO: Wire up boundVariables for fontFamily */ }}
                     onClose={() => setFontVarPickerOpen(false)}
                 />
                 <div ref={fontTriggerRef} className="flex-1">
@@ -327,8 +324,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     value={displayFontSize}
                     onChange={(v) => {
                         savedFontSizeRef.current = null
-                        // Auto-detach font size from theme on user edit
-                        onUpdate({ fontSize: v, fontSizeRef: undefined, fontSizeDetached: true })
+                        onUpdate({ fontSize: v })
                     }}
                     onPreview={handleFontSizePreview}
                     className="w-[4.5rem]"
@@ -369,8 +365,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             <div className="flex items-center gap-1.5">
                 <span ref={colorBadgeRef}>
                     <ThemeLinkBadge
-                        isLinked={isThemeLinked(node.colorRef, node.colorDetached)}
-                        variableName={node.colorRef}
+                        isLinked={false}
                         showUnlinked
                         onClick={() => setColorVarPickerOpen(v => !v)}
                     />
@@ -378,10 +373,11 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 <VariablePicker
                     open={colorVarPickerOpen}
                     anchorEl={colorBadgeRef.current}
-                    scope="text.color"
-                    currentRef={node.colorRef}
-                    onBind={(key) => onUpdate({ colorRef: key, colorDetached: false })}
-                    onDetach={() => onUpdate({ colorRef: undefined, colorDetached: true })}
+                    scope="TEXT_FILL"
+                    resolvedType="COLOR"
+                    currentVariableId={undefined}
+                    onBind={(_variableId) => { /* TODO: Wire up boundVariables for text color */ }}
+                    onDetach={() => { /* TODO: Wire up boundVariables for text color */ }}
                     onClose={() => setColorVarPickerOpen(false)}
                 />
                 <button
@@ -400,13 +396,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 fill={{ type: 'solid', color: normaliseHex(displayColor), opacity: 1 }}
                 onChange={(fill) => {
                     if (fill.type === 'solid') {
-                        // Auto-detach text color from theme on user edit
-                        const updates: Record<string, unknown> = { color: `#${normaliseHex(fill.color)}` }
-                        if (isThemeLinked(node.colorRef, node.colorDetached)) {
-                            updates.colorRef = undefined
-                            updates.colorDetached = true
-                        }
-                        onUpdate(updates)
+                        onUpdate({ color: `#${normaliseHex(fill.color)}` })
                     }
                 }}
                 anchorEl={colorSwatchRef.current}

@@ -25,6 +25,7 @@ import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { Palette, Code2, Pencil, Check, Loader2, Search } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
+import { useVariableStore } from '@/store/variable-store'
 import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
 import { parseHtml } from '@/lib/parser'
@@ -171,7 +172,7 @@ function buildContext(
 
 function extractChatFonts(
     html: string,
-    sgState: { variableTable: Record<string, { light: string; dark: string }>; themeMode: 'light' | 'dark' },
+    sgState: { data: { concepts: Array<{ id: string; fonts?: { heading?: string; body?: string } }>; activeConceptId?: string } },
 ): string[] {
     const families = new Set<string>()
     const fontClasses = html.match(/font-\[([^\]]+)\]/g)
@@ -188,10 +189,10 @@ function extractChatFonts(
             if (match) families.add(match[1])
         }
     }
-    const table = sgState.variableTable
-    const mode = sgState.themeMode
-    if (table['font/heading']?.[mode]) families.add(table['font/heading'][mode])
-    if (table['font/body']?.[mode]) families.add(table['font/body'][mode])
+    // Get fonts from the active concept
+    const concept = sgState.data.concepts?.find(c => c.id === sgState.data.activeConceptId)
+    if (concept?.fonts?.heading) families.add(concept.fonts.heading)
+    if (concept?.fonts?.body) families.add(concept.fonts.body)
     const systemFonts = new Set(['Inter', 'sans-serif', 'serif', 'monospace', 'mono', 'system-ui', 'Arial', 'Helvetica'])
     return Array.from(families).filter(f => !systemFonts.has(f))
 }
@@ -302,9 +303,10 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const fonts = extractChatFonts(html, sgState)
                 const parsed = await parseHtml(html, sectionType || 'Section', {
                     rootWidth: frameWidth,
-                    variableTable: sgState.variableTable,
-                    themeMode: sgState.themeMode,
                     fonts,
+                    variables: useVariableStore.getState().variables,
+                    collections: useVariableStore.getState().collections,
+                    activeModeId: useVariableStore.getState().activeModeId ?? undefined,
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 const editorStore = useEditorStore.getState()
@@ -357,9 +359,10 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const fonts = extractChatFonts(html, sgState)
                 const parsed = await parseHtml(html, existingNode.name, {
                     rootWidth: existingNode.width,
-                    variableTable: sgState.variableTable,
-                    themeMode: sgState.themeMode,
                     fonts,
+                    variables: useVariableStore.getState().variables,
+                    collections: useVariableStore.getState().collections,
+                    activeModeId: useVariableStore.getState().activeModeId ?? undefined,
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 newNode.x = existingNode.x

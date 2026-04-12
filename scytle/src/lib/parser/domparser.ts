@@ -11,7 +11,7 @@
  *   - Dimensions estimated (not measured)
  *
  * Pipeline:
- *   AI HTML → tailwind-to-inline → DOMParser → walkElement → relinkNodes → ScytleNode tree
+ *   AI HTML → tailwind-to-inline → DOMParser → walkElement → relinkNodesWithVariables → ScytleNode tree
  */
 
 import { generateId } from '@/lib/utils'
@@ -23,10 +23,10 @@ import {
     type LayoutConstraints,
 } from '@/types/canvas'
 import {
-    buildLinkMaps, normalizeHex, normalizeShadow,
-    type LinkMaps, type VariableTable, type ThemeMode,
-} from '@/lib/theme/variable-table'
-import { relinkNodes } from '@/lib/theme/relink-nodes'
+    normalizeHex,
+} from '@/lib/variables/build-link-maps'
+import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
+import type { Variable, VariableCollection } from '@/lib/variables/types'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
 import { estimateTextHeight } from './size-utils'
 
@@ -86,9 +86,11 @@ function resolveParentHeight(el: HTMLElement, containerWidth: number): number {
 
 export interface DOMParserOptions {
     rootWidth?: number
-    variableTable?: VariableTable
-    themeMode?: ThemeMode
     fonts?: string[]
+    /** New variable system — if provided, parser binds via boundVariables */
+    variables?: Map<string, Variable>
+    collections?: Map<string, VariableCollection>
+    activeModeId?: string
 }
 
 /**
@@ -165,90 +167,6 @@ function eff(csVal: string, inheritedVal?: string): string {
 }
 
 // ═══════════════════════════════════════════════════
-// AI Output Protection
-// ═══════════════════════════════════════════════════
-
-/**
- * Mark all AI-generated nodes as "detached" from theme variables
- * and clear any refs assigned during Pass 1 exact-matching.
- *
- * The AI intentionally chose specific colors, spacing, fonts, etc.
- * Without this, the renderer would resolve refs against the theme
- * variable table and override the AI's values — causing the design
- * to look different in the real editor vs the test page.
- *
- * We clear refs AND set detached flags so that:
- * 1. The renderer uses the AI's literal values (no ref → fallback)
- * 2. relinkNodes() skips all properties (detached → skip)
- *
- * Users can later manually re-link specific properties to theme
- * variables via the UI if they want theme-controlled values.
- */
-function detachAIGeneratedValues(nodes: ScytleNode[]): void {
-    for (const node of nodes) {
-        switch (node.type) {
-            case 'frame': {
-                // Protect fill colors — also clear any Pass 1 refs so
-                // the renderer uses the AI's literal value, not the theme's
-                for (const fill of node.fills) {
-                    if (fill.type === 'solid') {
-                        fill.detached = true
-                        fill.colorRef = undefined
-                    }
-                }
-                // Protect border color
-                if (node.border) {
-                    node.border.detached = true
-                    node.border.colorRef = undefined
-                }
-                // Protect spacing & layout — clear refs so renderer
-                // uses original parsed values instead of theme values
-                node.paddingDetached = true
-                node.paddingRef = undefined
-                node.borderRadiusDetached = true
-                node.borderRadiusRef = undefined
-                node.shadowDetached = true
-                node.shadowRef = undefined
-                if (node.layout) {
-                    node.layout.gapDetached = true
-                    node.layout.gapRef = undefined
-                }
-                // Recurse into children
-                if (node.children) {
-                    detachAIGeneratedValues(node.children)
-                }
-                break
-            }
-            case 'text': {
-                node.colorDetached = true
-                node.colorRef = undefined
-                node.fontFamilyDetached = true
-                node.fontFamilyRef = undefined
-                node.fontSizeDetached = true
-                node.fontSizeRef = undefined
-                node.fontWeightDetached = true
-                node.fontWeightRef = undefined
-                break
-            }
-            case 'image': {
-                node.borderRadiusDetached = true
-                node.borderRadiusRef = undefined
-                break
-            }
-            case 'vector': {
-                for (const fill of node.fills) {
-                    if (fill.type === 'solid') {
-                        fill.detached = true
-                        fill.colorRef = undefined
-                    }
-                }
-                break
-            }
-        }
-    }
-}
-
-// ═══════════════════════════════════════════════════
 // Public API
 // ═══════════════════════════════════════════════════
 
@@ -276,11 +194,6 @@ export async function parseHtmlViaDOMParser(
     const parser = new DOMParser()
     const doc = parser.parseFromString(fixedHtml, 'text/html')
 
-    // Build link maps for single-pass exact-match linking
-    const lm = options?.variableTable && options?.themeMode
-        ? buildLinkMaps(options.variableTable, options.themeMode)
-        : undefined
-
     // Find the root element
     const rootEl = doc.body.firstElementChild as HTMLElement
     if (!rootEl) {
@@ -299,12 +212,12 @@ export async function parseHtmlViaDOMParser(
         const wrapperInherited = mergeInherited(rootStyle)
         for (const child of rootEl.children) {
             if (child.nodeType === Node.ELEMENT_NODE) {
-                const node = walkElement(child as HTMLElement, width, lm, wrapperInherited)
+                const node = walkElement(child as HTMLElement, width, wrapperInherited)
                 if (node) rootChildren.push(node)
             }
         }
     } else {
-        const node = walkElement(rootEl, width, lm)
+        const node = walkElement(rootEl, width)
         if (node) rootChildren.push(node)
     }
 
@@ -334,18 +247,15 @@ export async function parseHtmlViaDOMParser(
     // Assign sequential positions to children
     assignChildPositions(pageFrame)
 
-    // Protect AI-generated values from semantic relinking.
-    // The AI intentionally chose specific colors, spacing, fonts, etc.
-    // Pass 1 (LinkMaps exact-match) already ran during parsing and linked
-    // any values that genuinely match theme variables. Setting detached flags
-    // ensures relinkNodes() skips all properties instead of force-fitting
-    // every value into the nearest theme bucket.
-    if (options?.variableTable && options?.themeMode) {
-        detachAIGeneratedValues(pageFrame.children)
-        relinkNodes(
+    // NEW VARIABLE SYSTEM: relink using boundVariables
+    // If new variable store data is provided, run the new relinker
+    // which assigns boundVariables instead of *Ref fields.
+    if (options?.variables && options?.collections && options?.activeModeId) {
+        relinkNodesWithVariables(
             pageFrame.children,
-            options.variableTable,
-            options.themeMode,
+            options.variables,
+            options.collections,
+            options.activeModeId,
         )
     }
 
@@ -385,7 +295,6 @@ function fixSelfClosingTags(html: string): string {
 function walkElement(
     el: HTMLElement,
     parentWidth: number,
-    lm?: LinkMaps,
     inherited?: InheritedStyles,
 ): ScytleNode | null {
     const tag = el.tagName.toLowerCase()
@@ -414,7 +323,7 @@ function walkElement(
 
     // Form elements
     if (tag === 'input' || tag === 'textarea' || tag === 'select') {
-        return buildInputNode(el as HTMLInputElement, cs, tag, parentWidth, lm)
+        return buildInputNode(el as HTMLInputElement, cs, tag, parentWidth)
     }
 
     // HR dividers
@@ -424,11 +333,11 @@ function walkElement(
     const _isTextOnly = isTextOnlyElement(el, tag)
     const _hasVisual = hasVisualProperties(cs)
     if (_isTextOnly && !_hasVisual) {
-        return buildTextNode(el, cs, tag, parentWidth, lm, inh)
+        return buildTextNode(el, cs, tag, parentWidth, inh)
     }
 
     // Container elements
-    return buildContainerNode(el, cs, tag, parentWidth, lm, inh)
+    return buildContainerNode(el, cs, tag, parentWidth, inh)
 }
 
 // ═══════════════════════════════════════════════════
@@ -440,7 +349,6 @@ function buildTextNode(
     cs: CSSStyleDeclaration,
     tag: string,
     parentWidth: number,
-    lm?: LinkMaps,
     inherited?: InheritedStyles,
 ): TextNode {
     const text = extractTextContent(el)
@@ -503,10 +411,6 @@ function buildTextNode(
         margin: extractMargin(cs),
         autoMargin: extractAutoMargin(el),
         ...extractMinMaxConstraints(cs),
-        colorRef: lm ? matchColor(color, lm) : undefined,
-        fontFamilyRef: lm ? matchFont(fontFamily, lm) : undefined,
-        fontSizeRef: lm ? matchFontSize(fontSize, lm) : undefined,
-        fontWeightRef: lm ? matchFontWeight(fontWeight, lm) : undefined,
     })
 }
 
@@ -515,7 +419,6 @@ function buildContainerNode(
     cs: CSSStyleDeclaration,
     tag: string,
     parentWidth: number,
-    lm?: LinkMaps,
     inherited?: InheritedStyles,
 ): FrameNode {
     const inh = mergeInherited(cs, inherited)
@@ -562,7 +465,7 @@ function buildContainerNode(
                     }
                 }
             }
-            const node = walkElement(childEl, childParentWidth, lm, inh)
+            const node = walkElement(childEl, childParentWidth, inh)
             if (node) children.push(node)
         } else if (child.nodeType === Node.TEXT_NODE) {
             const text = child.textContent?.trim()
@@ -610,7 +513,7 @@ function buildContainerNode(
 
     // Handle mixed content: container has text-only content not caught by isTextOnlyElement
     if (children.length === 0 && el.textContent?.trim()) {
-        const textNode = buildTextNode(el, cs, tag, childAvailWidth, lm, inh)
+        const textNode = buildTextNode(el, cs, tag, childAvailWidth, inh)
         if (hasVisualProperties(cs)) {
             textNode.positioning = 'auto'
             textNode.margin = undefined
@@ -634,17 +537,6 @@ function buildContainerNode(
     const border = extractBorder(cs)
     const borderRadius = extractBorderRadius(cs)
     const shadows = extractShadows(cs.boxShadow)
-
-    // Link fills to theme variables
-    if (lm) {
-        for (const fill of fills) {
-            if (fill.type === 'solid' && 'color' in fill && fill.color) {
-                (fill as { colorRef?: string }).colorRef = matchColor(fill.color, lm)
-            }
-        }
-    }
-
-    const maxPad = Math.max(padding.top, padding.right, padding.bottom, padding.left)
 
     // Estimate dimensions
     let estWidth = sizing.horizontal === 'fixed'
@@ -693,18 +585,12 @@ function buildContainerNode(
         width: Math.max(estWidth, 1),
         height: Math.max(estHeight, 1),
         children,
-        layout: {
-            ...layout,
-            gapRef: lm && layout.gap ? matchSpacing(layout.gap, lm) : undefined,
-        },
+        layout,
         padding,
-        paddingRef: lm ? matchSpacing(maxPad, lm) : undefined,
         fills,
         border,
         borderRadius,
-        borderRadiusRef: lm ? matchRadius(borderRadius, lm) : undefined,
         shadows,
-        shadowRef: lm && shadows.length > 0 ? matchShadow(shadows, lm) : undefined,
         opacity: parseOpacity(cs.opacity),
         ...(extractLayerBlur(cs.filter)),
         overflow: (cs.overflow === 'hidden' || cs.overflow === 'clip' || cs.overflowX === 'hidden' || cs.overflowX === 'clip' || cs.overflowY === 'hidden' || cs.overflowY === 'clip')
@@ -1110,7 +996,6 @@ function buildInputNode(
     cs: CSSStyleDeclaration,
     tag: string,
     parentWidth: number,
-    lm?: LinkMaps,
 ): FrameNode {
     const placeholder = el.placeholder || el.value || el.getAttribute('placeholder') || tag
     const width = parseFloat(cs.width) || Math.max(parentWidth, 100)
@@ -2748,45 +2633,6 @@ function extractPrimaryFont(fontFamily: string): string {
         .split(',')[0]
         .trim()
         .replace(/^['"]|['"]$/g, '')
-}
-
-// ═══════════════════════════════════════════════════
-// Theme Variable Matching (Exact-Match)
-// ═══════════════════════════════════════════════════
-
-function matchColor(hex: string, lm: LinkMaps): string | undefined {
-    if (hex === 'transparent') return undefined
-    return lm.colorMap.get(normalizeHex(hex))
-}
-
-function matchFont(family: string, lm: LinkMaps): string | undefined {
-    const clean = family.replace(/['"]/g, '').split(',')[0].trim().toLowerCase()
-    return lm.fontMap.get(clean)
-}
-
-function matchFontSize(size: number, lm: LinkMaps): string | undefined {
-    return lm.fontSizeMap.get(String(Math.round(size)))
-}
-
-function matchFontWeight(_weight: number, _lm: LinkMaps): string | undefined {
-    return undefined
-}
-
-function matchRadius(r: BorderRadius, lm: LinkMaps): string | undefined {
-    if (typeof r !== 'number') return undefined
-    return lm.radiusMap.get(String(r))
-}
-
-function matchSpacing(value: number, lm: LinkMaps): string | undefined {
-    if (value <= 0) return undefined
-    return lm.spacingMap.get(String(Math.round(value)))
-}
-
-function matchShadow(shadows: Shadow[], lm: LinkMaps): string | undefined {
-    if (shadows.length === 0) return undefined
-    const s = shadows[0]
-    const shadowStr = `${s.x}px ${s.y}px ${s.blur}px ${s.spread}px ${s.color}`
-    return lm.shadowMap.get(normalizeShadow(shadowStr))
 }
 
 // ═══════════════════════════════════════════════════

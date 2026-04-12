@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react'
 import type { ScytleNode } from '@/types/canvas'
 import { MIN_ZOOM, MAX_ZOOM } from '@/types/canvas'
 import { NodeRenderer } from '@/components/editor/node-renderer'
-import { ThemeResolverProvider } from '@/lib/theme/theme-context'
+
 
 interface ReadOnlyCanvasProps {
     nodes: ScytleNode[]
@@ -174,11 +174,9 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
                 className="absolute top-0 left-0"
                 style={{ '--z': zoomRef.current, '--px': panXRef.current, '--py': panYRef.current } as unknown as CSSProperties}
             >
-                <ThemeResolverProvider>
-                    {nodes.map((node) => (
-                        <NodeRenderer key={node.id} node={node} isTopLevel />
-                    ))}
-                </ThemeResolverProvider>
+                {nodes.map((node) => (
+                    <NodeRenderer key={node.id} node={node} isTopLevel />
+                ))}
             </div>
         </div>
     )

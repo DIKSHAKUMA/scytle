@@ -57,7 +57,11 @@ import {
 } from '@/lib/theme/tokens/font-pairs'
 
 import { generateId } from '@/lib/utils'
-import { conceptToVariableTable, type VariableTable, type ThemeMode } from '@/lib/theme/variable-table'
+
+// Old variable system types - kept as stubs for backward compat during migration
+type VariableTable = Record<string, { light: string; dark: string }>
+type ThemeMode = 'light' | 'dark'
+function conceptToVariableTable(_concept: Concept): VariableTable { return {} }
 
 // ============================================
 // Store State Interface
