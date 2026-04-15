@@ -72,8 +72,9 @@ export async function POST(req: Request) {
     if (provider === 'proxy') {
       providerOptions = { openai: { reasoningEffort: 'high' } }
     } else if (provider === 'vertex-global') {
-      // Gemini 3.x supports thinkingLevel
-      providerOptions = { vertex: { thinkingConfig: { thinkingLevel: 'high' } } }
+      // Gemini 3.x: use 'low' thinking for tool-heavy agentic workflows
+      // 'high' causes the model to over-reason and skip tool calls entirely
+      providerOptions = { vertex: { thinkingConfig: { thinkingLevel: 'low' } } }
     } else {
       // Gemini 2.5 supports thinkingBudget
       providerOptions = { vertex: { thinkingConfig: { thinkingBudget: 8192 } } }
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
       messages: modelMessages,
       stopWhen: stepCountIs(20),
       tools: ALL_TOOLS,
+      toolChoice: 'auto',
       providerOptions,
       onStepFinish({ toolCalls }) {
         if (toolCalls.length > 0) {

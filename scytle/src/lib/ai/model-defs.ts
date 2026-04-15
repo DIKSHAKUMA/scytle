@@ -23,7 +23,7 @@ export const MODELS: ModelDef[] = [
     key: 'gemini-pro',
     displayName: 'Gemini 3.1 Pro',
     provider: 'vertex-global',
-    proxyModelId: 'gemini-3.1-pro-preview',
+    proxyModelId: 'gemini-3.1-pro-preview-customtools',
     tier: 'pro',
     capabilities: ['thinking', 'vision', 'coding', 'long-context'],
   },
