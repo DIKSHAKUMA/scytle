@@ -116,6 +116,8 @@ export function SelectionOverlay({
     const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
     // Figma: selection handles hide when in vector edit mode (anchor points take over)
     const vectorEditNodeId = useEditorStore((s) => s.vectorEditNodeId)
+    // Hide selection bounds when actively inline-editing text
+    const editingNodeId = useEditorStore((s) => s.editingNodeId)
 
     const [rects, setRects] = useState<Map<string, ScreenRect>>(new Map())
     const rafRef = useRef<number>(0)
@@ -200,8 +202,8 @@ export function SelectionOverlay({
         <>
             {Array.from(rects.entries()).map(([id, rect]) => (
                 <div key={id}>
-                    {/* Hide everything when this node is in vector edit mode — anchor point overlay takes over */}
-                    {vectorEditNodeId !== id && (
+                    {/* Hide everything when this node is in vector edit mode or text edit mode */}
+                    {vectorEditNodeId !== id && editingNodeId !== id && (
                     <>
                     {/* Blue outline */}
                     <div

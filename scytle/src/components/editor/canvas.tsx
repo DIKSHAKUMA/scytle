@@ -443,12 +443,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const textNode = createText({
                     x: adjustedX,
                     y: adjustedY,
-                    characters: 'Type something',
+                    characters: '',
                 })
                 store.addNode(textNode, parentId)
                 store.selectNode(textNode.id)
-                store.setEditingNodeId(textNode.id)
                 store.setActiveTool('select')
+                store.setEditingNodeId(textNode.id)
                 e.preventDefault()
                 return
             }

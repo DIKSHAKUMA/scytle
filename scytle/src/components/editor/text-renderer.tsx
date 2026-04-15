@@ -81,6 +81,13 @@ export const TextRenderer = memo(function TextRenderer({
     const commitEdit = useCallback(() => {
         if (!editRef.current) return
         const newText = editRef.current.textContent || ''
+
+        if (newText.trim() === '') {
+            useEditorStore.getState().deleteNode(node.id)
+            useEditorStore.getState().setEditingNodeId(null)
+            return
+        }
+
         if (newText !== node.characters) {
             useEditorStore.getState().updateNode(node.id, {
                 characters: newText,
