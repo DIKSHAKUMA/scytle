@@ -142,9 +142,13 @@ Both Tailwind classes and inline styles are fully supported.
 - Z-index, float, pseudo-elements (::before, ::after)
 - Text shadow, backdrop-filter, advanced filters
 - <style> tags — use Tailwind classes or inline styles
-- Responsive prefixes (sm:, md:, lg:) — design for the target width
 - Interactive prefixes (hover:, focus:) — static design
 - HTML <table> — use flex/grid instead
+
+## RESPONSIVE PREFIXES (sm:, md:, lg:, xl:)
+Responsive prefixes ARE supported but unnecessary — you design for ONE target width.
+Write the desktop layout directly: use \`grid-cols-3\` not \`grid-cols-1 lg:grid-cols-3\`.
+Use \`flex-row\` not \`flex-col lg:flex-row\`. Use \`flex\` not \`hidden lg:flex\`.
 
 ## COMPLEX VISUALS
 - Maps: Use a placeholder image (searchImages "satellite map city")

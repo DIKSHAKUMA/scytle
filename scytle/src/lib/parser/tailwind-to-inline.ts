@@ -484,19 +484,31 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
 
   // Filter out variant/responsive classes — they produce CSS with @media / &:hover
   // selectors that cannot be represented as inline styles.
-  // Variant classes contain a colon before the utility name (hover:, focus:, md:, lg:, etc.)
-  // BUT Tailwind utilities like "text-lg" or "border-t-2" use colons only for variants.
-  // Variant prefixes always appear BEFORE the utility and use `:` as separator.
-  const isVariantClass = (cls: string) => {
-    // Classes like "hover:text-black", "md:flex", "focus:outline-none", "group-hover:text-black"
-    // Always have the pattern <variant>:<utility>
-    // Standard utilities never have a colon prefix like this
-    return /^[a-z][\w-]*:/.test(cls)
-  }
+  // HOWEVER: responsive classes (sm:, md:, lg:, xl:, 2xl:) should NOT be discarded.
+  // Since we design for a fixed desktop width (1440px), responsive variants should
+  // be promoted to their base utility (e.g., lg:grid-cols-3 → grid-cols-3) and
+  // override the base class. This is critical — without it, everything renders at
+  // the mobile 1-column breakpoint.
+  const RESPONSIVE_PREFIXES = new Set(['sm', 'md', 'lg', 'xl', '2xl'])
+  // Priority order: higher breakpoints override lower ones (mobile-first cascade)
+  const BREAKPOINT_PRIORITY: Record<string, number> = { sm: 1, md: 2, lg: 3, xl: 4, '2xl': 5 }
+
+  // Map: original responsive class → { base utility name, breakpoint priority }
+  const responsiveToBase = new Map<string, { base: string; priority: number }>()
 
   const filteredClasses = new Set<string>()
   for (const cls of uniqueClasses) {
-    if (!isVariantClass(cls)) {
+    const variantMatch = cls.match(/^([a-z][\w-]*):(.+)$/)
+    if (variantMatch) {
+      const prefix = variantMatch[1]
+      const baseUtility = variantMatch[2]
+      if (RESPONSIVE_PREFIXES.has(prefix)) {
+        // Responsive variant → strip prefix, track mapping, ensure base is resolved
+        responsiveToBase.set(cls, { base: baseUtility, priority: BREAKPOINT_PRIORITY[prefix] })
+        filteredClasses.add(baseUtility) // ensure the stripped utility is batch-converted
+      }
+      // else: interactive variant (hover:, focus:, group-hover:) → skip entirely
+    } else {
       filteredClasses.add(cls)
     }
   }
@@ -531,12 +543,30 @@ export async function convertTailwindToInline(html: string): Promise<ConversionR
     const start = match.index
     const end = start + match[0].length
 
-    // Collect parsed rules for all classes on this element
-    const rules: ParsedRule[] = []
+    // Collect parsed rules for all classes on this element.
+    // Responsive classes are resolved to their base utility and applied AFTER
+    // base classes so they override (mobile-first cascade at desktop width).
+    const baseRules: ParsedRule[] = []
+    const responsiveRules: Array<{ rule: ParsedRule; priority: number }> = []
+
     for (const cls of classes) {
-      const rule = classRuleMap.get(cls)
-      if (rule) rules.push(rule)
+      const responsive = responsiveToBase.get(cls)
+      if (responsive) {
+        // Responsive class → look up the stripped base utility's rule
+        const rule = classRuleMap.get(responsive.base)
+        if (rule) responsiveRules.push({ rule, priority: responsive.priority })
+      } else {
+        const rule = classRuleMap.get(cls)
+        if (rule) baseRules.push(rule)
+      }
     }
+
+    // Sort responsive rules by breakpoint priority (ascending: sm < md < lg < xl)
+    // so higher breakpoints override lower ones in the merge
+    responsiveRules.sort((a, b) => a.priority - b.priority)
+
+    // Merge: base first, then responsive overrides in breakpoint order
+    const rules = [...baseRules, ...responsiveRules.map(r => r.rule)]
 
     if (rules.length === 0) continue
 
