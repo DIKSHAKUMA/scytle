@@ -1,13 +1,13 @@
 /**
  * AI Tool Definitions — Scytle
  *
- * These are the "hands" the AI uses to interact with the canvas + theme.
+ * These are the "hands" the AI uses to interact with the canvas.
  *
  * ARCHITECTURE:
  *   - Tools execute on the SERVER (in streamText within route.ts)
- *   - Canvas/theme tools return structured data as results
+ *   - Canvas tools return structured data as results
  *   - The CLIENT (chat-panel.tsx) intercepts tool results via onToolCall
- *     and applies them to Zustand stores (editor-store, style-guide-store)
+ *     and applies them to Zustand stores (editor-store)
  *   - Server-side tools (searchImages) execute fully on the server
  *
  * IMPORTANT: AI SDK v6 uses `inputSchema` not `parameters` in tool().
@@ -18,73 +18,13 @@ import { z } from 'zod'
 import { searchImages as unsplashSearch } from '@/lib/ai/unsplash'
 
 // ═══════════════════════════════════════════════════════════
-// Tool: UPDATE THEME — AI decides the full visual identity
-// ═══════════════════════════════════════════════════════════
-//
-// Flow: AI calls updateTheme → returns theme params as result
-//       → client onToolCall picks up result → writes to useStyleGuideStore
-//       → theme tab updates live → variableTable recalculates
-//       → AI generates HTML using exact hex values
-//       → parser matches hex → stores as variable refs
-//       → user changes color in theme tab → all nodes update
-//
-export const updateTheme = tool({
-  description: `Set the full visual identity for the design. Call this FIRST before generating any HTML.
-This writes directly to the theme panel — the user will see colors, fonts, and styles update live.
-All generated HTML must use the exact hex values you set here. The parser links them to theme variables,
-so if the user later changes a color in the theme panel, all nodes update automatically.
-
-Choose colors contextually:
-- Fitness → warm oranges/reds, energetic
-- Legal → navy/gold, trustworthy
-- Kids → bright candy colors, playful
-- Luxury → muted blacks, gold, elegant serifs
-- Tech → clean blues/teals, modern sans-serif
-Never use generic defaults. Every project deserves unique colors.`,
-  inputSchema: z.object({
-    mode: z.enum(['light', 'dark']).describe('Light or dark mode'),
-    bgPrimary: z.string().describe('Main background. Use warm whites (#FAFAF8) or deep darks (#0A0A0F), never pure #fff/#000'),
-    bgSecondary: z.string().describe('Alternate section background for visual rhythm'),
-    textPrimary: z.string().describe('Main text color. Warm darks (#1A1A1A) or soft whites (#F5F5F5)'),
-    textSecondary: z.string().describe('Secondary text for descriptions and captions'),
-    textMuted: z.string().describe('Muted text for timestamps and meta'),
-    accent: z.string().describe('Primary accent — the ONE bold color defining the brand'),
-    accentName: z.string().describe('Human name: "Coral", "Electric Blue", "Forest Green"'),
-    textOnAccent: z.string().describe('Text on accent backgrounds, usually #ffffff or #000000'),
-    border: z.string().describe('Border/divider color, subtle'),
-    headingFont: z.string().describe('Heading font from Google Fonts: "Raleway", "Space Grotesk", etc.'),
-    bodyFont: z.string().describe('Body font from Google Fonts: "Inter", "DM Sans", etc.'),
-    headingWeight: z.enum(['400', '500', '600', '700', '800']),
-    bodyWeight: z.enum(['300', '400', '500']),
-    sizeScale: z.enum(['0.875', '1', '1.125']).describe('Font size multiplier'),
-    buttonStyle: z.enum(['solid', 'outline', 'ghost', 'brick', 'gradient']),
-    buttonRadius: z.enum(['0', '4', '8', '12', '9999']),
-    cardStyle: z.enum(['default', 'outlined', 'flat']),
-    cardRadius: z.enum(['0', '4', '8', '12', '9999']),
-    imageRadius: z.enum(['0', '4', '8', '12', '9999']),
-    accent2: z.string().optional().describe('Optional secondary accent'),
-    accent2Name: z.string().optional(),
-    direction: z.string().describe('One sentence visual direction: "Dark editorial with warm orange energy"'),
-  }),
-  execute: async (params) => {
-    // Returns theme data — client applies to useStyleGuideStore
-    return {
-      success: true,
-      action: 'updateTheme' as const,
-      message: `Theme set: ${params.mode} mode, accent ${params.accent} (${params.accentName}), ${params.headingFont}/${params.bodyFont}`,
-      theme: params,
-    }
-  },
-})
-
-// ═══════════════════════════════════════════════════════════
 // Tool: GENERATE SECTION — Write HTML to canvas
 // ═══════════════════════════════════════════════════════════
 export const generateSection = tool({
   description: `Generate HTML+Tailwind for ONE visual section and add it to the canvas.
 Call once per section: nav, hero, features, stats, testimonials, pricing, cta, footer.
-CRITICAL: Use the EXACT hex color values from your updateTheme call.
-The parser links these values to theme variables for live editing later.
+Use bg-[#hex] and text-[#hex] format for all colors. Include inline font-family styles for custom fonts.
+Keep colors consistent across sections — use the same palette throughout the design.
 
 MULTI-PAGE: Set newPage=true when starting a new page (e.g., user asks for "pricing page"
 after you already built a "home page"). This creates a separate page frame on the canvas.
@@ -95,7 +35,7 @@ When the user says "mobile app", "iPhone", "phone design" → use width=390.
 When the user says "tablet" → use width=768.`,
   inputSchema: z.object({
     sectionType: z.string().describe('Section type: "nav", "hero", "features", "stats", "cta", "footer", etc.'),
-    html: z.string().describe('Complete HTML+Tailwind. Use exact hex colors from updateTheme. Include inline font-family styles.'),
+    html: z.string().describe('Complete HTML+Tailwind with inline hex colors and font-family styles.'),
     newPage: z.boolean().default(false).describe('Set true to create a NEW page frame (e.g., starting a separate Pricing page). First section auto-creates a page.'),
     pageName: z.string().optional().describe('Name for the new page frame when newPage=true. E.g., "Pricing", "About", "Mobile - Home"'),
     width: z.number().default(1440).describe('Page frame width in px. Desktop=1440, Tablet=768, Mobile=390.'),
@@ -176,7 +116,6 @@ export const searchImages = tool({
 
 // ─── Export all tools ────────────────────────────────────────────
 export const ALL_TOOLS = {
-  updateTheme,
   generateSection,
   editNode,
   searchImages,

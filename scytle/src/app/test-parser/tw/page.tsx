@@ -14,123 +14,99 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 const DEFAULT_HTML = `
 <div style="font-family: system-ui, sans-serif">
 
-<!-- ═══ TEST 1: Hero with 2-column grid — inner content frame sizing ═══ -->
-<section class="w-full bg-[#0F172A]">
-  <div class="grid grid-cols-2 gap-16 px-16 py-16" style="min-height: 500px">
-    <div class="flex flex-col justify-center gap-4">
-      <span class="text-sm font-semibold text-[#0D9488] uppercase tracking-widest">240+ Verified Brands</span>
-      <h1 class="text-5xl font-bold text-white" style="line-height: 1.15">Discover Brands Worth Buying From.</h1>
-      <p class="text-base text-[#94A3B8]">BrandHub connects shoppers with the world's most thoughtful, independent, and celebrated brands — all in one curated marketplace.</p>
-      <div class="flex gap-3 mt-4">
-        <div class="bg-[#0D9488] text-white font-semibold px-6 py-3 text-sm" style="border-radius: 8px">Search</div>
+<!-- ═══════════════════════════════════════════════════════════════
+     ISSUE 1: GRID — Do children fill their 1fr columns?
+     Expected: 3 equal-width cards filling the full row width
+     Bug: Cards might render at "hug" width (as narrow as content)
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="w-full bg-[#1A1A1A] py-16 px-16">
+  <h2 class="text-2xl font-bold text-white mb-8">ISSUE 1: Grid cols-3 — should fill</h2>
+  <div class="grid grid-cols-3 gap-6">
+    <div class="bg-[#FFD700] rounded-2xl p-8 flex flex-col items-center gap-4">
+      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Burgers" />
       </div>
-      <div class="flex gap-6 mt-4">
-        <div class="flex flex-col gap-1">
-          <span class="text-2xl font-bold text-[#0D9488]">240+</span>
-          <span class="text-sm text-[#94A3B8]">New brands this month</span>
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-2xl font-bold text-[#0D9488]">2.4M</span>
-          <span class="text-sm text-[#94A3B8]">Shoppers</span>
-        </div>
-      </div>
+      <span class="text-lg font-bold text-[#1A1A1A]">Burgers</span>
+      <p class="text-sm text-[#333] text-center">Classic American favorites with premium toppings</p>
     </div>
-    <div class="flex items-center justify-center" style="position: relative; overflow: hidden; border-radius: 16px">
-      <img src="https://images.unsplash.com/photo-1488085061387-422e29b40080?w=600&h=400&fit=crop" alt="Brand product" class="w-full h-full object-cover" />
+    <div class="bg-[#FF4500] rounded-2xl p-8 flex flex-col items-center gap-4">
+      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Pizza" />
+      </div>
+      <span class="text-lg font-bold text-white">Pizza</span>
+      <p class="text-sm text-white text-center">Wood-fired artisan pizzas from local chefs</p>
+    </div>
+    <div class="bg-[#2E8B57] rounded-2xl p-8 flex flex-col items-center gap-4">
+      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Healthy" />
+      </div>
+      <span class="text-lg font-bold text-white">Healthy</span>
+      <p class="text-sm text-white text-center">Fresh salads, bowls, and smoothies</p>
     </div>
   </div>
 </section>
 
-<!-- ═══ TEST 2: Revenue chart — bars with percentage heights inside flex-col ═══ -->
-<section class="w-full bg-[#1E293B] px-16 py-16">
-  <div class="bg-[#0F172A] p-8 flex flex-col gap-6" style="border-radius: 16px">
-    <div class="flex justify-between items-center">
-      <h3 class="text-xl font-bold text-white">Revenue Overview</h3>
-      <div class="bg-[#0D9488] text-white text-xs font-semibold px-3 py-1" style="border-radius: 6px">This Month</div>
-    </div>
-    <!-- Chart bars: each bar has explicit height -->
-    <div class="flex items-end gap-2" style="height: 200px">
-      <div class="flex-1 bg-[#0D9488]" style="height: 40%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 65%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 45%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 70%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 55%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 80%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 30%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 90%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 50%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 75%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 60%; border-radius: 4px 4px 0 0"></div>
-      <div class="flex-1 bg-[#0D9488]" style="height: 95%; border-radius: 4px 4px 0 0"></div>
-    </div>
-    <div class="flex justify-between">
-      <div class="flex flex-col">
-        <span class="text-3xl font-bold text-white">$48,290</span>
-        <span class="text-sm text-[#94A3B8]">Total revenue this month</span>
-      </div>
-      <div class="flex flex-col items-end">
-        <span class="text-3xl font-bold text-[#0D9488]">1,247</span>
-        <span class="text-sm text-[#94A3B8]">Orders processed</span>
-      </div>
+<!-- ═══════════════════════════════════════════════════════════════
+     ISSUE 2: ABSOLUTE — Does inset-0 overlay fill parent?
+     Expected: Image fills section, gradient overlay covers it,
+               text sits at bottom-left on top of everything
+     Bug: Overlay/image might collapse to 0x0 or not layer correctly
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="w-full relative" style="min-height: 500px">
+  <h2 class="absolute top-4 left-16 text-sm font-bold text-white" style="z-index: 99">ISSUE 2: Absolute inset-0 overlay</h2>
+  <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1440&h=500&fit=crop" class="w-full h-full object-cover absolute inset-0" alt="Food hero" />
+  <div class="absolute inset-0" style="background: linear-gradient(to right, rgba(0,0,0,0.8), transparent)"></div>
+  <div class="absolute bottom-12 left-16 max-w-lg">
+    <h1 class="text-5xl font-bold text-white" style="line-height: 1.1">CRAVING IT? We've got it.</h1>
+    <p class="text-lg text-[#ccc] mt-4">Find your next favorite meal from 5,000+ restaurants</p>
+    <div class="flex gap-4 mt-6">
+      <button class="bg-[#FF6B00] text-white font-bold px-8 py-3 rounded-lg">Order Now</button>
+      <button class="border-2 border-white text-white font-bold px-8 py-3 rounded-lg">Browse</button>
     </div>
   </div>
 </section>
 
-<!-- ═══ TEST 3: Footer with inherited text-white on links ═══ -->
-<footer class="w-full bg-[#0F172A] text-white px-16 py-12">
-  <div class="grid grid-cols-4 gap-8 mb-8">
-    <div class="flex flex-col gap-2">
-      <span class="text-lg font-bold text-white">BrandHub</span>
-      <p class="text-sm text-[#94A3B8]">The world's most trusted marketplace for discovering and shopping from verified independent brands.</p>
-    </div>
-    <div class="flex flex-col gap-2">
-      <span class="text-sm font-semibold text-white uppercase tracking-wider">Discover</span>
-      <a class="text-sm text-[#94A3B8]">All Brands</a>
-      <a class="text-sm text-[#94A3B8]">New Arrivals</a>
-      <a class="text-sm text-[#94A3B8]">Collections</a>
-      <a class="text-sm text-[#94A3B8]">Deals</a>
-    </div>
-    <div class="flex flex-col gap-2">
-      <span class="text-sm font-semibold text-white uppercase tracking-wider">For Brands</span>
-      <a class="text-sm text-[#94A3B8]">List Your Brand</a>
-      <a class="text-sm text-[#94A3B8]">Analytics Dashboard</a>
-      <a class="text-sm text-[#94A3B8]">Pricing</a>
-    </div>
-    <div class="flex flex-col gap-2">
-      <span class="text-sm font-semibold text-white uppercase tracking-wider">Company</span>
-      <a class="text-sm text-[#94A3B8]">About</a>
-      <a class="text-sm text-[#94A3B8]">Careers</a>
-      <a class="text-sm text-[#94A3B8]">Contact</a>
-    </div>
-  </div>
-  <div class="flex justify-between pt-8" style="border-top: 1px solid #334155">
-    <span class="text-sm text-[#64748B]">© 2025 BrandHub, Inc. All rights reserved.</span>
-    <div class="flex gap-4">
-      <a class="text-sm text-[#64748B]">Privacy Policy</a>
-      <a class="text-sm text-[#64748B]">Terms of Service</a>
-      <a class="text-sm text-[#64748B]">Cookie Settings</a>
-    </div>
-  </div>
-</footer>
-
-<!-- ═══ TEST 4: Feature cards in 2-col grid with icon + text (94% Revenue Share pattern) ═══ -->
-<section class="w-full bg-[#F8FAFC] px-16 py-16">
-  <div class="grid grid-cols-2 gap-6">
-    <div class="bg-white p-6 flex flex-col gap-3" style="border-radius: 16px; border: 1px solid #E2E8F0">
-      <div class="w-10 h-10 bg-[#0D9488] flex items-center justify-center" style="border-radius: 8px">
-        <span class="text-white text-lg font-bold">📊</span>
+<!-- ═══════════════════════════════════════════════════════════════
+     ISSUE 3: WIDTH — Do restaurant cards fill grid cells?
+     Expected: 3 cards equal width, images stretch to card width,
+               each card fills its 1fr column
+     Bug: Cards might be narrow, not filling their grid column
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="w-full bg-[#0A0A0A] py-16 px-16">
+  <h2 class="text-2xl font-bold text-white mb-8">ISSUE 3: Grid cards — width fill</h2>
+  <div class="grid grid-cols-3 gap-8">
+    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
+      <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 1" />
+      <div class="p-6">
+        <h3 class="text-xl font-bold text-white">Thai Orchid Café</h3>
+        <p class="text-sm text-[#888] mt-1">Thai cuisine • 4.8 ★ • 25-35 min</p>
+        <div class="flex gap-2 mt-3">
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Popular</span>
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Free delivery</span>
+        </div>
       </div>
-      <h3 class="text-lg font-bold text-[#0F172A]">Audience Matching</h3>
-      <p class="text-sm text-[#64748B]">Our algorithm surfaces your brand to shoppers who share your values, aesthetics, and price point.</p>
-      <a class="text-sm font-semibold text-[#0D9488]">See the algorithm →</a>
     </div>
-    <div class="bg-[#0D9488] p-6 flex flex-col gap-3" style="border-radius: 16px">
-      <div class="w-10 h-10 bg-white flex items-center justify-center" style="border-radius: 8px">
-        <span class="text-[#0D9488] text-lg font-bold">💰</span>
+    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
+      <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 2" />
+      <div class="p-6">
+        <h3 class="text-xl font-bold text-white">Le Fork Bistro</h3>
+        <p class="text-sm text-[#888] mt-1">French bistro • 4.9 ★ • 30-45 min</p>
+        <div class="flex gap-2 mt-3">
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Top rated</span>
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">$$</span>
+        </div>
       </div>
-      <h3 class="text-lg font-bold text-white">94% Revenue Share</h3>
-      <p class="text-sm text-white" style="opacity: 0.85">Keep 94 cents of every dollar. No monthly fees. No setup cost. We only succeed when you succeed.</p>
-      <a class="text-sm font-semibold text-white">Compare to competitors →</a>
+    </div>
+    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
+      <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 3" />
+      <div class="p-6">
+        <h3 class="text-xl font-bold text-white">Garden Grill Co.</h3>
+        <p class="text-sm text-[#888] mt-1">American grill • 4.7 ★ • 20-30 min</p>
+        <div class="flex gap-2 mt-3">
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">New</span>
+          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Patio</span>
+        </div>
+      </div>
     </div>
   </div>
 </section>

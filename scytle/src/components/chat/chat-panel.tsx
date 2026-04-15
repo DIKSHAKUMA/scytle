@@ -22,10 +22,10 @@ import { useChat } from '@ai-sdk/react'
 import { useAuiState } from '@assistant-ui/store'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
-import { Palette, Code2, Pencil, Check, Loader2, Search } from 'lucide-react'
+import { Code2, Pencil, Check, Loader2, Search } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
-import { useVariableStore } from '@/store/variable-store'
+
 import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
 import { parseHtml } from '@/lib/parser'
@@ -107,24 +107,10 @@ function createPageFrame(
 // Helpers
 // ══════════════════════════════════════════════════════════
 
-/** Check if the concept still has default values (Indigo accent, Raleway/Inter) */
-function isDefaultTheme(concept: { colors: { accents: Array<{ hex: string }> }; typography: { headingFont: string; bodyFont: string } }): boolean {
-    const mainAccent = concept.colors.accents[0]
-    const isDefaultAccent = mainAccent?.hex?.toLowerCase() === '#4f46e5' || mainAccent?.hex?.toLowerCase() === '#6366f1'
-    const isDefaultHeading = concept.typography.headingFont.includes('Raleway')
-    const isDefaultBody = concept.typography.bodyFont.includes('Inter')
-    return isDefaultAccent && isDefaultHeading && isDefaultBody
-}
-
 function buildContext(
     nodes: readonly ScytleNode[],
     selectedIds: string[]
 ): SystemPromptContext {
-    // Read full theme from style guide store
-    const sgState = useStyleGuideStore.getState()
-    const concept = sgState.getActiveConcept()
-    const mainAccent = concept.colors.accents.find(a => a.isMain) ?? concept.colors.accents[0]
-
     // Get full HTML for the selected node (untruncated) so AI can rewrite it
     const selectedId = selectedIds.length > 0 ? selectedIds[0] : null
     let selectedNodeHtml: string | null = null
@@ -145,28 +131,6 @@ function buildContext(
         })),
         selectedNodeId: selectedId,
         selectedNodeHtml,
-        // Full theme context — AI sees everything
-        theme: {
-            mode: concept.colors.mode,
-            bgPrimary: concept.colors.bgPrimary,
-            bgSecondary: concept.colors.bgSecondary,
-            textPrimary: concept.colors.textPrimary,
-            textSecondary: concept.colors.textSecondary,
-            textMuted: concept.colors.textMuted ?? concept.colors.textSecondary,
-            textOnAccent: concept.colors.textOnAccent,
-            accent: mainAccent?.hex,
-            accentName: mainAccent?.name,
-            border: concept.colors.border,
-            headingFont: concept.typography.headingFont,
-            bodyFont: concept.typography.bodyFont,
-            headingWeight: String(concept.typography.headingWeight),
-            bodyWeight: String(concept.typography.bodyWeight),
-            buttonStyle: concept.ui.buttonStyle,
-            buttonRadius: String(concept.ui.buttonRadius),
-            cardStyle: concept.ui.cardStyle,
-            cardRadius: String(concept.ui.cardRadius),
-        },
-        themeModified: !isDefaultTheme(concept),
     }
 }
 
@@ -240,59 +204,7 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
     if (!result) return
 
     switch (toolName) {
-        case 'updateTheme': {
-            const theme = result.theme
-            if (!theme) return
-
-            useStyleGuideStore.setState((state) => {
-                const concept = state.data.concepts.find(c => c.id === state.data.activeConceptId)
-                if (!concept) return state
-
-                concept.colors.mode = theme.mode
-                concept.colors.bgPrimary = theme.bgPrimary
-                concept.colors.bgSecondary = theme.bgSecondary
-                concept.colors.textPrimary = theme.textPrimary
-                concept.colors.textSecondary = theme.textSecondary
-                concept.colors.textMuted = theme.textMuted
-                concept.colors.textOnAccent = theme.textOnAccent
-                concept.colors.border = theme.border
-
-                concept.colors.accents = [
-                    { id: 'accent-1', name: theme.accentName, hex: theme.accent, isMain: true },
-                ]
-                if (theme.accent2) {
-                    concept.colors.accents.push(
-                        { id: 'accent-2', name: theme.accent2Name || 'Secondary', hex: theme.accent2, isMain: false }
-                    )
-                }
-
-                concept.typography.headingFont = `'${theme.headingFont}', sans-serif`
-                concept.typography.bodyFont = `'${theme.bodyFont}', sans-serif`
-                concept.typography.headingWeight = Number(theme.headingWeight) as any
-                concept.typography.bodyWeight = Number(theme.bodyWeight) as any
-
-                concept.ui.buttonStyle = theme.buttonStyle
-                concept.ui.buttonRadius = Number(theme.buttonRadius) as any
-                concept.ui.cardStyle = theme.cardStyle
-                concept.ui.cardRadius = Number(theme.cardRadius) as any
-                concept.ui.imageRadius = Number(theme.imageRadius) as any
-
-                return state
-            })
-
-            const store = useStyleGuideStore.getState()
-            store.setHeadingFont(store.getActiveConcept().typography.headingFont)
-
-            try {
-                const link = document.createElement('link')
-                link.rel = 'stylesheet'
-                link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(theme.headingFont)}:wght@${theme.headingWeight}&family=${encodeURIComponent(theme.bodyFont)}:wght@${theme.bodyWeight}&display=swap`
-                document.head.appendChild(link)
-            } catch (e) {
-                console.warn('Failed to load Google Fonts:', e)
-            }
-            break
-        }
+        // updateTheme removed — AI generates HTML with inline colors/fonts directly
 
         case 'generateSection': {
             const { html, sectionType, newPage, pageName, width, parentNodeId } = result
@@ -304,9 +216,6 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const parsed = await parseHtml(html, sectionType || 'Section', {
                     rootWidth: frameWidth,
                     fonts,
-                    variables: useVariableStore.getState().variables,
-                    collections: useVariableStore.getState().collections,
-                    activeModeId: useVariableStore.getState().activeModeId ?? undefined,
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 const editorStore = useEditorStore.getState()
@@ -360,9 +269,6 @@ async function applyToolResult(toolName: string, result: any): Promise<void> {
                 const parsed = await parseHtml(html, existingNode.name, {
                     rootWidth: existingNode.width,
                     fonts,
-                    variables: useVariableStore.getState().variables,
-                    collections: useVariableStore.getState().collections,
-                    activeModeId: useVariableStore.getState().activeModeId ?? undefined,
                 })
                 const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
                 newNode.x = existingNode.x
@@ -389,42 +295,7 @@ function StatusIcon({ status }: { status: { type: string } }) {
     return null
 }
 
-const UpdateThemeToolUI = makeAssistantToolUI({
-    toolName: 'updateTheme',
-    render: ({ args, result, status, toolCallId }) => {
-        useEffect(() => {
-            if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
-                enqueueToolResult('updateTheme', result)
-            }
-        }, [status.type, result, toolCallId])
-
-        const theme = (result as any)?.theme || args
-        return (
-            <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                <Palette className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <span className="font-medium text-foreground/80">
-                        {status.type === 'running' ? 'Setting theme' : 'Theme set'}
-                    </span>
-                    {(theme as any)?.accentName && (
-                        <span className="text-muted-foreground"> — {String((theme as any).accentName)}</span>
-                    )}
-                    {(theme as any)?.headingFont && (
-                        <span className="text-muted-foreground text-xs ml-1">({String((theme as any).headingFont)}/{String((theme as any).bodyFont)})</span>
-                    )}
-                </div>
-                {(theme as any)?.accent && (
-                    <div className="flex gap-0.5 shrink-0">
-                        {[(theme as any).bgPrimary, (theme as any).accent, (theme as any).textPrimary].filter(Boolean).map((c: string, i: number) => (
-                            <div key={i} className="w-4 h-4 rounded-sm border border-border/50" style={{ background: c }} />
-                        ))}
-                    </div>
-                )}
-                <StatusIcon status={status} />
-            </div>
-        )
-    },
-})
+// UpdateThemeToolUI removed — AI no longer calls updateTheme
 
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
@@ -555,7 +426,7 @@ export function ChatPanel() {
             <ChatSyncBridge />
 
             {/* Tool side-effects + rich visual cards */}
-            <UpdateThemeToolUI />
+            {/* UpdateThemeToolUI removed — AI generates inline colors */}
             <GenerateSectionToolUI />
             <EditNodeToolUI />
             <SearchImagesToolUI />
