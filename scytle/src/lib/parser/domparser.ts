@@ -424,13 +424,21 @@ function buildContainerNode(
     const inh = mergeInherited(cs, inherited)
     const layout = extractLayout(cs, tag, inherited)
     const padding = extractPadding(cs)
-    const sizing = inferContainerSizing(el, cs)
+    let sizing = inferContainerSizing(el, cs)
 
 
     // Estimate this container's available width for children
-    let containerWidth = sizing.horizontal === 'fill'
-        ? parentWidth
-        : (parseFloat(cs.width) || parentWidth)
+    let containerWidth: number
+    if (sizing.horizontal === 'fill') {
+        containerWidth = parentWidth
+    } else if (cs.width?.endsWith('%')) {
+        // Percentage width: resolve against parent (e.g., w-[70%] → 70% of parentWidth)
+        containerWidth = (parseFloat(cs.width) / 100) * parentWidth
+    } else if (cs.width?.endsWith('px')) {
+        containerWidth = parseFloat(cs.width)
+    } else {
+        containerWidth = resolveLength(cs.width) || parseFloat(cs.width) || parentWidth
+    }
 
     // Apply maxWidth constraint BEFORE grid/child division
     const maxW = parseFloat(cs.maxWidth)
@@ -445,6 +453,31 @@ function buildContainerNode(
         const gridGap = layout.gap || 0
         const totalGap = gridGap * (layout.columns - 1)
         childAvailWidth = (childAvailWidth - totalGap) / layout.columns
+    }
+
+    // For flex-row containers, estimate per-child width for flex-grow siblings
+    // so images and text inside flex-1 divs get proper width estimates
+    let flexRowPerGrowWidth = childAvailWidth
+    const isFlexRow = layout.mode === 'flex' && layout.direction === 'row'
+    if (isFlexRow) {
+        const elementChildren = Array.from(el.children) as HTMLElement[]
+        let flexGrowCount = 0
+        let fixedWidthTotal = 0
+        for (const ch of elementChildren) {
+            const s = ch.style
+            const isGrow = (s.flexGrow && parseFloat(s.flexGrow) > 0) ||
+                s.flex === '1' || s.flex?.startsWith('1 ')
+            if (isGrow) {
+                flexGrowCount++
+            } else {
+                const fw = s.width?.endsWith('px') ? parseFloat(s.width) : 0
+                fixedWidthTotal += fw
+            }
+        }
+        if (flexGrowCount > 0) {
+            const totalGaps = (layout.gap || 0) * Math.max(elementChildren.length - 1, 0)
+            flexRowPerGrowWidth = Math.max((childAvailWidth - fixedWidthTotal - totalGaps) / flexGrowCount, 40)
+        }
     }
 
     // Recursively walk children
@@ -464,6 +497,18 @@ function buildContainerNode(
                     if (span > 1) {
                         childParentWidth = childAvailWidth * span + gridGap * (span - 1)
                     }
+                }
+            } else if (isFlexRow) {
+                // Flex-grow children in a flex-row should share space, not each get full width
+                const s = childEl.style
+                const isGrow = (s.flexGrow && parseFloat(s.flexGrow) > 0) ||
+                    s.flex === '1' || s.flex?.startsWith('1 ')
+                if (isGrow) {
+                    childParentWidth = flexRowPerGrowWidth
+                } else if (s.width?.endsWith('px')) {
+                    childParentWidth = parseFloat(s.width)
+                } else if (s.width?.endsWith('%')) {
+                    childParentWidth = (parseFloat(s.width) / 100) * childAvailWidth
                 }
             }
             const node = walkElement(childEl, childParentWidth, inh)
@@ -542,7 +587,7 @@ function buildContainerNode(
     // Estimate dimensions
     let estWidth = sizing.horizontal === 'fixed'
         ? (cs.width?.endsWith('%')
-            ? (parseFloat(cs.width) / 100) * containerWidth  // Resolve percentage against parent
+            ? (parseFloat(cs.width) / 100) * parentWidth  // Resolve percentage against PARENT width
             : (resolveLength(cs.width) || parseFloat(cs.width) || containerWidth))
         : sizing.horizontal === 'hug'
             ? estimateContainerWidth(children, padding, layout)
@@ -571,6 +616,10 @@ function buildContainerNode(
             : parseFloat(parts[0])
         if (ratio > 0 && isFinite(ratio)) {
             estHeight = (explicitW || estWidth) / ratio
+            // Aspect-ratio defines height deterministically from width.
+            // Mark as 'fixed' so the layout engine uses this value,
+            // not hug (which would create circular collapse with fill children).
+            sizing = { ...sizing, vertical: 'fixed' }
         }
     } else if (explicitW && explicitH) {
         // Both dimensions explicitly set (e.g., w-12 h-12) — always use CSS values
@@ -1952,6 +2001,27 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
         }
 
         const stops: Array<{ position: number; color: string; opacity?: number }> = []
+
+        // Pre-process: resolve color-mix() expressions to rgba equivalents
+        // Tailwind v4 generates these for opacity colors like from-black/60:
+        //   color-mix(in oklab, #000 60%, transparent) → rgba(0,0,0,0.6)
+        content = content.replace(/color-mix\(in\s+\w+,\s*(#[0-9a-fA-F]{3,8})\s+([\d.]+)%,\s*transparent\)/g,
+            (_full, hex, pct) => {
+                const r = parseInt(hex.slice(1,3), 16) || 0
+                const g = parseInt(hex.slice(3,5), 16) || 0
+                const b = parseInt(hex.slice(5,7), 16) || 0
+                return `rgba(${r}, ${g}, ${b}, ${parseFloat(pct) / 100})`
+            }
+        )
+        // Also handle the inverse: color-mix(in oklab, transparent, #FFF 40%)
+        content = content.replace(/color-mix\(in\s+\w+,\s*transparent,\s*(#[0-9a-fA-F]{3,8})\s+([\d.]+)%\)/g,
+            (_full, hex, pct) => {
+                const r = parseInt(hex.slice(1,3), 16) || 0
+                const g = parseInt(hex.slice(3,5), 16) || 0
+                const b = parseInt(hex.slice(5,7), 16) || 0
+                return `rgba(${r}, ${g}, ${b}, ${parseFloat(pct) / 100})`
+            }
+        )
 
         // Match color functions + hex + transparent keyword
         const colorStopRegex = /((?:rgba?|oklch|oklab|color)\([^)]+\)|#[0-9a-fA-F]{3,8}|transparent)\s*([\d.]+%)?/g

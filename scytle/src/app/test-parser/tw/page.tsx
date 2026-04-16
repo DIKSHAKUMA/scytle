@@ -12,106 +12,73 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<div style="font-family: system-ui, sans-serif">
-
-<!-- ═══════════════════════════════════════════════════════════════
-     ISSUE 1: GRID — Do children fill their 1fr columns?
-     Expected: 3 equal-width cards filling the full row width
-     Bug: Cards might render at "hug" width (as narrow as content)
-     ═══════════════════════════════════════════════════════════════ -->
-<section class="w-full bg-[#1A1A1A] py-16 px-16">
-  <h2 class="text-2xl font-bold text-white mb-8">ISSUE 1: Grid cols-3 — should fill</h2>
-  <div class="grid grid-cols-3 gap-6">
-    <div class="bg-[#FFD700] rounded-2xl p-8 flex flex-col items-center gap-4">
-      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
-        <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Burgers" />
+<section class="w-full bg-[#FAF8F5] py-32 px-12">
+  <div class="max-w-7xl mx-auto">
+    <div class="flex items-end justify-between mb-24">
+      <div class="max-w-xl">
+        <h3 class="text-5xl text-[#1A1A1A] font-light leading-tight mb-6" style="font-family: 'Cormorant Garamond', serif;">
+          Curated <span class="italic text-[#D4AF37]">Destinations</span>
+        </h3>
+        <p class="text-[#5A5A5A] leading-relaxed" style="font-family: 'Manrope', sans-serif;">
+          From the sun-drenched cliffs of the Mediterranean to the serene temples of the East, our handpicked collection represents the pinnacle of experiential travel.
+        </p>
       </div>
-      <span class="text-lg font-bold text-[#1A1A1A]">Burgers</span>
-      <p class="text-sm text-[#333] text-center">Classic American favorites with premium toppings</p>
+      <a href="#" class="hidden md:flex items-center gap-3 text-[#1A1A1A] uppercase tracking-widest text-xs border-b border-[#1A1A1A] pb-1 hover:text-[#D4AF37] hover:border-[#D4AF37] transition-all" style="font-family: 'Manrope', sans-serif;">
+        View All Locations
+      </a>
     </div>
-    <div class="bg-[#FF4500] rounded-2xl p-8 flex flex-col items-center gap-4">
-      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
-        <img src="https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Pizza" />
-      </div>
-      <span class="text-lg font-bold text-white">Pizza</span>
-      <p class="text-sm text-white text-center">Wood-fired artisan pizzas from local chefs</p>
-    </div>
-    <div class="bg-[#2E8B57] rounded-2xl p-8 flex flex-col items-center gap-4">
-      <div class="w-24 h-24 rounded-full bg-[#333] overflow-hidden">
-        <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=200&h=200&fit=crop" class="w-full h-full object-cover" alt="Healthy" />
-      </div>
-      <span class="text-lg font-bold text-white">Healthy</span>
-      <p class="text-sm text-white text-center">Fresh salads, bowls, and smoothies</p>
-    </div>
-  </div>
-</section>
 
-<!-- ═══════════════════════════════════════════════════════════════
-     ISSUE 2: ABSOLUTE — Does inset-0 overlay fill parent?
-     Expected: Image fills section, gradient overlay covers it,
-               text sits at bottom-left on top of everything
-     Bug: Overlay/image might collapse to 0x0 or not layer correctly
-     ═══════════════════════════════════════════════════════════════ -->
-<section class="w-full relative" style="min-height: 500px">
-  <h2 class="absolute top-4 left-16 text-sm font-bold text-white" style="z-index: 99">ISSUE 2: Absolute inset-0 overlay</h2>
-  <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1440&h=500&fit=crop" class="w-full h-full object-cover absolute inset-0" alt="Food hero" />
-  <div class="absolute inset-0" style="background: linear-gradient(to right, rgba(0,0,0,0.8), transparent)"></div>
-  <div class="absolute bottom-12 left-16 max-w-lg">
-    <h1 class="text-5xl font-bold text-white" style="line-height: 1.1">CRAVING IT? We've got it.</h1>
-    <p class="text-lg text-[#ccc] mt-4">Find your next favorite meal from 5,000+ restaurants</p>
-    <div class="flex gap-4 mt-6">
-      <button class="bg-[#FF6B00] text-white font-bold px-8 py-3 rounded-lg">Order Now</button>
-      <button class="border-2 border-white text-white font-bold px-8 py-3 rounded-lg">Browse</button>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════════════════════
-     ISSUE 3: WIDTH — Do restaurant cards fill grid cells?
-     Expected: 3 cards equal width, images stretch to card width,
-               each card fills its 1fr column
-     Bug: Cards might be narrow, not filling their grid column
-     ═══════════════════════════════════════════════════════════════ -->
-<section class="w-full bg-[#0A0A0A] py-16 px-16">
-  <h2 class="text-2xl font-bold text-white mb-8">ISSUE 3: Grid cards — width fill</h2>
-  <div class="grid grid-cols-3 gap-8">
-    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
-      <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 1" />
-      <div class="p-6">
-        <h3 class="text-xl font-bold text-white">Thai Orchid Café</h3>
-        <p class="text-sm text-[#888] mt-1">Thai cuisine • 4.8 ★ • 25-35 min</p>
-        <div class="flex gap-2 mt-3">
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Popular</span>
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Free delivery</span>
+    <div class="grid grid-cols-12 gap-8">
+      <!-- Destination 1 (Tall) -->
+      <div class="col-span-12 md:col-span-5 flex flex-col group cursor-pointer">
+        <div class="relative overflow-hidden aspect-[4/5] mb-6">
+          <img src="https://images.unsplash.com/photo-1752888444795-1775afa62e65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxhbWFsZmklMjBjb2FzdCUyMGNsaWZmc2lkZXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Amalfi Coast" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+          <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
+        </div>
+        <div class="flex justify-between items-start">
+          <div>
+            <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Italy</span>
+            <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Amalfi Coast</h4>
+          </div>
+          <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $8,500</span>
         </div>
       </div>
-    </div>
-    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
-      <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 2" />
-      <div class="p-6">
-        <h3 class="text-xl font-bold text-white">Le Fork Bistro</h3>
-        <p class="text-sm text-[#888] mt-1">French bistro • 4.9 ★ • 30-45 min</p>
-        <div class="flex gap-2 mt-3">
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Top rated</span>
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">$$</span>
+
+      <!-- Destination 2 & 3 (Stacked offset) -->
+      <div class="col-span-12 md:col-span-7 flex flex-col justify-between pt-24 md:pl-12">
+        
+        <div class="flex flex-col group cursor-pointer mb-20 md:ml-auto md:w-[85%]">
+          <div class="relative overflow-hidden aspect-[16/9] mb-6">
+            <img src="https://images.unsplash.com/photo-1700474896901-6afb362d2f8c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxreW90byUyMGF1dHVtbiUyMHRlbXBsZXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Kyoto Temple" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+            <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
+          </div>
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Japan</span>
+              <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Kyoto Serenity</h4>
+            </div>
+            <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $6,200</span>
+          </div>
         </div>
-      </div>
-    </div>
-    <div class="bg-[#1e1e1e] rounded-2xl overflow-hidden">
-      <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&h=250&fit=crop" class="w-full h-48 object-cover" alt="Restaurant 3" />
-      <div class="p-6">
-        <h3 class="text-xl font-bold text-white">Garden Grill Co.</h3>
-        <p class="text-sm text-[#888] mt-1">American grill • 4.7 ★ • 20-30 min</p>
-        <div class="flex gap-2 mt-3">
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">New</span>
-          <span class="bg-[#333] text-[#aaa] text-xs px-3 py-1 rounded-full">Patio</span>
+
+        <div class="flex flex-col group cursor-pointer w-full md:w-[70%]">
+          <div class="relative overflow-hidden aspect-square mb-6">
+            <img src="https://images.unsplash.com/photo-1667987566780-3b31fa5485c8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzYWZhcmklMjBsb2RnZSUyMHNlcmVuZ2V0aXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Serengeti Safari" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+            <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
+          </div>
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Tanzania</span>
+              <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Serengeti Wild</h4>
+            </div>
+            <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $12,450</span>
+          </div>
         </div>
+
       </div>
     </div>
   </div>
 </section>
-
-</div>
 `
 
 const PAGE_WIDTH = 1440

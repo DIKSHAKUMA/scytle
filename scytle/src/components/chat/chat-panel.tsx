@@ -10,7 +10,7 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
@@ -22,7 +22,7 @@ import { useChat } from '@ai-sdk/react'
 import { useAuiState } from '@assistant-ui/store'
 import { Thread } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
-import { Code2, Pencil, Check, Loader2, Search } from 'lucide-react'
+import { Code2, Pencil, Check, Loader2, Search, Copy, ChevronDown } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
 
@@ -300,25 +300,60 @@ function StatusIcon({ status }: { status: { type: string } }) {
 const GenerateSectionToolUI = makeAssistantToolUI({
     toolName: 'generateSection',
     render: ({ args, result, status, toolCallId }) => {
+        const [expanded, setExpanded] = useState(false)
+        const [copied, setCopied] = useState(false)
+        const html = (result as any)?.html || ''
+
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 enqueueToolResult('generateSection', result)
             }
         }, [status.type, result, toolCallId])
 
+        const handleCopy = useCallback((e: React.MouseEvent) => {
+            e.stopPropagation()
+            if (!html) return
+            navigator.clipboard.writeText(html).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+            })
+        }, [html])
+
         return (
-            <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                <Code2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <span className="font-medium text-foreground/80">
-                        {status.type === 'running' ? 'Generating' : 'Generated'}
-                    </span>
-                    <span className="text-muted-foreground"> {String(args?.sectionType || 'section')}</span>
-                    {(result as any)?.html && (
-                        <span className="text-muted-foreground/50 text-xs ml-1">({((result as any).html.length / 1024).toFixed(1)}kb)</span>
+            <div className="rounded-lg border border-border/50 bg-muted/30 text-sm">
+                <div
+                    className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => html && setExpanded(!expanded)}
+                >
+                    <Code2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <span className="font-medium text-foreground/80">
+                            {status.type === 'running' ? 'Generating' : 'Generated'}
+                        </span>
+                        <span className="text-muted-foreground"> {String(args?.sectionType || 'section')}</span>
+                        {html && (
+                            <span className="text-muted-foreground/50 text-xs ml-1">({(html.length / 1024).toFixed(1)}kb)</span>
+                        )}
+                    </div>
+                    {html && (
+                        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
                     )}
+                    <StatusIcon status={status} />
                 </div>
-                <StatusIcon status={status} />
+                {expanded && html && (
+                    <div className="border-t border-border/50 relative">
+                        <button
+                            onClick={handleCopy}
+                            className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background border border-border/50 text-muted-foreground hover:text-foreground transition-colors z-10"
+                            title="Copy HTML"
+                        >
+                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                        <pre className="p-3 overflow-x-auto text-xs text-foreground/70 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">
+                            <code>{html}</code>
+                        </pre>
+                    </div>
+                )}
             </div>
         )
     },
