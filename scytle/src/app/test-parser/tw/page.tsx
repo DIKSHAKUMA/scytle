@@ -12,50 +12,24 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="w-full bg-[#fdfbf7] py-32 px-12 border-t border-[#2c3525]/10">
-  <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-20 items-center">
+<section class="w-full bg-[#faf9f7] py-32 px-12 border-t border-[#e8e4db] mt-16" style="font-family: 'Outfit', sans-serif;">
+  <div class="max-w-4xl mx-auto text-center flex flex-col items-center">
     
-    <div class="w-full lg:w-1/2 relative">
-      <div class="aspect-[3/4] overflow-hidden w-[85%] relative z-10 shadow-xl">
-        <img src="https://images.unsplash.com/photo-1593515463811-63535505f44a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxyZXN0YXVyYW50JTIwdGFibGUlMjBzZXR0aW5nfGVufDB8MHx8fDE3NzY0NDM3MTh8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Restaurant Table Setting" class="w-full h-full object-cover" />
-      </div>
-      <!-- Decorative background square -->
-      <div class="absolute bottom-[-10%] right-0 w-[60%] h-[60%] bg-[#c05a30] z-0"></div>
-    </div>
-
-    <div class="w-full lg:w-1/2 flex flex-col justify-center">
-      <h2 class="text-[#1a1a1a] text-4xl md:text-5xl font-bold leading-tight mb-8" style="font-family: 'Playfair Display', serif;">
-        Rooted in <br/>
-        <span class="italic font-light text-[#595959]">Craftsmanship</span>
-      </h2>
-      <p class="text-[#595959] text-lg leading-relaxed mb-16 max-w-lg" style="font-family: 'Jost', sans-serif;">
-        Every detail in L'AURA, from the hand-thrown ceramics to the sustainably sourced timber, is an homage to artisanal creation. We believe the environment should be as meticulously crafted as the food on the plate.
-      </p>
-
-      <div class="grid grid-cols-2 gap-x-12 gap-y-12">
-        <div>
-          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">12</div>
-          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Local Farms</div>
-          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Direct partnerships</div>
-        </div>
-        <div>
-          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">500+</div>
-          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Wine Cellar</div>
-          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Curated vintages</div>
-        </div>
-        <div>
-          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">3</div>
-          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Michelin Stars</div>
-          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Awarded 2024</div>
-        </div>
-        <div>
-          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">0</div>
-          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Waste Goal</div>
-          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Sustainable practice</div>
-        </div>
-      </div>
-    </div>
-
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a35d49" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-10 opacity-80"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+    
+    <h2 class="text-[#2a2a28] text-5xl md:text-6xl mb-8 leading-tight" style="font-family: 'Cormorant Garamond', serif;">
+      Not sure where to begin?
+    </h2>
+    
+    <p class="text-[#73716a] text-lg font-light leading-relaxed mb-12 max-w-xl">
+      Let us suggest a path. Answer three simple questions about how you are feeling right now, and we will find the perfect framework for your state of mind.
+    </p>
+    
+    <button class="px-8 py-4 bg-[#2a2a28] text-[#f5f3ef] text-[16px] font-medium rounded-full hover:bg-[#1a1a18] transition-all duration-300 flex items-center gap-3 hover:-translate-y-1 shadow-xl shadow-[#2a2a28]/10">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
+      Find my path
+    </button>
+    
   </div>
 </section>
 `
