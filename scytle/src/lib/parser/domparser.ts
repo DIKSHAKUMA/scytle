@@ -835,7 +835,8 @@ function buildImageNode(
     }
 
     if (src && src !== '') {
-        return createFrame({
+        const isAbsImage = cs.position === 'absolute' || cs.position === 'fixed'
+        const frame = createFrame({
             id: generateId(),
             name: alt || 'Image',
             width,
@@ -855,8 +856,20 @@ function buildImageNode(
             children: [],
             layout: { mode: 'none' },
             padding: { top: 0, right: 0, bottom: 0, left: 0 },
-            positioning: cs.position === 'absolute' || cs.position === 'fixed' ? 'absolute' : 'auto',
+            positioning: isAbsImage ? 'absolute' : 'auto',
         })
+
+        // Extract CSS position for absolute images (e.g. absolute inset-0)
+        // so the renderer can stretch them via top/right/bottom/left
+        if (isAbsImage) {
+            const { cssPosition, constraints } = extractCssPosition(cs)
+            frame.cssPosition = cssPosition
+            frame.constraints = constraints
+            frame.x = 0
+            frame.y = 0
+        }
+
+        return frame
     }
 
     return createImage({
