@@ -33,6 +33,7 @@ interface MeasurementLine {
     y2: number
     distance: number
     direction: 'horizontal' | 'vertical'
+    isDashed?: boolean
 }
 
 // ============================================================
@@ -234,138 +235,62 @@ function calculateParentMeasurements(
 }
 
 /**
- * Calculate measurement lines from a node to its sibling nodes.
- * Shows nearest gap distances (horizontal and vertical) between edges.
+ * Calculate measurement lines from a node to a SPECIFIC target node.
+ * Uses exact center-plane projection geometry.
  */
-function calculateSiblingMeasurements(
-    nodeRect: ScreenRect,
-    siblingRects: ScreenRect[],
+function calculateTargetMeasurements(
+    S: ScreenRect,
+    H: ScreenRect,
     zoom: number
 ): MeasurementLine[] {
     const lines: MeasurementLine[] = []
     const MIN_DISTANCE = 1
 
-    const nodeCenter = {
-        x: nodeRect.x + nodeRect.width / 2,
-        y: nodeRect.y + nodeRect.height / 2,
+    const scx = S.x + S.width / 2
+    const scy = S.y + S.height / 2
+
+    // Check if one completely contains the other
+    const isInsideH = S.x >= H.x && S.x + S.width <= H.x + H.width && S.y >= H.y && S.y + S.height <= H.y + H.height
+    const hInsideS = H.x >= S.x && H.x + H.width <= S.x + S.width && H.y >= S.y && H.y + H.height <= S.y + S.height
+    
+    if (isInsideH) return calculateParentMeasurements(S, H, zoom)
+    if (hInsideS) return calculateParentMeasurements(H, S, zoom)
+
+    const targetIsLeft = H.x + H.width <= S.x
+    const targetIsRight = H.x >= S.x + S.width
+    const targetIsAbove = H.y + H.height <= S.y
+    const targetIsBelow = H.y >= S.y + S.height
+
+    // Y-axis measurement (vertical solid line + horizontal dashed extension)
+    if (targetIsAbove || targetIsBelow) {
+        const sy = targetIsAbove ? S.y : S.y + S.height
+        const hy = targetIsAbove ? H.y + H.height : H.y
+        const logicalDist = Math.round(Math.abs(sy - hy) / zoom)
+        
+        if (logicalDist >= MIN_DISTANCE) {
+            lines.push({ x1: scx, y1: sy, x2: scx, y2: hy, distance: logicalDist, direction: 'vertical' })
+            
+            if (scx < H.x) {
+                lines.push({ x1: scx, y1: hy, x2: H.x, y2: hy, distance: 0, direction: 'horizontal', isDashed: true })
+            } else if (scx > H.x + H.width) {
+                lines.push({ x1: H.x + H.width, y1: hy, x2: scx, y2: hy, distance: 0, direction: 'horizontal', isDashed: true })
+            }
+        }
     }
 
-    for (const sib of siblingRects) {
-        const sibCenter = {
-            x: sib.x + sib.width / 2,
-            y: sib.y + sib.height / 2,
-        }
-
-        // Horizontal gap (left/right between node and sibling)
-        // Only measure if they overlap vertically
-        const vOverlap =
-            nodeRect.y < sib.y + sib.height && nodeRect.y + nodeRect.height > sib.y
-
-        if (vOverlap) {
-            const midY = Math.max(nodeRect.y, sib.y) +
-                (Math.min(nodeRect.y + nodeRect.height, sib.y + sib.height) -
-                    Math.max(nodeRect.y, sib.y)) / 2
-
-            // Node is to the left of sibling
-            if (nodeRect.x + nodeRect.width <= sib.x) {
-                const dist = Math.round((sib.x - (nodeRect.x + nodeRect.width)) / zoom)
-                if (dist >= MIN_DISTANCE) {
-                    lines.push({
-                        x1: nodeRect.x + nodeRect.width, y1: midY,
-                        x2: sib.x, y2: midY,
-                        distance: dist, direction: 'horizontal',
-                    })
-                }
-            }
-            // Node is to the right of sibling
-            else if (nodeRect.x >= sib.x + sib.width) {
-                const dist = Math.round((nodeRect.x - (sib.x + sib.width)) / zoom)
-                if (dist >= MIN_DISTANCE) {
-                    lines.push({
-                        x1: sib.x + sib.width, y1: midY,
-                        x2: nodeRect.x, y2: midY,
-                        distance: dist, direction: 'horizontal',
-                    })
-                }
-            }
-        }
-
-        // Vertical gap (top/bottom between node and sibling)
-        // Only measure if they overlap horizontally
-        const hOverlap =
-            nodeRect.x < sib.x + sib.width && nodeRect.x + nodeRect.width > sib.x
-
-        if (hOverlap) {
-            const midX = Math.max(nodeRect.x, sib.x) +
-                (Math.min(nodeRect.x + nodeRect.width, sib.x + sib.width) -
-                    Math.max(nodeRect.x, sib.x)) / 2
-
-            // Node is above sibling
-            if (nodeRect.y + nodeRect.height <= sib.y) {
-                const dist = Math.round((sib.y - (nodeRect.y + nodeRect.height)) / zoom)
-                if (dist >= MIN_DISTANCE) {
-                    lines.push({
-                        x1: midX, y1: nodeRect.y + nodeRect.height,
-                        x2: midX, y2: sib.y,
-                        distance: dist, direction: 'vertical',
-                    })
-                }
-            }
-            // Node is below sibling
-            else if (nodeRect.y >= sib.y + sib.height) {
-                const dist = Math.round((nodeRect.y - (sib.y + sib.height)) / zoom)
-                if (dist >= MIN_DISTANCE) {
-                    lines.push({
-                        x1: midX, y1: sib.y + sib.height,
-                        x2: midX, y2: nodeRect.y,
-                        distance: dist, direction: 'vertical',
-                    })
-                }
-            }
-        }
-
-        // For non-overlapping siblings — measure closest edges
-        if (!vOverlap && !hOverlap) {
-            // Check horizontal distance
-            let hDist: number | null = null
-            let hx1 = 0, hx2 = 0
-            if (nodeRect.x + nodeRect.width <= sib.x) {
-                hDist = Math.round((sib.x - (nodeRect.x + nodeRect.width)) / zoom)
-                hx1 = nodeRect.x + nodeRect.width
-                hx2 = sib.x
-            } else if (nodeRect.x >= sib.x + sib.width) {
-                hDist = Math.round((nodeRect.x - (sib.x + sib.width)) / zoom)
-                hx1 = sib.x + sib.width
-                hx2 = nodeRect.x
-            }
-
-            if (hDist !== null && hDist >= MIN_DISTANCE) {
-                const y = (nodeCenter.y + sibCenter.y) / 2
-                lines.push({
-                    x1: hx1, y1: y, x2: hx2, y2: y,
-                    distance: hDist, direction: 'horizontal',
-                })
-            }
-
-            // Check vertical distance
-            let vDist: number | null = null
-            let vy1 = 0, vy2 = 0
-            if (nodeRect.y + nodeRect.height <= sib.y) {
-                vDist = Math.round((sib.y - (nodeRect.y + nodeRect.height)) / zoom)
-                vy1 = nodeRect.y + nodeRect.height
-                vy2 = sib.y
-            } else if (nodeRect.y >= sib.y + sib.height) {
-                vDist = Math.round((nodeRect.y - (sib.y + sib.height)) / zoom)
-                vy1 = sib.y + sib.height
-                vy2 = nodeRect.y
-            }
-
-            if (vDist !== null && vDist >= MIN_DISTANCE) {
-                const x = (nodeCenter.x + sibCenter.x) / 2
-                lines.push({
-                    x1: x, y1: vy1, x2: x, y2: vy2,
-                    distance: vDist, direction: 'vertical',
-                })
+    // X-axis measurement (horizontal solid line + vertical dashed extension)
+    if (targetIsLeft || targetIsRight) {
+        const sx = targetIsLeft ? S.x : S.x + S.width
+        const hx = targetIsLeft ? H.x + H.width : H.x
+        const logicalDist = Math.round(Math.abs(sx - hx) / zoom)
+        
+        if (logicalDist >= MIN_DISTANCE) {
+            lines.push({ x1: sx, y1: scy, x2: hx, y2: scy, distance: logicalDist, direction: 'horizontal' })
+            
+            if (scy < H.y) {
+                lines.push({ x1: hx, y1: scy, x2: hx, y2: H.y, distance: 0, direction: 'vertical', isDashed: true })
+            } else if (scy > H.y + H.height) {
+                lines.push({ x1: hx, y1: H.y + H.height, x2: hx, y2: scy, distance: 0, direction: 'vertical', isDashed: true })
             }
         }
     }
@@ -394,6 +319,7 @@ export function MeasurementOverlay({
     const zoom = useEditorStore((s) => s.zoom)
     const panX = useEditorStore((s) => s.panX)
     const panY = useEditorStore((s) => s.panY)
+    const hoveredId = useEditorStore((s) => s.hoveredId)
 
     const [alignmentLines, setAlignmentLines] = useState<AlignmentLine[]>([])
     const [measurementLines, setMeasurementLines] = useState<MeasurementLine[]>([])
@@ -474,16 +400,25 @@ export function MeasurementOverlay({
             return
         }
 
-        const parentMeasurements = ctx.parentRect
-            ? calculateParentMeasurements(ctx.nodeRect, ctx.parentRect, zoom)
-            : []
-        const siblingMeasurements = calculateSiblingMeasurements(
-            ctx.nodeRect, ctx.siblingRects, zoom
-        )
+        const lines: MeasurementLine[] = []
 
-        setMeasurementLines([...parentMeasurements, ...siblingMeasurements])
+        if (hoveredId && hoveredId !== ctx.nodeId) {
+            const viewport = viewportRef.current
+            const targetRect = viewport ? getNodeScreenRect(hoveredId, viewport) : null
+            if (targetRect) {
+                const targetMeasurements = calculateTargetMeasurements(
+                    ctx.nodeRect, targetRect, zoom
+                )
+                lines.push(...targetMeasurements)
+            }
+        } else if (ctx.parentRect) {
+            const parentMeasurements = calculateParentMeasurements(ctx.nodeRect, ctx.parentRect, zoom)
+            lines.push(...parentMeasurements)
+        }
+
+        setMeasurementLines(lines)
         setAlignmentLines([]) // No alignment guides in static measurement mode
-    }, [getContext, zoom])
+    }, [getContext, zoom, hoveredId, viewportRef])
 
     // RAF loop for drag alignment
     useEffect(() => {
@@ -511,7 +446,7 @@ export function MeasurementOverlay({
         } else if (!isDragging) {
             setMeasurementLines([])
         }
-    }, [altHeld, isDragging, selectedIds, updateAltOverlay, panX, panY, zoom])
+    }, [altHeld, isDragging, selectedIds, updateAltOverlay, panX, panY, zoom, hoveredId])
 
     if (alignmentLines.length === 0 && measurementLines.length === 0) return null
 
@@ -548,10 +483,12 @@ export function MeasurementOverlay({
                     ? Math.abs(m.x2 - m.x1)
                     : Math.abs(m.y2 - m.y1)
 
-                if (lineLength < 4) return null
+                if (lineLength < 1) return null
 
                 const midX = (m.x1 + m.x2) / 2
                 const midY = (m.y1 + m.y2) / 2
+
+                const color = '#f24e1e' // Figma's red orange
 
                 return (
                     <div key={`meas-${i}`}>
@@ -559,49 +496,58 @@ export function MeasurementOverlay({
                         <div
                             className="pointer-events-none"
                             style={{
+                                boxSizing: 'border-box',
                                 position: 'absolute',
                                 left: isH ? Math.min(m.x1, m.x2) : m.x1 - 0.5,
                                 top: isH ? m.y1 - 0.5 : Math.min(m.y1, m.y2),
-                                width: isH ? lineLength : 1,
-                                height: isH ? 1 : lineLength,
-                                backgroundColor: '#ef4444',
+                                width: isH ? lineLength : 0,
+                                height: !isH ? lineLength : 0,
+                                borderTop: isH ? `1px ${m.isDashed ? 'dashed' : 'solid'} ${color}` : 'none',
+                                borderLeft: !isH ? `1px ${m.isDashed ? 'dashed' : 'solid'} ${color}` : 'none',
                                 zIndex: 1002,
                             }}
                         />
 
                         {/* Distance label */}
-                        <div
-                            className="pointer-events-none"
-                            style={{
-                                position: 'absolute',
-                                left: midX,
-                                top: midY,
-                                transform: 'translate(-50%, -50%)',
-                                backgroundColor: '#ef4444',
-                                color: '#ffffff',
-                                fontSize: 10,
-                                fontWeight: 600,
-                                fontFamily: 'Inter, system-ui, sans-serif',
-                                padding: '1px 4px',
-                                borderRadius: 3,
-                                whiteSpace: 'nowrap',
-                                lineHeight: '14px',
-                                zIndex: 1003,
-                            }}
-                        >
-                            {m.distance}
-                        </div>
+                        {!m.isDashed && m.distance > 0 && (
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: midX,
+                                    top: midY,
+                                    transform: `translate(-50%, -50%) ${
+                                        lineLength < 36 
+                                            ? isH ? 'translateY(-16px)' : 'translateX(16px)' 
+                                            : ''
+                                    }`,
+                                    backgroundColor: color,
+                                    color: '#ffffff',
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    fontFamily: 'Inter, system-ui, sans-serif',
+                                    padding: '1px 4px',
+                                    borderRadius: 3,
+                                    whiteSpace: 'nowrap',
+                                    lineHeight: '14px',
+                                    zIndex: 1003,
+                                }}
+                            >
+                                {m.distance}
+                            </div>
+                        )}
 
                         {/* End caps */}
-                        {isH ? (
+                        {!m.isDashed && isH && (
                             <>
-                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x1 - 0.5, top: m.y1 - 3, width: 1, height: 6, backgroundColor: '#ef4444', zIndex: 1002 }} />
-                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x2 - 0.5, top: m.y2 - 3, width: 1, height: 6, backgroundColor: '#ef4444', zIndex: 1002 }} />
+                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x1 - 0.5, top: m.y1 - 3, width: 1, height: 6, backgroundColor: color, zIndex: 1002 }} />
+                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x2 - 0.5, top: m.y2 - 3, width: 1, height: 6, backgroundColor: color, zIndex: 1002 }} />
                             </>
-                        ) : (
+                        )}
+                        {!m.isDashed && !isH && (
                             <>
-                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x1 - 3, top: m.y1 - 0.5, width: 6, height: 1, backgroundColor: '#ef4444', zIndex: 1002 }} />
-                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x2 - 3, top: m.y2 - 0.5, width: 6, height: 1, backgroundColor: '#ef4444', zIndex: 1002 }} />
+                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x1 - 3, top: m.y1 - 0.5, width: 6, height: 1, backgroundColor: color, zIndex: 1002 }} />
+                                <div className="pointer-events-none" style={{ position: 'absolute', left: m.x2 - 3, top: m.y2 - 0.5, width: 6, height: 1, backgroundColor: color, zIndex: 1002 }} />
                             </>
                         )}
                     </div>
