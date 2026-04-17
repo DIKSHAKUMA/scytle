@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
-import type { Sizing, VectorNetwork, VectorNode } from '@/types/canvas'
+import type { Sizing, TextNode, VectorNetwork, VectorNode } from '@/types/canvas'
 
 // ============================================================
 // Constants
@@ -205,6 +205,25 @@ export function useNodeResize(
                     }
                     if (changed) {
                         store.updateNode(s.nodeId, { sizing: newSizing })
+                    }
+
+                    // For TextNodes, sync the autoResize mode with the resize interaction (Figma parity)
+                    if (node.type === 'text') {
+                        const text = node as TextNode
+                        let newAutoResize = text.autoResize
+                        const isCorner = axes.x && axes.y
+
+                        if (isCorner) {
+                            newAutoResize = 'none' // Corner -> Fixed Size
+                        } else if (axes.y) {
+                            newAutoResize = 'none' // N/S side handle -> Fixed Size
+                        } else if (axes.x && text.autoResize === 'width-and-height') {
+                            newAutoResize = 'height' // E/W side handle -> Auto Height (wraps)
+                        }
+
+                        if (newAutoResize !== text.autoResize) {
+                            store.updateNode(s.nodeId, { autoResize: newAutoResize })
+                        }
                     }
                 }
             }
