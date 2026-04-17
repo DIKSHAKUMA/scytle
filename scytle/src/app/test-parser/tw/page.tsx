@@ -12,26 +12,126 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="w-full bg-[#faf9f7] py-32 px-12 border-t border-[#e8e4db] mt-16" style="font-family: 'Outfit', sans-serif;">
-  <div class="max-w-4xl mx-auto text-center flex flex-col items-center">
+<section class="w-full min-h-screen bg-[#e8e4db] py-24 px-8 md:px-12 flex justify-center" style="font-family: 'Outfit', sans-serif;">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500&display=swap');
+  </style>
+
+  <div class="max-w-6xl w-full flex flex-col lg:flex-row gap-10 items-start">
     
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a35d49" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-10 opacity-80"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-    
-    <h2 class="text-[#2a2a28] text-5xl md:text-6xl mb-8 leading-tight" style="font-family: 'Cormorant Garamond', serif;">
-      Not sure where to begin?
-    </h2>
-    
-    <p class="text-[#73716a] text-lg font-light leading-relaxed mb-12 max-w-xl">
-      Let us suggest a path. Answer three simple questions about how you are feeling right now, and we will find the perfect framework for your state of mind.
-    </p>
-    
-    <button class="px-8 py-4 bg-[#2a2a28] text-[#f5f3ef] text-[16px] font-medium rounded-full hover:bg-[#1a1a18] transition-all duration-300 flex items-center gap-3 hover:-translate-y-1 shadow-xl shadow-[#2a2a28]/10">
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>
-      Find my path
-    </button>
-    
+    <!-- Left Column: Sticky Profile & Navigation -->
+    <aside class="w-full lg:w-[340px] shrink-0 sticky top-24 flex flex-col gap-6">
+      
+      <!-- Profile Summary Card -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 border border-[#dcd6ca] flex flex-col items-center text-center shadow-xl shadow-[#2a2a28]/5 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-[#f5f3ef] to-[#faf9f7]"></div>
+        
+        <div class="w-28 h-28 rounded-full overflow-hidden border-4 border-[#faf9f7] bg-[#e8e4db] relative z-10 mb-4 shadow-lg shadow-[#2a2a28]/10">
+          <img src="https://images.unsplash.com/photo-1772443325800-e1510d7758f0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzb2Z0JTIwcG9ydHJhaXQlMjBtaW5pbWFsJTIwc2VyZW5lfGVufDB8MHx8fDE3NzY0NTM0Nzh8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Profile" class="w-full h-full object-cover">
+        </div>
+        
+        <h2 class="text-[#2a2a28] text-2xl font-medium mb-1 relative z-10" style="font-family: 'Cormorant Garamond', serif;">Elena Kowalski</h2>
+        <p class="text-[#73716a] text-sm mb-6 relative z-10 font-light">elena.kowalski@example.com</p>
+        
+        <div class="flex items-center justify-center gap-2 relative z-10 w-full">
+           <div class="px-5 py-2.5 bg-[#f5f3ef] border border-[#e8e4db] rounded-full text-xs font-medium text-[#73716a] tracking-wide uppercase flex-1">Free Plan</div>
+        </div>
+      </div>
+
+      <!-- Navigation Card -->
+      <nav class="bg-[#faf9f7] rounded-[32px] p-4 border border-[#dcd6ca] flex flex-col gap-2 shadow-xl shadow-[#2a2a28]/5">
+        <a href="#" class="flex items-center justify-between px-5 py-4 bg-[#f5f3ef] text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors border border-[#e8e4db] shadow-sm">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            My Profile
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
+        </a>
+        <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z"></path><path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path><path d="M12 2v2"></path><path d="M12 22v-2"></path><path d="m17 20.66-1-1.73"></path><path d="M11 10.27 7 3.34"></path><path d="m20.66 17-1.73-1"></path><path d="m3.34 7 1.73 1"></path><path d="M14 12h8"></path><path d="M2 12h2"></path><path d="m20.66 7-1.73 1"></path><path d="m3.34 17 1.73-1"></path><path d="m17 3.34-1 1.73"></path><path d="m11 13.73-4 6.93"></path></svg>
+            Preferences
+          </div>
+        </a>
+        <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Security
+          </div>
+        </a>
+        <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
+          <div class="flex items-center gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
+            Billing
+          </div>
+        </a>
+      </nav>
+      
+    </aside>
+
+    <!-- Right Column: Settings Forms -->
+    <main class="flex-1 flex flex-col gap-8 w-full">
+      
+      <!-- Top Title -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#faf9f7] rounded-[32px] p-8 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 gap-6">
+        <h1 class="text-4xl text-[#2a2a28]" style="font-family: 'Cormorant Garamond', serif;">Profile Settings</h1>
+        <button class="px-8 py-3.5 bg-[#2a2a28] text-[#f5f3ef] text-sm font-medium rounded-full hover:bg-[#1a1a18] transition-colors shadow-lg shadow-[#2a2a28]/20 w-full sm:w-auto">Save Changes</button>
+      </div>
+
+      <!-- Basic Info Card -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-10">
+        <div>
+          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Personal Details</h3>
+          <p class="text-[#73716a] text-[15px] font-light">Update your name and contact information.</p>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          <div class="flex flex-col gap-3">
+            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">First Name</label>
+            <input type="text" value="Elena" class="w-full px-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
+          </div>
+          <div class="flex flex-col gap-3">
+            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Last Name</label>
+            <input type="text" value="Kowalski" class="w-full px-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
+          </div>
+          <div class="flex flex-col gap-3 sm:col-span-2">
+            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Email Address</label>
+            <div class="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="absolute left-5 top-1/2 -translate-y-1/2 text-[#8c857b]"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+              <input type="email" value="elena.kowalski@example.com" class="w-full pl-14 pr-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mindful Intentions Card -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-10">
+        <div>
+          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Mindful Intentions</h3>
+          <p class="text-[#73716a] text-[15px] font-light max-w-lg leading-relaxed">Tell us what you're focusing on so we can tailor your guided paths to your current emotional state.</p>
+        </div>
+        
+        <div class="flex flex-col gap-3">
+          <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Current Focus</label>
+          <textarea rows="4" class="w-full px-5 py-5 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] leading-relaxed focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors resize-none">I'm currently trying to process a major career transition and want to document my daily anxieties to find patterns of peace.</textarea>
+        </div>
+      </div>
+
+      <!-- Danger Zone Card -->
+      <div class="bg-gradient-to-br from-[#f5f3ef] to-[#e8e4db]/50 rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mt-4">
+        <div>
+          <h3 class="text-[#2a2a28] text-2xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Danger Zone</h3>
+          <p class="text-[#73716a] text-[15px] font-light max-w-md leading-relaxed">Permanently delete your account and all of your journal entries. This action cannot be undone.</p>
+        </div>
+        <button class="px-8 py-3.5 bg-[#faf9f7] border border-[#a35d49]/40 text-[#a35d49] text-[15px] font-medium rounded-full hover:bg-[#a35d49] hover:text-[#f5f3ef] transition-colors whitespace-nowrap shadow-sm">
+          Delete Account
+        </button>
+      </div>
+
+    </main>
+
   </div>
-</section> 
+</section>
 `
 
 const PAGE_WIDTH = 1440

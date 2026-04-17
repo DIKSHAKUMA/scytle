@@ -304,7 +304,15 @@ function walkElement(
     // Skip non-visual elements
     if (SKIP_TAGS.has(tag)) return null
 
-    const cs = el.style
+    // Read inline styles. SVG elements in DOMParser's SVG namespace don't
+    // populate .style CSSStyleDeclaration from inline style attributes.
+    // Workaround: copy the raw style attribute into a temp HTML element.
+    let cs = el.style
+    if (!cs.cssText && el.getAttribute('style')) {
+        const tmp = el.ownerDocument.createElement('div')
+        tmp.setAttribute('style', el.getAttribute('style')!)
+        cs = tmp.style
+    }
 
     // Skip hidden elements
     if (cs.display === 'none' || cs.visibility === 'collapse') return null
@@ -956,13 +964,16 @@ function buildVectorNodeFromNetwork(
     const rawCap = firstPath?.getAttribute('stroke-linecap') || el.getAttribute('stroke-linecap') || ''
     const rawJoin = firstPath?.getAttribute('stroke-linejoin') || el.getAttribute('stroke-linejoin') || ''
 
-    return createVector({
+    const isAbsolute = cs.position === 'absolute' || cs.position === 'fixed'
+
+    const node = createVector({
         id: generateId(),
         name: inferSvgName(el),
         width: bbox.width || width,
         height: bbox.height || height,
         vectorNetwork: network,
-        positioning: 'auto',
+        positioning: isAbsolute ? 'absolute' : 'auto',
+        margin: extractMargin(cs),
         fills: fillColor ? [{
             type: 'solid',
             id: generateId(),
@@ -977,6 +988,16 @@ function buildVectorNodeFromNetwork(
         strokeJoin: rawJoin === 'round' ? 'ROUND' : rawJoin === 'bevel' ? 'BEVEL' : 'MITER',
         opacity: parseOpacity(cs.opacity),
     })
+
+    if (isAbsolute) {
+        const { cssPosition, constraints } = extractCssPosition(cs)
+        node.cssPosition = cssPosition
+        node.constraints = constraints
+        node.x = 0
+        node.y = 0
+    }
+
+    return node
 }
 
 function buildSvgAsDataUri(
@@ -1022,13 +1043,16 @@ function buildSvgAsDataUri(
     const svgString = new XMLSerializer().serializeToString(clone)
     const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`
 
-    return createFrame({
+    const isAbsolute = cs.position === 'absolute' || cs.position === 'fixed'
+
+    const frame = createFrame({
         id: generateId(),
         name: inferSvgName(el),
         width,
         height,
         sizing: { horizontal: 'fixed', vertical: 'fixed' },
-        positioning: 'auto',
+        positioning: isAbsolute ? 'absolute' : 'auto',
+        margin: extractMargin(cs),
         layout: { mode: 'none' },
         padding: { top: 0, right: 0, bottom: 0, left: 0 },
         fills: [{
@@ -1045,6 +1069,16 @@ function buildSvgAsDataUri(
         overflow: 'hidden',
         children: [],
     })
+
+    if (isAbsolute) {
+        const { cssPosition, constraints } = extractCssPosition(cs)
+        frame.cssPosition = cssPosition
+        frame.constraints = constraints
+        frame.x = 0
+        frame.y = 0
+    }
+
+    return frame
 }
 
 // ═══════════════════════════════════════════════════
@@ -1079,9 +1113,46 @@ function buildInputNode(
     tag: string,
     parentWidth: number,
 ): FrameNode {
-    const placeholder = el.placeholder || el.value || el.getAttribute('placeholder') || tag
-    const width = parseFloat(cs.width) || Math.max(parentWidth, 100)
-    const height = parseFloat(cs.height) || 36
+    const placeholder = el.placeholder || el.value || el.getAttribute('placeholder') || el.textContent?.trim() || tag
+    const fontSize = parseFloat(cs.fontSize) || 14
+
+    // Line height: unitless values (e.g. 1.625) are multipliers, not px
+    const rawLH = cs.lineHeight
+    let lineHeight: number
+    if (!rawLH || rawLH === 'normal' || rawLH === '') {
+        lineHeight = fontSize * 1.5
+    } else if (rawLH.endsWith('px')) {
+        lineHeight = parseFloat(rawLH)
+    } else {
+        // Unitless multiplier (e.g. "1.625") → multiply by fontSize
+        const parsed = parseFloat(rawLH)
+        lineHeight = parsed < fontSize ? parsed * fontSize : parsed
+    }
+
+    const padding = extractPadding(cs)
+    const isTextarea = tag === 'textarea'
+
+    // Width: resolve percentage against parentWidth, use explicit px, or fill parent
+    let width: number
+    if (cs.width?.endsWith('%')) {
+        width = (parseFloat(cs.width) / 100) * parentWidth
+    } else if (parseFloat(cs.width) > 0) {
+        width = parseFloat(cs.width)
+    } else {
+        width = Math.max(parentWidth, 100)
+    }
+
+    // Height: compute from padding + content, never hardcode
+    let contentHeight: number
+    if (parseFloat(cs.height) > 0) {
+        contentHeight = parseFloat(cs.height)
+    } else if (isTextarea) {
+        const rows = parseInt(el.getAttribute('rows') || '4')
+        contentHeight = rows * lineHeight + padding.top + padding.bottom
+    } else {
+        contentHeight = lineHeight + padding.top + padding.bottom
+    }
+    const height = Math.max(contentHeight, 28)
 
     const textChild = createText({
         id: generateId(),
@@ -1089,26 +1160,32 @@ function buildInputNode(
         characters: placeholder,
         color: rgbToHex(cs.color),
         fontFamily: extractPrimaryFont(cs.fontFamily),
-        fontSize: parseFloat(cs.fontSize) || 14,
+        fontSize,
         fontWeight: parseInt(cs.fontWeight) || 400,
+        lineHeight: parseFloat(cs.lineHeight) || 'auto',
         sizing: { horizontal: 'fill', vertical: 'hug' },
-        opacity: el.placeholder ? 0.5 : 1,
+        // 'height' mode → whiteSpace:'pre-wrap' → text wraps in textareas
+        // 'width-and-height' → whiteSpace:'nowrap' → single-line inputs
+        autoResize: isTextarea ? 'height' : 'width-and-height',
+        opacity: el.placeholder && !el.value ? 0.5 : 1,
     })
 
     return createFrame({
         id: generateId(),
-        name: tag === 'select' ? 'Select' : tag === 'textarea' ? 'Textarea' : 'Input',
+        name: tag === 'select' ? 'Select' : isTextarea ? 'Textarea' : 'Input',
         width,
         height,
         children: [textChild],
-        layout: { mode: 'flex', direction: 'row', align: 'center' },
-        padding: extractPadding(cs),
+        layout: { mode: 'flex', direction: isTextarea ? 'column' : 'row', align: isTextarea ? 'start' : 'center' },
+        padding,
         fills: extractFills(cs),
         border: extractBorder(cs),
         borderRadius: extractBorderRadius(cs),
-        sizing: { horizontal: 'fill', vertical: 'fixed' },
+        sizing: { horizontal: 'fill', vertical: isTextarea ? 'fixed' : 'hug' },
+        shadows: extractShadows(cs.boxShadow),
     })
 }
+
 
 function buildDividerNode(
     el: HTMLElement,
