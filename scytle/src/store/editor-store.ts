@@ -178,6 +178,8 @@ interface EditorState {
     zoom: number
     panX: number
     panY: number
+    /** Whether the viewport is currently undergoing an automated transition (zoom to node) */
+    isViewportAnimating: boolean
     /** Cached viewport size for zoomIn/zoomOut centering */
     viewportRect: { width: number; height: number } | null
 
@@ -402,6 +404,7 @@ export const useEditorStore = create<EditorState>()(
             zoom: 1,
             panX: 0,
             panY: 0,
+            isViewportAnimating: false,
             viewportRect: null,
             selectedIds: [],
             hoveredId: null,
@@ -784,6 +787,7 @@ export const useEditorStore = create<EditorState>()(
 
                 set(
                     (s) => {
+                        s.isViewportAnimating = true
                         s.zoom = newZoom
                         s.panX = newPanX
                         s.panY = newPanY
@@ -791,6 +795,11 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'zoomToNode'
                 )
+
+                // Turn off animation after transition finishes
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
             },
 
             enterFrame: (id) =>

@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useEditorStore } from '@/store/editor-store'
+import { cn } from '@/lib/utils'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
 import { NodeRenderer } from './node-renderer'
@@ -39,6 +40,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const canvasColor = useEditorStore((s) => s.canvasColor)
     const penNearStart = useEditorStore((s) => s.penDrawingState?.nearStartPoint ?? false)
     const penIsDrawing = useEditorStore((s) => s.penDrawingState?.isDrawing ?? false)
+    const isViewportAnimating = useEditorStore((s) => s.isViewportAnimating)
 
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
@@ -842,7 +844,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             {/* Transform container — CSS custom properties drive coordinate-space rendering */}
             <div
                 ref={transformRef}
-                className="absolute top-0 left-0"
+                className={cn("absolute top-0 left-0", isViewportAnimating && "transition-viewport")}
                 style={{ '--z': zoom, '--px': panX, '--py': panY } as unknown as CSSProperties}
             >
                 <ThemeResolverProvider>

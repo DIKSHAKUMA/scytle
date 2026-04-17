@@ -10,6 +10,29 @@
    Modern, warm, professional
    ============================================ */
 
+/** Viewport animation support (Houdini) */
+@property --z {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+@property --px {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --py {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.transition-viewport {
+  transition: --z 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              --px 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              --py 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 :root {
   /* Brand Colors - Warm terracotta/coral accent */
   --accent: oklch(0.65 0.18 35);
