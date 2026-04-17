@@ -12,36 +12,93 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="bg-[#fdfbf7] text-[#2a312b] py-24 px-10" style="font-family: 'DM Sans', sans-serif;">
-  <div class="max-w-[1360px] mx-auto grid grid-cols-12 gap-10 items-end">
-    <!-- Text Column -->
-    <div class="col-span-5 pb-12 flex flex-col justify-end h-full">
-      <div class="flex items-center gap-3 mb-6">
-        <span class="w-8 h-[1px] bg-[#d25d38]"></span>
-        <span class="text-sm font-bold uppercase tracking-[0.2em] text-[#d25d38]">Featured Disptach</span>
+<section class="w-full bg-[#F5F3ED] py-16 px-8 lg:px-16" style="font-family: 'Newsreader', serif;">
+  <div class="max-w-7xl mx-auto flex flex-col gap-32">
+    
+    <!-- Theme 1 -->
+    <div class="flex flex-col lg:flex-row items-center gap-16 group cursor-pointer">
+      <div class="lg:w-5/12 order-2 lg:order-1 flex flex-col items-start pr-0 lg:pr-12">
+        <span class="text-[#1A1A1A] text-2xl mb-4 font-semibold opacity-30">I.</span>
+        <h2 class="text-5xl text-[#1A1A1A] leading-[1.2] mb-6 font-medium group-hover:text-[#8C2A1E] transition-colors" style="font-family: 'Lora', serif;">
+          Architecture & Space
+        </h2>
+        <p class="text-xl text-[#5C5A55] leading-relaxed mb-10">
+          Essays examining the psychological impact of the built environment. How the spaces we inhabit ultimately construct our internal narratives.
+        </p>
+        <div class="flex items-center justify-between w-full border-t border-[#EBE7DC] pt-6">
+          <span class="text-[#1A1A1A] text-sm uppercase tracking-widest font-semibold">14 Essays</span>
+          <span class="text-[#5C5A55] text-sm italic group-hover:text-[#8C2A1E] transition-colors flex items-center gap-2">Explore <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+        </div>
       </div>
-      <h1 class="text-7xl leading-[1.05] mb-8" style="font-family: 'Playfair Display', serif;">Beyond the Atlas Front.</h1>
-      <p class="text-lg text-[#2a312b]/70 leading-relaxed mb-10 max-w-md">
-        A slow journey through the arid expanse and ancient medinas of Morocco, where time dilates and the desert winds whisper forgotten histories.
-      </p>
-      <div class="flex items-center gap-4">
-        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop" alt="Author" class="w-12 h-12 rounded-full object-cover grayscale">
-        <div>
-          <p class="font-medium">Elena Kowalski</p>
-          <p class="text-xs text-[#2a312b]/60 uppercase tracking-wider mt-1">12 Min Read &bull; Oct 24, 2023</p>
+      <div class="lg:w-7/12 order-1 lg:order-2 w-full aspect-[16/9] relative overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1744148621897-5fb0b6323543?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwYXJjaGl0ZWN0dXJlJTIwY29uY3JldGV8ZW58MHwwfHx8MTc3NjQwOTg0MHww&ixlib=rb-4.1.0&q=80&w=1080" alt="Minimalist architecture concrete" class="w-full h-full object-cover grayscale opacity-90 group-hover:scale-105 group-hover:grayscale-0 transition-all duration-700 ease-in-out" />
+        <div class="absolute inset-0 border border-[#1A1A1A]/10 m-4 pointer-events-none"></div>
+      </div>
+    </div>
+
+    <!-- Theme 2 -->
+    <div class="flex flex-col lg:flex-row items-center gap-16 group cursor-pointer">
+      <div class="lg:w-7/12 w-full aspect-[16/9] relative overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1604434295959-d3360b707f5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxhbmFsb2clMjBmaWxtJTIwY2FtZXJhfGVufDB8MHx8fDE3NzY0MDk4NDF8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Analog film camera" class="w-full h-full object-cover grayscale opacity-90 group-hover:scale-105 group-hover:grayscale-0 transition-all duration-700 ease-in-out" />
+        <div class="absolute inset-0 border border-[#1A1A1A]/10 m-4 pointer-events-none"></div>
+      </div>
+      <div class="lg:w-5/12 flex flex-col items-start pl-0 lg:pl-12">
+        <span class="text-[#1A1A1A] text-2xl mb-4 font-semibold opacity-30">II.</span>
+        <h2 class="text-5xl text-[#1A1A1A] leading-[1.2] mb-6 font-medium group-hover:text-[#8C2A1E] transition-colors" style="font-family: 'Lora', serif;">
+          The Material World
+        </h2>
+        <p class="text-xl text-[#5C5A55] leading-relaxed mb-10">
+          A defense of analog documentation in a digital ecosystem. Investigating the friction, permanence, and melancholy of physical objects.
+        </p>
+        <div class="flex items-center justify-between w-full border-t border-[#EBE7DC] pt-6">
+          <span class="text-[#1A1A1A] text-sm uppercase tracking-widest font-semibold">9 Essays</span>
+          <span class="text-[#5C5A55] text-sm italic group-hover:text-[#8C2A1E] transition-colors flex items-center gap-2">Explore <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
         </div>
       </div>
     </div>
-    
-    <!-- Image Column -->
-    <div class="col-span-7 relative group cursor-pointer">
-      <div class="aspect-[4/5] w-full overflow-hidden">
-        <img src="https://images.unsplash.com/photo-1759517268149-c113637c3800?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxjaW5lbWF0aWMlMjBtb3JvY2NvJTIwbGFuZHNjYXBlfGVufDB8MHx8fDE3NzY0MDY0OTR8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Morocco Landscape" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+
+    <!-- Theme 3 -->
+    <div class="flex flex-col lg:flex-row items-center gap-16 group cursor-pointer">
+      <div class="lg:w-5/12 order-2 lg:order-1 flex flex-col items-start pr-0 lg:pr-12">
+        <span class="text-[#1A1A1A] text-2xl mb-4 font-semibold opacity-30">III.</span>
+        <h2 class="text-5xl text-[#1A1A1A] leading-[1.2] mb-6 font-medium group-hover:text-[#8C2A1E] transition-colors" style="font-family: 'Lora', serif;">
+          Solitude & Being
+        </h2>
+        <p class="text-xl text-[#5C5A55] leading-relaxed mb-10">
+          Musings on isolation, the necessity of boredom, and the quiet act of withdrawing from the relentless noise of modernity.
+        </p>
+        <div class="flex items-center justify-between w-full border-t border-[#EBE7DC] pt-6">
+          <span class="text-[#1A1A1A] text-sm uppercase tracking-widest font-semibold">22 Essays</span>
+          <span class="text-[#5C5A55] text-sm italic group-hover:text-[#8C2A1E] transition-colors flex items-center gap-2">Explore <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+        </div>
       </div>
-      <div class="absolute -bottom-8 -right-8 w-48 h-48 bg-[#d25d38] rounded-full flex items-center justify-center p-6 transform transition-transform duration-500 group-hover:rotate-12">
-        <p class="text-[#fdfbf7] text-center text-sm font-medium uppercase tracking-widest leading-tight">Read the full essay <span class="block mt-2">&rarr;</span></p>
+      <div class="lg:w-7/12 order-1 lg:order-2 w-full aspect-[16/9] relative overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1644892530846-06397fea62f8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzb2xpdHVkZSUyMGxhbmRzY2FwZXxlbnwwfDB8fHwxNzc2NDA5ODQwfDA&ixlib=rb-4.1.0&q=80&w=1080" alt="Solitude landscape" class="w-full h-full object-cover grayscale opacity-90 group-hover:scale-105 group-hover:grayscale-0 transition-all duration-700 ease-in-out" />
+        <div class="absolute inset-0 border border-[#1A1A1A]/10 m-4 pointer-events-none"></div>
       </div>
     </div>
+    
+    <!-- Theme 4 -->
+    <div class="flex flex-col lg:flex-row items-center gap-16 group cursor-pointer">
+      <div class="lg:w-7/12 w-full aspect-[16/9] relative overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1643596028210-cdde50b7f37b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxvbGQlMjBjbG9jayUyMHZpbnRhZ2V8ZW58MHwwfHx8MTc3NjQwOTg0MHww&ixlib=rb-4.1.0&q=80&w=1080" alt="Vintage clock" class="w-full h-full object-cover grayscale opacity-90 group-hover:scale-105 group-hover:grayscale-0 transition-all duration-700 ease-in-out" />
+        <div class="absolute inset-0 border border-[#1A1A1A]/10 m-4 pointer-events-none"></div>
+      </div>
+      <div class="lg:w-5/12 flex flex-col items-start pl-0 lg:pl-12">
+        <span class="text-[#1A1A1A] text-2xl mb-4 font-semibold opacity-30">IV.</span>
+        <h2 class="text-5xl text-[#1A1A1A] leading-[1.2] mb-6 font-medium group-hover:text-[#8C2A1E] transition-colors" style="font-family: 'Lora', serif;">
+          Time & Memory
+        </h2>
+        <p class="text-xl text-[#5C5A55] leading-relaxed mb-10">
+          How nostalgia functions as both a sanctuary and a prison. Exploring the non-linear way we experience our own personal histories.
+        </p>
+        <div class="flex items-center justify-between w-full border-t border-[#EBE7DC] pt-6">
+          <span class="text-[#1A1A1A] text-sm uppercase tracking-widest font-semibold">11 Essays</span>
+          <span class="text-[#5C5A55] text-sm italic group-hover:text-[#8C2A1E] transition-colors flex items-center gap-2">Explore <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
 `

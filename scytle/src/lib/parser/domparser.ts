@@ -458,9 +458,11 @@ function buildContainerNode(
     // For flex-row containers, estimate per-child width for flex-grow siblings
     // so images and text inside flex-1 divs get proper width estimates
     let flexRowPerGrowWidth = childAvailWidth
+    let flexRowTotalGaps = 0
     const isFlexRow = layout.mode === 'flex' && layout.direction === 'row'
     if (isFlexRow) {
         const elementChildren = Array.from(el.children) as HTMLElement[]
+        flexRowTotalGaps = (layout.gap || 0) * Math.max(elementChildren.length - 1, 0)
         let flexGrowCount = 0
         let fixedWidthTotal = 0
         for (const ch of elementChildren) {
@@ -475,8 +477,7 @@ function buildContainerNode(
             }
         }
         if (flexGrowCount > 0) {
-            const totalGaps = (layout.gap || 0) * Math.max(elementChildren.length - 1, 0)
-            flexRowPerGrowWidth = Math.max((childAvailWidth - fixedWidthTotal - totalGaps) / flexGrowCount, 40)
+            flexRowPerGrowWidth = Math.max((childAvailWidth - fixedWidthTotal - flexRowTotalGaps) / flexGrowCount, 40)
         }
     }
 
@@ -512,7 +513,10 @@ function buildContainerNode(
                 } else if (s.width?.endsWith('px')) {
                     childParentWidth = parseFloat(s.width)
                 } else if (s.width?.endsWith('%')) {
-                    childParentWidth = (parseFloat(s.width) / 100) * childAvailWidth
+                    // DON'T pre-multiply by the percentage — buildContainerNode will
+                    // resolve cs.width ('58.333%') against parentWidth itself.
+                    // Just pass the gap-adjusted available width as the base.
+                    childParentWidth = childAvailWidth - flexRowTotalGaps
                 }
             }
             const node = walkElement(childEl, childParentWidth, inh)
