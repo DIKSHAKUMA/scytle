@@ -145,7 +145,7 @@ export type GridTrack = z.infer<typeof GridTrackSchema>
 export const LayoutSchema = z.object({
     mode: z.enum(['flex', 'grid', 'none']),
     direction: z.enum(['row', 'column']).optional(),
-    justify: z.enum(['start', 'end', 'center', 'between']).optional(),
+    justify: z.enum(['start', 'end', 'center', 'between', 'around', 'evenly']).optional(),
     align: z.enum(['start', 'end', 'center', 'stretch', 'baseline']).optional(),
     wrap: z.boolean().optional(),
     gap: z.number().optional(),

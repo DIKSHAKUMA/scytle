@@ -12,114 +12,168 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="flex flex-col w-[390px] min-h-[844px] bg-[#f8f7f5] overflow-hidden" style="font-family: 'Plus Jakarta Sans', sans-serif;">
+<div class="w-[390px] min-h-[844px] bg-[#F9FAFB] relative overflow-hidden flex flex-col pb-20" style="font-family: 'Inter', sans-serif;">
   <!-- Header -->
-  <div class="flex items-center justify-between px-6 pt-14 pb-6">
-    <div class="flex flex-col">
-      <p class="text-sm font-medium text-[#8a857b]">Good morning,</p>
-      <h1 class="text-3xl font-semibold text-[#1f1c18]" style="font-family: 'Playfair Display', serif;">Eleanor</h1>
+  <div class="px-6 pt-12 pb-4 flex justify-between items-center bg-[#FFFFFF] rounded-b-3xl shadow-sm z-10">
+    <div class="flex flex-col gap-1">
+      <span class="text-[11px] text-[#E11D48] font-semibold uppercase tracking-wider" style="font-family: 'Plus Jakarta Sans', sans-serif;">Delivering to</span>
+      <div class="flex items-center gap-1 cursor-pointer">
+        <h2 class="text-[#111827] text-lg font-bold" style="font-family: 'Plus Jakarta Sans', sans-serif;">New York, 10012</h2>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
     </div>
-    <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-[#ffffff] shadow-sm">
-      <img src="https://images.unsplash.com/photo-1595085610896-fb31cfd5d4b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHx3b21hbiUyMHNtaWxpbmclMjBwb3J0cmFpdHxlbnwwfDB8fHwxNzc2NDE5MzYwfDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Profile" class="w-full h-full object-cover">
+    <div class="w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFFFFF] shadow-sm">
+      <img src="https://images.unsplash.com/photo-1539605480396-a61f99da1041?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxwcm9maWxlJTIwcGljdHVyZSUyMHBvcnRyYWl0fGVufDB8MHx8fDE3NzY0MjEwMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Profile" class="w-full h-full object-cover">
     </div>
   </div>
 
-  <!-- Search -->
-  <div class="px-6 mb-8">
-    <div class="flex items-center bg-[#ffffff] rounded-2xl p-4 shadow-sm border border-[#ebe7df]">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8a857b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3">
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
-      <input type="text" placeholder="Where to next?" class="flex-1 bg-transparent outline-none text-[#1f1c18] placeholder:text-[#8a857b] text-base font-medium">
-    </div>
-  </div>
-
-  <!-- Categories -->
-  <div class="flex gap-4 px-6 mb-10 overflow-x-auto [&::-webkit-scrollbar]:hidden" style="scrollbar-width: none;">
-    <div class="flex flex-col items-center gap-2">
-      <div class="w-14 h-14 bg-[#1f1c18] rounded-full flex items-center justify-center shadow-md">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.2-1.1.6L2.5 9l8.1 4.5L6 18l-3-1-2 2 4.5 2 2 4.5 2-2-1-3 4.5-4.6 4.5 8.1 2.2-1.2c.4-.2.7-.6.6-1.1Z"/></svg>
-      </div>
-      <span class="text-xs font-bold text-[#1f1c18]">Flights</span>
-    </div>
-    <div class="flex flex-col items-center gap-2">
-      <div class="w-14 h-14 bg-[#ffffff] rounded-full flex items-center justify-center border border-[#ebe7df]">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f1c18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M9 21v-4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4"/><path d="M10 9h.01"/><path d="M14 9h.01"/><path d="M10 13h.01"/><path d="M14 13h.01"/></svg>
-      </div>
-      <span class="text-xs font-semibold text-[#8a857b]">Stays</span>
-    </div>
-    <div class="flex flex-col items-center gap-2">
-      <div class="w-14 h-14 bg-[#ffffff] rounded-full flex items-center justify-center border border-[#ebe7df]">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f1c18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-      </div>
-      <span class="text-xs font-semibold text-[#8a857b]">Guides</span>
-    </div>
-    <div class="flex flex-col items-center gap-2">
-      <div class="w-14 h-14 bg-[#ffffff] rounded-full flex items-center justify-center border border-[#ebe7df]">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1f1c18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-      </div>
-      <span class="text-xs font-semibold text-[#8a857b]">Visas</span>
-    </div>
-  </div>
-
-  <!-- Featured -->
-  <div class="flex items-center justify-between px-6 mb-5">
-    <h2 class="text-xl font-semibold text-[#1f1c18]" style="font-family: 'Playfair Display', serif;">Curated Journeys</h2>
-    <span class="text-sm font-semibold text-[#c27a55]">See all</span>
-  </div>
-
-  <!-- Horizontal scroll cards -->
-  <div class="flex gap-5 px-6 pb-12 overflow-x-auto [&::-webkit-scrollbar]:hidden snap-x" style="scrollbar-width: none;">
-    <div class="flex-none w-[280px] h-[360px] relative rounded-[32px] overflow-hidden shadow-lg snap-center">
-      <img src="https://images.unsplash.com/photo-1626175910312-eeb299094d50" class="absolute inset-0 w-full h-full object-cover" />
-      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-[#1f1c18]/10 to-[#1f1c18]/90"></div>
-      <div class="absolute top-4 right-4 bg-[#ffffff]/20 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-        <span class="text-[#ffffff] text-xs font-bold">4.9</span>
-      </div>
-      <div class="absolute bottom-6 left-6 right-6">
-        <h3 class="text-2xl text-[#ffffff] mb-1" style="font-family: 'Playfair Display', serif;">Amalfi Coast</h3>
-        <div class="flex items-center text-[#ffffff]/80 text-sm gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          <span>Campania, Italy</span>
+  <div class="flex-1 overflow-y-auto overflow-x-hidden">
+    <!-- Search -->
+    <div class="px-6 py-5">
+      <div class="relative flex items-center w-full h-14 rounded-2xl bg-[#FFFFFF] shadow-sm border border-gray-100 overflow-hidden px-4 gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="What are you craving?" class="flex-1 bg-transparent border-none outline-none text-[#111827] text-sm placeholder-[#6B7280]">
+        <div class="w-8 h-8 rounded-full bg-[#FFE4E6] flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V14"/><path d="M4 10V3"/><path d="M12 21V12"/><path d="M12 8V3"/><path d="M20 21V16"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>
         </div>
       </div>
     </div>
-    <div class="flex-none w-[280px] h-[360px] relative rounded-[32px] overflow-hidden shadow-lg snap-center">
-      <img src="https://images.unsplash.com/photo-1711490553971-4065c2531a21" class="absolute inset-0 w-full h-full object-cover" />
-      <div class="absolute inset-0 bg-gradient-to-b from-transparent via-[#1f1c18]/10 to-[#1f1c18]/90"></div>
-      <div class="absolute top-4 right-4 bg-[#ffffff]/20 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-        <span class="text-[#ffffff] text-xs font-bold">4.8</span>
-      </div>
-      <div class="absolute bottom-6 left-6 right-6">
-        <h3 class="text-2xl text-[#ffffff] mb-1" style="font-family: 'Playfair Display', serif;">Kyoto Temples</h3>
-        <div class="flex items-center text-[#ffffff]/80 text-sm gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          <span>Kyoto, Japan</span>
+
+    <!-- Categories -->
+    <div class="pl-6 pb-6">
+      <h3 class="text-[#111827] text-lg font-bold mb-4" style="font-family: 'Plus Jakarta Sans', sans-serif;">Categories</h3>
+      <div class="flex gap-4 overflow-x-auto pr-6 pb-2" style="scrollbar-width: none;">
+        <!-- Cat 1 -->
+        <div class="flex flex-col items-center gap-2 min-w-[72px]">
+          <div class="w-16 h-16 rounded-2xl bg-[#E11D48] flex items-center justify-center shadow-md shadow-[#e11d48]/30">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.686 2 6 4.686 6 8c0 1.258.384 2.427 1.037 3.393L12 22l4.963-10.607A5.975 5.975 0 0 0 18 8c0-3.314-2.686-6-6-6Z"/><circle cx="12" cy="8" r="2"/></svg>
+          </div>
+          <span class="text-[#111827] text-xs font-semibold">Near Me</span>
         </div>
+        <!-- Cat 2 -->
+        <div class="flex flex-col items-center gap-2 min-w-[72px]">
+          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
+             <img src="https://images.unsplash.com/photo-1627378378955-a3f4e406c5de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxnb3VybWV0JTIwYnVyZ2VyfGVufDB8MHx8fDE3NzY0MjEwMDF8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Burger">
+          </div>
+          <span class="text-[#6B7280] text-xs font-medium">Burger</span>
+        </div>
+        <!-- Cat 3 -->
+        <div class="flex flex-col items-center gap-2 min-w-[72px]">
+          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
+             <img src="https://images.unsplash.com/photo-1579751626657-72bc17010498?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHx3b29kJTIwZmlyZWQlMjBwaXp6YXxlbnwwfDB8fHwxNzc2NDIxMDAxfDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Pizza">
+          </div>
+          <span class="text-[#6B7280] text-xs font-medium">Pizza</span>
+        </div>
+        <!-- Cat 4 -->
+        <div class="flex flex-col items-center gap-2 min-w-[72px]">
+          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
+             <img src="https://images.unsplash.com/photo-1579871494447-9811cf80d66c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzdXNoaSUyMHJvbGx8ZW58MHwwfHx8MTc3NjQyMTAwMXww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Sushi">
+          </div>
+          <span class="text-[#6B7280] text-xs font-medium">Sushi</span>
+        </div>
+        <!-- Cat 5 -->
+        <div class="flex flex-col items-center gap-2 min-w-[72px]">
+          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
+             <img src="https://images.unsplash.com/photo-1578657084274-03b9d153b0dc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxoZWFsdGh5JTIwc2FsYWQlMjBib3dsfGVufDB8MHx8fDE3NzY0MjEwMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Healthy">
+          </div>
+          <span class="text-[#6B7280] text-xs font-medium">Healthy</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Featured -->
+    <div class="px-6 pb-8">
+      <div class="flex justify-between items-end mb-4">
+        <h3 class="text-[#111827] text-xl font-bold" style="font-family: 'Plus Jakarta Sans', sans-serif;">Featured for you</h3>
+        <span class="text-[#E11D48] text-sm font-semibold cursor-pointer">See all</span>
+      </div>
+
+      <div class="flex flex-col gap-6">
+        <!-- Card 1 -->
+        <div class="w-full bg-[#FFFFFF] rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer relative">
+          <div class="absolute top-4 right-4 z-10 w-8 h-8 bg-[#FFFFFF] rounded-full flex items-center justify-center shadow-md cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+          </div>
+          <div class="w-full h-48 relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent z-10"></div>
+            <img src="https://images.unsplash.com/photo-1627378378955-a3f4e406c5de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxnb3VybWV0JTIwYnVyZ2VyfGVufDB8MHx8fDE3NzY0MjEwMDF8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="The Artisan Burger" class="w-full h-full object-cover">
+            <div class="absolute bottom-3 left-3 z-20 flex items-center gap-2">
+              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                4.8
+              </span>
+              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg shadow-sm">25-35 min</span>
+            </div>
+          </div>
+          <div class="p-4">
+            <h4 class="text-[#111827] text-lg font-bold mb-1" style="font-family: 'Plus Jakarta Sans', sans-serif;">The Artisan Burger Co.</h4>
+            <p class="text-[#6B7280] text-sm mb-3">American • Burgers • Fries</p>
+            <div class="flex items-center gap-4 text-sm font-medium">
+              <span class="flex items-center gap-1 text-[#6B7280]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                $2.99 Delivery
+              </span>
+              <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+              <span class="text-[#111827] flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                Free over $30
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="w-full bg-[#FFFFFF] rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer relative">
+          <div class="absolute top-4 right-4 z-10 w-8 h-8 bg-[#FFFFFF] rounded-full flex items-center justify-center shadow-md cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+          </div>
+          <div class="w-full h-48 relative overflow-hidden">
+             <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent z-10"></div>
+            <img src="https://images.unsplash.com/photo-1579871494447-9811cf80d66c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzdXNoaSUyMHJvbGx8ZW58MHwwfHx8MTc3NjQyMTAwMXww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Tokyo Sushi Bar" class="w-full h-full object-cover">
+            <div class="absolute bottom-3 left-3 z-20 flex items-center gap-2">
+              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                4.9
+              </span>
+              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg shadow-sm">15-25 min</span>
+            </div>
+          </div>
+          <div class="p-4">
+            <h4 class="text-[#111827] text-lg font-bold mb-1" style="font-family: 'Plus Jakarta Sans', sans-serif;">Tokyo Sushi Bar</h4>
+            <p class="text-[#6B7280] text-sm mb-3">Japanese • Sushi • Healthy</p>
+            <div class="flex items-center gap-4 text-sm font-medium">
+              <span class="flex items-center gap-1 text-[#E11D48]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+                Free Delivery
+              </span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <!-- Bottom Nav bar -->
-  <div class="mt-auto bg-[#ffffff] border-t border-[#ebe7df] px-8 py-5 flex justify-between items-center rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.03)]">
-    <div class="flex flex-col items-center gap-1 text-[#1f1c18]">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <div class="w-1 h-1 bg-[#c27a55] rounded-full mt-0.5"></div>
+  <!-- Bottom Nav -->
+  <div class="absolute bottom-0 left-0 right-0 h-20 bg-[#FFFFFF] border-t border-gray-100 flex items-center justify-around px-4 pb-2 z-50">
+    <div class="flex flex-col items-center gap-1 cursor-pointer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span class="text-[10px] font-bold text-[#E11D48]">Home</span>
     </div>
-    <div class="flex flex-col items-center gap-1 text-[#8a857b]">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+    <div class="flex flex-col items-center gap-1 cursor-pointer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="text-[10px] font-medium text-[#6B7280]">Search</span>
     </div>
-    <div class="flex flex-col items-center gap-1 text-[#8a857b]">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+    <div class="flex flex-col items-center gap-1 cursor-pointer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span class="text-[10px] font-medium text-[#6B7280]">Orders</span>
     </div>
-    <div class="flex flex-col items-center gap-1 text-[#8a857b]">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <div class="flex flex-col items-center gap-1 cursor-pointer">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="text-[10px] font-medium text-[#6B7280]">Profile</span>
     </div>
   </div>
-</section>
+</div>
 `
 
 const PAGE_WIDTH = 1440
@@ -302,12 +356,41 @@ export default function ParserTestPage() {
             store.addNode(pageFrame)
 
             const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
-            newNode.width = PAGE_WIDTH
-            newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
+            // Preserve fixed-width roots (e.g., mobile 390px) — don't stretch to PAGE_WIDTH
+            if (newNode.sizing?.horizontal === 'fixed' && newNode.width < PAGE_WIDTH) {
+                // Keep parsed width, just ensure vertical sizing is preserved
+                newNode.sizing = { ...newNode.sizing }
+            } else {
+                newNode.width = PAGE_WIDTH
+                newNode.sizing = { horizontal: 'fill', vertical: newNode.sizing?.vertical ?? 'hug' }
+            }
 
             store.addNode(newNode, pageFrame.id)
 
             setTiming({ convert: convertMs, parse: parseMs })
+
+            // DEBUG: Find ALL large colored elements in rendered canvas
+            setTimeout(() => {
+                const allEls = document.querySelectorAll('[data-node-id]')
+                allEls.forEach(el => {
+                    const htmlEl = el as HTMLElement
+                    const cs = getComputedStyle(htmlEl)
+                    const rect = htmlEl.getBoundingClientRect()
+                    const bg = cs.backgroundColor
+                    const shadow = cs.boxShadow
+                    // Log any element wider than 80px that has a non-white/non-transparent bg
+                    const isTransparent = !bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent'
+                    const isWhite = bg === 'rgb(255, 255, 255)' || bg === 'rgba(255, 255, 255, 1)'
+                    const isLightGray = bg === 'rgb(249, 250, 251)'
+                    if (!isTransparent && !isWhite && !isLightGray && rect.width > 50) {
+                        console.log(`[DOM-COLORED] tag=${htmlEl.tagName} w=${rect.width.toFixed(1)} h=${rect.height.toFixed(1)} x=${rect.x.toFixed(0)} y=${rect.y.toFixed(0)} | bg="${bg}" | shadow="${shadow?.slice(0,60)}" | style.width="${htmlEl.style.width}" style.height="${htmlEl.style.height}"`)
+                    }
+                    // Also log any element with red-ish box-shadow
+                    if (shadow && shadow.includes('225') && rect.width > 30) {
+                        console.log(`[DOM-SHADOW] tag=${htmlEl.tagName} w=${rect.width.toFixed(1)} h=${rect.height.toFixed(1)} | shadow="${shadow}"`)
+                    }
+                })
+            }, 1000)
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : String(e))
         }

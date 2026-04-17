@@ -52,6 +52,8 @@ function resolveLength(value: string): number {
     if (isNaN(num)) return NaN
 
     if (value.endsWith('px')) return num
+    if (value.endsWith('rem')) return num * 16  // 1rem = 16px (browser default)
+    if (value.endsWith('em')) return num * 16   // approximate: treat em as rem
     if (value.endsWith('dvh') || value.endsWith('vh')) return (num / 100) * viewportHeight()
     if (value.endsWith('dvw') || value.endsWith('vw')) return (num / 100) * _rootWidth
     if (value.endsWith('vmin')) return (num / 100) * Math.min(_rootWidth, viewportHeight())
@@ -426,6 +428,14 @@ function buildContainerNode(
     const padding = extractPadding(cs)
     let sizing = inferContainerSizing(el, cs)
 
+    // DEBUG: Log sizing info for every container
+    const debugClasses = el.className?.toString().slice(0, 80) || ''
+    const debugBg = cs.backgroundColor || ''
+    const hasFills = debugBg && debugBg !== 'rgba(0, 0, 0, 0)' && debugBg !== 'transparent'
+    if (hasFills) {
+        console.log(`[PARSER-FILL] <${tag}> classes="${debugClasses}" | w="${cs.width}" h="${cs.height}" | bg="${debugBg}" | sizing=${sizing.horizontal}/${sizing.vertical} | parentWidth=${parentWidth}`)
+    }
+
 
     // Estimate this container's available width for children
     let containerWidth: number
@@ -434,8 +444,8 @@ function buildContainerNode(
     } else if (cs.width?.endsWith('%')) {
         // Percentage width: resolve against parent (e.g., w-[70%] → 70% of parentWidth)
         containerWidth = (parseFloat(cs.width) / 100) * parentWidth
-    } else if (cs.width?.endsWith('px')) {
-        containerWidth = parseFloat(cs.width)
+    } else if (cs.width?.endsWith('px') || cs.width?.endsWith('rem') || cs.width?.endsWith('em')) {
+        containerWidth = resolveLength(cs.width)
     } else {
         containerWidth = resolveLength(cs.width) || parseFloat(cs.width) || parentWidth
     }
@@ -592,10 +602,12 @@ function buildContainerNode(
     }
 
     // ── Sort children by CSS z-index (Figma layer ordering) ──
-    // CSS z-index determines stacking; Figma uses child order.
-    // Sort ascending: lowest z-index = bottom (first), highest = top (last).
-    // Stable sort preserves DOM order for equal z-index values.
-    if (childZIndex.size > 0) {
+    // ONLY for containers WITHOUT auto-layout (mode: 'none').
+    // In CSS, z-index controls stacking/paint order, NOT layout flow.
+    // For flex/grid containers, reordering children would break the layout
+    // (e.g., header pushed below content). CSS handles z-index stacking
+    // natively for positioned elements in flex/grid without reordering.
+    if (layout.mode === 'none' && childZIndex.size > 0) {
         const hasNonZero = Array.from(childZIndex.values()).some(z => z !== 0)
         if (hasNonZero) {
             children.sort((a, b) => {
@@ -684,6 +696,11 @@ function buildContainerNode(
         // Grid child spans (col-span-2, row-span-2, etc.)
         ...extractGridSpan(cs),
     })
+
+    // DEBUG: Log final frame dimensions for elements with visible fills
+    if (hasFills) {
+        console.log(`[PARSER-FRAME] <${tag}> "${debugClasses.slice(0, 50)}" → FINAL w=${frame.width} h=${frame.height} | sizing=${frame.sizing.horizontal}/${frame.sizing.vertical} | overflow=${frame.overflow} | fills=${frame.fills.length}`)
+    }
 
     // Store raw CSS percentage width/height for render-time resolution
     const widthPct = parseFloat(cs.width || '')
@@ -775,7 +792,7 @@ function inferImageSizing(cs: CSSStyleDeclaration, el: HTMLImageElement): Sizing
     const isAbs = cs.position === 'absolute' || cs.position === 'fixed'
 
     let horizontal: Sizing['horizontal'] = 'fill'  // images default to fill
-    if (widthVal && widthVal.endsWith('px')) {
+    if (widthVal && (widthVal.endsWith('px') || widthVal.endsWith('rem') || widthVal.endsWith('em'))) {
         horizontal = 'fixed'
     } else if (widthVal && (widthVal === '100%' || (widthVal.endsWith('%') && parseFloat(widthVal) >= 99.5))) {
         horizontal = 'fill'
@@ -786,7 +803,7 @@ function inferImageSizing(cs: CSSStyleDeclaration, el: HTMLImageElement): Sizing
     let vertical: Sizing['vertical'] = 'fixed'  // images default to fixed height
     if (heightVal && (heightVal === '100%' || (heightVal.endsWith('%') && parseFloat(heightVal) >= 99.5))) {
         vertical = 'fill'  // 100% height → fill (works for both abs and normal flow in flex containers)
-    } else if (heightVal && (heightVal.endsWith('px') || /\d+d?v[hw]/.test(heightVal))) {
+    } else if (heightVal && (heightVal.endsWith('px') || heightVal.endsWith('rem') || heightVal.endsWith('em') || /\d+d?v[hw]/.test(heightVal))) {
         vertical = 'fixed'
     }
 
@@ -2310,9 +2327,10 @@ function inferContainerSizing(
         return val.endsWith('%') && n >= 99.5
     }
 
-    // Helper: check if value is a fixed length (px, viewport units, or non-100% percentages)
+    // Helper: check if value is a fixed length (px, rem, em, viewport units, or non-100% percentages)
     const isFixedLength = (val: string) =>
-        val.endsWith('px') || /\d+d?v[hwminax]+$/.test(val) ||
+        val.endsWith('px') || val.endsWith('rem') || val.endsWith('em') ||
+        /\d+d?v[hwminax]+$/.test(val) ||
         (val.endsWith('%') && !isFull(val))
 
     // Helper: check if cross-axis is stretched
@@ -2334,7 +2352,7 @@ function inferContainerSizing(
         const flexGrowsRow = (!isNaN(fgRow) && fgRow > 0) || cs.flex === '1' || cs.flex?.startsWith('1 ')
         if (flexGrowsRow) {
             horizontal = 'fill'
-        } else if (widthVal && widthVal.endsWith('px')) {
+        } else if (widthVal && isFixedLength(widthVal)) {
             horizontal = 'fixed'
         } else if (widthVal && isFull(widthVal)) {
             horizontal = 'fill'
@@ -2345,7 +2363,7 @@ function inferContainerSizing(
             horizontal = 'hug'
         }
     } else if (parentIsFlexCol) {
-        if (widthVal && widthVal.endsWith('px')) {
+        if (widthVal && isFixedLength(widthVal)) {
             horizontal = 'fixed'
         } else if (widthVal && isFull(widthVal)) {
             horizontal = 'fill'
@@ -2357,7 +2375,7 @@ function inferContainerSizing(
         } else {
             horizontal = 'hug'
         }
-    } else if (widthVal && widthVal.endsWith('px')) {
+    } else if (widthVal && isFixedLength(widthVal)) {
         horizontal = 'fixed'
     } else if (widthVal && isFull(widthVal)) {
         horizontal = 'fill'
@@ -2636,6 +2654,8 @@ function mapJustifyContent(value: string): Layout['justify'] {
         case 'flex-end': case 'end': return 'end'
         case 'center': return 'center'
         case 'space-between': return 'between'
+        case 'space-around': return 'around'
+        case 'space-evenly': return 'evenly'
         default: return 'start'
     }
 }
