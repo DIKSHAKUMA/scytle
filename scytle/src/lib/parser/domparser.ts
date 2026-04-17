@@ -142,7 +142,7 @@ const SEMANTIC_NAMES: Record<string, string> = {
 }
 
 /** Block-level display values — elements with these fill width by default */
-const BLOCK_DISPLAYS = new Set(['block', 'flex', 'grid', 'list-item', 'table'])
+const BLOCK_DISPLAYS = new Set(['block', 'flex', 'grid', 'list-item', 'table', 'table-row', 'table-cell', 'table-row-group', 'table-header-group', 'table-footer-group'])
 
 /**
  * Merge parent inherited styles with the current element's inline styles.
@@ -462,6 +462,17 @@ function buildContainerNode(
         const gridGap = layout.gap || 0
         const totalGap = gridGap * (layout.columns - 1)
         childAvailWidth = (childAvailWidth - totalGap) / layout.columns
+    }
+
+    // For table rows (<tr>), divide width equally among cells
+    if (tag === 'tr') {
+        const cellCount = Array.from(el.children).filter(c => {
+            const t = c.tagName.toLowerCase()
+            return t === 'td' || t === 'th'
+        }).length
+        if (cellCount > 0) {
+            childAvailWidth = childAvailWidth / cellCount
+        }
     }
 
     // For flex-row containers, estimate per-child width for flex-grow siblings
@@ -1483,6 +1494,14 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
     const flexAlign = textAlign === 'center' ? 'center'
         : textAlign === 'right' || textAlign === 'end' ? 'end'
         : undefined
+
+    // Table elements → map to flex layout
+    if (tag === 'tr') {
+        return { mode: 'flex', direction: 'row', gap: 0, align: 'center' }
+    }
+    if (tag === 'table' || tag === 'thead' || tag === 'tbody' || tag === 'tfoot') {
+        return { mode: 'flex', direction: 'column', gap: 0 }
+    }
 
     // Exception: TEXT_ONLY_TAGS (p, h1-h6) with mixed inline children should flow horizontally
     // Enable wrap so inline spans don't overflow the container (e.g. large font titles)

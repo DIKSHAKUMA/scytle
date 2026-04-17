@@ -40,12 +40,11 @@ const DEFAULT_HTML = `
 
       <!-- Navigation Card -->
       <nav class="bg-[#faf9f7] rounded-[32px] p-4 border border-[#dcd6ca] flex flex-col gap-2 shadow-xl shadow-[#2a2a28]/5">
-        <a href="#" class="flex items-center justify-between px-5 py-4 bg-[#f5f3ef] text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors border border-[#e8e4db] shadow-sm">
+        <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
           <div class="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
             My Profile
           </div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
         </a>
         <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
           <div class="flex items-center gap-3">
@@ -59,11 +58,12 @@ const DEFAULT_HTML = `
             Security
           </div>
         </a>
-        <a href="#" class="flex items-center justify-between px-5 py-4 text-[#73716a] hover:bg-[#f5f3ef]/80 hover:text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors">
+        <a href="#" class="flex items-center justify-between px-5 py-4 bg-[#f5f3ef] text-[#2a2a28] rounded-2xl font-medium text-sm transition-colors border border-[#e8e4db] shadow-sm">
           <div class="flex items-center gap-3">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
             Billing
           </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg>
         </a>
       </nav>
       
@@ -74,58 +74,115 @@ const DEFAULT_HTML = `
       
       <!-- Top Title -->
       <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#faf9f7] rounded-[32px] p-8 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 gap-6">
-        <h1 class="text-4xl text-[#2a2a28]" style="font-family: 'Cormorant Garamond', serif;">Profile Settings</h1>
-        <button class="px-8 py-3.5 bg-[#2a2a28] text-[#f5f3ef] text-sm font-medium rounded-full hover:bg-[#1a1a18] transition-colors shadow-lg shadow-[#2a2a28]/20 w-full sm:w-auto">Save Changes</button>
+        <h1 class="text-4xl text-[#2a2a28]" style="font-family: 'Cormorant Garamond', serif;">Billing & Subscription</h1>
+        <div class="flex items-center gap-2 text-[#73716a] text-sm font-light">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          Secure payment via Stripe
+        </div>
       </div>
 
-      <!-- Basic Info Card -->
-      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-10">
-        <div>
-          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Personal Details</h3>
-          <p class="text-[#73716a] text-[15px] font-light">Update your name and contact information.</p>
+      <!-- Current Plan Card -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col lg:flex-row justify-between gap-10">
+        <div class="flex-1">
+          <h3 class="text-[#a35d49] text-xs font-medium tracking-widest uppercase mb-3">Current Plan</h3>
+          <h2 class="text-[#2a2a28] text-4xl mb-4" style="font-family: 'Cormorant Garamond', serif;">Reverie Free</h2>
+          <p class="text-[#73716a] text-[15px] font-light leading-relaxed max-w-sm mb-8">
+            You are currently on our free tier. This gives you access to a quiet space for your daily reflections and basic monthly insights.
+          </p>
+          <div class="flex items-baseline gap-2">
+            <span class="text-[#2a2a28] text-5xl" style="font-family: 'Cormorant Garamond', serif;">$0</span>
+            <span class="text-[#73716a] text-sm">/ month</span>
+          </div>
         </div>
         
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
-          <div class="flex flex-col gap-3">
-            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">First Name</label>
-            <input type="text" value="Elena" class="w-full px-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
-          </div>
-          <div class="flex flex-col gap-3">
-            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Last Name</label>
-            <input type="text" value="Kowalski" class="w-full px-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
-          </div>
-          <div class="flex flex-col gap-3 sm:col-span-2">
-            <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Email Address</label>
-            <div class="relative">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="absolute left-5 top-1/2 -translate-y-1/2 text-[#8c857b]"><rect width="20" height="16" x="2" y="4" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
-              <input type="email" value="elena.kowalski@example.com" class="w-full pl-14 pr-5 py-4 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors">
+        <div class="flex-1 bg-[#f5f3ef] rounded-2xl p-8 border border-[#e8e4db] flex flex-col">
+          <h4 class="text-[#2a2a28] text-lg font-medium mb-6" style="font-family: 'Cormorant Garamond', serif;">Upgrade to Reverie Premium</h4>
+          
+          <ul class="flex flex-col gap-4 mb-8">
+            <li class="flex items-start gap-3 text-[#73716a] text-sm font-light">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a35d49" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Unlimited access to all Guided Paths
+            </li>
+            <li class="flex items-start gap-3 text-[#73716a] text-sm font-light">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a35d49" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Deep chronological Insights & Word Constellations
+            </li>
+            <li class="flex items-start gap-3 text-[#73716a] text-sm font-light">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a35d49" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Export entries to PDF, Markdown, and TXT
+            </li>
+          </ul>
+          
+          <button class="w-full py-3.5 bg-[#2a2a28] text-[#f5f3ef] text-[15px] font-medium rounded-full hover:bg-[#1a1a18] transition-colors shadow-lg shadow-[#2a2a28]/20 mt-auto">
+            Upgrade for $8 / month
+          </button>
+        </div>
+      </div>
+
+      <!-- Payment Method Card -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-8">
+        <div>
+          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Payment Method</h3>
+          <p class="text-[#73716a] text-[15px] font-light">Manage your cards and billing preferences.</p>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row items-center justify-between p-6 bg-[#f5f3ef] border border-[#e8e4db] border-dashed rounded-2xl gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-[#faf9f7] border border-[#dcd6ca] flex items-center justify-center text-[#73716a]">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
+            </div>
+            <div>
+              <p class="text-[#2a2a28] font-medium text-[15px]">No payment method added</p>
+              <p class="text-[#73716a] text-sm font-light">Add a card to subscribe to premium.</p>
             </div>
           </div>
+          <button class="px-6 py-2.5 bg-transparent border border-[#dcd6ca] text-[#2a2a28] text-[14px] font-medium rounded-full hover:bg-[#e8e4db] transition-colors whitespace-nowrap">
+            Add Payment Method
+          </button>
         </div>
       </div>
 
-      <!-- Mindful Intentions Card -->
-      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-10">
+      <!-- Billing History -->
+      <div class="bg-[#faf9f7] rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col gap-8">
         <div>
-          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Mindful Intentions</h3>
-          <p class="text-[#73716a] text-[15px] font-light max-w-lg leading-relaxed">Tell us what you're focusing on so we can tailor your guided paths to your current emotional state.</p>
+          <h3 class="text-[#2a2a28] text-3xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Billing History</h3>
+          <p class="text-[#73716a] text-[15px] font-light">Review your past invoices and receipts.</p>
         </div>
         
-        <div class="flex flex-col gap-3">
-          <label class="text-xs font-medium text-[#73716a] tracking-widest uppercase">Current Focus</label>
-          <textarea rows="4" class="w-full px-5 py-5 bg-[#f5f3ef] border border-[#e8e4db] rounded-2xl text-[#2a2a28] text-[15px] leading-relaxed focus:outline-none focus:border-[#a35d49] focus:bg-[#faf9f7] transition-colors resize-none">I'm currently trying to process a major career transition and want to document my daily anxieties to find patterns of peace.</textarea>
+        <div class="w-full border border-[#e8e4db] rounded-2xl overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-[#f5f3ef] border-b border-[#e8e4db]">
+                <th class="py-4 px-6 text-xs font-medium text-[#73716a] tracking-widest uppercase">Date</th>
+                <th class="py-4 px-6 text-xs font-medium text-[#73716a] tracking-widest uppercase">Plan</th>
+                <th class="py-4 px-6 text-xs font-medium text-[#73716a] tracking-widest uppercase hidden sm:table-cell">Amount</th>
+                <th class="py-4 px-6 text-xs font-medium text-[#73716a] tracking-widest uppercase text-right">Receipt</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-[#e8e4db] hover:bg-[#f5f3ef]/50 transition-colors group">
+                <td class="py-4 px-6 text-[#2a2a28] text-[15px] font-light">Oct 11, 2023</td>
+                <td class="py-4 px-6 text-[#2a2a28] text-[15px] font-light">Free Plan</td>
+                <td class="py-4 px-6 text-[#73716a] text-[15px] font-light hidden sm:table-cell">$0.00</td>
+                <td class="py-4 px-6 text-right">
+                  <button class="text-[#73716a] hover:text-[#a35d49] transition-colors inline-flex">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+                  </button>
+                </td>
+              </tr>
+              <tr class="hover:bg-[#f5f3ef]/50 transition-colors group">
+                <td class="py-4 px-6 text-[#2a2a28] text-[15px] font-light">Sep 11, 2023</td>
+                <td class="py-4 px-6 text-[#2a2a28] text-[15px] font-light">Free Plan</td>
+                <td class="py-4 px-6 text-[#73716a] text-[15px] font-light hidden sm:table-cell">$0.00</td>
+                <td class="py-4 px-6 text-right">
+                  <button class="text-[#73716a] hover:text-[#a35d49] transition-colors inline-flex">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      <!-- Danger Zone Card -->
-      <div class="bg-gradient-to-br from-[#f5f3ef] to-[#e8e4db]/50 rounded-[32px] p-8 md:p-12 border border-[#dcd6ca] shadow-xl shadow-[#2a2a28]/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mt-4">
-        <div>
-          <h3 class="text-[#2a2a28] text-2xl mb-2" style="font-family: 'Cormorant Garamond', serif;">Danger Zone</h3>
-          <p class="text-[#73716a] text-[15px] font-light max-w-md leading-relaxed">Permanently delete your account and all of your journal entries. This action cannot be undone.</p>
-        </div>
-        <button class="px-8 py-3.5 bg-[#faf9f7] border border-[#a35d49]/40 text-[#a35d49] text-[15px] font-medium rounded-full hover:bg-[#a35d49] hover:text-[#f5f3ef] transition-colors whitespace-nowrap shadow-sm">
-          Delete Account
-        </button>
       </div>
 
     </main>
