@@ -626,6 +626,14 @@ export function createText(
         textDecoration: 'none',
         autoResize: 'width-and-height',
         color: '#000000',
+        fills: [{
+            id: generateId(),
+            type: 'solid',
+            color: '000000',
+            opacity: 1,
+            visible: true,
+            blendMode: 'NORMAL',
+        }],
         ...overrides,
     }
 }

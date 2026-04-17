@@ -109,15 +109,27 @@ export const TextRenderer = memo(function TextRenderer({
     // ── Styles ────────────────────────────────────────────────
     const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, themeCtx)
 
+    // For text nodes, fills should color the text itself (CSS color or background-clip: text),
+    // not the bounding box. We remove the background properties from computeBaseStyles.
+    const {
+        backgroundColor: _bgCol,
+        backgroundImage: _bgImg,
+        backgroundSize: _bgSize,
+        backgroundPosition: _bgPos,
+        backgroundRepeat: _bgRep,
+        ...textIntrinsicStyles
+    } = baseStyle
+
+    // Resolve text color from node.fills (Figma parity)
+    const visibleFills = node.fills.filter((f) => f.visible !== false)
+    const firstFill = visibleFills[0]
+
     // ── Line height (unit-aware) ───────────────────────────────────────────────
-    // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.
-    // New nodes use lineHeightUnit to disambiguate.
     const lhUnit = node.lineHeightUnit ?? (node.lineHeight === 'auto' ? 'auto' : 'px')
     const lineHeightCSS: string | number = (() => {
         if (lhUnit === 'auto' || node.lineHeight === 'auto') return 'normal'
         const val = node.lineHeight as number
         if (lhUnit === '%') return `${val}%`
-        // 'px' mode — legacy unitless multiplier preservation: values ≤4 treated as ratio
         return val <= 4 ? val : `calc(${val}px * var(--z, 1))`
     })()
 
@@ -129,14 +141,13 @@ export const TextRenderer = memo(function TextRenderer({
         return `calc(${node.letterSpacing}px * var(--z, 1))`
     })()
 
-    // ── Text transform → CSS textTransform + fontVariantCaps (small-caps) ────
+    // ── Text transform ────────────────────────────────────────────────────────
     const isSmallCaps = node.textTransform === 'small-caps'
     const textTransformCSS = (!isSmallCaps && node.textTransform !== 'none')
         ? (node.textTransform as CSSProperties['textTransform'])
         : undefined
 
-    // ── Vertical alignment (flex column on fixed-height box) ─────────────────
-    // 'display: flex; flexDirection: column' centers/aligns the anonymous text child.
+    // ── Vertical alignment ───────────────────────────────────────────────────
     const vAlign = node.textAlignVertical ?? 'top'
     const isFixedHeight = node.autoResize === 'none' || node.autoResize === 'truncate'
     const vAlignStyle: CSSProperties = (isFixedHeight && vAlign !== 'top')
@@ -160,10 +171,42 @@ export const TextRenderer = memo(function TextRenderer({
         ? Object.entries(node.opentypeFlags).map(([tag, val]) => `"${tag}" ${val}`).join(', ')
         : undefined
 
+    const textFillStyles: CSSProperties = (() => {
+        if (!firstFill) return { color: 'transparent' }
+
+        if (firstFill.type === 'solid') {
+            const color = firstFill.colorRef && themeCtx
+                ? resolveColor(firstFill.colorRef, firstFill.color, themeCtx.table, themeCtx.mode)
+                : firstFill.color
+            const opacity = firstFill.opacity ?? 1
+            const h = color.replace('#', '').slice(0, 6).padEnd(6, '0')
+            const r = parseInt(h.slice(0, 2), 16) || 0
+            const g = parseInt(h.slice(2, 4), 16) || 0
+            const b = parseInt(h.slice(4, 6), 16) || 0
+            return { color: `rgba(${r},${g},${b},${opacity})` }
+        }
+
+        if (firstFill.type === 'gradient') {
+            const fillStyles = baseStyle as CSSProperties
+            return {
+                backgroundImage: fillStyles.backgroundImage,
+                backgroundSize: fillStyles.backgroundSize,
+                backgroundPosition: fillStyles.backgroundPosition,
+                backgroundRepeat: fillStyles.backgroundRepeat,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+            }
+        }
+
+        return { color: 'transparent' }
+    })()
+
     const style: CSSProperties = {
-        ...baseStyle,
+        ...textIntrinsicStyles,
         ...vAlignStyle,
         ...listStyleCSS,
+        ...textFillStyles,
         // Typography core
         fontFamily: `"${resolvedFontFamily}", sans-serif`,
         fontWeight: resolvedFontWeight,
@@ -175,7 +218,6 @@ export const TextRenderer = memo(function TextRenderer({
         textTransform: textTransformCSS,
         fontVariantCaps: isSmallCaps ? 'small-caps' : undefined,
         textDecoration: node.textDecoration !== 'none' ? node.textDecoration : undefined,
-        color: resolvedColor,
         // Paragraph indent — CSS text-indent applies to first line of each paragraph
         textIndent: node.paragraphIndent ? `calc(${node.paragraphIndent}px * var(--z, 1))` : undefined,
         // Hanging punctuation (CSS, limited browser support but gracefully degrades)

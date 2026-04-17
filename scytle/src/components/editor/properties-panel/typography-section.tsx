@@ -131,13 +131,9 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const fontTriggerRef = useRef<HTMLDivElement>(null)
     const settingsBtnRef = useRef<HTMLButtonElement>(null)
     const styleTriggerRef = useRef<HTMLButtonElement>(null)
-    const colorSwatchRef = useRef<HTMLButtonElement>(null)
     const fontBadgeRef = useRef<HTMLSpanElement>(null)
-    const colorBadgeRef = useRef<HTMLSpanElement>(null)
     const [stylePickerOpen, setStylePickerOpen] = useState(false)
-    const [colorPickerOpen, setColorPickerOpen] = useState(false)
     const [fontVarPickerOpen, setFontVarPickerOpen] = useState(false)
-    const [colorVarPickerOpen, setColorVarPickerOpen] = useState(false)
 
     // Theme resolution — show resolved values in the Design tab
     const { table, mode } = useThemeTable()
@@ -365,55 +361,6 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                 />
             </div>
 
-            {/* ── Color ──────────────────────────────────────────────── */}
-            <div className="flex items-center gap-1.5">
-                <span ref={colorBadgeRef}>
-                    <ThemeLinkBadge
-                        isLinked={isThemeLinked(node.colorRef, node.colorDetached)}
-                        variableName={node.colorRef}
-                        showUnlinked
-                        onClick={() => setColorVarPickerOpen(v => !v)}
-                    />
-                </span>
-                <VariablePicker
-                    open={colorVarPickerOpen}
-                    anchorEl={colorBadgeRef.current}
-                    scope="text.color"
-                    currentRef={node.colorRef}
-                    onBind={(key) => onUpdate({ colorRef: key, colorDetached: false })}
-                    onDetach={() => onUpdate({ colorRef: undefined, colorDetached: true })}
-                    onClose={() => setColorVarPickerOpen(false)}
-                />
-                <button
-                    ref={colorSwatchRef}
-                    className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer
-                        shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
-                    style={{ backgroundColor: displayColor }}
-                    onClick={() => setColorPickerOpen((v) => !v)}
-                    title="Pick color"
-                />
-                <span className="text-[11px] font-mono text-foreground/80 uppercase tracking-wide">
-                    {normaliseHex(displayColor)}
-                </span>
-            </div>
-            <ColorPicker
-                fill={{ type: 'solid', color: normaliseHex(displayColor), opacity: 1 }}
-                onChange={(fill) => {
-                    if (fill.type === 'solid') {
-                        // Auto-detach text color from theme on user edit
-                        const updates: Record<string, unknown> = { color: `#${normaliseHex(fill.color)}` }
-                        if (isThemeLinked(node.colorRef, node.colorDetached)) {
-                            updates.colorRef = undefined
-                            updates.colorDetached = true
-                        }
-                        onUpdate(updates)
-                    }
-                }}
-                anchorEl={colorSwatchRef.current}
-                open={colorPickerOpen}
-                onClose={() => setColorPickerOpen(false)}
-                solidOnly
-            />
 
             {/* ── Type Settings Overlay (floating, portal) ───────────── */}
             {typeSettingsOpen && (
