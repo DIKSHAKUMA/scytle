@@ -202,18 +202,20 @@ export function useKeyboardShortcuts() {
                 return
             }
 
-            // ── Bare key commands (no modifiers) ─────────────────
+            // ── Bare key / Shift + key commands (no ⌘/Ctrl) ─────
 
-            // Z-order (bracket keys)
-            if (key === ']' && store.selectedIds.length === 1) {
-                e.preventDefault()
-                store.bringForward(store.selectedIds[0])
-                return
-            }
-            if (key === '[' && store.selectedIds.length === 1) {
-                e.preventDefault()
-                store.sendBackward(store.selectedIds[0])
-                return
+            // Zoom to Fit (⇧1) and Zoom to Selection (⇧2)
+            if (shift) {
+                if (key === '1') {
+                    e.preventDefault()
+                    store.zoomToFit()
+                    return
+                }
+                if (key === '2') {
+                    e.preventDefault()
+                    store.zoomToSelection()
+                    return
+                }
             }
 
             // Delete

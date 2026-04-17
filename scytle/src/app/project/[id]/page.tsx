@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
@@ -48,30 +48,8 @@ function ProjectEditor() {
     // Centralized keyboard shortcuts (tools, zoom, clipboard, undo/redo, z-order, etc.)
     useKeyboardShortcuts()
 
-    // Helper: auto-zoom to fit all nodes on canvas
-    const zoomToFitAll = useCallback(() => {
-        const allNodes = useEditorStore.getState().nodes
-        if (allNodes.length === 0) return
+    const hasDoneInitialFit = useRef(false)
 
-        const minX = Math.min(...allNodes.map(n => n.x))
-        const maxX = Math.max(...allNodes.map(n => n.x + n.width))
-        const minY = Math.min(...allNodes.map(n => n.y))
-        const maxY = Math.max(...allNodes.map(n => n.y + n.height))
-        const contentW = maxX - minX
-        const contentH = maxY - minY
-
-        const viewportW = window.innerWidth - 520
-        const viewportH = window.innerHeight - 48
-        const padding = 80
-        const zoomX = (viewportW - padding * 2) / contentW
-        const zoomY = (viewportH - padding * 2) / contentH
-        const fitZoom = Math.min(zoomX, zoomY, 1)
-        const centerX = (viewportW / 2) - ((minX + contentW / 2) * fitZoom)
-        const centerY = (viewportH / 2) - ((minY + contentH / 2) * fitZoom)
-
-        useEditorStore.getState().setZoom(Math.max(0.05, fitZoom))
-        useEditorStore.getState().setPan(centerX, centerY)
-    }, [])
 
     // ── Auto-generation via Chat ──────────────────────────────
     // When a new project lands with a description and empty canvas,
@@ -111,6 +89,18 @@ function ProjectEditor() {
             console.log('💬 Initial prompt stored for chat:', prompt.substring(0, 80))
         }
     }, [projectReady, canvasLoaded, hasNodes, hasEverHadNodes, currentProject, authChecked, projectLoading, initialPromptSent, urlProductType, projectId])
+
+    // ── Auto-zoom to fit on initial project load ──────────────
+    useEffect(() => {
+        if (canvasLoaded && hasNodes && !hasDoneInitialFit.current) {
+            const store = useEditorStore.getState()
+            // Small delay to ensure viewportRect is calculated
+            setTimeout(() => {
+                store.zoomToFit()
+                hasDoneInitialFit.current = true
+            }, 100)
+        }
+    }, [canvasLoaded, hasNodes])
 
     // Connect to real-time sync server once auth is confirmed
     useEffect(() => {

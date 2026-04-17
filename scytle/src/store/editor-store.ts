@@ -288,6 +288,10 @@ interface EditorState {
     setHoveredId: (id: string | null) => void
     /** Zoom and pan to center the given node in the viewport */
     zoomToNode: (id: string) => void
+    /** Zoom and pan to fit all top-level nodes in the viewport */
+    zoomToFit: () => void
+    /** Zoom and pan to fit the currently selected nodes in the viewport */
+    zoomToSelection: () => void
     enterFrame: (id: string) => void
     exitFrame: () => void
 
@@ -797,6 +801,104 @@ export const useEditorStore = create<EditorState>()(
                 )
 
                 // Turn off animation after transition finishes
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
+            },
+
+            zoomToFit: () => {
+                const state = get()
+                const nodes = state.nodes
+                if (nodes.length === 0 || !state.viewportRect) {
+                    set((s) => {
+                        s.zoom = 1
+                        s.panX = 0
+                        s.panY = 0
+                    }, false, 'zoomToFit:empty')
+                    return
+                }
+
+                // Calculate bounding box of all top-level nodes
+                let minX = Infinity, minY = Infinity
+                let maxX = -Infinity, maxY = -Infinity
+
+                for (const node of nodes) {
+                    minX = Math.min(minX, node.x)
+                    minY = Math.min(minY, node.y)
+                    maxX = Math.max(maxX, node.x + node.width)
+                    maxY = Math.max(maxY, node.y + node.height)
+                }
+
+                const contentW = maxX - minX
+                const contentH = maxY - minY
+                const { width: vw, height: vh } = state.viewportRect
+
+                // Padding (approx 10% of viewport)
+                const padding = Math.min(vw, vh) * 0.1
+                const zoomX = (vw - padding * 2) / contentW
+                const zoomY = (vh - padding * 2) / contentH
+                let newZoom = Math.min(zoomX, zoomY, 1.0) // Cap at 100% for fit
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                const newPanX = vw / 2 - (minX + contentW / 2) * newZoom
+                const newPanY = vh / 2 - (minY + contentH / 2) * newZoom
+
+                set((s) => {
+                    s.isViewportAnimating = true
+                    s.zoom = newZoom
+                    s.panX = newPanX
+                    s.panY = newPanY
+                }, false, 'zoomToFit')
+
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
+            },
+
+            zoomToSelection: () => {
+                const state = get()
+                const { selectedIds, nodes, viewportRect } = state
+                if (selectedIds.length === 0 || !viewportRect) return
+
+                // Calculate bounding box of selection
+                let minX = Infinity, minY = Infinity
+                let maxX = -Infinity, maxY = -Infinity
+                let foundAny = false
+
+                for (const id of selectedIds) {
+                    const node = findNodeById(nodes, id)
+                    const absPos = getNodeCanvasPosition(nodes, id)
+                    if (node && absPos) {
+                        minX = Math.min(minX, absPos.x)
+                        minY = Math.min(minY, absPos.y)
+                        maxX = Math.max(maxX, absPos.x + node.width)
+                        maxY = Math.max(maxY, absPos.y + node.height)
+                        foundAny = true
+                    }
+                }
+
+                if (!foundAny) return
+
+                const contentW = maxX - minX
+                const contentH = maxY - minY
+                const { width: vw, height: vh } = viewportRect
+
+                const padding = Math.min(vw, vh) * 0.1
+                const zoomX = (vw - padding * 2) / contentW
+                const zoomY = (vh - padding * 2) / contentH
+                let newZoom = Math.min(zoomX, zoomY, 2.0) // Cap at 200% for selection
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                const newPanX = vw / 2 - (minX + contentW / 2) * newZoom
+                const newPanY = vh / 2 - (minY + contentH / 2) * newZoom
+
+                set((s) => {
+                    s.isViewportAnimating = true
+                    s.zoom = newZoom
+                    s.panX = newPanX
+                    s.panY = newPanY
+                }, false, 'zoomToSelection')
+
                 setTimeout(() => {
                     set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
                 }, 500)
