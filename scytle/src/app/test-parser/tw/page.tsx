@@ -368,29 +368,6 @@ export default function ParserTestPage() {
             store.addNode(newNode, pageFrame.id)
 
             setTiming({ convert: convertMs, parse: parseMs })
-
-            // DEBUG: Find ALL large colored elements in rendered canvas
-            setTimeout(() => {
-                const allEls = document.querySelectorAll('[data-node-id]')
-                allEls.forEach(el => {
-                    const htmlEl = el as HTMLElement
-                    const cs = getComputedStyle(htmlEl)
-                    const rect = htmlEl.getBoundingClientRect()
-                    const bg = cs.backgroundColor
-                    const shadow = cs.boxShadow
-                    // Log any element wider than 80px that has a non-white/non-transparent bg
-                    const isTransparent = !bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent'
-                    const isWhite = bg === 'rgb(255, 255, 255)' || bg === 'rgba(255, 255, 255, 1)'
-                    const isLightGray = bg === 'rgb(249, 250, 251)'
-                    if (!isTransparent && !isWhite && !isLightGray && rect.width > 50) {
-                        console.log(`[DOM-COLORED] tag=${htmlEl.tagName} w=${rect.width.toFixed(1)} h=${rect.height.toFixed(1)} x=${rect.x.toFixed(0)} y=${rect.y.toFixed(0)} | bg="${bg}" | shadow="${shadow?.slice(0,60)}" | style.width="${htmlEl.style.width}" style.height="${htmlEl.style.height}"`)
-                    }
-                    // Also log any element with red-ish box-shadow
-                    if (shadow && shadow.includes('225') && rect.width > 30) {
-                        console.log(`[DOM-SHADOW] tag=${htmlEl.tagName} w=${rect.width.toFixed(1)} h=${rect.height.toFixed(1)} | shadow="${shadow}"`)
-                    }
-                })
-            }, 1000)
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : String(e))
         }

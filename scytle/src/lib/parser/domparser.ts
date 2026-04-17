@@ -428,15 +428,6 @@ function buildContainerNode(
     const padding = extractPadding(cs)
     let sizing = inferContainerSizing(el, cs)
 
-    // DEBUG: Log sizing info for every container
-    const debugClasses = el.className?.toString().slice(0, 80) || ''
-    const debugBg = cs.backgroundColor || ''
-    const hasFills = debugBg && debugBg !== 'rgba(0, 0, 0, 0)' && debugBg !== 'transparent'
-    if (hasFills) {
-        console.log(`[PARSER-FILL] <${tag}> classes="${debugClasses}" | w="${cs.width}" h="${cs.height}" | bg="${debugBg}" | sizing=${sizing.horizontal}/${sizing.vertical} | parentWidth=${parentWidth}`)
-    }
-
-
     // Estimate this container's available width for children
     let containerWidth: number
     if (sizing.horizontal === 'fill') {
@@ -696,11 +687,6 @@ function buildContainerNode(
         // Grid child spans (col-span-2, row-span-2, etc.)
         ...extractGridSpan(cs),
     })
-
-    // DEBUG: Log final frame dimensions for elements with visible fills
-    if (hasFills) {
-        console.log(`[PARSER-FRAME] <${tag}> "${debugClasses.slice(0, 50)}" → FINAL w=${frame.width} h=${frame.height} | sizing=${frame.sizing.horizontal}/${frame.sizing.vertical} | overflow=${frame.overflow} | fills=${frame.fills.length}`)
-    }
 
     // Store raw CSS percentage width/height for render-time resolution
     const widthPct = parseFloat(cs.width || '')

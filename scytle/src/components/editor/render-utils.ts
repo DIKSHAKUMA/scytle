@@ -613,11 +613,6 @@ export function computeBaseStyles(
         if (!s.position) s.position = 'relative'
     }
 
-    // DEBUG: Log rendered CSS for elements with visible backgrounds
-    if (s.backgroundColor && s.backgroundColor !== 'transparent' && s.backgroundColor !== 'rgba(0,0,0,0)') {
-        console.log(`[RENDER] node="${node.name?.slice(0, 40)}" w=${node.width} h=${node.height} | CSS: width=${s.width} height=${s.height} flex=${s.flex} alignSelf=${s.alignSelf} position=${s.position} | bg=${s.backgroundColor}`)
-    }
-
     return s
 }
 
