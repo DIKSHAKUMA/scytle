@@ -607,7 +607,15 @@ export function computeBaseStyles(
         s.margin = `${mt} ${mr} ${mb} ${ml}`
     }
 
-    // Explicit z-index override (reverse canvas stacking)
+    // Parsed CSS z-index — pass through so the browser handles
+    // stacking natively without reordering children (preserves flex/grid layout)
+    if (node.zIndex != null) {
+        s.zIndex = node.zIndex
+        // z-index only works on positioned elements
+        if (!s.position) s.position = 'relative'
+    }
+
+    // Explicit z-index override (reverse canvas stacking — takes priority)
     if (zIndexOverride != null) {
         s.zIndex = zIndexOverride
         if (!s.position) s.position = 'relative'

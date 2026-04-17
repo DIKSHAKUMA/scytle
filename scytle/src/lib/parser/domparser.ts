@@ -484,10 +484,6 @@ function buildContainerNode(
 
     // Recursively walk children
     const children: ScytleNode[] = []
-    // Track CSS z-index per child node for Figma-style layer ordering.
-    // After the walk, children are sorted by z-index (ascending) so that
-    // children[0] = bottom layer, children[n-1] = top layer.
-    const childZIndex = new Map<string, number>()
     const isGrid = layout.mode === 'grid' && layout.columns && typeof layout.columns === 'number'
     const gridGap = layout.gap || 0
     for (const child of el.childNodes) {
@@ -523,8 +519,14 @@ function buildContainerNode(
             const node = walkElement(childEl, childParentWidth, inh)
             if (node) {
                 children.push(node)
+                // Store CSS z-index directly on the node for CSS-based stacking.
+                // The renderer applies it as a CSS property — no child reordering
+                // needed, which preserves flex/grid layout order.
                 const rawZ = childEl.style.zIndex
-                childZIndex.set(node.id, rawZ ? (parseInt(rawZ) || 0) : 0)
+                if (rawZ) {
+                    const z = parseInt(rawZ)
+                    if (!isNaN(z)) node.zIndex = z
+                }
             }
         } else if (child.nodeType === Node.TEXT_NODE) {
             const text = child.textContent?.trim()
@@ -592,22 +594,7 @@ function buildContainerNode(
         mergeImageWithGradientOverlay(children)
     }
 
-    // ── Sort children by CSS z-index (Figma layer ordering) ──
-    // ONLY for containers WITHOUT auto-layout (mode: 'none').
-    // In CSS, z-index controls stacking/paint order, NOT layout flow.
-    // For flex/grid containers, reordering children would break the layout
-    // (e.g., header pushed below content). CSS handles z-index stacking
-    // natively for positioned elements in flex/grid without reordering.
-    if (layout.mode === 'none' && childZIndex.size > 0) {
-        const hasNonZero = Array.from(childZIndex.values()).some(z => z !== 0)
-        if (hasNonZero) {
-            children.sort((a, b) => {
-                const za = childZIndex.get(a.id) ?? 0
-                const zb = childZIndex.get(b.id) ?? 0
-                return za - zb
-            })
-        }
-    }
+
 
     const fills = extractFills(cs)
     const border = extractBorder(cs)
@@ -2271,6 +2258,10 @@ function inferContainerSizing(
             horizontal = 'fixed'
         } else if (widthVal && (widthVal === '100%' || (widthVal.endsWith('%') && parseFloat(widthVal) >= 99.5))) {
             horizontal = 'fill'
+        } else if (widthVal && widthVal.endsWith('%')) {
+            // Non-100% percentage (e.g. w-[60%]): treat as fixed.
+            // The raw CSS percentage is preserved via cssWidth for the renderer.
+            horizontal = 'fixed'
         } else if (hasInset || (hasLeft && hasRight)) {
             horizontal = 'fill'
         }
@@ -2280,6 +2271,9 @@ function inferContainerSizing(
             vertical = 'fixed'
         } else if (heightVal && (heightVal === '100%' || (heightVal.endsWith('%') && parseFloat(heightVal) >= 99.5))) {
             vertical = 'fill'
+        } else if (heightVal && heightVal.endsWith('%')) {
+            // Non-100% percentage (e.g. h-[60%]): treat as fixed.
+            vertical = 'fixed'
         } else if (heightVal && /\d+v[hw]/.test(heightVal)) {
             vertical = 'fixed'  // viewport units → fixed, resolved later
         } else if (hasInset || (hasTop && hasBottom)) {

@@ -359,6 +359,10 @@ export interface BaseNodeProperties {
     height: number
     sizing: Sizing
     positioning: 'auto' | 'absolute'
+    /** CSS z-index for stacking order. Stored on positioned elements (relative/absolute)
+     *  and rendered as a CSS property so the browser handles paint-order natively
+     *  without reordering children (which would break flex/grid layout). */
+    zIndex?: number
     opacity: number
     rotation: number
     /** Mirror horizontally (applied as scaleX(-1) in the CSS transform) */

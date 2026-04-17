@@ -12,168 +12,52 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<div class="w-[390px] min-h-[844px] bg-[#F9FAFB] relative overflow-hidden flex flex-col pb-20" style="font-family: 'Inter', sans-serif;">
-  <!-- Header -->
-  <div class="px-6 pt-12 pb-4 flex justify-between items-center bg-[#FFFFFF] rounded-b-3xl shadow-sm z-10">
-    <div class="flex flex-col gap-1">
-      <span class="text-[11px] text-[#E11D48] font-semibold uppercase tracking-wider" style="font-family: 'Plus Jakarta Sans', sans-serif;">Delivering to</span>
-      <div class="flex items-center gap-1 cursor-pointer">
-        <h2 class="text-[#111827] text-lg font-bold" style="font-family: 'Plus Jakarta Sans', sans-serif;">New York, 10012</h2>
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+<section class="w-full bg-[#fdfbf7] py-32 px-12 border-t border-[#2c3525]/10">
+  <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-20 items-center">
+    
+    <div class="w-full lg:w-1/2 relative">
+      <div class="aspect-[3/4] overflow-hidden w-[85%] relative z-10 shadow-xl">
+        <img src="https://images.unsplash.com/photo-1593515463811-63535505f44a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxyZXN0YXVyYW50JTIwdGFibGUlMjBzZXR0aW5nfGVufDB8MHx8fDE3NzY0NDM3MTh8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Restaurant Table Setting" class="w-full h-full object-cover" />
+      </div>
+      <!-- Decorative background square -->
+      <div class="absolute bottom-[-10%] right-0 w-[60%] h-[60%] bg-[#c05a30] z-0"></div>
+    </div>
+
+    <div class="w-full lg:w-1/2 flex flex-col justify-center">
+      <h2 class="text-[#1a1a1a] text-4xl md:text-5xl font-bold leading-tight mb-8" style="font-family: 'Playfair Display', serif;">
+        Rooted in <br/>
+        <span class="italic font-light text-[#595959]">Craftsmanship</span>
+      </h2>
+      <p class="text-[#595959] text-lg leading-relaxed mb-16 max-w-lg" style="font-family: 'Jost', sans-serif;">
+        Every detail in L'AURA, from the hand-thrown ceramics to the sustainably sourced timber, is an homage to artisanal creation. We believe the environment should be as meticulously crafted as the food on the plate.
+      </p>
+
+      <div class="grid grid-cols-2 gap-x-12 gap-y-12">
+        <div>
+          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">12</div>
+          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Local Farms</div>
+          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Direct partnerships</div>
+        </div>
+        <div>
+          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">500+</div>
+          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Wine Cellar</div>
+          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Curated vintages</div>
+        </div>
+        <div>
+          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">3</div>
+          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Michelin Stars</div>
+          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Awarded 2024</div>
+        </div>
+        <div>
+          <div class="text-[#c05a30] text-5xl font-light mb-2" style="font-family: 'Playfair Display', serif;">0</div>
+          <div class="text-[#1a1a1a] font-semibold text-sm uppercase tracking-widest mb-1" style="font-family: 'Jost', sans-serif;">Waste Goal</div>
+          <div class="text-[#595959] text-sm" style="font-family: 'Jost', sans-serif;">Sustainable practice</div>
+        </div>
       </div>
     </div>
-    <div class="w-11 h-11 rounded-full overflow-hidden border-2 border-[#FFFFFF] shadow-sm">
-      <img src="https://images.unsplash.com/photo-1539605480396-a61f99da1041?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxwcm9maWxlJTIwcGljdHVyZSUyMHBvcnRyYWl0fGVufDB8MHx8fDE3NzY0MjEwMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Profile" class="w-full h-full object-cover">
-    </div>
+
   </div>
-
-  <div class="flex-1 overflow-y-auto overflow-x-hidden">
-    <!-- Search -->
-    <div class="px-6 py-5">
-      <div class="relative flex items-center w-full h-14 rounded-2xl bg-[#FFFFFF] shadow-sm border border-gray-100 overflow-hidden px-4 gap-3">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" placeholder="What are you craving?" class="flex-1 bg-transparent border-none outline-none text-[#111827] text-sm placeholder-[#6B7280]">
-        <div class="w-8 h-8 rounded-full bg-[#FFE4E6] flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V14"/><path d="M4 10V3"/><path d="M12 21V12"/><path d="M12 8V3"/><path d="M20 21V16"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>
-        </div>
-      </div>
-    </div>
-
-    <!-- Categories -->
-    <div class="pl-6 pb-6">
-      <h3 class="text-[#111827] text-lg font-bold mb-4" style="font-family: 'Plus Jakarta Sans', sans-serif;">Categories</h3>
-      <div class="flex gap-4 overflow-x-auto pr-6 pb-2" style="scrollbar-width: none;">
-        <!-- Cat 1 -->
-        <div class="flex flex-col items-center gap-2 min-w-[72px]">
-          <div class="w-16 h-16 rounded-2xl bg-[#E11D48] flex items-center justify-center shadow-md shadow-[#e11d48]/30">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.686 2 6 4.686 6 8c0 1.258.384 2.427 1.037 3.393L12 22l4.963-10.607A5.975 5.975 0 0 0 18 8c0-3.314-2.686-6-6-6Z"/><circle cx="12" cy="8" r="2"/></svg>
-          </div>
-          <span class="text-[#111827] text-xs font-semibold">Near Me</span>
-        </div>
-        <!-- Cat 2 -->
-        <div class="flex flex-col items-center gap-2 min-w-[72px]">
-          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
-             <img src="https://images.unsplash.com/photo-1627378378955-a3f4e406c5de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxnb3VybWV0JTIwYnVyZ2VyfGVufDB8MHx8fDE3NzY0MjEwMDF8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Burger">
-          </div>
-          <span class="text-[#6B7280] text-xs font-medium">Burger</span>
-        </div>
-        <!-- Cat 3 -->
-        <div class="flex flex-col items-center gap-2 min-w-[72px]">
-          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
-             <img src="https://images.unsplash.com/photo-1579751626657-72bc17010498?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHx3b29kJTIwZmlyZWQlMjBwaXp6YXxlbnwwfDB8fHwxNzc2NDIxMDAxfDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Pizza">
-          </div>
-          <span class="text-[#6B7280] text-xs font-medium">Pizza</span>
-        </div>
-        <!-- Cat 4 -->
-        <div class="flex flex-col items-center gap-2 min-w-[72px]">
-          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
-             <img src="https://images.unsplash.com/photo-1579871494447-9811cf80d66c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzdXNoaSUyMHJvbGx8ZW58MHwwfHx8MTc3NjQyMTAwMXww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Sushi">
-          </div>
-          <span class="text-[#6B7280] text-xs font-medium">Sushi</span>
-        </div>
-        <!-- Cat 5 -->
-        <div class="flex flex-col items-center gap-2 min-w-[72px]">
-          <div class="w-16 h-16 rounded-2xl bg-[#FFFFFF] flex items-center justify-center shadow-sm border border-gray-100 overflow-hidden p-1">
-             <img src="https://images.unsplash.com/photo-1578657084274-03b9d153b0dc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxoZWFsdGh5JTIwc2FsYWQlMjBib3dsfGVufDB8MHx8fDE3NzY0MjEwMDJ8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" class="w-full h-full object-cover rounded-xl" alt="Healthy">
-          </div>
-          <span class="text-[#6B7280] text-xs font-medium">Healthy</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Featured -->
-    <div class="px-6 pb-8">
-      <div class="flex justify-between items-end mb-4">
-        <h3 class="text-[#111827] text-xl font-bold" style="font-family: 'Plus Jakarta Sans', sans-serif;">Featured for you</h3>
-        <span class="text-[#E11D48] text-sm font-semibold cursor-pointer">See all</span>
-      </div>
-
-      <div class="flex flex-col gap-6">
-        <!-- Card 1 -->
-        <div class="w-full bg-[#FFFFFF] rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer relative">
-          <div class="absolute top-4 right-4 z-10 w-8 h-8 bg-[#FFFFFF] rounded-full flex items-center justify-center shadow-md cursor-pointer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-          </div>
-          <div class="w-full h-48 relative overflow-hidden">
-            <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent z-10"></div>
-            <img src="https://images.unsplash.com/photo-1627378378955-a3f4e406c5de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxnb3VybWV0JTIwYnVyZ2VyfGVufDB8MHx8fDE3NzY0MjEwMDF8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="The Artisan Burger" class="w-full h-full object-cover">
-            <div class="absolute bottom-3 left-3 z-20 flex items-center gap-2">
-              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                4.8
-              </span>
-              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg shadow-sm">25-35 min</span>
-            </div>
-          </div>
-          <div class="p-4">
-            <h4 class="text-[#111827] text-lg font-bold mb-1" style="font-family: 'Plus Jakarta Sans', sans-serif;">The Artisan Burger Co.</h4>
-            <p class="text-[#6B7280] text-sm mb-3">American • Burgers • Fries</p>
-            <div class="flex items-center gap-4 text-sm font-medium">
-              <span class="flex items-center gap-1 text-[#6B7280]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
-                $2.99 Delivery
-              </span>
-              <span class="w-1 h-1 rounded-full bg-gray-300"></span>
-              <span class="text-[#111827] flex items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                Free over $30
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2 -->
-        <div class="w-full bg-[#FFFFFF] rounded-3xl overflow-hidden shadow-sm border border-gray-100 group cursor-pointer relative">
-          <div class="absolute top-4 right-4 z-10 w-8 h-8 bg-[#FFFFFF] rounded-full flex items-center justify-center shadow-md cursor-pointer">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
-          </div>
-          <div class="w-full h-48 relative overflow-hidden">
-             <div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent z-10"></div>
-            <img src="https://images.unsplash.com/photo-1579871494447-9811cf80d66c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzdXNoaSUyMHJvbGx8ZW58MHwwfHx8MTc3NjQyMTAwMXww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Tokyo Sushi Bar" class="w-full h-full object-cover">
-            <div class="absolute bottom-3 left-3 z-20 flex items-center gap-2">
-              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                4.9
-              </span>
-              <span class="bg-[#FFFFFF] text-[#111827] text-xs font-bold px-2 py-1 rounded-lg shadow-sm">15-25 min</span>
-            </div>
-          </div>
-          <div class="p-4">
-            <h4 class="text-[#111827] text-lg font-bold mb-1" style="font-family: 'Plus Jakarta Sans', sans-serif;">Tokyo Sushi Bar</h4>
-            <p class="text-[#6B7280] text-sm mb-3">Japanese • Sushi • Healthy</p>
-            <div class="flex items-center gap-4 text-sm font-medium">
-              <span class="flex items-center gap-1 text-[#E11D48]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
-                Free Delivery
-              </span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- Bottom Nav -->
-  <div class="absolute bottom-0 left-0 right-0 h-20 bg-[#FFFFFF] border-t border-gray-100 flex items-center justify-around px-4 pb-2 z-50">
-    <div class="flex flex-col items-center gap-1 cursor-pointer">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#E11D48" stroke="#E11D48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <span class="text-[10px] font-bold text-[#E11D48]">Home</span>
-    </div>
-    <div class="flex flex-col items-center gap-1 cursor-pointer">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <span class="text-[10px] font-medium text-[#6B7280]">Search</span>
-    </div>
-    <div class="flex flex-col items-center gap-1 cursor-pointer">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-      <span class="text-[10px] font-medium text-[#6B7280]">Orders</span>
-    </div>
-    <div class="flex flex-col items-center gap-1 cursor-pointer">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      <span class="text-[10px] font-medium text-[#6B7280]">Profile</span>
-    </div>
-  </div>
-</div>
+</section>
 `
 
 const PAGE_WIDTH = 1440
