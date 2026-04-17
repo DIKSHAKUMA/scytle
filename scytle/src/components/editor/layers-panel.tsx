@@ -114,6 +114,7 @@ function LayerRow({
     const hasChildren = node.type === 'frame' && (node as FrameNode).children.length > 0
     const isRenaming = renamingId === node.id
     const renameRef = useRef<HTMLSpanElement>(null)
+    const rowRef = useRef<HTMLDivElement>(null)
     const [rowHovered, setRowHovered] = useState(false)
     // Manual double-click tracking — native onDoubleClick is unreliable
     // because the first click triggers a store update + re-render, which
@@ -132,6 +133,28 @@ function LayerRow({
             sel?.addRange(range)
         }
     }, [isRenaming])
+
+    // Auto-scroll to selected row if it's not visible
+    useEffect(() => {
+        if (isSelected && rowRef.current) {
+            const el = rowRef.current
+            const container = el.closest('.overflow-y-auto')
+            if (!container) return
+
+            const elRect = el.getBoundingClientRect()
+            const containerRect = container.getBoundingClientRect()
+
+            const isVisible =
+                elRect.top >= containerRect.top && elRect.bottom <= containerRect.bottom
+
+            if (!isVisible) {
+                el.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                })
+            }
+        }
+    }, [isSelected])
 
     const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLSpanElement>) => {
         if (e.key === 'Enter') {
@@ -152,6 +175,7 @@ function LayerRow({
 
     return (
         <div
+            ref={rowRef}
             className={cn(
                 'group relative flex items-center h-7 pr-2 cursor-default select-none text-xs',
                 isSelected
