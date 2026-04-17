@@ -723,7 +723,8 @@ function mergeImageWithGradientOverlay(children: ScytleNode[]): void {
     const overlay = children[overlayIdx] as FrameNode
 
     // Merge: stack overlay fills on top of image fill
-    imgFrame.fills = [...(imgFrame.fills || []), ...(overlay.fills || [])]
+    // fills[0] = topmost CSS layer, so overlay goes FIRST
+    imgFrame.fills = [...(overlay.fills || []), ...(imgFrame.fills || [])]
 
     // Promote overlay's children into the image frame
     if (overlay.children.length > 0) {
@@ -1986,9 +1987,37 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
     if (linearMatch) {
         let content = linearMatch[1]
 
-        // Strip color space hints: "in oklab", "in oklch", "in srgb"
+        // Pre-process: resolve color-mix() expressions to rgba equivalents FIRST
+        // (Must happen before stripping color space hints, which would break
+        //  the "in oklab" inside color-mix() expressions)
+        // Handles TWO formats:
+        //   Original CSS: color-mix(in oklab, #1C1917 80%, transparent)
+        //   Browser-normalized: color-mix(rgb(28, 25, 23) 80%, transparent)
+        const resolveColorMix = (colorStr: string, pct: string): string => {
+            const hex = rgbToHex(colorStr)
+            if (hex === 'transparent') return 'transparent'
+            const r = parseInt(hex.slice(1, 3), 16) || 0
+            const g = parseInt(hex.slice(3, 5), 16) || 0
+            const b = parseInt(hex.slice(5, 7), 16) || 0
+            const baseOpacity = rgbToOpacity(colorStr)
+            return `rgba(${r}, ${g}, ${b}, ${(parseFloat(pct) / 100) * baseOpacity})`
+        }
+        // Forward: color-mix([in oklab,] <color> pct%, transparent)
+        content = content.replace(
+            /color-mix\(\s*(?:in\s+\w+\s*,\s*)?((?:rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}))\s+([\d.]+)%\s*,\s*transparent\s*\)/g,
+            (_full, color, pct) => resolveColorMix(color, pct)
+        )
+        // Inverse: color-mix([in oklab,] transparent, <color> pct%)
+        content = content.replace(
+            /color-mix\(\s*(?:in\s+\w+\s*,\s*)?transparent\s*,\s*((?:rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}))\s+([\d.]+)%\s*\)/g,
+            (_full, color, pct) => resolveColorMix(color, pct)
+        )
+
+        // NOW strip color space hints from direction: "to top in oklab" → "to top"
+        // Safe because color-mix() expressions have already been resolved above
         content = content.replace(/\s+in\s+\w+/g, '')
 
+        // Parse gradient direction
         let angle = 180
         const angleMatch = content.match(/^([\d.]+)deg/)
         if (angleMatch) {
@@ -2001,27 +2030,6 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
         }
 
         const stops: Array<{ position: number; color: string; opacity?: number }> = []
-
-        // Pre-process: resolve color-mix() expressions to rgba equivalents
-        // Tailwind v4 generates these for opacity colors like from-black/60:
-        //   color-mix(in oklab, #000 60%, transparent) → rgba(0,0,0,0.6)
-        content = content.replace(/color-mix\(in\s+\w+,\s*(#[0-9a-fA-F]{3,8})\s+([\d.]+)%,\s*transparent\)/g,
-            (_full, hex, pct) => {
-                const r = parseInt(hex.slice(1,3), 16) || 0
-                const g = parseInt(hex.slice(3,5), 16) || 0
-                const b = parseInt(hex.slice(5,7), 16) || 0
-                return `rgba(${r}, ${g}, ${b}, ${parseFloat(pct) / 100})`
-            }
-        )
-        // Also handle the inverse: color-mix(in oklab, transparent, #FFF 40%)
-        content = content.replace(/color-mix\(in\s+\w+,\s*transparent,\s*(#[0-9a-fA-F]{3,8})\s+([\d.]+)%\)/g,
-            (_full, hex, pct) => {
-                const r = parseInt(hex.slice(1,3), 16) || 0
-                const g = parseInt(hex.slice(3,5), 16) || 0
-                const b = parseInt(hex.slice(5,7), 16) || 0
-                return `rgba(${r}, ${g}, ${b}, ${parseFloat(pct) / 100})`
-            }
-        )
 
         // Match color functions + hex + transparent keyword
         const colorStopRegex = /((?:rgba?|oklch|oklab|color)\([^)]+\)|#[0-9a-fA-F]{3,8}|transparent)\s*([\d.]+%)?/g
@@ -2097,6 +2105,25 @@ function parseGradientFromComputed(bgImage: string): Fill | null {
     const radialMatch = bgImage.match(/radial-gradient\((.+)\)/)
     if (radialMatch) {
         let content = radialMatch[1]
+        // Resolve color-mix() FIRST (before stripping color space hints)
+        // Handles both original CSS and browser-normalized formats
+        const resolveColorMixR = (colorStr: string, pct: string): string => {
+            const hex = rgbToHex(colorStr)
+            if (hex === 'transparent') return 'transparent'
+            const r = parseInt(hex.slice(1, 3), 16) || 0
+            const g = parseInt(hex.slice(3, 5), 16) || 0
+            const b = parseInt(hex.slice(5, 7), 16) || 0
+            const baseOpacity = rgbToOpacity(colorStr)
+            return `rgba(${r}, ${g}, ${b}, ${(parseFloat(pct) / 100) * baseOpacity})`
+        }
+        content = content.replace(
+            /color-mix\(\s*(?:in\s+\w+\s*,\s*)?((?:rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}))\s+([\d.]+)%\s*,\s*transparent\s*\)/g,
+            (_full, color, pct) => resolveColorMixR(color, pct)
+        )
+        content = content.replace(
+            /color-mix\(\s*(?:in\s+\w+\s*,\s*)?transparent\s*,\s*((?:rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}))\s+([\d.]+)%\s*\)/g,
+            (_full, color, pct) => resolveColorMixR(color, pct)
+        )
         // Strip color space hints
         content = content.replace(/\s+in\s+\w+/g, '')
 
@@ -2487,6 +2514,10 @@ function isTextOnlyElement(el: HTMLElement, tag: string): boolean {
         const isInline = INLINE_TAGS.has(childTag) || childDisplay === 'inline' || childDisplay === 'inline-block'
         if (!isInline) return false
         if (hasVisualProperties(childEl.style)) return false
+        // Check for distinct text styling (color, font-size, font-weight)
+        // that would be lost if flattened into one text node
+        const cStyle = childEl.style
+        if (cStyle?.color || cStyle?.fontSize || cStyle?.fontWeight) return false
     }
 
     return true

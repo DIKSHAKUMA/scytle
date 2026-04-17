@@ -12,70 +12,50 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="w-full bg-[#FAF8F5] py-32 px-12">
-  <div class="max-w-7xl mx-auto">
-    <div class="flex items-end justify-between mb-24">
-      <div class="max-w-xl">
-        <h3 class="text-5xl text-[#1A1A1A] font-light leading-tight mb-6" style="font-family: 'Cormorant Garamond', serif;">
-          Curated <span class="italic text-[#D4AF37]">Destinations</span>
-        </h3>
-        <p class="text-[#5A5A5A] leading-relaxed" style="font-family: 'Manrope', sans-serif;">
-          From the sun-drenched cliffs of the Mediterranean to the serene temples of the East, our handpicked collection represents the pinnacle of experiential travel.
-        </p>
+<section class="w-full bg-[#FAF9F6] px-8 md:px-16 pb-24 pt-4 relative" style="font-family: 'Lato', sans-serif;">
+  <div class="w-full h-[80vh] min-h-[600px] relative overflow-hidden group">
+    <img 
+      src="https://images.unsplash.com/photo-1624459852010-72ea13d744e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxicmVhdGh0YWtpbmclMjBtb3VudGFpbiUyMGxha2UlMjBsYW5kc2NhcGV8ZW58MHwwfHx8MTc3NjM2OTMyN3ww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" 
+      alt="Breathtaking mountain lake landscape" 
+      class="w-full h-full object-cover transform scale-100 transition-transform duration-1000 ease-out group-hover:scale-105"
+    />
+    
+    <!-- Overlay Gradient for Readability -->
+    <div class="absolute inset-0 bg-gradient-to-t from-[#1C1917]/80 via-transparent to-transparent"></div>
+
+    <!-- Content Box -->
+    <div class="absolute bottom-0 left-0 w-full md:w-3/4 lg:w-1/2 p-10 md:p-16 flex flex-col justify-end">
+      <span class="text-[#D97757] uppercase tracking-[0.2em] text-sm font-semibold mb-4 block">
+        Featured Expedition
+      </span>
+      <h1 class="text-[#FAF9F6] text-5xl md:text-7xl leading-[1.1] mb-6" style="font-family: 'Playfair Display', serif;">
+        Silence at the edge of the world.
+      </h1>
+      <p class="text-[#F0EEE9] text-lg max-w-md mb-10 font-light leading-relaxed">
+        Escape the noise. Discover hidden alpine lakes and untouched valleys where time stands still and nature reclaims its dominance.
+      </p>
+      
+      <div class="flex items-center gap-6">
+        <a href="#" class="bg-[#D97757] text-[#FAF9F6] px-8 py-4 text-sm uppercase tracking-wider hover:bg-[#FAF9F6] hover:text-[#1C1917] transition-colors inline-block">
+          Explore the Alps
+        </a>
+        <button class="w-12 h-12 rounded-full border border-[#FAF9F6]/30 flex items-center justify-center text-[#FAF9F6] hover:bg-[#FAF9F6] hover:text-[#1C1917] transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        </button>
+        <span class="text-[#FAF9F6] text-xs uppercase tracking-widest">Watch Film</span>
       </div>
-      <a href="#" class="hidden md:flex items-center gap-3 text-[#1A1A1A] uppercase tracking-widest text-xs border-b border-[#1A1A1A] pb-1 hover:text-[#D4AF37] hover:border-[#D4AF37] transition-all" style="font-family: 'Manrope', sans-serif;">
-        View All Locations
-      </a>
     </div>
+  </div>
 
-    <div class="grid grid-cols-12 gap-8">
-      <!-- Destination 1 (Tall) -->
-      <div class="col-span-12 md:col-span-5 flex flex-col group cursor-pointer">
-        <div class="relative overflow-hidden aspect-[4/5] mb-6">
-          <img src="https://images.unsplash.com/photo-1752888444795-1775afa62e65?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxhbWFsZmklMjBjb2FzdCUyMGNsaWZmc2lkZXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Amalfi Coast" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
-          <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
-        </div>
-        <div class="flex justify-between items-start">
-          <div>
-            <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Italy</span>
-            <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Amalfi Coast</h4>
-          </div>
-          <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $8,500</span>
-        </div>
-      </div>
-
-      <!-- Destination 2 & 3 (Stacked offset) -->
-      <div class="col-span-12 md:col-span-7 flex flex-col justify-between pt-24 md:pl-12">
-        
-        <div class="flex flex-col group cursor-pointer mb-20 md:ml-auto md:w-[85%]">
-          <div class="relative overflow-hidden aspect-[16/9] mb-6">
-            <img src="https://images.unsplash.com/photo-1700474896901-6afb362d2f8c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxreW90byUyMGF1dHVtbiUyMHRlbXBsZXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Kyoto Temple" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
-            <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
-          </div>
-          <div class="flex justify-between items-start">
-            <div>
-              <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Japan</span>
-              <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Kyoto Serenity</h4>
-            </div>
-            <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $6,200</span>
-          </div>
-        </div>
-
-        <div class="flex flex-col group cursor-pointer w-full md:w-[70%]">
-          <div class="relative overflow-hidden aspect-square mb-6">
-            <img src="https://images.unsplash.com/photo-1667987566780-3b31fa5485c8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxzYWZhcmklMjBsb2RnZSUyMHNlcmVuZ2V0aXxlbnwwfDB8fHwxNzc2MzYzOTQ3fDA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Serengeti Safari" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
-            <div class="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-500"></div>
-          </div>
-          <div class="flex justify-between items-start">
-            <div>
-              <span class="text-[#D4AF37] text-xs uppercase tracking-[0.2em] mb-2 block" style="font-family: 'Manrope', sans-serif;">Tanzania</span>
-              <h4 class="text-3xl text-[#1A1A1A] font-light" style="font-family: 'Cormorant Garamond', serif;">Serengeti Wild</h4>
-            </div>
-            <span class="text-[#5A5A5A] text-sm italic" style="font-family: 'Cormorant Garamond', serif;">from $12,450</span>
-          </div>
-        </div>
-
-      </div>
+  <!-- Floating Stats -->
+  <div class="absolute bottom-16 right-16 hidden lg:flex gap-12 text-[#FAF9F6]">
+    <div>
+      <p class="text-3xl mb-1" style="font-family: 'Playfair Display', serif;">12</p>
+      <p class="text-[10px] uppercase tracking-widest text-[#F0EEE9]/70">Curated Routes</p>
+    </div>
+    <div>
+      <p class="text-3xl mb-1" style="font-family: 'Playfair Display', serif;">4.9</p>
+      <p class="text-[10px] uppercase tracking-widest text-[#F0EEE9]/70">Average Rating</p>
     </div>
   </div>
 </section>
@@ -251,6 +231,7 @@ export default function ParserTestPage() {
             const { parseHtmlViaDOMParser } = await import('@/lib/parser/domparser')
             const parsed = await parseHtmlViaDOMParser(inlined, 'Section')
             const parseMs = Math.round(performance.now() - t1)
+
 
             // Step 3: Inject into canvas
             const store = useEditorStore.getState()
