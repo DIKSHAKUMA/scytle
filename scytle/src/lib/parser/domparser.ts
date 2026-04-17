@@ -422,7 +422,7 @@ function buildContainerNode(
     inherited?: InheritedStyles,
 ): FrameNode {
     const inh = mergeInherited(cs, inherited)
-    const layout = extractLayout(cs, tag, inherited)
+    const layout = extractLayout(cs, tag, inherited, el)
     const padding = extractPadding(cs)
     let sizing = inferContainerSizing(el, cs)
 
@@ -482,6 +482,10 @@ function buildContainerNode(
 
     // Recursively walk children
     const children: ScytleNode[] = []
+    // Track CSS z-index per child node for Figma-style layer ordering.
+    // After the walk, children are sorted by z-index (ascending) so that
+    // children[0] = bottom layer, children[n-1] = top layer.
+    const childZIndex = new Map<string, number>()
     const isGrid = layout.mode === 'grid' && layout.columns && typeof layout.columns === 'number'
     const gridGap = layout.gap || 0
     for (const child of el.childNodes) {
@@ -512,7 +516,11 @@ function buildContainerNode(
                 }
             }
             const node = walkElement(childEl, childParentWidth, inh)
-            if (node) children.push(node)
+            if (node) {
+                children.push(node)
+                const rawZ = childEl.style.zIndex
+                childZIndex.set(node.id, rawZ ? (parseInt(rawZ) || 0) : 0)
+            }
         } else if (child.nodeType === Node.TEXT_NODE) {
             const text = child.textContent?.trim()
             if (text) {
@@ -577,6 +585,21 @@ function buildContainerNode(
     // In Figma, this is one frame with stacked fills [image, gradient] + text children.
     if ((cs.position === 'relative' || cs.position === 'static' || !cs.position) && children.length >= 2) {
         mergeImageWithGradientOverlay(children)
+    }
+
+    // ── Sort children by CSS z-index (Figma layer ordering) ──
+    // CSS z-index determines stacking; Figma uses child order.
+    // Sort ascending: lowest z-index = bottom (first), highest = top (last).
+    // Stable sort preserves DOM order for equal z-index values.
+    if (childZIndex.size > 0) {
+        const hasNonZero = Array.from(childZIndex.values()).some(z => z !== 0)
+        if (hasNonZero) {
+            children.sort((a, b) => {
+                const za = childZIndex.get(a.id) ?? 0
+                const zb = childZIndex.get(b.id) ?? 0
+                return za - zb
+            })
+        }
     }
 
     const fills = extractFills(cs)
@@ -1337,7 +1360,7 @@ function isTransparentColor(color: string): boolean {
 // Layout Extraction
 // ═══════════════════════════════════════════════════
 
-function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: InheritedStyles): Layout {
+function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: InheritedStyles, el?: HTMLElement): Layout {
     const display = cs.display
 
     if (display === 'grid' || display === 'inline-grid') {
@@ -1378,8 +1401,13 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
 
     // Exception: TEXT_ONLY_TAGS (p, h1-h6) with mixed inline children should flow horizontally
     // Enable wrap so inline spans don't overflow the container (e.g. large font titles)
+    // BUT: if a <br> is present, children should stack vertically (column)
     // Exception: button/a with text should center content
     if (tag && TEXT_ONLY_TAGS.has(tag)) {
+        const hasBR = el ? Array.from(el.childNodes).some(n => n.nodeName === 'BR') : false
+        if (hasBR) {
+            return { mode: 'flex', direction: 'column', gap: 0, align: flexAlign as Layout['align'], justify: flexAlign as Layout['justify'] }
+        }
         return { mode: 'flex', direction: 'row', gap: 0, wrap: true, align: 'baseline' as Layout['align'], justify: flexAlign as Layout['justify'] }
     }
     if (tag === 'button' || tag === 'a') {
@@ -2402,17 +2430,23 @@ function inferTextSizing(
     // Width: 100% → fill
     if (cs.width === '100%') return { horizontal: 'fill', vertical: 'hug' }
 
+    // If max-width is set (e.g. max-w-xl), the element is width-constrained
+    // and should NOT use 'fill' sizing (which forces alignSelf:stretch,
+    // overriding parent align-items:center). Use 'fixed' instead.
+    const maxW = parseFloat(cs.maxWidth)
+    const hasMaxWidth = !isNaN(maxW) && cs.maxWidth !== 'none' && maxW < 9999
+
     // Explicit display overrides tag defaults
     if (display === 'inline' || display === 'inline-block' || display === 'inline-flex') {
         return { horizontal: 'hug', vertical: 'hug' }
     }
     if (display === 'block' || display === 'flex' || display === 'grid') {
-        return { horizontal: 'fill', vertical: 'hug' }
+        return { horizontal: hasMaxWidth ? 'fixed' : 'fill', vertical: 'hug' }
     }
 
     // No explicit display → use HTML tag defaults
     if (INLINE_TEXT_TAGS.has(tag)) return { horizontal: 'hug', vertical: 'hug' }
-    if (BLOCK_LEVEL_TEXT_TAGS.has(tag)) return { horizontal: 'fill', vertical: 'hug' }
+    if (BLOCK_LEVEL_TEXT_TAGS.has(tag)) return { horizontal: hasMaxWidth ? 'fixed' : 'fill', vertical: 'hug' }
 
     // Unknown tag with no display → hug (safe default)
     return { horizontal: 'hug', vertical: 'hug' }

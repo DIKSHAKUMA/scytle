@@ -12,50 +12,35 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // ═══════════════════════════════════════════════════════════════
 
 const DEFAULT_HTML = `
-<section class="w-full bg-[#FAF9F6] px-8 md:px-16 pb-24 pt-4 relative" style="font-family: 'Lato', sans-serif;">
-  <div class="w-full h-[80vh] min-h-[600px] relative overflow-hidden group">
-    <img 
-      src="https://images.unsplash.com/photo-1624459852010-72ea13d744e3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxicmVhdGh0YWtpbmclMjBtb3VudGFpbiUyMGxha2UlMjBsYW5kc2NhcGV8ZW58MHwwfHx8MTc3NjM2OTMyN3ww&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" 
-      alt="Breathtaking mountain lake landscape" 
-      class="w-full h-full object-cover transform scale-100 transition-transform duration-1000 ease-out group-hover:scale-105"
-    />
-    
-    <!-- Overlay Gradient for Readability -->
-    <div class="absolute inset-0 bg-gradient-to-t from-[#1C1917]/80 via-transparent to-transparent"></div>
-
-    <!-- Content Box -->
-    <div class="absolute bottom-0 left-0 w-full md:w-3/4 lg:w-1/2 p-10 md:p-16 flex flex-col justify-end">
-      <span class="text-[#D97757] uppercase tracking-[0.2em] text-sm font-semibold mb-4 block">
-        Featured Expedition
-      </span>
-      <h1 class="text-[#FAF9F6] text-5xl md:text-7xl leading-[1.1] mb-6" style="font-family: 'Playfair Display', serif;">
-        Silence at the edge of the world.
-      </h1>
-      <p class="text-[#F0EEE9] text-lg max-w-md mb-10 font-light leading-relaxed">
-        Escape the noise. Discover hidden alpine lakes and untouched valleys where time stands still and nature reclaims its dominance.
+<section class="bg-[#fdfbf7] text-[#2a312b] py-24 px-10" style="font-family: 'DM Sans', sans-serif;">
+  <div class="max-w-[1360px] mx-auto grid grid-cols-12 gap-10 items-end">
+    <!-- Text Column -->
+    <div class="col-span-5 pb-12 flex flex-col justify-end h-full">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-[1px] bg-[#d25d38]"></span>
+        <span class="text-sm font-bold uppercase tracking-[0.2em] text-[#d25d38]">Featured Disptach</span>
+      </div>
+      <h1 class="text-7xl leading-[1.05] mb-8" style="font-family: 'Playfair Display', serif;">Beyond the Atlas Front.</h1>
+      <p class="text-lg text-[#2a312b]/70 leading-relaxed mb-10 max-w-md">
+        A slow journey through the arid expanse and ancient medinas of Morocco, where time dilates and the desert winds whisper forgotten histories.
       </p>
-      
-      <div class="flex items-center gap-6">
-        <a href="#" class="bg-[#D97757] text-[#FAF9F6] px-8 py-4 text-sm uppercase tracking-wider hover:bg-[#FAF9F6] hover:text-[#1C1917] transition-colors inline-block">
-          Explore the Alps
-        </a>
-        <button class="w-12 h-12 rounded-full border border-[#FAF9F6]/30 flex items-center justify-center text-[#FAF9F6] hover:bg-[#FAF9F6] hover:text-[#1C1917] transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-        </button>
-        <span class="text-[#FAF9F6] text-xs uppercase tracking-widest">Watch Film</span>
+      <div class="flex items-center gap-4">
+        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop" alt="Author" class="w-12 h-12 rounded-full object-cover grayscale">
+        <div>
+          <p class="font-medium">Elena Kowalski</p>
+          <p class="text-xs text-[#2a312b]/60 uppercase tracking-wider mt-1">12 Min Read &bull; Oct 24, 2023</p>
+        </div>
       </div>
     </div>
-  </div>
-
-  <!-- Floating Stats -->
-  <div class="absolute bottom-16 right-16 hidden lg:flex gap-12 text-[#FAF9F6]">
-    <div>
-      <p class="text-3xl mb-1" style="font-family: 'Playfair Display', serif;">12</p>
-      <p class="text-[10px] uppercase tracking-widest text-[#F0EEE9]/70">Curated Routes</p>
-    </div>
-    <div>
-      <p class="text-3xl mb-1" style="font-family: 'Playfair Display', serif;">4.9</p>
-      <p class="text-[10px] uppercase tracking-widest text-[#F0EEE9]/70">Average Rating</p>
+    
+    <!-- Image Column -->
+    <div class="col-span-7 relative group cursor-pointer">
+      <div class="aspect-[4/5] w-full overflow-hidden">
+        <img src="https://images.unsplash.com/photo-1759517268149-c113637c3800?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w5MTI1NTZ8MHwxfHNlYXJjaHwxfHxjaW5lbWF0aWMlMjBtb3JvY2NvJTIwbGFuZHNjYXBlfGVufDB8MHx8fDE3NzY0MDY0OTR8MA&ixlib=rb-4.1.0&q=80&w=1080&w=1200&q=80" alt="Morocco Landscape" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+      </div>
+      <div class="absolute -bottom-8 -right-8 w-48 h-48 bg-[#d25d38] rounded-full flex items-center justify-center p-6 transform transition-transform duration-500 group-hover:rotate-12">
+        <p class="text-[#fdfbf7] text-center text-sm font-medium uppercase tracking-widest leading-tight">Read the full essay <span class="block mt-2">&rarr;</span></p>
+      </div>
     </div>
   </div>
 </section>
@@ -243,6 +228,7 @@ export default function ParserTestPage() {
             const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
             newNode.width = PAGE_WIDTH
             newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
+
             store.addNode(newNode, pageFrame.id)
 
             setTiming({ convert: convertMs, parse: parseMs })

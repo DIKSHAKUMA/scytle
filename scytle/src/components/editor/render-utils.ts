@@ -454,6 +454,11 @@ export function computeBaseStyles(
 
     // ── Sizing ────────────────────────────────────────────────
     // Absolute-positioned children in auto layout use fixed sizing (not flex)
+    // Exception: if cssPosition has BOTH edges set on an axis (e.g. inset-0),
+    // CSS handles sizing via stretch — don't override with explicit width/height.
+    const cssStretchH = node.cssPosition?.left != null && node.cssPosition?.right != null
+    const cssStretchV = node.cssPosition?.top != null && node.cssPosition?.bottom != null
+
     // Horizontal
     if (node.sizing.horizontal === 'fixed') {
         // Use raw CSS percentage if available (e.g. width: 75% from w-3/4)
@@ -463,7 +468,7 @@ export function computeBaseStyles(
             s.width = `calc(${node.width}px * var(--z, 1))`
         }
     } else if (node.sizing.horizontal === 'fill') {
-        if (isAbsoluteInAutoLayout) {
+        if (isAbsoluteInAutoLayout && !cssStretchH) {
             // Absolute children can't use flex sizing — fall back to fixed width
             s.width = `calc(${node.width}px * var(--z, 1))`
         } else if (parentDir === 'row') {
@@ -499,7 +504,7 @@ export function computeBaseStyles(
             s.height = `calc(${node.height}px * var(--z, 1))`
         }
     } else if (node.sizing.vertical === 'fill') {
-        if (isAbsoluteInAutoLayout) {
+        if (isAbsoluteInAutoLayout && !cssStretchV) {
             // Absolute children can't use flex sizing — fall back to fixed height
             s.height = `calc(${node.height}px * var(--z, 1))`
         } else if (parentDir === 'column') {
