@@ -31,7 +31,7 @@ const DEFAULT_HTML = `
     </button>
     
   </div>
-</section>
+</section> 
 `
 
 const PAGE_WIDTH = 1440

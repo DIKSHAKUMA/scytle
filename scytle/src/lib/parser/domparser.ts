@@ -572,6 +572,7 @@ function buildContainerNode(
         }
     }
 
+
     // Handle mixed content: container has text-only content not caught by isTextOnlyElement
     if (children.length === 0 && el.textContent?.trim()) {
         const textNode = buildTextNode(el, cs, tag, childAvailWidth, inh)
@@ -1954,34 +1955,74 @@ function parseSingleShadow(shadow: string): Shadow | null {
     const isInner = shadow.includes('inset')
     const cleaned = shadow.replace('inset', '').trim()
 
-    // Extract color — handle rgb(), rgba(), oklch(), color(), hex, and named colors
-    const funcColorMatch = cleaned.match(/((?:rgba?|oklch|oklab|color)\([^)]+\))/)
-    const hexColorMatch = !funcColorMatch ? cleaned.match(/(#[0-9a-fA-F]{3,8})\b/) : null
-
     let color: string
     let colorRaw: string
-    if (funcColorMatch) {
-        colorRaw = funcColorMatch[1]
-        color = rgbToHex(colorRaw)
-    } else if (hexColorMatch) {
-        colorRaw = hexColorMatch[1]
-        color = normalizeHex(colorRaw)
+    let numsStr: string
+
+    // ── Handle color-mix() — uses balanced-paren matching ──
+    // Tailwind v4 outputs: color-mix(color-mix(rgb(r,g,b) N%, transparent) M%, transparent)
+    // The simple regex can't handle nested parens, so we extract the full expression first.
+    const cmIdx = cleaned.indexOf('color-mix(')
+    if (cmIdx !== -1) {
+        let depth = 0
+        let end = cmIdx
+        for (let i = cmIdx; i < cleaned.length; i++) {
+            if (cleaned[i] === '(') depth++
+            else if (cleaned[i] === ')') {
+                depth--
+                if (depth === 0) { end = i + 1; break }
+            }
+        }
+        colorRaw = cleaned.substring(cmIdx, end)
+        numsStr = (cleaned.substring(0, cmIdx) + cleaned.substring(end)).trim()
+
+        // Resolve color-mix: extract base rgb color + multiply opacity percentages
+        // color-mix(color-mix(rgb(r,g,b) P1%, transparent) P2%, transparent) → rgba(r,g,b, P1*P2/10000)
+        const rgbMatch = colorRaw.match(/rgba?\(([^)]+)\)/)
+        const percentages = [...colorRaw.matchAll(/(\d+(?:\.\d+)?)%/g)].map(m => parseFloat(m[1]) / 100)
+        const combinedOpacity = percentages.reduce((a, b) => a * b, 1)
+
+        if (rgbMatch) {
+            const baseHex = rgbToHex(`rgb(${rgbMatch[1]})`)
+            const baseOpacity = rgbToOpacity(`rgb(${rgbMatch[1]})`)
+            const finalOpacity = baseOpacity * combinedOpacity
+            color = baseHex
+            if (finalOpacity < 1) {
+                const hex = color.replace('#', '')
+                const alphaHex = Math.round(finalOpacity * 255).toString(16).padStart(2, '0')
+                color = `#${hex}${alphaHex}`
+            }
+        } else {
+            color = '#00000019' // fallback: black 10%
+        }
     } else {
-        colorRaw = ''
-        color = '#000000'
+        // ── Standard color extraction: rgb(), rgba(), oklch(), hex ──
+        const funcColorMatch = cleaned.match(/((?:rgba?|oklch|oklab|color)\([^)]+\))/)
+        const hexColorMatch = !funcColorMatch ? cleaned.match(/(#[0-9a-fA-F]{3,8})\b/) : null
+
+        if (funcColorMatch) {
+            colorRaw = funcColorMatch[1]
+            color = rgbToHex(colorRaw)
+        } else if (hexColorMatch) {
+            colorRaw = hexColorMatch[1]
+            color = normalizeHex(colorRaw)
+        } else {
+            colorRaw = ''
+            color = '#000000'
+        }
+
+        const opacity = colorRaw ? rgbToOpacity(colorRaw) : 1
+        if (opacity < 1 && color !== 'transparent') {
+            const hex = color.replace('#', '')
+            const alphaHex = Math.round(opacity * 255).toString(16).padStart(2, '0')
+            color = `#${hex}${alphaHex}`
+        }
+
+        numsStr = colorRaw
+            ? cleaned.replace(colorRaw, '').trim()
+            : cleaned
     }
 
-    const opacity = colorRaw ? rgbToOpacity(colorRaw) : 1
-
-    if (opacity < 1 && color !== 'transparent') {
-        const hex = color.replace('#', '')
-        const alphaHex = Math.round(opacity * 255).toString(16).padStart(2, '0')
-        color = `#${hex}${alphaHex}`
-    }
-
-    const numsStr = colorRaw
-        ? cleaned.replace(colorRaw, '').trim()
-        : cleaned
     const nums = numsStr
         .split(/\s+/)
         .filter(n => n.length > 0)
@@ -2533,9 +2574,10 @@ function isTextOnlyElement(el: HTMLElement, tag: string): boolean {
         for (const child of el.children) {
             const childStyle = (child as HTMLElement).style
             if (hasVisualProperties(childStyle)) return false
-            // Also check for distinct text styling (font-size, font-weight, color)
-            // that would be lost if flattened into one text node
-            if (childStyle.fontSize || childStyle.fontWeight || childStyle.color) return false
+            // Check for distinct text styling that affects layout (font-size, font-weight).
+            // Color-only and font-style differences are acceptable to flatten — the alternative
+            // (flex-row wrap) can't replicate inline text flow and breaks word wrapping.
+            if (childStyle.fontSize || childStyle.fontWeight) return false
         }
         return true
     }
@@ -2563,10 +2605,10 @@ function isTextOnlyElement(el: HTMLElement, tag: string): boolean {
         const isInline = INLINE_TAGS.has(childTag) || childDisplay === 'inline' || childDisplay === 'inline-block'
         if (!isInline) return false
         if (hasVisualProperties(childEl.style)) return false
-        // Check for distinct text styling (color, font-size, font-weight)
-        // that would be lost if flattened into one text node
+        // Check for distinct text styling that affects layout (font-size, font-weight).
+        // Color-only differences are acceptable to flatten for proper text wrapping.
         const cStyle = childEl.style
-        if (cStyle?.color || cStyle?.fontSize || cStyle?.fontWeight) return false
+        if (cStyle?.fontSize || cStyle?.fontWeight) return false
     }
 
     return true
