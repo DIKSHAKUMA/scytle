@@ -42,29 +42,30 @@ const EDGE_ZONE = 6
 
 function NodeTypeIcon({ node }: { node: ScytleNode }) {
     const size = 14
+    let icon = <Frame className="shrink-0 text-muted-foreground/70" size={size} />
 
     if (node.type === 'text') {
-        return <Type className="shrink-0 text-muted-foreground/70" size={size} />
-    }
-    if (node.type === 'image') {
-        return <Image className="shrink-0 text-muted-foreground/70" size={size} />
-    }
-    if (node.type === 'vector') {
-        return <Pen className="shrink-0 text-muted-foreground/70" size={size} />
+        icon = <Type className="shrink-0 text-muted-foreground/70" size={size} />
+    } else if (node.type === 'image') {
+        icon = <Image className="shrink-0 text-muted-foreground/70" size={size} />
+    } else if (node.type === 'vector') {
+        icon = <Pen className="shrink-0 text-muted-foreground/70" size={size} />
+    } else if (node.type === 'frame') {
+        const layout = (node as FrameNode).layout
+        if (layout.mode === 'flex' && layout.direction === 'row') {
+            icon = <Columns3 className="shrink-0 text-muted-foreground/70" size={size} />
+        } else if (layout.mode === 'flex' && layout.direction === 'column') {
+            icon = <Rows3 className="shrink-0 text-muted-foreground/70" size={size} />
+        } else if (layout.mode === 'grid') {
+            icon = <LayoutGrid className="shrink-0 text-muted-foreground/70" size={size} />
+        }
     }
 
-    // Frame — differentiate by layout mode
-    const layout = (node as FrameNode).layout
-    if (layout.mode === 'flex' && layout.direction === 'row') {
-        return <Columns3 className="shrink-0 text-muted-foreground/70" size={size} />
-    }
-    if (layout.mode === 'flex' && layout.direction === 'column') {
-        return <Rows3 className="shrink-0 text-muted-foreground/70" size={size} />
-    }
-    if (layout.mode === 'grid') {
-        return <LayoutGrid className="shrink-0 text-muted-foreground/70" size={size} />
-    }
-    return <Frame className="shrink-0 text-muted-foreground/70" size={size} />
+    return (
+        <span data-layer-icon className="flex items-center justify-center shrink-0">
+            {icon}
+        </span>
+    )
 }
 
 // ============================================================
@@ -182,9 +183,15 @@ function LayerRow({
                 const isDoubleClick = last.id === node.id && now - last.time < 400
 
                 if (isDoubleClick) {
-                    // Double-click → start rename
+                    // Double-click → start rename OR zoom to node if icon clicked
                     lastClickRef.current = { id: '', time: 0 }
-                    onStartRename(node.id)
+
+                    const target = e.target as HTMLElement
+                    if (target.closest('[data-layer-icon]')) {
+                        useEditorStore.getState().zoomToNode(node.id)
+                    } else {
+                        onStartRename(node.id)
+                    }
                 } else {
                     // Single click → select
                     lastClickRef.current = { id: node.id, time: now }

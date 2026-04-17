@@ -284,6 +284,8 @@ interface EditorState {
     selectNode: (id: string, addToSelection?: boolean) => void
     deselectAll: () => void
     setHoveredId: (id: string | null) => void
+    /** Zoom and pan to center the given node in the viewport */
+    zoomToNode: (id: string) => void
     enterFrame: (id: string) => void
     exitFrame: () => void
 
@@ -756,6 +758,40 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'setHoveredId'
                 ),
+
+            zoomToNode: (id) => {
+                const state = get()
+                const node = findNodeById(state.nodes, id)
+                if (!node || !state.viewportRect) return
+
+                const absPos = getNodeCanvasPosition(state.nodes, id)
+                if (!absPos) return
+
+                const { width: vw, height: vh } = state.viewportRect
+                const nodeW = node.width
+                const nodeH = node.height
+
+                // Calculate zoom to fit with padding
+                const padding = 64
+                const zoomX = (vw - padding) / nodeW
+                const zoomY = (vh - padding) / nodeH
+                let newZoom = Math.min(zoomX, zoomY, 2) // Cap at 200% zoom
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                // Center the node
+                const newPanX = vw / 2 - (absPos.x + nodeW / 2) * newZoom
+                const newPanY = vh / 2 - (absPos.y + nodeH / 2) * newZoom
+
+                set(
+                    (s) => {
+                        s.zoom = newZoom
+                        s.panX = newPanX
+                        s.panY = newPanY
+                    },
+                    false,
+                    'zoomToNode'
+                )
+            },
 
             enterFrame: (id) =>
                 set(
