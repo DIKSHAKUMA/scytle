@@ -153,7 +153,7 @@ function saveMessagesCache(projectId: string, threadId: string, repo: StoredMess
         try {
             localStorage.setItem(messagesKey(projectId, threadId), JSON.stringify(trimmed))
         } catch {
-            // Still too large — skip cache, server has the data
+            console.warn('[chat-persistence] Message too large for localStorage even after trimming — relying on server sync')
         }
     }
 }
@@ -289,29 +289,51 @@ async function refreshThreadsFromServer(projectId: string): Promise<void> {
 }
 
 /**
- * Fetch messages for a thread from server, update cache.
+ * Fetch messages for a thread from server and MERGE with local cache.
+ * Returns the merged data directly so callers don't depend on a successful
+ * localStorage save (which can fail due to quota when AI responses are large).
+ *
+ * Strategy:
+ *   • Server messages win for content (source of truth once synced).
+ *   • Local-only messages are kept (pending sync — still valid).
+ *   • headId = latest between server and cache.
  */
-async function refreshMessagesFromServer(projectId: string, threadId: string): Promise<void> {
+async function refreshMessagesFromServer(
+    projectId: string,
+    threadId: string,
+): Promise<StoredMessageRepo | null> {
     const auth = await getAuthHeader()
-    if (!auth) return
+    if (!auth) return null
 
     try {
         const res = await fetch(`/api/projects/${projectId}/threads/${threadId}/messages`, {
             headers: { Authorization: auth },
         })
-        if (!res.ok) return
+        if (!res.ok) return null
 
         const data = await res.json()
-        const repo: StoredMessageRepo = {
-            headId: data.headId,
-            messages: data.messages ?? [],
+        const serverMessages: StoredMessageEntry[] = data.messages ?? []
+        if (serverMessages.length === 0) return null // nothing from server
+
+        const local = loadMessagesCache(projectId, threadId)
+
+        // Build a map: id → message.  Start with local, overlay with server.
+        const merged = new Map<string, StoredMessageEntry>()
+        for (const m of local.messages) merged.set(m.id, m)
+        for (const m of serverMessages) merged.set(m.id, m) // server wins for same id
+
+        const mergedRepo: StoredMessageRepo = {
+            headId: data.headId ?? local.headId,
+            messages: Array.from(merged.values()),
         }
 
-        if (repo.messages.length > 0) {
-            saveMessagesCache(projectId, threadId, repo)
-        }
+        // Best-effort cache update (may fail for large AI responses — that's OK)
+        saveMessagesCache(projectId, threadId, mergedRepo)
+
+        return mergedRepo
     } catch (e) {
         console.warn('Failed to refresh messages from server:', e)
+        return null
     }
 }
 
@@ -461,9 +483,11 @@ class ChatHistoryAdapter implements ThreadHistoryAdapter {
                 if (!remoteId) return { messages: [] }
 
                 try {
-                    // Always fetch fresh from server to ensure cross-browser sync
-                    await refreshMessagesFromServer(self.projectId, remoteId)
-                    const stored = loadMessagesCache(self.projectId, remoteId)
+                    // Fetch from server and merge with cache.
+                    // Use the RETURNED data directly — don't rely on cache,
+                    // because saveMessagesCache can fail for large AI responses.
+                    const serverMerged = await refreshMessagesFromServer(self.projectId, remoteId)
+                    const stored = serverMerged ?? loadMessagesCache(self.projectId, remoteId)
 
                     if (stored.messages.length === 0) return { messages: [] }
 

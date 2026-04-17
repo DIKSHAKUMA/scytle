@@ -10,7 +10,7 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
@@ -430,16 +430,34 @@ function useChatThreadRuntime(transport: AssistantChatTransport<any>) {
 
 export function ChatPanel() {
     const selectedIds = useEditorStore((s) => s.selectedIds)
-    const nodes = useEditorStore((s) => s.nodes)
     const projectId = useEditorStore((s) => s._projectId) ?? 'default'
-    const context = buildContext(nodes, selectedIds)
 
+    // Read canvas context lazily via getState() — NOT by subscribing to `nodes`.
+    // Subscribing caused re-renders on every canvas change (tool results adding nodes),
+    // which recreated the transport, potentially aborting the active AI stream.
+    // Context only needs to be current at API-call time, not on every render.
+    const getContext = useCallback(() => {
+        const s = useEditorStore.getState()
+        return buildContext(s.nodes, s.selectedIds)
+    }, [])
+
+    // Mutable body object — the transport stores a REFERENCE to this, not a clone.
+    // Mutating bodyRef.current.context updates what the transport sends at call-time.
+    const bodyRef = useRef<Record<string, unknown>>({ context: getContext() })
+
+    // Refresh context on selection changes (not on every node change)
+    useEffect(() => {
+        bodyRef.current.context = getContext()
+    }, [selectedIds, getContext])
+
+    // Transport created ONCE — stable reference across renders.
     const transport = useMemo(
         () => new AssistantChatTransport({
             api: '/api/chat',
-            body: { context },
+            body: bodyRef.current,
         }),
-        [context]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        []
     )
 
     // Persistence adapter — localStorage scoped per project
@@ -448,12 +466,15 @@ export function ChatPanel() {
         [projectId],
     )
 
-    const runtime = useRemoteThreadListRuntime({
-        runtimeHook: function ChatRuntimeHook() {
+    // Stable runtimeHook — only changes if transport changes (which is now stable)
+    const runtimeHook = useCallback(
+        function ChatRuntimeHook() {
             return useChatThreadRuntime(transport)
         },
-        adapter,
-    })
+        [transport]
+    )
+
+    const runtime = useRemoteThreadListRuntime({ runtimeHook, adapter })
 
     return (
         <AssistantRuntimeProvider runtime={runtime}>
