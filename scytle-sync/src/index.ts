@@ -30,6 +30,27 @@ export default {
       })
     }
 
+    // ── Internal snapshot route: /snapshot/:projectId ────────
+    const snapshotMatch = url.pathname.match(/^\/snapshot\/([a-zA-Z0-9_-]+)$/)
+    if (snapshotMatch) {
+      const expectedSecret = env.INTERNAL_SYNC_SECRET
+      const providedSecret = request.headers.get('x-sync-internal-secret')
+      const isLocalRequest = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+
+      if (!expectedSecret && !isLocalRequest) {
+        return new Response('Snapshot endpoint disabled', { status: 503 })
+      }
+
+      if (!isLocalRequest && (!providedSecret || providedSecret !== expectedSecret)) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+
+      const projectId = snapshotMatch[1]
+      const roomId = env.CANVAS_ROOM.idFromName(projectId)
+      const room = env.CANVAS_ROOM.get(roomId)
+      return room.fetch(request)
+    }
+
     // ── WebSocket room route: /room/:projectId ──────────────
     const match = url.pathname.match(/^\/room\/([a-zA-Z0-9_-]+)$/)
     if (!match) {

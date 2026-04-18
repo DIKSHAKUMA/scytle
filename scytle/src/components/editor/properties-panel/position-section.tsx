@@ -14,7 +14,6 @@ import {
     RotateCw,
     FlipHorizontal,
     FlipVertical,
-    Anchor,
 } from 'lucide-react'
 import { useCallback } from 'react'
 import { cn } from '@/lib/utils'
@@ -460,74 +459,64 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
             onClick={handleToggleIgnoreAutoLayout}
             title="Ignore auto layout"
             className={cn(
-                'flex items-center justify-center w-6 h-6 rounded transition-colors',
+                'flex items-center justify-center w-7 h-7 rounded-sm border border-transparent shrink-0 transition-colors',
                 isIgnoringAutoLayout
-                    ? 'text-blue-500 bg-blue-500/10 hover:bg-blue-500/20'
-                    : 'text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50'
+                    ? 'text-blue-600 bg-blue-500/12 border-blue-500/25 hover:bg-blue-500/20'
+                    : 'text-foreground/75 bg-muted/35 border-border/40 hover:text-foreground hover:bg-muted/55'
             )}
         >
-            <IgnoreAutoLayoutIcon size={14} />
+            <IgnoreAutoLayoutIcon size={15} />
         </button>
     ) : undefined
 
     return (
         <Section title="Position" action={ignoreAction}>
-            {/* Positioning mode — auto vs absolute (hidden when in auto layout parent — toggle replaces it) */}
-            {!isInAutoLayoutParent && (
-                <div className="flex items-center gap-1.5">
-                    <Anchor size={11} className="text-muted-foreground/60 shrink-0" />
-                    <SelectInput
-                        value={node.positioning}
-                        options={[
-                            { value: 'auto', label: 'Auto' },
-                            { value: 'absolute', label: 'Absolute' },
-                        ]}
-                        onChange={(v) => onUpdate({ positioning: v })}
-                        className="flex-1"
-                    />
-                </div>
-            )}
-
             {/* Alignment buttons — Figma: 6-button grid */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-px">
+                <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
                     <IconButton
                         icon={<AlignHorizontalJustifyStart size={14} />}
                         onClick={handleAlignLeft}
                         title="Align left"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                     <IconButton
                         icon={<AlignHorizontalJustifyCenter size={14} />}
                         onClick={handleAlignCenterH}
                         title="Align center"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                     <IconButton
                         icon={<AlignHorizontalJustifyEnd size={14} />}
                         onClick={handleAlignRight}
                         title="Align right"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                 </div>
-                <div className="flex items-center gap-px">
+                <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
                     <IconButton
                         icon={<AlignVerticalJustifyStart size={14} />}
                         onClick={handleAlignTop}
                         title="Align top"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                     <IconButton
                         icon={<AlignVerticalJustifyCenter size={14} />}
                         onClick={handleAlignCenterV}
                         title="Align middle"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                     <IconButton
                         icon={<AlignVerticalJustifyEnd size={14} />}
                         onClick={handleAlignBottom}
                         title="Align bottom"
                         disabled={isAutoLayout}
+                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                     />
                 </div>
             </div>
@@ -540,6 +529,7 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
                     onChange={(v) => onUpdate({ x: v })}
                     step={1}
                     disabled={isAutoLayout}
+                    disabledClassName="opacity-75 cursor-not-allowed bg-muted/35 border-border/30 text-muted-foreground"
                 />
                 <NumberInput
                     label="Y"
@@ -547,6 +537,7 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
                     onChange={(v) => onUpdate({ y: v })}
                     step={1}
                     disabled={isAutoLayout}
+                    disabledClassName="opacity-75 cursor-not-allowed bg-muted/35 border-border/30 text-muted-foreground"
                 />
             </div>
 

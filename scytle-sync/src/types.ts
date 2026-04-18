@@ -81,4 +81,5 @@ export interface Env {
   APPWRITE_ENDPOINT: string
   APPWRITE_PROJECT_ID: string
   ALLOWED_ORIGINS: string
+  INTERNAL_SYNC_SECRET?: string
 }

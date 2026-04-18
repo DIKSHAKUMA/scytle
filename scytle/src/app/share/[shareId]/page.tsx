@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
-import { Query, Storage } from 'node-appwrite'
+import { Query } from 'node-appwrite'
+import { resolveSharedCanvasData } from '@/lib/share-canvas'
 import { ShareViewer } from './share-viewer'
-
-const BUCKET_ID = 'exports'
-const canvasFileId = (projectId: string) => `canvas_${projectId.replace(/[^a-zA-Z0-9._-]/g, '_')}`
 
 interface PageProps {
     params: Promise<{ shareId: string }>
@@ -25,25 +24,11 @@ async function getShareData(shareId: string) {
         if (!share.isPublic) return { private: true, projectName: null, canvasData: null }
 
         const project = await databases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, share.projectId)
-
-        // Load canvas data from Appwrite Storage (same approach as partner's /api/projects/[id]/canvas)
-        let canvasData = null
-        try {
-            const storage = new Storage(client)
-            const fileId = canvasFileId(share.projectId)
-            const fileData = await storage.getFileDownload(BUCKET_ID, fileId)
-
-            if (fileData && typeof fileData === 'object' && !ArrayBuffer.isView(fileData) && !(fileData instanceof ArrayBuffer)) {
-                canvasData = fileData
-            } else {
-                const jsonStr = typeof fileData === 'string'
-                    ? fileData
-                    : new TextDecoder().decode(fileData as ArrayBuffer)
-                canvasData = JSON.parse(jsonStr)
-            }
-        } catch {
-            // No canvas file yet — that's fine
-        }
+        const canvasData = await resolveSharedCanvasData(
+            share.projectId,
+            client,
+            project as unknown as Record<string, unknown>
+        )
 
         return {
             private: false,
@@ -93,12 +78,12 @@ export default async function SharePage({ params }: PageProps) {
             <div className="flex flex-col items-center justify-center h-screen gap-4 bg-background">
                 <div className="text-6xl">404</div>
                 <p className="text-muted-foreground">This share link doesn&apos;t exist.</p>
-                <a
+                <Link
                     href="/"
                     className="text-sm text-primary hover:underline"
                 >
                     Go to Scytle.ai
-                </a>
+                </Link>
             </div>
         )
     }
@@ -114,12 +99,12 @@ export default async function SharePage({ params }: PageProps) {
                 </div>
                 <h1 className="text-lg font-semibold">This design is private</h1>
                 <p className="text-sm text-muted-foreground">The owner hasn&apos;t made this design publicly available.</p>
-                <a
+                <Link
                     href="/login"
                     className="text-sm text-primary hover:underline"
                 >
                     Log in to Scytle.ai
-                </a>
+                </Link>
             </div>
         )
     }

@@ -47,6 +47,8 @@ interface NumberInputProps {
     labelWidth?: string
     /** Callback for comma-separated shorthand input (e.g., "10,20,30,40") */
     onShorthand?: (values: number[]) => void
+    /** Optional override for disabled visual treatment */
+    disabledClassName?: string
 }
 
 /** Round to step precision to avoid floating point artifacts */
@@ -68,6 +70,7 @@ export function NumberInput({
     suffix,
     labelWidth = 'w-4',
     onShorthand,
+    disabledClassName,
 }: NumberInputProps) {
     const [localValue, setLocalValue] = useState(String(roundToStep(value, step)))
     const inputRef = useRef<HTMLInputElement>(null)
@@ -137,7 +140,7 @@ export function NumberInput({
                     className={cn(
                         INPUT_BASE,
                         suffix && 'pr-6',
-                        disabled && 'opacity-40 cursor-not-allowed'
+                        disabled && (disabledClassName ?? 'opacity-40 cursor-not-allowed')
                     )}
                     onChange={(e) => setLocalValue(e.target.value)}
                     onBlur={commit}
@@ -519,10 +522,12 @@ interface IconButtonProps {
     title?: string
     active?: boolean
     disabled?: boolean
+    /** Optional override for disabled visual treatment */
+    disabledClassName?: string
     className?: string
 }
 
-export function IconButton({ icon, onClick, title, active, disabled, className }: IconButtonProps) {
+export function IconButton({ icon, onClick, title, active, disabled, disabledClassName, className }: IconButtonProps) {
     return (
         <button
             className={cn(
@@ -530,7 +535,7 @@ export function IconButton({ icon, onClick, title, active, disabled, className }
                 active
                     ? 'bg-muted text-foreground'
                     : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                disabled && 'opacity-30 cursor-not-allowed',
+                disabled && (disabledClassName ?? 'opacity-30 cursor-not-allowed'),
                 className
             )}
             onClick={onClick}

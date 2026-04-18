@@ -160,6 +160,21 @@ export class CanvasRoom extends DurableObject<Env> {
   // ============================================================
 
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+
+    // Internal snapshot endpoint used by the Next.js server.
+    if (request.method === 'GET' && /^\/snapshot\/[a-zA-Z0-9_-]+$/.test(url.pathname)) {
+      this.ensureStateLoaded()
+      return Response.json(
+        { state: this.getInitState() },
+        {
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        }
+      )
+    }
+
     const upgrade = request.headers.get('Upgrade')
     if (upgrade !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 })

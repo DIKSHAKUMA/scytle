@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Query, Storage } from 'node-appwrite'
+import { Query } from 'node-appwrite'
 import { createAdminClient, getUserFromJWT, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
-
-const BUCKET_ID = 'exports'
-const canvasFileId = (projectId: string) => `canvas_${projectId.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+import { resolveSharedCanvasData } from '@/lib/share-canvas'
 
 interface RouteParams {
     params: Promise<{ shareId: string }>
@@ -36,25 +34,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
         // Fetch project metadata
         const project = await databases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, share.projectId)
-
-        // Load canvas data from Appwrite Storage (same approach as /api/projects/[id]/canvas)
-        let canvasData = null
-        try {
-            const storage = new Storage(client)
-            const fileId = canvasFileId(share.projectId)
-            const fileData = await storage.getFileDownload(BUCKET_ID, fileId)
-
-            if (fileData && typeof fileData === 'object' && !ArrayBuffer.isView(fileData) && !(fileData instanceof ArrayBuffer)) {
-                canvasData = fileData
-            } else {
-                const jsonStr = typeof fileData === 'string'
-                    ? fileData
-                    : new TextDecoder().decode(fileData as ArrayBuffer)
-                canvasData = JSON.parse(jsonStr)
-            }
-        } catch {
-            // No canvas file yet — that's fine
-        }
+        const canvasData = await resolveSharedCanvasData(
+            share.projectId,
+            client,
+            project as unknown as Record<string, unknown>
+        )
 
         return NextResponse.json({
             projectName: project.name,
