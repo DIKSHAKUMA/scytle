@@ -6,6 +6,7 @@ import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, Ve
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
 import { canvasSync } from '@/lib/sync'
+import { useVariableStore } from '@/store/variable-store'
 
 // ============================================================
 // History constants
@@ -1267,7 +1268,6 @@ export const useEditorStore = create<EditorState>()(
                         if (state.nodes.length === 0) return
                         _snap(state)
                         // Use new variable store for relinking
-                        const { useVariableStore } = require('@/store/variable-store')
                         const { variables, collections, activeModeId } = useVariableStore.getState()
                         relinkNodesWithVariables(state.nodes, variables, collections, activeModeId ?? '')
                     },

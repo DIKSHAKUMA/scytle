@@ -1,4 +1,4 @@
-import { memo, type CSSProperties, createElement, useRef, useEffect, useCallback, useState } from 'react'
+import { memo, type CSSProperties, createElement, useEffect, useCallback, useState } from 'react'
 import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
@@ -34,7 +34,6 @@ export const TextRenderer = memo(function TextRenderer({
     // ── Inline editing state ──────────────────────────────────
     const editingNodeId = useEditorStore((s) => s.editingNodeId)
     const isEditing = editingNodeId === node.id
-    const editRef = useRef<HTMLElement>(null)
 
     // ── New variable system (resolves at render time via boundVariables) ──
     const resolved = useResolvedVariables(node.boundVariables)
@@ -68,8 +67,9 @@ export const TextRenderer = memo(function TextRenderer({
 
     // Focus + select all when entering edit mode
     useEffect(() => {
-        if (isEditing && editRef.current) {
-            const el = editRef.current
+        if (isEditing) {
+            const el = document.querySelector(`[data-node-id="${node.id}"]`) as HTMLElement | null
+            if (!el) return
             el.focus()
             const selection = window.getSelection()
             if (selection) {
@@ -79,11 +79,10 @@ export const TextRenderer = memo(function TextRenderer({
                 selection.addRange(range)
             }
         }
-    }, [isEditing])
+    }, [isEditing, node.id])
 
-    const commitEdit = useCallback(() => {
-        if (!editRef.current) return
-        const newText = editRef.current.textContent || ''
+    const commitEdit = useCallback((newTextRaw: string) => {
+        const newText = newTextRaw || ''
         const isBlankDraft = node.characters.length === 0 && newText.trim().length === 0
         if (isBlankDraft) {
             useEditorStore.getState().discardNode(node.id)
@@ -101,7 +100,9 @@ export const TextRenderer = memo(function TextRenderer({
     const handleEditKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
             e.preventDefault()
-            commitEdit()
+            const text = (e.currentTarget as HTMLElement).textContent || ''
+            commitEdit(text)
+                ; (e.currentTarget as HTMLElement).blur()
         }
         // Stop bubbling to prevent canvas keyboard shortcuts while typing
         e.stopPropagation()
@@ -218,19 +219,17 @@ export const TextRenderer = memo(function TextRenderer({
     const tag = node.htmlTag || 'p'
 
     return createElement(tag, {
-        ref: editRef,
         'data-node-id': node.id,
         style,
         ...(isEditing
             ? {
                 contentEditable: true,
                 suppressContentEditableWarning: true,
-                onBlur: commitEdit,
+                onBlur: (e: React.FocusEvent<HTMLElement>) => commitEdit(e.currentTarget.textContent || ''),
                 onKeyDown: handleEditKeyDown,
                 // Prevent canvas from intercepting pointer events during editing
                 onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
             }
             : {}),
-        children: node.characters,
-    })
+    }, node.characters)
 })
