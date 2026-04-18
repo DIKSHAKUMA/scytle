@@ -1,42 +1,126 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { DesignTab } from './design-tab'
 import { ThemeTab } from './theme-tab'
+import { PanelRightClose, PanelRight } from 'lucide-react'
 
 const TABS = ['Design', 'Theme'] as const
 type Tab = (typeof TABS)[number]
 
+const MIN_WIDTH = 220
+const MAX_WIDTH = 480
+const DEFAULT_WIDTH = 256
+const COLLAPSE_THRESHOLD = 180
+
 export function RightPanel() {
     const [activeTab, setActiveTab] = useState<Tab>('Design')
+    const [width, setWidth] = useState(DEFAULT_WIDTH)
+    const [collapsed, setCollapsed] = useState(false)
+    const isDragging = useRef(false)
+    const startX = useRef(0)
+    const startWidth = useRef(DEFAULT_WIDTH)
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        isDragging.current = true
+        startX.current = e.clientX
+        startWidth.current = collapsed ? 0 : width
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+        e.preventDefault()
+    }, [width, collapsed])
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (!isDragging.current) return
+            // For right panel, dragging left (negative delta) increases width
+            const delta = e.clientX - startX.current
+            const newWidth = startWidth.current - delta
+
+            if (newWidth < COLLAPSE_THRESHOLD) {
+                setCollapsed(true)
+            } else {
+                setCollapsed(false)
+                setWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)))
+            }
+        }
+
+        const handleMouseUp = () => {
+            if (!isDragging.current) return
+            isDragging.current = false
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [])
+
+    if (collapsed) {
+        return (
+            <div className="flex flex-col w-12 bg-card border-l border-border/60 shrink-0 select-none items-center pt-2 gap-1">
+                <button
+                    onClick={() => setCollapsed(false)}
+                    className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    title="Expand panel"
+                >
+                    <PanelRight className="w-4 h-4" />
+                </button>
+            </div>
+        )
+    }
 
     return (
-        <div className="flex flex-col w-64 bg-card border-l border-border/60 shrink-0 select-none">
-            {/* ── Tab bar ── */}
-            <div className="flex h-10 border-b border-border/40 shrink-0">
-                {TABS.map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                            'flex-1 text-xs font-medium transition-colors relative',
-                            activeTab === tab
-                                ? 'text-foreground'
-                                : 'text-muted-foreground hover:text-foreground/80'
-                        )}
-                    >
-                        {tab}
-                        {activeTab === tab && (
-                            <span className="absolute bottom-0 inset-x-3 h-[2px] bg-foreground rounded-full" />
-                        )}
-                    </button>
-                ))}
-            </div>
+        <div className="relative flex shrink-0" style={{ width }}>
+            {/* ── Drag handle ── */}
+            <div
+                onMouseDown={handleMouseDown}
+                className="absolute top-0 left-0 w-1 h-full cursor-col-resize z-10 hover:bg-primary/30 active:bg-primary/50 transition-colors"
+            />
 
-            {/* ── Tab content ── */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-                {activeTab === 'Design' ? <DesignTab /> : <ThemeTab />}
+            <div className="flex flex-col flex-1 bg-card border-l border-border/60 select-none overflow-hidden">
+                {/* ── Tab bar ── */}
+                <div className="flex h-10 border-b border-border/40 shrink-0 items-center">
+                    <button
+                        onClick={() => setCollapsed(true)}
+                        className="w-10 h-full flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors border-r border-border/40"
+                        title="Collapse panel"
+                    >
+                        <PanelRightClose className="w-3.5 h-3.5" />
+                    </button>
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={cn(
+                                'flex-1 h-full text-xs font-medium transition-colors relative',
+                                activeTab === tab
+                                    ? 'text-foreground font-semibold'
+                                    : 'text-muted-foreground hover:text-foreground/80'
+                            )}
+                        >
+                            {tab}
+                            {activeTab === tab && (
+                                <span className="absolute bottom-0 inset-x-3 h-[1.5px] bg-foreground rounded-full" />
+                            )}
+                        </button>
+                    ))}
+                </div>
+
+                {/* ── Tab content ── */}
+                <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <div className={cn('absolute inset-0 overflow-y-auto custom-scrollbar', activeTab !== 'Design' && 'hidden')}>
+                        <DesignTab />
+                    </div>
+                    <div className={cn('absolute inset-0 overflow-y-auto custom-scrollbar', activeTab !== 'Theme' && 'hidden')}>
+                        <ThemeTab />
+                    </div>
+                </div>
             </div>
         </div>
     )
