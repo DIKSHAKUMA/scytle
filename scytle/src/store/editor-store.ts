@@ -318,27 +318,6 @@ function getTopLevelFrameShiftX(
     return sourceBounds.maxRight - sourceBounds.minX + gap
 }
 
-function getFrameAtAnchor(
-    nodes: readonly ScytleNode[],
-    anchor: { x: number; y: number } | null,
-): string | null {
-    if (!anchor) return null
-
-    const containing = findContainingFrame(
-        nodes,
-        anchor.x,
-        anchor.y,
-        0,
-        0,
-        undefined,
-        10,
-        false,
-    )
-
-    return containing?.frameId ?? null
-}
-
-
 // ============================================================
 // State Interface
 // ============================================================
@@ -1632,7 +1611,7 @@ export const useEditorStore = create<EditorState>()(
 
                         const canPasteToEachSelectedFrame =
                             !state.enteredFrameId &&
-                            selectedFrames.length > 0 &&
+                            selectedFrames.length > 1 &&
                             selectedFrames.length === state.selectedIds.length &&
                             selectedFrames.every((frame) => !copiedSourceIds.has(frame.id))
 
@@ -1674,9 +1653,9 @@ export const useEditorStore = create<EditorState>()(
                         }
 
                         // Determine paste target:
-                        // 1. If drilled into a frame (enteredFrameId), paste inside it
-                        // 2. If a single frame is selected, paste inside it (except self-paste)
-                        // 3. Otherwise, paste at top level
+                        // 1. If drilled into a frame (enteredFrameId), paste inside it.
+                        // 2. Otherwise regular paste targets top-level unless same-source
+                        //    context preservation applies below.
                         let targetFrame: FrameNode | null = null
                         if (state.enteredFrameId) {
                             const f = findNodeById(
@@ -1684,17 +1663,6 @@ export const useEditorStore = create<EditorState>()(
                                 state.enteredFrameId
                             ) as FrameNode | null
                             if (f && f.type === 'frame') targetFrame = f
-                        } else if (state.selectedIds.length === 1) {
-                            const sel = findNodeById(
-                                state.nodes,
-                                state.selectedIds[0]
-                            )
-                            if (sel && sel.type === 'frame') {
-                                // Prevent frame self-nesting on copy/paste
-                                if (!copiedSourceIds.has(sel.id)) {
-                                    targetFrame = sel as FrameNode
-                                }
-                            }
                         }
 
                         // Preserve source parent context for same-page copy/paste
@@ -1705,12 +1673,7 @@ export const useEditorStore = create<EditorState>()(
                             if (parentKeys.size === 1) {
                                 const sourceParentId = sourceEntries[0]?.sourceParentId ?? null
                                 if (sourceParentId) {
-                                    const anchorFrameId = getFrameAtAnchor(state.nodes, state._pasteAnchor)
-                                    const shouldPreserveSourceParent = state._pasteAnchor
-                                        ? anchorFrameId === sourceParentId
-                                        : hasActiveSourceSelection
-
-                                    if (shouldPreserveSourceParent) {
+                                    if (hasActiveSourceSelection) {
                                         const parent = findNodeById(state.nodes, sourceParentId)
                                         if (parent && parent.type === 'frame') {
                                             targetFrame = parent as FrameNode
