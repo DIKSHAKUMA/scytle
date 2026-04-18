@@ -382,7 +382,11 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     // ----------------------------------------------------------
     const handlePointerDown = useCallback(
         (e: React.PointerEvent<HTMLDivElement>) => {
-            // ── Commit any active text editing ────────────────────
+            // ── Commit any active text editing (including TopBar inputs) ──
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur()
+            }
+
             const editorState = useEditorStore.getState()
             if (editorState.editingNodeId) {
                 const editingEl = viewportRef.current?.querySelector(

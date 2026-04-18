@@ -109,7 +109,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                     "flex items-center gap-2 px-2 py-1 -ml-1 rounded-md transition-colors cursor-pointer group",
                     !isEditingTitle && "hover:bg-muted/60"
                 )}
-                onClick={() => !isEditingTitle && setIsEditingTitle(true)}
+                onDoubleClick={() => !isEditingTitle && setIsEditingTitle(true)}
             >
                 {/* Project Icon */}
                 <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-foreground/5 dark:bg-foreground/10 border border-border/40">
