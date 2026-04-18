@@ -107,6 +107,34 @@ const V_CONSTRAINT_OPTIONS = [
     { value: 'scale', label: 'Scale' },
 ]
 
+const DEFAULT_CONSTRAINTS: LayoutConstraints = {
+    horizontal: 'left',
+    vertical: 'top',
+}
+
+type AlignHorizontalConstraint = Extract<LayoutConstraints['horizontal'], 'left' | 'center' | 'right'>
+type AlignVerticalConstraint = Extract<LayoutConstraints['vertical'], 'top' | 'center' | 'bottom'>
+
+function mergeHorizontalConstraint(
+    current: LayoutConstraints | undefined,
+    horizontal: AlignHorizontalConstraint
+): LayoutConstraints {
+    return {
+        ...(current ?? DEFAULT_CONSTRAINTS),
+        horizontal,
+    }
+}
+
+function mergeVerticalConstraint(
+    current: LayoutConstraints | undefined,
+    vertical: AlignVerticalConstraint
+): LayoutConstraints {
+    return {
+        ...(current ?? DEFAULT_CONSTRAINTS),
+        vertical,
+    }
+}
+
 interface ConstraintsSectionProps {
     constraints: LayoutConstraints
     onUpdate: (updates: Record<string, unknown>) => void
@@ -276,6 +304,36 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
 
     const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
 
+    const getHorizontalAlignUpdates = useCallback(
+        (x: number, horizontal: AlignHorizontalConstraint): Record<string, unknown> => {
+            if (!isIgnoringAutoLayout) {
+                return { x }
+            }
+
+            return {
+                x,
+                constraints: mergeHorizontalConstraint(node.constraints, horizontal),
+            }
+        },
+        [isIgnoringAutoLayout, node.constraints]
+    )
+
+    const getVerticalAlignUpdates = useCallback(
+        (y: number, vertical: AlignVerticalConstraint): Record<string, unknown> => {
+            if (!isIgnoringAutoLayout) {
+                return { y }
+            }
+
+            return {
+                y,
+                constraints: mergeVerticalConstraint(node.constraints, vertical),
+            }
+        },
+        [isIgnoringAutoLayout, node.constraints]
+    )
+
+    const shouldSyncChildConstraintsOnAlign = node.type === 'frame' && node.layout.mode !== 'none'
+
     // Toggle handler for "Ignore auto layout"
     const handleToggleIgnoreAutoLayout = useCallback(() => {
         if (node.positioning === 'absolute') {
@@ -293,79 +351,107 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { x: bounds.x })
+                const updates: Record<string, unknown> = { x: bounds.x }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeHorizontalConstraint(child.constraints, 'left')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ x: bounds.x })
+            onUpdate(getHorizontalAlignUpdates(bounds.x, 'left'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getHorizontalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     const handleAlignCenterH = useCallback(() => {
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { x: bounds.x + (bounds.width - child.width) / 2 })
+                const updates: Record<string, unknown> = {
+                    x: bounds.x + (bounds.width - child.width) / 2,
+                }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeHorizontalConstraint(child.constraints, 'center')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ x: bounds.x + (bounds.width - node.width) / 2 })
+            onUpdate(getHorizontalAlignUpdates(bounds.x + (bounds.width - node.width) / 2, 'center'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getHorizontalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     const handleAlignRight = useCallback(() => {
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { x: bounds.x + bounds.width - child.width })
+                const updates: Record<string, unknown> = { x: bounds.x + bounds.width - child.width }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeHorizontalConstraint(child.constraints, 'right')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ x: bounds.x + bounds.width - node.width })
+            onUpdate(getHorizontalAlignUpdates(bounds.x + bounds.width - node.width, 'right'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getHorizontalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     const handleAlignTop = useCallback(() => {
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { y: bounds.y })
+                const updates: Record<string, unknown> = { y: bounds.y }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeVerticalConstraint(child.constraints, 'top')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ y: bounds.y })
+            onUpdate(getVerticalAlignUpdates(bounds.y, 'top'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getVerticalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     const handleAlignCenterV = useCallback(() => {
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { y: bounds.y + (bounds.height - child.height) / 2 })
+                const updates: Record<string, unknown> = {
+                    y: bounds.y + (bounds.height - child.height) / 2,
+                }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeVerticalConstraint(child.constraints, 'center')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ y: bounds.y + (bounds.height - node.height) / 2 })
+            onUpdate(getVerticalAlignUpdates(bounds.y + (bounds.height - node.height) / 2, 'center'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getVerticalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     const handleAlignBottom = useCallback(() => {
         if (isParentFrame(node)) {
             const bounds = getFrameContentBounds(node)
             for (const child of node.children) {
-                updateNode(child.id, { y: bounds.y + bounds.height - child.height })
+                const updates: Record<string, unknown> = { y: bounds.y + bounds.height - child.height }
+                if (shouldSyncChildConstraintsOnAlign && child.positioning === 'absolute') {
+                    updates.constraints = mergeVerticalConstraint(child.constraints, 'bottom')
+                }
+                updateNode(child.id, updates)
             }
         } else {
             const bounds = getAlignmentBounds(node.id)
             if (!bounds) return
-            onUpdate({ y: bounds.y + bounds.height - node.height })
+            onUpdate(getVerticalAlignUpdates(bounds.y + bounds.height - node.height, 'bottom'))
         }
-    }, [node, onUpdate, updateNode])
+    }, [getVerticalAlignUpdates, node, onUpdate, shouldSyncChildConstraintsOnAlign, updateNode])
 
     // "Ignore auto layout" toggle button — shown as action in section header
     const ignoreAction = isInAutoLayoutParent ? (
@@ -467,7 +553,7 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
             {/* Constraints — shown when node is absolute-positioned in auto layout parent */}
             {isIgnoringAutoLayout && (
                 <ConstraintsSection
-                    constraints={node.constraints ?? { horizontal: 'left', vertical: 'top' }}
+                    constraints={node.constraints ?? DEFAULT_CONSTRAINTS}
                     onUpdate={onUpdate}
                 />
             )}
