@@ -36,6 +36,7 @@ import { quickExport } from '@/lib/export/export-node'
 // │ ⇧⌘Z                   │ Redo                           │
 // │ ⌘C                    │ Copy                           │
 // │ ⌘V                    │ Paste                          │
+// │ ⇧⌘V                   │ Paste Over Selection           │
 // │ ⌘D                    │ Duplicate                      │
 // │ ⌘G                    │ Group                          │
 // │ ⇧⌘G                   │ Ungroup                        │
@@ -142,7 +143,11 @@ export function useKeyboardShortcuts() {
                     case 'v':
                         if (store._clipboard.length > 0) {
                             e.preventDefault()
-                            store.pasteNodes()
+                            if (shift) {
+                                store.pasteOverSelection()
+                            } else {
+                                store.pasteNodes()
+                            }
                         }
                         return
 
@@ -417,9 +422,9 @@ export function useKeyboardShortcuts() {
                         let targetIdx = idx
                         switch (key) {
                             case 'arrowright': targetIdx = idx + 1; break
-                            case 'arrowleft':  targetIdx = idx - 1; break
-                            case 'arrowdown':  targetIdx = idx + colCount; break
-                            case 'arrowup':    targetIdx = idx - colCount; break
+                            case 'arrowleft': targetIdx = idx - 1; break
+                            case 'arrowdown': targetIdx = idx + colCount; break
+                            case 'arrowup': targetIdx = idx - colCount; break
                         }
 
                         // Bounds check

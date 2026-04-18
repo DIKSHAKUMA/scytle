@@ -204,74 +204,74 @@ export function SelectionOverlay({
                 <div key={id}>
                     {/* Hide everything when this node is in vector edit mode or text edit mode */}
                     {vectorEditNodeId !== id && editingNodeId !== id && (
-                    <>
-                    {/* Blue outline */}
-                    <div
-                        className="pointer-events-none"
-                        style={{
-                            position: 'absolute',
-                            left: rect.x,
-                            top: rect.y,
-                            width: rect.width,
-                            height: rect.height,
-                            border: '1.5px solid #3b82f6',
-                            borderRadius: 1,
-                            zIndex: 999,
-                        }}
-                    />
-
-                    {/* Resize handles */}
-                    {!vectorEditNodeId && (
                         <>
-                            {/* 4 corner resize handles — visible dots */}
-                            {CORNER_POSITIONS.map((pos) => {
-                                const hs = getCornerHandleStyle(pos, rect)
-                                return (
-                                    <div
-                                        key={pos}
-                                        data-handle={pos}
-                                        data-node-handle={id}
-                                        style={{
-                                            position: 'absolute',
-                                            left: hs.left,
-                                            top: hs.top,
-                                            width: CORNER_HANDLE_SIZE,
-                                            height: CORNER_HANDLE_SIZE,
-                                            backgroundColor: '#ffffff',
-                                            border: '1.5px solid #3b82f6',
-                                            borderRadius: 1,
-                                            cursor: hs.cursor,
-                                            zIndex: 1000,
-                                            pointerEvents: 'auto',
-                                        }}
-                                    />
-                                )
-                            })}
+                            {/* Blue outline */}
+                            <div
+                                className="pointer-events-none"
+                                style={{
+                                    position: 'absolute',
+                                    left: rect.x,
+                                    top: rect.y,
+                                    width: rect.width,
+                                    height: rect.height,
+                                    border: '1.5px solid #3b82f6',
+                                    borderRadius: 1,
+                                    zIndex: 999,
+                                }}
+                            />
 
-                            {/* 4 edge resize hit zones — invisible but interactive */}
-                            {EDGE_POSITIONS.map((pos) => {
-                                const ez = getEdgeHitZoneStyle(pos, rect)
-                                return (
-                                    <div
-                                        key={pos}
-                                        data-handle={pos}
-                                        data-node-handle={id}
-                                        style={{
-                                            position: 'absolute',
-                                            left: ez.left,
-                                            top: ez.top,
-                                            width: ez.width,
-                                            height: ez.height,
-                                            cursor: ez.cursor,
-                                            zIndex: 1000,
-                                            pointerEvents: 'auto',
-                                        }}
-                                    />
-                                )
-                            })}
+                            {/* Resize handles */}
+                            {!vectorEditNodeId && (
+                                <>
+                                    {/* 4 corner resize handles — visible dots */}
+                                    {CORNER_POSITIONS.map((pos) => {
+                                        const hs = getCornerHandleStyle(pos, rect)
+                                        return (
+                                            <div
+                                                key={pos}
+                                                data-handle={pos}
+                                                data-node-handle={id}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: hs.left,
+                                                    top: hs.top,
+                                                    width: CORNER_HANDLE_SIZE,
+                                                    height: CORNER_HANDLE_SIZE,
+                                                    backgroundColor: '#ffffff',
+                                                    border: '1.5px solid #3b82f6',
+                                                    borderRadius: 1,
+                                                    cursor: hs.cursor,
+                                                    zIndex: 1000,
+                                                    pointerEvents: 'auto',
+                                                }}
+                                            />
+                                        )
+                                    })}
+
+                                    {/* 4 edge resize hit zones — invisible but interactive */}
+                                    {EDGE_POSITIONS.map((pos) => {
+                                        const ez = getEdgeHitZoneStyle(pos, rect)
+                                        return (
+                                            <div
+                                                key={pos}
+                                                data-handle={pos}
+                                                data-node-handle={id}
+                                                style={{
+                                                    position: 'absolute',
+                                                    left: ez.left,
+                                                    top: ez.top,
+                                                    width: ez.width,
+                                                    height: ez.height,
+                                                    cursor: ez.cursor,
+                                                    zIndex: 1000,
+                                                    pointerEvents: 'auto',
+                                                }}
+                                            />
+                                        )
+                                    })}
+                                </>
+                            )}
                         </>
-                    )}
-                    </>
                     )}
                 </div>
             ))}
@@ -1248,7 +1248,7 @@ interface GapZoneRect {
     width: number
     height: number
     index: number
-    actualGapPx: number // real gap in screen pixels (can be 0)
+    actualGapPx: number // absolute spacing magnitude in screen pixels
 }
 
 export function CanvasGapZones({
@@ -1297,6 +1297,7 @@ export function CanvasGapZones({
     const frameId = frameNode?.id ?? null
     const frameGap = frameNode?.layout.gap ?? 0
     const isColumn = frameNode?.layout.direction === 'column' || frameNode?.layout.direction === undefined
+    const allowsNegativeGap = !(frameNode?.layout.wrap)
 
     const gapZonesRef = useRef<GapZoneRect[]>([])
     const prevFrameRectRef = useRef<ScreenRect | null>(null)
@@ -1388,7 +1389,21 @@ export function CanvasGapZones({
                             width: maxRight - minLeft,
                             height: zoneHeight,
                             index: i,
-                            actualGapPx: Math.max(0, gapHeight),
+                            actualGapPx: Math.abs(gapHeight),
+                        })
+                    } else if (allowsNegativeGap) {
+                        const overlapTop = gapBottom
+                        const overlapBottom = gapTop
+                        const overlapHeight = overlapBottom - overlapTop
+                        const zoneHeight = Math.max(overlapHeight, MIN_GAP_HIT)
+                        const yOffset = overlapHeight < MIN_GAP_HIT ? (MIN_GAP_HIT - overlapHeight) / 2 : 0
+                        zones.push({
+                            x: minLeft - viewportRect.left,
+                            y: overlapTop - yOffset,
+                            width: maxRight - minLeft,
+                            height: zoneHeight,
+                            index: i,
+                            actualGapPx: Math.abs(gapHeight),
                         })
                     }
                 } else {
@@ -1405,7 +1420,21 @@ export function CanvasGapZones({
                             width: zoneWidth,
                             height: maxBottom - minTop,
                             index: i,
-                            actualGapPx: Math.max(0, gapWidth),
+                            actualGapPx: Math.abs(gapWidth),
+                        })
+                    } else if (allowsNegativeGap) {
+                        const overlapLeft = gapRight
+                        const overlapRight = gapLeft
+                        const overlapWidth = overlapRight - overlapLeft
+                        const zoneWidth = Math.max(overlapWidth, MIN_GAP_HIT)
+                        const xOffset = overlapWidth < MIN_GAP_HIT ? (MIN_GAP_HIT - overlapWidth) / 2 : 0
+                        zones.push({
+                            x: overlapLeft - xOffset,
+                            y: minTop - viewportRect.top,
+                            width: zoneWidth,
+                            height: maxBottom - minTop,
+                            index: i,
+                            actualGapPx: Math.abs(gapWidth),
                         })
                     }
                 }
@@ -1469,7 +1498,7 @@ export function CanvasGapZones({
             isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [frameId, viewportRef])
+    }, [frameId, viewportRef, allowsNegativeGap])
 
     // Close inline input when selection changes
     useEffect(() => {
@@ -1526,7 +1555,10 @@ export function CanvasGapZones({
 
             const currentPos = isColumn ? ev.clientY : ev.clientX
             const delta = (currentPos - startPos) / zoomRef.current
-            const newGap = Math.max(0, Math.round(startGap + delta))
+            let newGap = Math.round(startGap + delta)
+            if (!allowsNegativeGap) {
+                newGap = Math.max(0, newGap)
+            }
 
             const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
             if (!currentNode || currentNode.type !== 'frame') return
@@ -1587,15 +1619,16 @@ export function CanvasGapZones({
         target.addEventListener('pointermove', handleMove)
         target.addEventListener('pointerup', handleUp)
         target.addEventListener('pointercancel', handleUp)
-    }, [frameId, isColumn, beginBatch, endBatch, updateNode])
+    }, [frameId, isColumn, allowsNegativeGap, beginBatch, endBatch, updateNode])
 
     const handleInlineSubmit = useCallback((value: number) => {
         if (!frameId) return
         const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
         if (!currentNode || currentNode.type !== 'frame') return
-        updateNode(frameId, { layout: { ...currentNode.layout, gap: Math.max(0, value) } })
+        const nextGap = allowsNegativeGap ? value : Math.max(0, value)
+        updateNode(frameId, { layout: { ...currentNode.layout, gap: nextGap } })
         setInlineInput(null)
-    }, [frameId, updateNode])
+    }, [frameId, allowsNegativeGap, updateNode])
 
     if (gapZones.length === 0) return null
 
@@ -1686,7 +1719,7 @@ export function CanvasGapZones({
                             onPointerDown={(e) => handlePointerDown(zone, e)}
                         />
 
-                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered, only if actual gap > 0 */}
+                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered */}
                         {isAnyHovered && !inlineInput && zone.actualGapPx > 0 && (
                             <div
                                 className="pointer-events-none"

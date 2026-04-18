@@ -3,7 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import { devtools } from 'zustand/middleware'
 import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
-import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
+import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, findContainingFrame, getEffectiveNodeSize, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
 import { canvasSync } from '@/lib/sync'
 import { useVariableStore } from '@/store/variable-store'
@@ -159,6 +159,185 @@ export interface PenDrawingState {
     _extendToVertexIndex?: number
 }
 
+interface ClipboardEntryMeta {
+    sourceId: string
+    sourceParentId: string | null
+    sourceIndex: number
+    sourceCanvasX: number
+    sourceCanvasY: number
+}
+
+interface ClipboardMeta {
+    sourcePageId: string
+    entries: ClipboardEntryMeta[]
+}
+
+interface SourcePositionMeta {
+    sourceCanvasX: number
+    sourceCanvasY: number
+}
+
+function snapshotNode(node: ScytleNode): ScytleNode {
+    return JSON.parse(JSON.stringify(node)) as ScytleNode
+}
+
+function buildClipboardState(
+    nodes: ScytleNode[],
+    ids: string[],
+    sourcePageId: string
+): { clipboard: ScytleNode[]; meta: ClipboardMeta } {
+    const clipboard: ScytleNode[] = []
+    const entries: ClipboardEntryMeta[] = []
+
+    for (const id of ids) {
+        const node = findNodeById(nodes, id)
+        if (!node) continue
+
+        const parentInfo = findParentOfNode(nodes, id)
+        const absPos = getNodeCanvasPosition(nodes, id) ?? { x: node.x, y: node.y }
+
+        clipboard.push(snapshotNode(node as ScytleNode))
+        entries.push({
+            sourceId: id,
+            sourceParentId: parentInfo?.parent?.id ?? null,
+            sourceIndex: parentInfo?.index ?? -1,
+            sourceCanvasX: absPos.x,
+            sourceCanvasY: absPos.y,
+        })
+    }
+
+    return {
+        clipboard,
+        meta: {
+            sourcePageId,
+            entries,
+        },
+    }
+}
+
+function getRightmostTopLevelFrameEdge(nodes: readonly ScytleNode[]): number | null {
+    let maxRight = -Infinity
+
+    for (const node of nodes) {
+        if (node.type !== 'frame') continue
+        const size = getEffectiveNodeSize(node)
+        maxRight = Math.max(maxRight, node.x + size.width)
+    }
+
+    return Number.isFinite(maxRight) ? maxRight : null
+}
+
+function getRightmostTopLevelFrameX(nodes: readonly ScytleNode[]): number | null {
+    let maxX = -Infinity
+
+    for (const node of nodes) {
+        if (node.type !== 'frame') continue
+        maxX = Math.max(maxX, node.x)
+    }
+
+    return Number.isFinite(maxX) ? maxX : null
+}
+
+function getObservedTopLevelFrameStep(nodes: readonly ScytleNode[]): number | null {
+    const xs = nodes
+        .filter((node): node is FrameNode => node.type === 'frame')
+        .map((node) => node.x)
+        .sort((a, b) => a - b)
+
+    if (xs.length < 2) return null
+
+    const deltas: number[] = []
+    for (let i = 1; i < xs.length; i++) {
+        const delta = xs[i] - xs[i - 1]
+        if (delta > 0) deltas.push(delta)
+    }
+
+    if (deltas.length === 0) return null
+    deltas.sort((a, b) => a - b)
+
+    const mid = Math.floor(deltas.length / 2)
+    if (deltas.length % 2 === 1) return deltas[mid]
+
+    return (deltas[mid - 1] + deltas[mid]) / 2
+}
+
+function getTopLevelSourceFrameBounds(
+    nodes: readonly ScytleNode[],
+    sourceEntries: readonly SourcePositionMeta[]
+): { minX: number; maxRight: number } | null {
+    if (nodes.length === 0 || nodes.length !== sourceEntries.length) return null
+
+    let minX = Infinity
+    let maxRight = -Infinity
+
+    for (let i = 0; i < nodes.length; i++) {
+        const source = sourceEntries[i]
+        const node = nodes[i]
+        const size = getEffectiveNodeSize(node)
+        minX = Math.min(minX, source.sourceCanvasX)
+        maxRight = Math.max(maxRight, source.sourceCanvasX + size.width)
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxRight)) {
+        return null
+    }
+
+    return { minX, maxRight }
+}
+
+function getTopLevelFrameShiftX(
+    existingNodes: readonly ScytleNode[],
+    sourceNodes: readonly ScytleNode[],
+    sourceEntries: readonly SourcePositionMeta[],
+    gap: number,
+): number | null {
+    const sourceBounds = getTopLevelSourceFrameBounds(sourceNodes, sourceEntries)
+    if (!sourceBounds) return null
+
+    const rightmostExisting = getRightmostTopLevelFrameEdge(existingNodes)
+    if (rightmostExisting !== null) {
+        let targetLeft = rightmostExisting + gap
+
+        // If frame effective width is inflated, edge-based chaining can jump too far.
+        // Prefer observed X-step from existing top-level frames when the edge step is
+        // significantly larger than the established chain cadence.
+        const observedStep = getObservedTopLevelFrameStep(existingNodes)
+        const rightmostX = getRightmostTopLevelFrameX(existingNodes)
+        if (observedStep !== null && rightmostX !== null) {
+            const edgeStep = targetLeft - rightmostX
+            const shouldUseObservedStep = edgeStep > observedStep * 2.5 && (edgeStep - observedStep) > 120
+
+            if (shouldUseObservedStep) {
+                targetLeft = rightmostX + observedStep
+            }
+        }
+
+        return targetLeft - sourceBounds.minX
+    }
+
+    return sourceBounds.maxRight - sourceBounds.minX + gap
+}
+
+function getFrameAtAnchor(
+    nodes: readonly ScytleNode[],
+    anchor: { x: number; y: number } | null,
+): string | null {
+    if (!anchor) return null
+
+    const containing = findContainingFrame(
+        nodes,
+        anchor.x,
+        anchor.y,
+        0,
+        0,
+        undefined,
+        10,
+        false,
+    )
+
+    return containing?.frameId ?? null
+}
+
 
 // ============================================================
 // State Interface
@@ -306,6 +485,7 @@ interface EditorState {
     selectNode: (id: string, addToSelection?: boolean) => void
     deselectAll: () => void
     setHoveredId: (id: string | null) => void
+    setPasteAnchor: (x: number, y: number) => void
     /** Zoom and pan to center the given node in the viewport */
     zoomToNode: (id: string) => void
     /** Zoom and pan to fit all top-level nodes in the viewport */
@@ -337,6 +517,8 @@ interface EditorState {
     _future: ScytleNode[][]
     _batchDepth: number
     _clipboard: ScytleNode[]
+    _clipboardMeta: ClipboardMeta | null
+    _pasteAnchor: { x: number; y: number } | null
 
     // History actions -----------------------------------------
     undo: () => void
@@ -357,6 +539,8 @@ interface EditorState {
     copyNodes: (ids: string[]) => void
     cutNodes: (ids: string[]) => void
     pasteNodes: () => void
+    pasteOverSelection: () => void
+    pasteHere: () => void
     duplicateNodes: (ids: string[]) => void
 
     // Reparent actions -----------------------------------------
@@ -461,6 +645,8 @@ export const useEditorStore = create<EditorState>()(
             _future: [],
             _batchDepth: 0,
             _clipboard: [],
+            _clipboardMeta: null,
+            _pasteAnchor: null,
             _projectId: null,
             hasEverHadNodes: false,
             pages: [],
@@ -810,6 +996,7 @@ export const useEditorStore = create<EditorState>()(
                 set(
                     (state) => {
                         state.selectedIds = []
+                        state._pasteAnchor = null
                     },
                     false,
                     'deselectAll'
@@ -822,6 +1009,15 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setHoveredId'
+                ),
+
+            setPasteAnchor: (x, y) =>
+                set(
+                    (state) => {
+                        state._pasteAnchor = { x, y }
+                    },
+                    false,
+                    'setPasteAnchor'
                 ),
 
             zoomToNode: (id) => {
@@ -1362,12 +1558,13 @@ export const useEditorStore = create<EditorState>()(
             copyNodes: (ids) =>
                 set(
                     (state) => {
-                        const nodes: ScytleNode[] = []
-                        for (const id of ids) {
-                            const node = findNodeById(state.nodes, id)
-                            if (node) nodes.push(current(node) as ScytleNode)
-                        }
-                        state._clipboard = nodes
+                        const clipboardState = buildClipboardState(
+                            state.nodes,
+                            ids,
+                            state.activePageId
+                        )
+                        state._clipboard = clipboardState.clipboard
+                        state._clipboardMeta = clipboardState.meta
                     },
                     false,
                     'copyNodes'
@@ -1377,12 +1574,13 @@ export const useEditorStore = create<EditorState>()(
                 set(
                     (state) => {
                         // Save to clipboard first
-                        const clipNodes: ScytleNode[] = []
-                        for (const id of ids) {
-                            const node = findNodeById(state.nodes, id)
-                            if (node) clipNodes.push(current(node) as ScytleNode)
-                        }
-                        state._clipboard = clipNodes
+                        const clipboardState = buildClipboardState(
+                            state.nodes,
+                            ids,
+                            state.activePageId
+                        )
+                        state._clipboard = clipboardState.clipboard
+                        state._clipboardMeta = clipboardState.meta
 
                         // Snap before deletion (the actual mutation)
                         _snap(state)
@@ -1421,11 +1619,63 @@ export const useEditorStore = create<EditorState>()(
                         _snap(state)
 
                         const PASTE_OFFSET = 20
+                        const TOP_LEVEL_FRAME_GAP = 40
                         const newIds: string[] = []
+                        const clipboardMeta = state._clipboardMeta
+                        const sourceEntries = clipboardMeta?.entries ?? []
+                        const copiedSourceIds = new Set(sourceEntries.map((e) => e.sourceId))
+                        const hasActiveSourceSelection = state.selectedIds.some((id) => copiedSourceIds.has(id))
+
+                        const selectedFrames = state.selectedIds
+                            .map((id) => findNodeById(state.nodes, id))
+                            .filter((n): n is FrameNode => !!n && n.type === 'frame')
+
+                        const canPasteToEachSelectedFrame =
+                            !state.enteredFrameId &&
+                            selectedFrames.length > 0 &&
+                            selectedFrames.length === state.selectedIds.length &&
+                            selectedFrames.every((frame) => !copiedSourceIds.has(frame.id))
+
+                        if (canPasteToEachSelectedFrame) {
+                            for (let i = 0; i < selectedFrames.length; i++) {
+                                const targetFrame = selectedFrames[i]
+                                const original = clipboard[i % clipboard.length]
+                                const clone = deepCloneWithNewIds(original)
+                                const sourceMeta = sourceEntries[i % sourceEntries.length]
+
+                                let x = clone.x
+                                let y = clone.y
+                                const xFits = x >= -clone.width && x <= targetFrame.width
+                                const yFits = y >= -clone.height && y <= targetFrame.height
+
+                                if (!xFits) x = (targetFrame.width - clone.width) / 2
+                                if (!yFits) y = (targetFrame.height - clone.height) / 2
+
+                                if (sourceMeta?.sourceParentId === targetFrame.id) {
+                                    x += PASTE_OFFSET
+                                    y += PASTE_OFFSET
+                                }
+
+                                clone.x = x
+                                clone.y = y
+                                targetFrame.children.push(clone)
+                                newIds.push(clone.id)
+                            }
+
+                            state.selectedIds = newIds
+                            const nextClipboard = buildClipboardState(
+                                state.nodes,
+                                newIds,
+                                state.activePageId
+                            )
+                            state._clipboard = nextClipboard.clipboard
+                            state._clipboardMeta = nextClipboard.meta
+                            return
+                        }
 
                         // Determine paste target:
                         // 1. If drilled into a frame (enteredFrameId), paste inside it
-                        // 2. If a single frame is selected, paste inside it (Figma behavior)
+                        // 2. If a single frame is selected, paste inside it (except self-paste)
                         // 3. Otherwise, paste at top level
                         let targetFrame: FrameNode | null = null
                         if (state.enteredFrameId) {
@@ -1440,48 +1690,298 @@ export const useEditorStore = create<EditorState>()(
                                 state.selectedIds[0]
                             )
                             if (sel && sel.type === 'frame') {
-                                targetFrame = sel as FrameNode
+                                // Prevent frame self-nesting on copy/paste
+                                if (!copiedSourceIds.has(sel.id)) {
+                                    targetFrame = sel as FrameNode
+                                }
                             }
                         }
 
-                        for (const original of clipboard) {
+                        // Preserve source parent context for same-page copy/paste
+                        if (!targetFrame && clipboardMeta?.sourcePageId === state.activePageId) {
+                            const parentKeys = new Set(
+                                sourceEntries.map((entry) => entry.sourceParentId ?? '__TOP__')
+                            )
+                            if (parentKeys.size === 1) {
+                                const sourceParentId = sourceEntries[0]?.sourceParentId ?? null
+                                if (sourceParentId) {
+                                    const anchorFrameId = getFrameAtAnchor(state.nodes, state._pasteAnchor)
+                                    const shouldPreserveSourceParent = state._pasteAnchor
+                                        ? anchorFrameId === sourceParentId
+                                        : hasActiveSourceSelection
+
+                                    if (shouldPreserveSourceParent) {
+                                        const parent = findNodeById(state.nodes, sourceParentId)
+                                        if (parent && parent.type === 'frame') {
+                                            targetFrame = parent as FrameNode
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        const isTopLevelFramePaste =
+                            !targetFrame &&
+                            clipboardMeta?.sourcePageId === state.activePageId &&
+                            clipboard.length > 0 &&
+                            clipboard.length === sourceEntries.length &&
+                            clipboard.every((node) => node.type === 'frame') &&
+                            sourceEntries.every((entry) => entry.sourceParentId === null)
+
+                        let topLevelPasteShiftX: number | null = null
+                        if (isTopLevelFramePaste) {
+                            topLevelPasteShiftX = getTopLevelFrameShiftX(
+                                state.nodes,
+                                clipboard,
+                                sourceEntries,
+                                TOP_LEVEL_FRAME_GAP,
+                            )
+                        }
+
+                        for (let i = 0; i < clipboard.length; i++) {
+                            const original = clipboard[i]
                             const clone = deepCloneWithNewIds(original)
+                            const sourceMeta = sourceEntries[i]
 
                             if (targetFrame) {
-                                // Check if clipboard coords are reasonable within target frame
-                                const inFrameBounds =
-                                    clone.x >= -clone.width && clone.x <= targetFrame.width &&
-                                    clone.y >= -clone.height && clone.y <= targetFrame.height
+                                let nextX = clone.x
+                                let nextY = clone.y
 
-                                if (inFrameBounds) {
-                                    // Same-context or stacked paste — offset from current position
-                                    clone.x += PASTE_OFFSET
-                                    clone.y += PASTE_OFFSET
+                                const inFrameBounds =
+                                    nextX >= -clone.width && nextX <= targetFrame.width &&
+                                    nextY >= -clone.height && nextY <= targetFrame.height
+
+                                if (sourceMeta?.sourceParentId === targetFrame.id) {
+                                    nextX += PASTE_OFFSET
+                                    nextY += PASTE_OFFSET
+                                } else if (!inFrameBounds) {
+                                    // Cross-context paste — center constrained axes
+                                    if (nextX < -clone.width || nextX > targetFrame.width) {
+                                        nextX = (targetFrame.width - clone.width) / 2
+                                    }
+                                    if (nextY < -clone.height || nextY > targetFrame.height) {
+                                        nextY = (targetFrame.height - clone.height) / 2
+                                    }
                                 } else {
-                                    // Cross-context paste (from outside) — center within frame
-                                    clone.x = (targetFrame.width - clone.width) / 2
-                                    clone.y = (targetFrame.height - clone.height) / 2
+                                    nextX += PASTE_OFFSET
+                                    nextY += PASTE_OFFSET
                                 }
+
+                                clone.x = nextX
+                                clone.y = nextY
                                 targetFrame.children.push(clone)
                             } else {
-                                clone.x += PASTE_OFFSET
-                                clone.y += PASTE_OFFSET
+                                if (topLevelPasteShiftX !== null && sourceMeta) {
+                                    clone.x = sourceMeta.sourceCanvasX + topLevelPasteShiftX
+                                    clone.y = sourceMeta.sourceCanvasY
+                                } else {
+                                    clone.x += PASTE_OFFSET
+                                    clone.y += PASTE_OFFSET
+                                }
                                 state.nodes.push(clone)
                             }
                             newIds.push(clone.id)
                         }
 
                         state.selectedIds = newIds
-                        // Update clipboard for stacked paste offset
-                        state._clipboard = newIds.map(
-                            (id) => {
-                                const node = findNodeById(state.nodes, id)!
-                                return JSON.parse(JSON.stringify(node)) as ScytleNode
-                            }
+                        const nextClipboard = buildClipboardState(
+                            state.nodes,
+                            newIds,
+                            state.activePageId
                         )
+                        state._clipboard = nextClipboard.clipboard
+                        state._clipboardMeta = nextClipboard.meta
+                        state._pasteAnchor = null
                     },
                     false,
                     'pasteNodes'
+                ),
+
+            pasteOverSelection: () =>
+                set(
+                    (state) => {
+                        const clipboard = current(state._clipboard) as ScytleNode[]
+                        if (clipboard.length === 0 || state.selectedIds.length === 0) return
+                        _snap(state)
+
+                        const sourceEntries = state._clipboardMeta?.entries ?? []
+                        const newIds: string[] = []
+
+                        const selectedTargets = state.selectedIds
+                            .map((id) => findNodeById(state.nodes, id))
+                            .filter((n): n is ScytleNode => !!n)
+
+                        if (selectedTargets.length === 1 && clipboard.length > 1) {
+                            const target = selectedTargets[0]
+                            const targetCanvas = getNodeCanvasPosition(state.nodes, target.id)
+                            if (!targetCanvas) return
+
+                            const targetParentInfo = findParentOfNode(state.nodes, target.id)
+                            const targetParent = targetParentInfo?.parent ?? null
+                            const targetParentCanvas = targetParent
+                                ? getNodeCanvasPosition(state.nodes, targetParent.id)
+                                : null
+
+                            const baseSource = sourceEntries[0] ?? {
+                                sourceCanvasX: clipboard[0].x,
+                                sourceCanvasY: clipboard[0].y,
+                            }
+
+                            for (let i = 0; i < clipboard.length; i++) {
+                                const original = clipboard[i]
+                                const clone = deepCloneWithNewIds(original)
+                                const sourceMeta = sourceEntries[i]
+
+                                const deltaX = sourceMeta
+                                    ? sourceMeta.sourceCanvasX - baseSource.sourceCanvasX
+                                    : original.x - clipboard[0].x
+                                const deltaY = sourceMeta
+                                    ? sourceMeta.sourceCanvasY - baseSource.sourceCanvasY
+                                    : original.y - clipboard[0].y
+
+                                const canvasX = targetCanvas.x + deltaX
+                                const canvasY = targetCanvas.y + deltaY
+
+                                if (targetParent) {
+                                    clone.x = canvasX - (targetParentCanvas?.x ?? 0)
+                                    clone.y = canvasY - (targetParentCanvas?.y ?? 0)
+                                    targetParent.children.push(clone)
+                                } else {
+                                    clone.x = canvasX
+                                    clone.y = canvasY
+                                    state.nodes.push(clone)
+                                }
+
+                                newIds.push(clone.id)
+                            }
+                        } else {
+                            for (let i = 0; i < selectedTargets.length; i++) {
+                                const target = selectedTargets[i]
+                                const original = clipboard[i % clipboard.length]
+                                const clone = deepCloneWithNewIds(original)
+                                const targetCanvas = getNodeCanvasPosition(state.nodes, target.id)
+                                if (!targetCanvas) continue
+
+                                const targetParentInfo = findParentOfNode(state.nodes, target.id)
+                                const targetParent = targetParentInfo?.parent ?? null
+                                const targetParentCanvas = targetParent
+                                    ? getNodeCanvasPosition(state.nodes, targetParent.id)
+                                    : null
+
+                                if (targetParent) {
+                                    clone.x = targetCanvas.x - (targetParentCanvas?.x ?? 0)
+                                    clone.y = targetCanvas.y - (targetParentCanvas?.y ?? 0)
+                                    targetParent.children.push(clone)
+                                } else {
+                                    clone.x = targetCanvas.x
+                                    clone.y = targetCanvas.y
+                                    state.nodes.push(clone)
+                                }
+
+                                newIds.push(clone.id)
+                            }
+                        }
+
+                        if (newIds.length === 0) return
+
+                        state.selectedIds = newIds
+                        const nextClipboard = buildClipboardState(
+                            state.nodes,
+                            newIds,
+                            state.activePageId
+                        )
+                        state._clipboard = nextClipboard.clipboard
+                        state._clipboardMeta = nextClipboard.meta
+                        state._pasteAnchor = null
+                    },
+                    false,
+                    'pasteOverSelection'
+                ),
+
+            pasteHere: () =>
+                set(
+                    (state) => {
+                        const clipboard = current(state._clipboard) as ScytleNode[]
+                        if (clipboard.length === 0) return
+                        _snap(state)
+
+                        const fallbackAnchor = state.viewportRect
+                            ? {
+                                x: (state.viewportRect.width / 2 - state.panX) / state.zoom,
+                                y: (state.viewportRect.height / 2 - state.panY) / state.zoom,
+                            }
+                            : { x: 0, y: 0 }
+
+                        const anchor = state._pasteAnchor ?? fallbackAnchor
+                        const sourceEntries = state._clipboardMeta?.entries ?? []
+                        const newIds: string[] = []
+
+                        // Paste here follows cursor placement. For auto-layout parents,
+                        // paste on top of the frame (not inside), matching Figma intent.
+                        let targetFrame: FrameNode | null = null
+                        const containing = findContainingFrame(state.nodes, anchor.x, anchor.y)
+                        if (containing) {
+                            const candidate = findNodeById(state.nodes, containing.frameId)
+                            if (candidate && candidate.type === 'frame' && candidate.layout.mode === 'none') {
+                                targetFrame = candidate as FrameNode
+                            }
+                        }
+                        if (!targetFrame && state.enteredFrameId) {
+                            const entered = findNodeById(state.nodes, state.enteredFrameId)
+                            if (entered && entered.type === 'frame' && entered.layout.mode === 'none') {
+                                targetFrame = entered as FrameNode
+                            }
+                        }
+
+                        const targetFrameCanvas = targetFrame
+                            ? getNodeCanvasPosition(state.nodes, targetFrame.id)
+                            : null
+
+                        const baseSource = sourceEntries[0] ?? {
+                            sourceCanvasX: clipboard[0].x,
+                            sourceCanvasY: clipboard[0].y,
+                        }
+
+                        for (let i = 0; i < clipboard.length; i++) {
+                            const original = clipboard[i]
+                            const clone = deepCloneWithNewIds(original)
+                            const sourceMeta = sourceEntries[i]
+
+                            const deltaX = sourceMeta
+                                ? sourceMeta.sourceCanvasX - baseSource.sourceCanvasX
+                                : original.x - clipboard[0].x
+                            const deltaY = sourceMeta
+                                ? sourceMeta.sourceCanvasY - baseSource.sourceCanvasY
+                                : original.y - clipboard[0].y
+
+                            const canvasX = anchor.x + deltaX
+                            const canvasY = anchor.y + deltaY
+
+                            if (targetFrame) {
+                                clone.x = canvasX - (targetFrameCanvas?.x ?? 0)
+                                clone.y = canvasY - (targetFrameCanvas?.y ?? 0)
+                                targetFrame.children.push(clone)
+                            } else {
+                                clone.x = canvasX
+                                clone.y = canvasY
+                                state.nodes.push(clone)
+                            }
+
+                            newIds.push(clone.id)
+                        }
+
+                        state.selectedIds = newIds
+                        const nextClipboard = buildClipboardState(
+                            state.nodes,
+                            newIds,
+                            state.activePageId
+                        )
+                        state._clipboard = nextClipboard.clipboard
+                        state._clipboardMeta = nextClipboard.meta
+                        state._pasteAnchor = null
+                    },
+                    false,
+                    'pasteHere'
                 ),
 
             duplicateNodes: (ids) =>
@@ -1491,7 +1991,53 @@ export const useEditorStore = create<EditorState>()(
                         _snap(state)
 
                         const OFFSET = 20
+                        const TOP_LEVEL_FRAME_GAP = 40
                         const newIds: string[] = []
+
+                        const originals = ids
+                            .map((id) => findNodeById(state.nodes, id))
+                            .filter((node): node is ScytleNode => !!node)
+
+                        const isTopLevelFrameDuplicate =
+                            originals.length === ids.length &&
+                            originals.every((node) => node.type === 'frame') &&
+                            ids.every((id) => !findParentOfNode(state.nodes, id)?.parent)
+
+                        if (isTopLevelFrameDuplicate) {
+                            const sourceEntries: SourcePositionMeta[] = originals.map((node) => ({
+                                sourceCanvasX: node.x,
+                                sourceCanvasY: node.y,
+                            }))
+
+                            const shiftX = getTopLevelFrameShiftX(
+                                state.nodes,
+                                originals,
+                                sourceEntries,
+                                TOP_LEVEL_FRAME_GAP,
+                            )
+
+                            for (let i = 0; i < originals.length; i++) {
+                                const original = originals[i]
+                                const sourceMeta = sourceEntries[i]
+                                const clone = deepCloneWithNewIds(
+                                    current(original) as ScytleNode
+                                )
+
+                                if (shiftX !== null) {
+                                    clone.x = sourceMeta.sourceCanvasX + shiftX
+                                    clone.y = sourceMeta.sourceCanvasY
+                                } else {
+                                    clone.x += OFFSET
+                                    clone.y += OFFSET
+                                }
+
+                                state.nodes.push(clone)
+                                newIds.push(clone.id)
+                            }
+
+                            state.selectedIds = newIds
+                            return
+                        }
 
                         for (const id of ids) {
                             const original = findNodeById(state.nodes, id)
@@ -1751,6 +2297,9 @@ export const useEditorStore = create<EditorState>()(
                         draft._past = []
                         draft._future = []
                         draft._batchDepth = 0
+                        draft._clipboard = []
+                        draft._clipboardMeta = null
+                        draft._pasteAnchor = null
                     },
                     false,
                     'initForProject'
@@ -1761,6 +2310,9 @@ export const useEditorStore = create<EditorState>()(
                 set(
                     (state) => {
                         state.selectedIds = ids
+                        if (ids.length === 0) {
+                            state._pasteAnchor = null
+                        }
                     },
                     false,
                     'setSelectedIds'

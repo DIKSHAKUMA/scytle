@@ -34,7 +34,14 @@ function modeToLayout(mode: LayoutMode, prev: Layout): Partial<Layout> {
         case 'grid': {
             const cols = typeof prev.columns === 'number' ? prev.columns : 2
             const tracks: GridTrack[] = Array.from({ length: cols }, () => ({ value: 1, unit: 'fr' as const }))
-            return { mode: 'grid', columns: cols, columnTracks: tracks }
+            const normalizedGap = Math.max(0, prev.gap ?? 0)
+            return {
+                mode: 'grid',
+                columns: cols,
+                columnTracks: tracks,
+                columnGap: Math.max(0, prev.columnGap ?? normalizedGap),
+                rowGap: Math.max(0, prev.rowGap ?? normalizedGap),
+            }
         }
     }
 }
@@ -591,15 +598,18 @@ function GapInput({
 
     // Use raw gap value directly (new variable system resolves via boundVariables)
     const resolvedGap = layout.gap ?? 0
+    const resolvedGridColumnGap = Math.max(0, layout.columnGap ?? resolvedGap)
+    const resolvedGridRowGap = Math.max(0, layout.rowGap ?? resolvedGap)
+    const primaryGapMin = layout.wrap ? 0 : -999
 
     const handleGapChange = useCallback((partial: Partial<Layout>) => {
         onChange(partial)
     }, [onChange])
 
     // All hooks called unconditionally (React rules of hooks)
-    const gapScrub = useScrub(resolvedGap, (v) => handleGapChange({ gap: v }))
-    const colGapScrub = useScrub(layout.columnGap ?? resolvedGap, (v) => handleGapChange({ columnGap: v }))
-    const rowGapScrub = useScrub(layout.rowGap ?? resolvedGap, (v) => handleGapChange({ rowGap: v }))
+    const gapScrub = useScrub(resolvedGap, (v) => handleGapChange({ gap: v }), 1, primaryGapMin)
+    const colGapScrub = useScrub(resolvedGridColumnGap, (v) => handleGapChange({ columnGap: v }))
+    const rowGapScrub = useScrub(resolvedGridRowGap, (v) => handleGapChange({ rowGap: v }))
 
     if (isGrid) {
         return (
@@ -609,7 +619,7 @@ function GapInput({
                         <HorizontalGapIcon />
                     </span>
                     <NumberInput
-                        value={layout.columnGap ?? resolvedGap}
+                        value={resolvedGridColumnGap}
                         onChange={(v) => handleGapChange({ columnGap: v })}
                         min={0}
                         step={1}
@@ -621,7 +631,7 @@ function GapInput({
                         <VerticalGapIcon />
                     </span>
                     <NumberInput
-                        value={layout.rowGap ?? resolvedGap}
+                        value={resolvedGridRowGap}
                         onChange={(v) => handleGapChange({ rowGap: v })}
                         min={0}
                         step={1}
@@ -646,7 +656,7 @@ function GapInput({
                 <NumberInput
                     value={resolvedGap}
                     onChange={(v) => handleGapChange({ gap: v })}
-                    min={-999}
+                    min={primaryGapMin}
                     step={1}
                     className="flex-1"
                 />
@@ -883,198 +893,198 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
 
     return (
         <>
-        <Section title={hasLayout ? 'Auto layout' : 'Layout'}>
-            {/* Flow radio group — Figma: Freeform / Vertical / Horizontal / Grid */}
-            <div className="flex items-center gap-1">
-                <div className="flex items-center gap-px bg-muted/50 rounded-sm p-0.5 flex-1">
-                    {FLOW_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            className={cn(
-                                'flex items-center gap-1 px-2 h-7 rounded-sm text-[11px] transition-all flex-1 justify-center',
-                                mode === opt.value
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                            )}
-                            onClick={() => {
-                                const partial = modeToLayout(opt.value, layout)
-                                updateLayout(partial)
-                            }}
-                            title={opt.label}
-                        >
-                            {opt.icon}
-                            <span className="text-[10px]">{opt.label}</span>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Wrap toggle — for both horizontal and vertical flex */}
-                {(mode === 'flex-row' || mode === 'flex-col') && (
-                    <button
-                        className={cn(
-                            'w-7 h-7 flex items-center justify-center rounded-sm transition-colors shrink-0',
-                            layout.wrap
-                                ? 'bg-muted text-foreground'
-                                : 'text-muted-foreground/40 hover:text-foreground hover:bg-muted/40'
-                        )}
-                        onClick={() => updateLayout({ wrap: !layout.wrap })}
-                        title={layout.wrap ? 'Disable wrap' : 'Enable wrap'}
-                    >
-                        <WrapText size={14} />
-                    </button>
-                )}
-            </div>
-
-            {/* Alignment + Gap row (flex & grid) */}
-            {hasLayout && (
-                <>
-                    <div className="flex items-start gap-3 pt-1">
-                        {/* Alignment grid */}
-                        <div>
-                            <span className="text-[10px] text-muted-foreground mb-1 block">Alignment</span>
-                            <AlignmentGrid
-                                value={getAlign3x3(layout.justify, layout.align)}
-                                onChange={(j, a) => updateLayout({ justify: j, align: a })}
-                                direction={layout.direction || 'column'}
-                                isSpaceBetween={isFlex && isSpaceBetween}
-                            />
-                        </div>
-
-                        {/* Gap controls */}
-                        <div className="flex-1">
-                            <span className="text-[10px] text-muted-foreground mb-1 block">Gap</span>
-                            <GapInput layout={layout} onChange={updateLayout} />
-                        </div>
+            <Section title={hasLayout ? 'Auto layout' : 'Layout'}>
+                {/* Flow radio group — Figma: Freeform / Vertical / Horizontal / Grid */}
+                <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-px bg-muted/50 rounded-sm p-0.5 flex-1">
+                        {FLOW_OPTIONS.map((opt) => (
+                            <button
+                                key={opt.value}
+                                className={cn(
+                                    'flex items-center gap-1 px-2 h-7 rounded-sm text-[11px] transition-all flex-1 justify-center',
+                                    mode === opt.value
+                                        ? 'bg-background text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                                )}
+                                onClick={() => {
+                                    const partial = modeToLayout(opt.value, layout)
+                                    updateLayout(partial)
+                                }}
+                                title={opt.label}
+                            >
+                                {opt.icon}
+                                <span className="text-[10px]">{opt.label}</span>
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Wrap-specific controls: counter-axis gap + wrap alignment */}
-                    {isFlex && layout.wrap && (
-                        <div className="flex items-center gap-1.5">
-                            <div className="flex items-center gap-0.5 flex-1">
-                                <span className="cursor-ew-resize select-none flex items-center" title="Cross-axis gap">
-                                    {(layout.direction ?? 'column') === 'row'
-                                        ? <VerticalGapIcon />
-                                        : <HorizontalGapIcon />
-                                    }
-                                </span>
-                                <NumberInput
-                                    value={(layout.direction ?? 'column') === 'row'
-                                        ? (layout.rowGap ?? layout.gap ?? 0)
-                                        : (layout.columnGap ?? layout.gap ?? 0)
-                                    }
-                                    onChange={(v) => {
-                                        if ((layout.direction ?? 'column') === 'row') {
-                                            updateLayout({ rowGap: v })
-                                        } else {
-                                            updateLayout({ columnGap: v })
-                                        }
-                                    }}
-                                    min={0}
-                                    step={1}
-                                    className="flex-1"
+                    {/* Wrap toggle — for both horizontal and vertical flex */}
+                    {(mode === 'flex-row' || mode === 'flex-col') && (
+                        <button
+                            className={cn(
+                                'w-7 h-7 flex items-center justify-center rounded-sm transition-colors shrink-0',
+                                layout.wrap
+                                    ? 'bg-muted text-foreground'
+                                    : 'text-muted-foreground/40 hover:text-foreground hover:bg-muted/40'
+                            )}
+                            onClick={() => updateLayout({ wrap: !layout.wrap })}
+                            title={layout.wrap ? 'Disable wrap' : 'Enable wrap'}
+                        >
+                            <WrapText size={14} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Alignment + Gap row (flex & grid) */}
+                {hasLayout && (
+                    <>
+                        <div className="flex items-start gap-3 pt-1">
+                            {/* Alignment grid */}
+                            <div>
+                                <span className="text-[10px] text-muted-foreground mb-1 block">Alignment</span>
+                                <AlignmentGrid
+                                    value={getAlign3x3(layout.justify, layout.align)}
+                                    onChange={(j, a) => updateLayout({ justify: j, align: a })}
+                                    direction={layout.direction || 'column'}
+                                    isSpaceBetween={isFlex && isSpaceBetween}
                                 />
                             </div>
-                            <SelectInput
-                                value={layout.wrapAlign ?? 'start'}
-                                options={[
-                                    { value: 'start', label: 'Start' },
-                                    { value: 'center', label: 'Center' },
-                                    { value: 'end', label: 'End' },
-                                    { value: 'between', label: 'Space' },
-                                    { value: 'stretch', label: 'Stretch' },
-                                ]}
-                                onChange={(v) => updateLayout({ wrapAlign: v === 'start' ? undefined : v as Layout['wrapAlign'] })}
-                                className="w-[70px]"
-                            />
+
+                            {/* Gap controls */}
+                            <div className="flex-1">
+                                <span className="text-[10px] text-muted-foreground mb-1 block">Gap</span>
+                                <GapInput layout={layout} onChange={updateLayout} />
+                            </div>
                         </div>
-                    )}
 
-                    {/* Padding controls (Figma-style compact H/V with individual toggle) */}
-                    <PaddingControls padding={padding} onChange={updatePadding} nodeId={node.id} />
-                </>
-            )}
+                        {/* Wrap-specific controls: counter-axis gap + wrap alignment */}
+                        {isFlex && layout.wrap && (
+                            <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-0.5 flex-1">
+                                    <span className="cursor-ew-resize select-none flex items-center" title="Cross-axis gap">
+                                        {(layout.direction ?? 'column') === 'row'
+                                            ? <VerticalGapIcon />
+                                            : <HorizontalGapIcon />
+                                        }
+                                    </span>
+                                    <NumberInput
+                                        value={(layout.direction ?? 'column') === 'row'
+                                            ? (layout.rowGap ?? layout.gap ?? 0)
+                                            : (layout.columnGap ?? layout.gap ?? 0)
+                                        }
+                                        onChange={(v) => {
+                                            if ((layout.direction ?? 'column') === 'row') {
+                                                updateLayout({ rowGap: v })
+                                            } else {
+                                                updateLayout({ columnGap: v })
+                                            }
+                                        }}
+                                        min={0}
+                                        step={1}
+                                        className="flex-1"
+                                    />
+                                </div>
+                                <SelectInput
+                                    value={layout.wrapAlign ?? 'start'}
+                                    options={[
+                                        { value: 'start', label: 'Start' },
+                                        { value: 'center', label: 'Center' },
+                                        { value: 'end', label: 'End' },
+                                        { value: 'between', label: 'Space' },
+                                        { value: 'stretch', label: 'Stretch' },
+                                    ]}
+                                    onChange={(v) => updateLayout({ wrapAlign: v === 'start' ? undefined : v as Layout['wrapAlign'] })}
+                                    className="w-[70px]"
+                                />
+                            </div>
+                        )}
 
-            {/* Clip content — Figma-style checkbox */}
-            <Checkbox
-                checked={node.overflow === 'hidden'}
-                onChange={(checked) => onUpdate({ overflow: checked ? 'hidden' : 'visible' })}
-                label="Clip content"
-            />
+                        {/* Padding controls (Figma-style compact H/V with individual toggle) */}
+                        <PaddingControls padding={padding} onChange={updatePadding} nodeId={node.id} />
+                    </>
+                )}
 
-            {/* Reverse stacking order (Figma: first on top vs last on top) */}
-            {hasLayout && (
+                {/* Clip content — Figma-style checkbox */}
                 <Checkbox
-                    checked={layout.reverseZIndex ?? false}
-                    onChange={(checked) => updateLayout({ reverseZIndex: checked || undefined })}
-                    label="Reverse canvas stacking"
+                    checked={node.overflow === 'hidden'}
+                    onChange={(checked) => onUpdate({ overflow: checked ? 'hidden' : 'visible' })}
+                    label="Clip content"
                 />
-            )}
-        </Section>
 
-        {/* Grid track lists — separate section below Auto layout (like Figma) */}
-        {isGrid && (
-            <div className="border-b border-border/40 px-3 py-1">
-                <TrackListSection
-                    label="Columns"
-                    axis="col"
-                    nodeId={node.id}
-                    tracks={layout.columnTracks?.length ? layout.columnTracks : legacyToTracks(layout.columns)}
-                    onChange={(tracks, removedIndex) => {
-                        updateLayout({ columnTracks: tracks, columns: tracks.length })
-                        if (removedIndex != null && node.children) {
-                            for (const child of node.children) {
-                                const start = child.gridColumnStart
-                                const span = child.gridColumnSpan
-                                const updates: Record<string, unknown> = {}
-                                if (start != null && start > removedIndex + 1) {
-                                    updates.gridColumnStart = start - 1
-                                }
-                                if (span != null && span > 1 && span !== -1) {
-                                    const childEnd = (start ?? 1) + span - 1
-                                    if (childEnd > removedIndex + 1) {
-                                        updates.gridColumnSpan = Math.max(1, span - 1)
+                {/* Reverse stacking order (Figma: first on top vs last on top) */}
+                {hasLayout && (
+                    <Checkbox
+                        checked={layout.reverseZIndex ?? false}
+                        onChange={(checked) => updateLayout({ reverseZIndex: checked || undefined })}
+                        label="Reverse canvas stacking"
+                    />
+                )}
+            </Section>
+
+            {/* Grid track lists — separate section below Auto layout (like Figma) */}
+            {isGrid && (
+                <div className="border-b border-border/40 px-3 py-1">
+                    <TrackListSection
+                        label="Columns"
+                        axis="col"
+                        nodeId={node.id}
+                        tracks={layout.columnTracks?.length ? layout.columnTracks : legacyToTracks(layout.columns)}
+                        onChange={(tracks, removedIndex) => {
+                            updateLayout({ columnTracks: tracks, columns: tracks.length })
+                            if (removedIndex != null && node.children) {
+                                for (const child of node.children) {
+                                    const start = child.gridColumnStart
+                                    const span = child.gridColumnSpan
+                                    const updates: Record<string, unknown> = {}
+                                    if (start != null && start > removedIndex + 1) {
+                                        updates.gridColumnStart = start - 1
+                                    }
+                                    if (span != null && span > 1 && span !== -1) {
+                                        const childEnd = (start ?? 1) + span - 1
+                                        if (childEnd > removedIndex + 1) {
+                                            updates.gridColumnSpan = Math.max(1, span - 1)
+                                        }
+                                    }
+                                    if (Object.keys(updates).length > 0) {
+                                        updateNode(child.id, updates)
                                     }
                                 }
-                                if (Object.keys(updates).length > 0) {
-                                    updateNode(child.id, updates)
-                                }
                             }
-                        }
-                    }}
-                />
-                <TrackListSection
-                    label="Rows"
-                    axis="row"
-                    nodeId={node.id}
-                    tracks={layout.rowTracks?.length ? layout.rowTracks : (layout.rows != null ? legacyToTracks(layout.rows) : [])}
-                    onChange={(tracks, removedIndex) => {
-                        updateLayout({
-                            rowTracks: tracks.length > 0 ? tracks : undefined,
-                            rows: tracks.length > 0 ? tracks.length : undefined,
-                        })
-                        if (removedIndex != null && node.children) {
-                            for (const child of node.children) {
-                                const start = child.gridRowStart
-                                const span = child.gridRowSpan
-                                const updates: Record<string, unknown> = {}
-                                if (start != null && start > removedIndex + 1) {
-                                    updates.gridRowStart = start - 1
-                                }
-                                if (span != null && span > 1 && span !== -1) {
-                                    const childEnd = (start ?? 1) + span - 1
-                                    if (childEnd > removedIndex + 1) {
-                                        updates.gridRowSpan = Math.max(1, span - 1)
+                        }}
+                    />
+                    <TrackListSection
+                        label="Rows"
+                        axis="row"
+                        nodeId={node.id}
+                        tracks={layout.rowTracks?.length ? layout.rowTracks : (layout.rows != null ? legacyToTracks(layout.rows) : [])}
+                        onChange={(tracks, removedIndex) => {
+                            updateLayout({
+                                rowTracks: tracks.length > 0 ? tracks : undefined,
+                                rows: tracks.length > 0 ? tracks.length : undefined,
+                            })
+                            if (removedIndex != null && node.children) {
+                                for (const child of node.children) {
+                                    const start = child.gridRowStart
+                                    const span = child.gridRowSpan
+                                    const updates: Record<string, unknown> = {}
+                                    if (start != null && start > removedIndex + 1) {
+                                        updates.gridRowStart = start - 1
+                                    }
+                                    if (span != null && span > 1 && span !== -1) {
+                                        const childEnd = (start ?? 1) + span - 1
+                                        if (childEnd > removedIndex + 1) {
+                                            updates.gridRowSpan = Math.max(1, span - 1)
+                                        }
+                                    }
+                                    if (Object.keys(updates).length > 0) {
+                                        updateNode(child.id, updates)
                                     }
                                 }
-                                if (Object.keys(updates).length > 0) {
-                                    updateNode(child.id, updates)
-                                }
                             }
-                        }
-                    }}
-                />
-            </div>
-        )}
+                        }}
+                    />
+                </div>
+            )}
         </>
     )
 }

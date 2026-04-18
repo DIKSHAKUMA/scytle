@@ -42,12 +42,15 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const penNearStart = useEditorStore((s) => s.penDrawingState?.nearStartPoint ?? false)
     const penIsDrawing = useEditorStore((s) => s.penDrawingState?.isDrawing ?? false)
     const isViewportAnimating = useEditorStore((s) => s.isViewportAnimating)
+    const selectedCount = useEditorStore((s) => s.selectedIds.length)
+    const clipboardCount = useEditorStore((s) => s._clipboard.length)
 
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
     const panSourceRef = useRef<'space' | 'middle' | null>(null)
     const lastPointerRef = useRef({ x: 0, y: 0 })
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
 
     const isHandMode = activeTool === 'hand' || spaceHeld
 
@@ -242,18 +245,28 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
         return () => window.removeEventListener('keydown', handlePenKeyDown)
     }, [handlePenKeyDown])
 
-    // ----------------------------------------------------------
-    // Helper: walk up from a DOM target to find data-node-id
-    // ----------------------------------------------------------
-    const findNodeIdFromTarget = useCallback((target: HTMLElement): string | null => {
-        let el: HTMLElement | null = target
-        while (el && el !== viewportRef.current) {
-            const nodeId = el.getAttribute('data-node-id')
-            if (nodeId) return nodeId
-            el = el.parentElement
+    useEffect(() => {
+        if (!contextMenu) return
+
+        const handleMouseDown = (e: MouseEvent) => {
+            const target = e.target as HTMLElement
+            if (target.closest('[data-editor-context-menu="true"]')) return
+            setContextMenu(null)
         }
-        return null
-    }, [])
+
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setContextMenu(null)
+            }
+        }
+
+        window.addEventListener('mousedown', handleMouseDown)
+        window.addEventListener('keydown', handleEscape)
+        return () => {
+            window.removeEventListener('mousedown', handleMouseDown)
+            window.removeEventListener('keydown', handleEscape)
+        }
+    }, [contextMenu])
 
     /** Resolve which node ID to select given entry context.
      *  Implements Figma-like click-through:
@@ -396,6 +409,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 if (editingEl) editingEl.blur()
             }
 
+            const pointerCanvas = screenToCanvas(e.clientX, e.clientY)
+            useEditorStore.getState().setPasteAnchor(pointerCanvas.x, pointerCanvas.y)
+
             // ── Middle mouse / hand tool → pan ────────────────────
             if (e.button === 1 || isHandMode) {
                 setIsDragging(true)
@@ -428,22 +444,28 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const pos = screenToCanvas(e.clientX, e.clientY)
                 const store = useEditorStore.getState()
 
-                // Auto-detect parent frame
+                // Match Figma-style intent: only nest text when the user is
+                // explicitly inside a frame context (entered frame or selected frame).
                 let parentId: string | undefined
                 let adjustedX = pos.x
                 let adjustedY = pos.y
 
-                const container = findContainingFrame(store.nodes, pos.x, pos.y)
-                if (container) {
-                    parentId = container.frameId
-                    adjustedX = pos.x - container.frameAbsX
-                    adjustedY = pos.y - container.frameAbsY
-                } else if (store.enteredFrameId) {
+                if (store.enteredFrameId) {
                     parentId = store.enteredFrameId
                     const parentPos = getNodeCanvasPosition(store.nodes, parentId)
                     if (parentPos) {
                         adjustedX = pos.x - parentPos.x
                         adjustedY = pos.y - parentPos.y
+                    }
+                } else if (store.selectedIds.length === 1) {
+                    const selectedNode = findNodeById(store.nodes, store.selectedIds[0])
+                    if (selectedNode?.type === 'frame') {
+                        parentId = selectedNode.id
+                        const parentPos = getNodeCanvasPosition(store.nodes, selectedNode.id)
+                        if (parentPos) {
+                            adjustedX = pos.x - parentPos.x
+                            adjustedY = pos.y - parentPos.y
+                        }
                     }
                 }
 
@@ -531,7 +553,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 }
             }
         },
-        [isHandMode, activeTool, resolveClickTarget, startPotentialDrag, startResize, screenToCanvas]
+        [isHandMode, activeTool, resolveClickTarget, startPotentialDrag, startResize, screenToCanvas, handlePenPointerDown]
     )
 
     // ----------------------------------------------------------
@@ -624,7 +646,26 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 state.selectNode(node.children[0].id)
             }
         },
-        [activeTool, resolveClickTarget, handlePenPointerDown]
+        [activeTool, resolveClickTarget]
+    )
+
+    const handleContextMenu = useCallback(
+        (e: React.MouseEvent<HTMLDivElement>) => {
+            e.preventDefault()
+
+            const pos = screenToCanvas(e.clientX, e.clientY)
+            const store = useEditorStore.getState()
+            store.setPasteAnchor(pos.x, pos.y)
+
+            const target = e.target as HTMLElement
+            const nodeId = resolveClickTarget(target)
+            if (nodeId && !store.selectedIds.includes(nodeId)) {
+                store.selectNode(nodeId)
+            }
+
+            setContextMenu({ x: e.clientX, y: e.clientY })
+        },
+        [resolveClickTarget, screenToCanvas]
     )
 
     // ----------------------------------------------------------
@@ -845,6 +886,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
             onDoubleClick={handleDoubleClick}
+            onContextMenu={handleContextMenu}
         >
             {/* Transform container — CSS custom properties drive coordinate-space rendering */}
             <div
@@ -914,6 +956,131 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     />
                 )
             })()}
+
+            {contextMenu && (
+                <div
+                    data-editor-context-menu="true"
+                    className="fixed z-50 min-w-55 rounded-lg bg-popover border border-border shadow-lg py-1"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.preventDefault()}
+                >
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store.selectedIds.length > 0) {
+                                store.copyNodes(store.selectedIds)
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={selectedCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            selectedCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Copy
+                    </button>
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store.selectedIds.length > 0) {
+                                store.cutNodes(store.selectedIds)
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={selectedCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            selectedCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Cut
+                    </button>
+
+                    <div className="my-1 h-px bg-border/70" />
+
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store._clipboard.length > 0) {
+                                store.pasteNodes()
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={clipboardCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            clipboardCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Paste
+                    </button>
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store._clipboard.length > 0 && store.selectedIds.length > 0) {
+                                store.pasteOverSelection()
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={clipboardCount === 0 || selectedCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            clipboardCount === 0 || selectedCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Paste Over Selection
+                    </button>
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store._clipboard.length > 0) {
+                                store.pasteHere()
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={clipboardCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            clipboardCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Paste Here
+                    </button>
+
+                    <div className="my-1 h-px bg-border/70" />
+
+                    <button
+                        onClick={() => {
+                            const store = useEditorStore.getState()
+                            if (store.selectedIds.length > 0) {
+                                store.duplicateNodes(store.selectedIds)
+                            }
+                            setContextMenu(null)
+                        }}
+                        disabled={selectedCount === 0}
+                        className={cn(
+                            'flex items-center w-full px-3 py-1.5 text-xs transition-colors',
+                            selectedCount === 0
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-muted/80 text-popover-foreground'
+                        )}
+                    >
+                        Duplicate
+                    </button>
+                </div>
+            )}
 
             {/* Floating toolbar — centered at top of canvas */}
             {showToolbar && (

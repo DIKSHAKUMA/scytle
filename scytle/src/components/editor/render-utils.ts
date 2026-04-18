@@ -229,10 +229,10 @@ function computeBorderAsShadow(border: Border, varCtx?: VarCtx): string | undefi
             // Build per-side inset shadows
             const shadows: string[] = []
             const nw = `calc(${-width}px * var(--z, 1))` // negative width
-            if (top)    shadows.push(`inset 0 ${w} 0 0 ${color}`)
+            if (top) shadows.push(`inset 0 ${w} 0 0 ${color}`)
             if (bottom) shadows.push(`inset 0 ${nw} 0 0 ${color}`)
-            if (left)   shadows.push(`inset ${w} 0 0 0 ${color}`)
-            if (right)  shadows.push(`inset ${nw} 0 0 0 ${color}`)
+            if (left) shadows.push(`inset ${w} 0 0 0 ${color}`)
+            if (right) shadows.push(`inset ${nw} 0 0 0 ${color}`)
             return shadows.join(', ')
         }
     }
@@ -651,11 +651,13 @@ export function computeFrameLayoutStyles(node: FrameNode, varCtx?: VarCtx): CSSP
             // New system: check boundVariables for itemSpacing
             const boundGap = nodeVarCtx ? resolveBoundNumber('itemSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
             const resolvedGap = boundGap ?? node.layout.gap
-            const gapCSS = `calc(${resolvedGap}px * var(--z, 1))`
-            // Use longhand rowGap/columnGap to avoid React warning when
-            // counter-axis gap overrides one of them during wrap.
-            s.rowGap = gapCSS
-            s.columnGap = gapCSS
+            if (resolvedGap >= 0) {
+                const gapCSS = `calc(${resolvedGap}px * var(--z, 1))`
+                // Use longhand rowGap/columnGap to avoid React warning when
+                // counter-axis gap overrides one of them during wrap.
+                s.rowGap = gapCSS
+                s.columnGap = gapCSS
+            }
         }
         if (node.layout.justify)
             s.justifyContent = JUSTIFY_MAP[node.layout.justify] ?? node.layout.justify
@@ -715,12 +717,12 @@ export function computeFrameLayoutStyles(node: FrameNode, varCtx?: VarCtx): CSSP
         const gridRowGap = node.layout.rowGap ?? node.layout.gap
         if (gridColGap != null) {
             const boundColGap = nodeVarCtx ? resolveBoundNumber('itemSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
-            const resolvedColGap = boundColGap ?? gridColGap
+            const resolvedColGap = Math.max(0, boundColGap ?? gridColGap)
             s.columnGap = `calc(${resolvedColGap}px * var(--z, 1))`
         }
         if (gridRowGap != null) {
             const boundRowGap = nodeVarCtx ? resolveBoundNumber('counterAxisSpacing', nodeVarCtx.boundVariables, nodeVarCtx.modeId, nodeVarCtx.variables, nodeVarCtx.collections) : undefined
-            const resolvedRowGap = boundRowGap ?? gridRowGap
+            const resolvedRowGap = Math.max(0, boundRowGap ?? gridRowGap)
             s.rowGap = `calc(${resolvedRowGap}px * var(--z, 1))`
         }
     }

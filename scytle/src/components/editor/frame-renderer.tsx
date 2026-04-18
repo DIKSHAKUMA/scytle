@@ -17,6 +17,37 @@ interface FrameRendererProps {
     zIndex?: number
 }
 
+function applySyntheticNegativeGap(node: FrameNode): FrameNode['children'] {
+    const gap = node.layout.gap ?? 0
+    if (node.layout.mode !== 'flex' || node.layout.wrap || gap >= 0) {
+        return node.children
+    }
+
+    const direction = node.layout.direction ?? 'column'
+
+    return node.children.map((child, index) => {
+        if (index === 0 || child.positioning === 'absolute') return child
+
+        // Keep auto margins authoritative on the adjusted axis.
+        if (direction === 'row' && child.autoMargin?.left) return child
+        if (direction === 'column' && child.autoMargin?.top) return child
+
+        const margin = child.margin ?? { top: 0, right: 0, bottom: 0, left: 0 }
+
+        if (direction === 'row') {
+            return {
+                ...child,
+                margin: { ...margin, left: margin.left + gap },
+            }
+        }
+
+        return {
+            ...child,
+            margin: { ...margin, top: margin.top + gap },
+        }
+    }) as FrameNode['children']
+}
+
 // ============================================================
 // FrameRenderer — container div with flex/grid/freeform layout
 // ============================================================
@@ -56,15 +87,17 @@ export const FrameRenderer = memo(function FrameRenderer({
             ? (node.layout.direction ?? 'column')
             : undefined
 
+    const renderedChildren = applySyntheticNegativeGap(node)
+
     return (
         <div data-node-id={node.id} style={style}>
-            {node.children.map((child, index) => (
+            {renderedChildren.map((child, index) => (
                 <NodeRenderer
                     key={child.id}
                     node={child}
                     parentDirection={childDirection}
                     parentLayoutMode={node.layout.mode}
-                    zIndex={node.layout.reverseZIndex ? node.children.length - index : undefined}
+                    zIndex={node.layout.reverseZIndex ? renderedChildren.length - index : undefined}
                 />
             ))}
         </div>

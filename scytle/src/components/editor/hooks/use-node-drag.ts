@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
-import { findNodeById, findParentOfNode, deepCloneWithNewIds, getNodeCanvasPosition, findContainingFrame, collectNodeIds } from '@/types/canvas'
-import type { FrameNode } from '@/types/canvas'
+import { findNodeById, findParentOfNode, deepCloneWithNewIds, getNodeCanvasPosition, findContainingFrame, getEffectiveFrameSize, collectNodeIds } from '@/types/canvas'
+import type { FrameNode, ScytleNode } from '@/types/canvas'
 
 // ============================================================
 // Constants
 // ============================================================
 
 const DRAG_THRESHOLD = 3 // px of movement before drag activates
+const REPARENT_INSET = 12
+const REPARENT_OVERLAP_THRESHOLD = 0.25
 
 // ============================================================
 // Module-level drag flag (shared with page.tsx for Escape gating)
@@ -280,6 +282,46 @@ function getGridCellAtScreenPoint(
     }
 
     return { col, row }
+}
+
+interface CanvasRect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
+
+function getIntersectionArea(a: CanvasRect, b: CanvasRect): number {
+    const left = Math.max(a.x, b.x)
+    const top = Math.max(a.y, b.y)
+    const right = Math.min(a.x + a.width, b.x + b.width)
+    const bottom = Math.min(a.y + a.height, b.y + b.height)
+
+    const width = right - left
+    const height = bottom - top
+
+    if (width <= 0 || height <= 0) return 0
+    return width * height
+}
+
+function getFrameDropRect(
+    nodes: readonly ScytleNode[],
+    frameId: string,
+): CanvasRect | null {
+    const frame = findNodeById(nodes, frameId)
+    if (!frame || frame.type !== 'frame') return null
+
+    const frameCanvasPos = getNodeCanvasPosition(nodes, frameId)
+    if (!frameCanvasPos) return null
+
+    const frameSize = getEffectiveFrameSize(frame)
+
+    return {
+        x: frameCanvasPos.x,
+        y: frameCanvasPos.y,
+        width: frameSize.width,
+        height: frameSize.height,
+    }
 }
 
 // ============================================================
@@ -695,14 +737,36 @@ export function useNodeDrag(
 
                     const centerX = canvasPos.x + node.width / 2
                     const centerY = canvasPos.y + node.height / 2
+                    const draggedRect: CanvasRect = {
+                        x: canvasPos.x,
+                        y: canvasPos.y,
+                        width: node.width,
+                        height: node.height,
+                    }
 
                     const currentParent = findParentOfNode(store.nodes, draggedId)
-                    // Use inset=0 for reparent detection (Figma: center within frame boundary)
-                    const container = findContainingFrame(store.nodes, centerX, centerY, 0, 0, excludeIds, 0)
+                    const container = findContainingFrame(
+                        store.nodes,
+                        centerX,
+                        centerY,
+                        0,
+                        0,
+                        excludeIds,
+                        REPARENT_INSET,
+                        true,
+                    )
 
                     if (container) {
-                        // Dropped onto a frame — reparent if different from current parent
-                        if (container.frameId !== currentParent?.parent?.id) {
+                        const frameDropRect = getFrameDropRect(store.nodes, container.frameId)
+                        const overlapArea = frameDropRect
+                            ? getIntersectionArea(draggedRect, frameDropRect)
+                            : 0
+                        const draggedArea = Math.max(draggedRect.width * draggedRect.height, 1)
+                        const overlapRatio = overlapArea / draggedArea
+                        const shouldReparent = overlapRatio >= REPARENT_OVERLAP_THRESHOLD
+
+                        // Dropped onto a frame interior — reparent if different from current parent
+                        if (shouldReparent && container.frameId !== currentParent?.parent?.id) {
                             store.moveNodeToFrame(draggedId, container.frameId)
                         }
                     } else if (currentParent?.parent) {

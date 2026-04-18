@@ -791,6 +791,143 @@ export function deepCloneWithNewIds(node: ScytleNode): ScytleNode {
     return clone
 }
 
+const AUTO_LAYOUT_INFLATION_THRESHOLD = 2
+const AUTO_LAYOUT_INFLATION_MIN_DELTA = 300
+
+function getFlexEstimatedContentSize(
+    frame: FrameNode,
+    children: readonly ScytleNode[]
+): { width: number; height: number } | null {
+    if (frame.layout.mode !== 'flex' || frame.layout.wrap || children.length === 0) {
+        return null
+    }
+
+    const direction = frame.layout.direction ?? 'column'
+    const gap = frame.layout.gap ?? 0
+
+    if (direction === 'row') {
+        const contentWidth = children.reduce((sum, child) => sum + Math.max(child.width, 0), 0)
+            + Math.max(children.length - 1, 0) * gap
+        const contentHeight = children.reduce((max, child) => Math.max(max, child.height), 0)
+
+        return {
+            width: Math.max(contentWidth, 0),
+            height: Math.max(contentHeight, 0),
+        }
+    }
+
+    const contentWidth = children.reduce((max, child) => Math.max(max, child.width), 0)
+    const contentHeight = children.reduce((sum, child) => sum + Math.max(child.height, 0), 0)
+        + Math.max(children.length - 1, 0) * gap
+
+    return {
+        width: Math.max(contentWidth, 0),
+        height: Math.max(contentHeight, 0),
+    }
+}
+
+/**
+ * Return a practical frame size for placement/hit-testing.
+ *
+ * Auto-layout frames can occasionally carry inflated dimensions relative to
+ * their visible content. When that inflation is extreme, clamp to content+
+ * padding so interactions stay close to what users see on canvas.
+ */
+export function getEffectiveFrameSize(frame: FrameNode): { width: number; height: number } {
+    const baseWidth = Math.max(frame.width, 1)
+    const baseHeight = Math.max(frame.height, 1)
+
+    if (frame.layout.mode === 'none' || frame.children.length === 0) {
+        return { width: baseWidth, height: baseHeight }
+    }
+
+    const sizingChildren = frame.children.filter((child) => child.positioning !== 'absolute')
+    if (sizingChildren.length === 0) {
+        return { width: baseWidth, height: baseHeight }
+    }
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxRight = -Infinity
+    let maxBottom = -Infinity
+
+    for (const child of sizingChildren) {
+        minX = Math.min(minX, child.x)
+        minY = Math.min(minY, child.y)
+        maxRight = Math.max(maxRight, child.x + child.width)
+        maxBottom = Math.max(maxBottom, child.y + child.height)
+    }
+
+    if (
+        !Number.isFinite(minX) ||
+        !Number.isFinite(minY) ||
+        !Number.isFinite(maxRight) ||
+        !Number.isFinite(maxBottom)
+    ) {
+        return { width: baseWidth, height: baseHeight }
+    }
+
+    const coordinateContentWidth = Math.max(maxRight - minX, 0)
+    const coordinateContentHeight = Math.max(maxBottom - minY, 0)
+    const flexEstimate = getFlexEstimatedContentSize(frame, sizingChildren)
+
+    const contentWidth = flexEstimate
+        ? Math.max(coordinateContentWidth, flexEstimate.width)
+        : coordinateContentWidth
+    const contentHeight = flexEstimate
+        ? Math.max(coordinateContentHeight, flexEstimate.height)
+        : coordinateContentHeight
+
+    const paddedWidth = contentWidth + (frame.padding?.left ?? 0) + (frame.padding?.right ?? 0)
+    const paddedHeight = contentHeight + (frame.padding?.top ?? 0) + (frame.padding?.bottom ?? 0)
+    const canShrinkToContentWidth = frame.layout.mode === 'flex' && frame.sizing.horizontal !== 'fixed'
+    const canShrinkToContentHeight = frame.layout.mode === 'flex' && frame.sizing.vertical !== 'fixed'
+
+    let width = baseWidth
+    let height = baseHeight
+
+    if (canShrinkToContentWidth && paddedWidth > 0) {
+        width = Math.min(width, paddedWidth)
+    }
+
+    if (canShrinkToContentHeight && paddedHeight > 0) {
+        height = Math.min(height, paddedHeight)
+    }
+
+    if (
+        paddedWidth > 0 &&
+        width > paddedWidth * AUTO_LAYOUT_INFLATION_THRESHOLD &&
+        width - paddedWidth > AUTO_LAYOUT_INFLATION_MIN_DELTA
+    ) {
+        width = paddedWidth
+    }
+
+    if (
+        paddedHeight > 0 &&
+        height > paddedHeight * AUTO_LAYOUT_INFLATION_THRESHOLD &&
+        height - paddedHeight > AUTO_LAYOUT_INFLATION_MIN_DELTA
+    ) {
+        height = paddedHeight
+    }
+
+    return {
+        width: Math.max(width, 1),
+        height: Math.max(height, 1),
+    }
+}
+
+/** Return effective width/height for any node. */
+export function getEffectiveNodeSize(node: ScytleNode): { width: number; height: number } {
+    if (node.type === 'frame') {
+        return getEffectiveFrameSize(node)
+    }
+
+    return {
+        width: Math.max(node.width, 1),
+        height: Math.max(node.height, 1),
+    }
+}
+
 /**
  * Find the deepest frame that contains the given canvas-space point.
  * Returns the frame ID, the point relative to the frame, and the frame's
@@ -807,6 +944,7 @@ export function findContainingFrame(
     offsetY: number = 0,
     excludeIds?: ReadonlySet<string>,
     inset: number = 10,
+    useEffectiveBounds: boolean = false,
 ): { frameId: string; relX: number; relY: number; frameAbsX: number; frameAbsY: number } | null {
     // Reverse iterate — topmost visual layer (last in array) checked first
     for (let i = nodes.length - 1; i >= 0; i--) {
@@ -817,13 +955,16 @@ export function findContainingFrame(
         if (node.type === 'frame') {
             const nodeAbsX = offsetX + node.x
             const nodeAbsY = offsetY + node.y
+            const frameSize = useEffectiveBounds
+                ? getEffectiveFrameSize(node)
+                : { width: node.width, height: node.height }
 
             // Point must be inside the frame (inset from all edges)
             if (
                 canvasX >= nodeAbsX + inset &&
-                canvasX <= nodeAbsX + node.width - inset &&
+                canvasX <= nodeAbsX + frameSize.width - inset &&
                 canvasY >= nodeAbsY + inset &&
-                canvasY <= nodeAbsY + node.height - inset
+                canvasY <= nodeAbsY + frameSize.height - inset
             ) {
                 // Check children first (deeper nesting wins)
                 const childResult = findContainingFrame(
@@ -834,6 +975,7 @@ export function findContainingFrame(
                     nodeAbsY,
                     excludeIds,
                     inset,
+                    useEffectiveBounds,
                 )
                 if (childResult) return childResult
 
@@ -867,7 +1009,6 @@ export function getNodeCanvasPosition(
     let curId = nodeId
 
     // Walk up parents accumulating offsets
-    // eslint-disable-next-line no-constant-condition
     while (true) {
         const result = findParentOfNode(nodes as ScytleNode[], curId)
         if (!result || !result.parent) break
