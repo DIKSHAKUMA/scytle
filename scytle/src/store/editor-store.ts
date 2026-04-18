@@ -324,6 +324,8 @@ interface EditorState {
     /** Replace a top-level node entirely (used for skeleton → real frame swap) */
     replaceNode: (oldId: string, newNode: ScytleNode) => void
     deleteNode: (id: string) => void
+    /** Remove a node without writing history (for cancelled transient creations) */
+    discardNode: (id: string) => void
     deleteSelectedNodes: () => void
     /** Reorder a node within its parent's children array.
      *  gapIndex is 0..N where N = number of siblings. */
@@ -1100,6 +1102,32 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'deleteNode'
+                )
+                // Sync handled by auto-sync subscriber
+            },
+
+            discardNode: (id) => {
+                set(
+                    (state) => {
+                        // Top-level
+                        const topIdx = state.nodes.findIndex((n) => n.id === id)
+                        if (topIdx !== -1) {
+                            state.nodes.splice(topIdx, 1)
+                        } else {
+                            // Nested
+                            const result = findParentOfNode(state.nodes, id)
+                            if (result?.parent) {
+                                result.parent.children.splice(result.index, 1)
+                            }
+                        }
+
+                        state.selectedIds = state.selectedIds.filter((sid) => sid !== id)
+                        if (state.editingNodeId === id) {
+                            state.editingNodeId = null
+                        }
+                    },
+                    false,
+                    'discardNode'
                 )
                 // Sync handled by auto-sync subscriber
             },
@@ -2301,62 +2329,62 @@ export const useEditorStore = create<EditorState>()(
 
                             // Recalculate bounding box from ALL vertices AND bezier control points
                             if (vn.vertices.length > 0) {
-                            let minX = Infinity, minY = Infinity
-                            let maxX = -Infinity, maxY = -Infinity
+                                let minX = Infinity, minY = Infinity
+                                let maxX = -Infinity, maxY = -Infinity
 
-                            // Include vertex positions
-                            for (const v of vn.vertices) {
-                                if (v.x < minX) minX = v.x
-                                if (v.y < minY) minY = v.y
-                                if (v.x > maxX) maxX = v.x
-                                if (v.y > maxY) maxY = v.y
-                            }
-
-                            // Include bezier control points (tangent extents)
-                            for (const seg of vn.segments) {
-                                const startV = vn.vertices[seg.start]
-                                const endV = vn.vertices[seg.end]
-                                if (!startV || !endV) continue
-
-                                if (seg.tangentStart) {
-                                    const cpX = startV.x + seg.tangentStart.x
-                                    const cpY = startV.y + seg.tangentStart.y
-                                    if (cpX < minX) minX = cpX
-                                    if (cpY < minY) minY = cpY
-                                    if (cpX > maxX) maxX = cpX
-                                    if (cpY > maxY) maxY = cpY
+                                // Include vertex positions
+                                for (const v of vn.vertices) {
+                                    if (v.x < minX) minX = v.x
+                                    if (v.y < minY) minY = v.y
+                                    if (v.x > maxX) maxX = v.x
+                                    if (v.y > maxY) maxY = v.y
                                 }
-                                if (seg.tangentEnd) {
-                                    const cpX = endV.x + seg.tangentEnd.x
-                                    const cpY = endV.y + seg.tangentEnd.y
-                                    if (cpX < minX) minX = cpX
-                                    if (cpY < minY) minY = cpY
-                                    if (cpX > maxX) maxX = cpX
-                                    if (cpY > maxY) maxY = cpY
+
+                                // Include bezier control points (tangent extents)
+                                for (const seg of vn.segments) {
+                                    const startV = vn.vertices[seg.start]
+                                    const endV = vn.vertices[seg.end]
+                                    if (!startV || !endV) continue
+
+                                    if (seg.tangentStart) {
+                                        const cpX = startV.x + seg.tangentStart.x
+                                        const cpY = startV.y + seg.tangentStart.y
+                                        if (cpX < minX) minX = cpX
+                                        if (cpY < minY) minY = cpY
+                                        if (cpX > maxX) maxX = cpX
+                                        if (cpY > maxY) maxY = cpY
+                                    }
+                                    if (seg.tangentEnd) {
+                                        const cpX = endV.x + seg.tangentEnd.x
+                                        const cpY = endV.y + seg.tangentEnd.y
+                                        if (cpX < minX) minX = cpX
+                                        if (cpY < minY) minY = cpY
+                                        if (cpX > maxX) maxX = cpX
+                                        if (cpY > maxY) maxY = cpY
+                                    }
                                 }
+
+                                // Add padding for stroke width (half on each side for center-aligned stroke)
+                                const strokePad = ((node as VectorNode).strokeWeight ?? 2) / 2
+                                minX -= strokePad
+                                minY -= strokePad
+                                maxX += strokePad
+                                maxY += strokePad
+
+                                // Offset all vertices so origin is top-left of bounding box
+                                for (const v of vn.vertices) {
+                                    v.x -= minX
+                                    v.y -= minY
+                                }
+
+                                // Tangents are relative to their vertex, so no adjustment needed
+
+                                // Update node position and dimensions
+                                node.x += minX
+                                node.y += minY
+                                node.width = Math.max(maxX - minX, 1)
+                                node.height = Math.max(maxY - minY, 1)
                             }
-
-                            // Add padding for stroke width (half on each side for center-aligned stroke)
-                            const strokePad = ((node as VectorNode).strokeWeight ?? 2) / 2
-                            minX -= strokePad
-                            minY -= strokePad
-                            maxX += strokePad
-                            maxY += strokePad
-
-                            // Offset all vertices so origin is top-left of bounding box
-                            for (const v of vn.vertices) {
-                                v.x -= minX
-                                v.y -= minY
-                            }
-
-                            // Tangents are relative to their vertex, so no adjustment needed
-
-                            // Update node position and dimensions
-                            node.x += minX
-                            node.y += minY
-                            node.width = Math.max(maxX - minX, 1)
-                            node.height = Math.max(maxY - minY, 1)
-                        }
                         } // end normal mode else
 
                         // Clear drawing state
