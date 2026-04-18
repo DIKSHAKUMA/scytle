@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
 import { EditorCanvas, useKeyboardShortcuts } from '@/components/editor'
-import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/workspace'
+import { TopBar, LeftPanel, RightPanel } from '@/components/workspace'
 import { Loader2, Sparkles } from 'lucide-react'
 import { canvasSync } from '@/lib/sync'
 import { createJWT } from '@/lib/appwrite'
@@ -229,10 +229,9 @@ function ProjectEditor() {
                 {/* Left panel: Files (pages + layers) / Chat tabs */}
                 <LeftPanel />
 
-                {/* Canvas + floating zoom controls */}
+                {/* Canvas */}
                 <div className="flex-1 relative overflow-hidden">
                     <EditorCanvas showToolbar={false} />
-                    <ZoomControls />
 
                     {/* Empty canvas prompt — directs user to chat */}
                     {!hasNodes && authChecked && !projectLoading && (

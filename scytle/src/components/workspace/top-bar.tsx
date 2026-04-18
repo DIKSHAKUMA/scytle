@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShareDialog } from '@/components/share/share-dialog'
+import { ZoomControls } from './zoom-controls'
 
 // ────────────────────────────────────────────────────────────
 // Tool definitions (same order as Figma: Move, Hand, Frame, Text)
@@ -122,7 +123,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 </div>
             </div>
 
-            {/* ── Right: Share ── */}
+            {/* ── Right: Share and Zoom ── */}
             <div className="flex items-center gap-1.5">
                 <button
                     onClick={() => setShareOpen(true)}
@@ -131,6 +132,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                     <Share2 className="w-3.5 h-3.5" />
                     Share
                 </button>
+                <ZoomControls />
             </div>
 
             {/* Share Dialog */}

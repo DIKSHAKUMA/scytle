@@ -444,7 +444,17 @@ export const useEditorStore = create<EditorState>()(
             setZoom: (zoom) =>
                 set(
                     (state) => {
-                        state.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+                        const { zoom: oldZoom, panX, panY, viewportRect } = state
+                        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+                        if (viewportRect) {
+                            const cx = viewportRect.width / 2
+                            const cy = viewportRect.height / 2
+                            const canvasX = (cx - panX) / oldZoom
+                            const canvasY = (cy - panY) / oldZoom
+                            state.panX = cx - canvasX * newZoom
+                            state.panY = cy - canvasY * newZoom
+                        }
+                        state.zoom = newZoom
                     },
                     false,
                     'setZoom'
@@ -821,12 +831,24 @@ export const useEditorStore = create<EditorState>()(
                 // Calculate bounding box of all top-level nodes
                 let minX = Infinity, minY = Infinity
                 let maxX = -Infinity, maxY = -Infinity
+                let hasVisibleNodes = false
 
                 for (const node of nodes) {
+                    if (node.visible === false) continue
+                    hasVisibleNodes = true
                     minX = Math.min(minX, node.x)
                     minY = Math.min(minY, node.y)
                     maxX = Math.max(maxX, node.x + node.width)
                     maxY = Math.max(maxY, node.y + node.height)
+                }
+
+                if (!hasVisibleNodes) {
+                    set((s) => {
+                        s.zoom = 1
+                        s.panX = 0
+                        s.panY = 0
+                    }, false, 'zoomToFit:invisible')
+                    return
                 }
 
                 const contentW = maxX - minX
@@ -837,7 +859,8 @@ export const useEditorStore = create<EditorState>()(
                 const padding = Math.min(vw, vh) * 0.1
                 const zoomX = (vw - padding * 2) / contentW
                 const zoomY = (vh - padding * 2) / contentH
-                let newZoom = Math.min(zoomX, zoomY, 1.0) // Cap at 100% for fit
+                // Figma zooms as much as needed, up to a reasonable limit (e.g. MAX_ZOOM)
+                let newZoom = Math.min(zoomX, zoomY)
                 newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
 
                 const newPanX = vw / 2 - (minX + contentW / 2) * newZoom
