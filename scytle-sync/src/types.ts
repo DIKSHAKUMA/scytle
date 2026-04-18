@@ -27,6 +27,7 @@ export interface SyncPage {
 
 export type ClientMessage =
   | { type: 'join'; projectId: string; token: string }
+  | { type: 'share:join'; token: string }
   | { type: 'update'; nodeId: string; changes: Record<string, unknown> }
   | { type: 'add'; node: SyncNode; pageId: string }
   | { type: 'delete'; nodeId: string; pageId: string }
@@ -82,4 +83,5 @@ export interface Env {
   APPWRITE_PROJECT_ID: string
   ALLOWED_ORIGINS: string
   INTERNAL_SYNC_SECRET?: string
+  SHARE_SYNC_TOKEN_SECRET?: string
 }

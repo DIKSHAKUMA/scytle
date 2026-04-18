@@ -1,15 +1,24 @@
 'use client'
 
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { forwardRef, useRef, useCallback, useEffect, useImperativeHandle } from 'react'
 import type { CSSProperties } from 'react'
 import type { ScytleNode } from '@/types/canvas'
 import { MIN_ZOOM, MAX_ZOOM } from '@/types/canvas'
 import { NodeRenderer } from '@/components/editor/node-renderer'
 
+const ZOOM_STEP = 0.1
 
 interface ReadOnlyCanvasProps {
     nodes: ScytleNode[]
     canvasColor?: string
+    onZoomChange?: (zoom: number) => void
+}
+
+export interface ReadOnlyCanvasHandle {
+    zoomIn: () => void
+    zoomOut: () => void
+    setZoom: (zoom: number) => void
+    fitToContent: () => void
 }
 
 /**
@@ -46,7 +55,10 @@ function computeZoomToFit(
  * but no selection, dragging, resizing, or editing.
  * Uses refs for zoom/pan state to match the editor's snappy feel.
  */
-export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanvasProps) {
+export const ReadOnlyCanvas = forwardRef<ReadOnlyCanvasHandle, ReadOnlyCanvasProps>(function ReadOnlyCanvas(
+    { nodes, canvasColor = '#F5F5F5', onZoomChange }: ReadOnlyCanvasProps,
+    ref
+) {
     const viewportRef = useRef<HTMLDivElement>(null)
     const transformRef = useRef<HTMLDivElement>(null)
 
@@ -59,8 +71,9 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
     const isPanningRef = useRef(false)
     const lastPointerRef = useRef({ x: 0, y: 0 })
 
-    // Track whether initial fit has been applied
-    const [ready, setReady] = useState(false)
+    const notifyZoomChange = useCallback((zoom: number) => {
+        onZoomChange?.(zoom)
+    }, [onZoomChange])
 
     // Apply current zoom/pan to the DOM directly
     const applyTransform = useCallback(() => {
@@ -84,27 +97,62 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
         zoomRef.current = clamped
 
         applyTransform()
-    }, [applyTransform])
+        notifyZoomChange(clamped)
+    }, [applyTransform, notifyZoomChange])
 
-    // Initial zoom-to-fit — computed before making visible
-    useEffect(() => {
-        if (nodes.length === 0) {
-            setReady(true)
-            return
-        }
-
-        // Use actual viewport dimensions
+    const fitToContent = useCallback(() => {
         const viewport = viewportRef.current
         const viewportW = viewport?.clientWidth ?? window.innerWidth
         const viewportH = viewport?.clientHeight ?? (window.innerHeight - 56)
-
         const { zoom, panX, panY } = computeZoomToFit(nodes, viewportW, viewportH)
+
         zoomRef.current = zoom
         panXRef.current = panX
         panYRef.current = panY
         applyTransform()
-        setReady(true)
-    }, [nodes, applyTransform])
+        notifyZoomChange(zoom)
+    }, [nodes, applyTransform, notifyZoomChange])
+
+    useImperativeHandle(ref, () => ({
+        zoomIn: () => {
+            const viewport = viewportRef.current
+            if (!viewport) return
+            zoomTo(
+                zoomRef.current * (1 + ZOOM_STEP),
+                viewport.clientWidth / 2,
+                viewport.clientHeight / 2,
+            )
+        },
+        zoomOut: () => {
+            const viewport = viewportRef.current
+            if (!viewport) return
+            zoomTo(
+                zoomRef.current / (1 + ZOOM_STEP),
+                viewport.clientWidth / 2,
+                viewport.clientHeight / 2,
+            )
+        },
+        setZoom: (zoom: number) => {
+            const viewport = viewportRef.current
+            if (!viewport) return
+            zoomTo(zoom, viewport.clientWidth / 2, viewport.clientHeight / 2)
+        },
+        fitToContent,
+    }), [fitToContent, zoomTo])
+
+    // Initial zoom-to-fit — computed before making visible
+    useEffect(() => {
+        if (nodes.length === 0) {
+            zoomRef.current = 1
+            panXRef.current = 0
+            panYRef.current = 0
+            applyTransform()
+            notifyZoomChange(1)
+            return
+        }
+
+        fitToContent()
+    }, [nodes, applyTransform, notifyZoomChange, fitToContent])
 
     // Wheel: ctrl/cmd+scroll = zoom to cursor, regular scroll = pan
     useEffect(() => {
@@ -137,7 +185,7 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
         if (e.button === 0 || e.button === 1) {
             isPanningRef.current = true
             lastPointerRef.current = { x: e.clientX, y: e.clientY }
-            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+                ; (e.target as HTMLElement).setPointerCapture(e.pointerId)
         }
     }, [])
 
@@ -161,9 +209,7 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
             className="w-full h-full overflow-hidden select-none"
             style={{
                 backgroundColor: canvasColor,
-                cursor: isPanningRef.current ? 'grabbing' : 'grab',
-                // Hide until initial fit is computed to prevent flash
-                visibility: ready ? 'visible' : 'hidden',
+                cursor: 'default',
             }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -172,7 +218,7 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
             <div
                 ref={transformRef}
                 className="absolute top-0 left-0"
-                style={{ '--z': zoomRef.current, '--px': panXRef.current, '--py': panYRef.current } as unknown as CSSProperties}
+                style={{ '--z': 1, '--px': 0, '--py': 0 } as unknown as CSSProperties}
             >
                 {nodes.map((node) => (
                     <NodeRenderer key={node.id} node={node} isTopLevel />
@@ -180,4 +226,4 @@ export function ReadOnlyCanvas({ nodes, canvasColor = '#F5F5F5' }: ReadOnlyCanva
             </div>
         </div>
     )
-}
+})

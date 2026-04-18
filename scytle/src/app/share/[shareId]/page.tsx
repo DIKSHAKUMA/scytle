@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createAdminClient, DATABASE_ID, COLLECTIONS } from '@/lib/appwrite-server'
 import { Query } from 'node-appwrite'
 import { resolveSharedCanvasData } from '@/lib/share-canvas'
+import { createShareRealtimeToken } from '@/lib/share-realtime-token'
 import { ShareViewer } from './share-viewer'
 
 interface PageProps {
@@ -21,7 +22,15 @@ async function getShareData(shareId: string) {
         if (result.documents.length === 0) return null
 
         const share = result.documents[0]
-        if (!share.isPublic) return { private: true, projectName: null, canvasData: null }
+        if (!share.isPublic) {
+            return {
+                private: true,
+                projectId: null,
+                projectName: null,
+                canvasData: null,
+                shareRealtimeToken: null,
+            }
+        }
 
         const project = await databases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, share.projectId)
         const canvasData = await resolveSharedCanvasData(
@@ -29,12 +38,18 @@ async function getShareData(shareId: string) {
             client,
             project as unknown as Record<string, unknown>
         )
+        const shareRealtimeToken = await createShareRealtimeToken({
+            projectId: share.projectId as string,
+            shareId,
+        })
 
         return {
             private: false,
+            projectId: share.projectId as string,
             projectName: project.name as string,
             projectDescription: (project.description || '') as string,
             canvasData,
+            shareRealtimeToken,
         }
     } catch {
         return null
@@ -109,5 +124,12 @@ export default async function SharePage({ params }: PageProps) {
         )
     }
 
-    return <ShareViewer projectName={data.projectName!} canvasData={data.canvasData} />
+    return (
+        <ShareViewer
+            projectId={data.projectId!}
+            projectName={data.projectName!}
+            canvasData={data.canvasData}
+            shareRealtimeToken={data.shareRealtimeToken ?? null}
+        />
+    )
 }

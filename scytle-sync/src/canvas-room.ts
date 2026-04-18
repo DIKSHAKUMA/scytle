@@ -14,7 +14,7 @@
 // ============================================================
 
 import { DurableObject } from 'cloudflare:workers'
-import { verifyToken, type AuthResult, AuthError } from './auth'
+import { verifyToken, verifyShareToken, type AuthResult, AuthError } from './auth'
 import type {
   Env,
   ClientMessage,
@@ -23,6 +23,12 @@ import type {
   SyncPage,
   InitState,
 } from './types'
+
+interface SocketAttachment {
+  userId: string
+  pageId: string
+  role: 'editor' | 'viewer'
+}
 
 // ============================================================
 // Durable Object
@@ -35,6 +41,7 @@ export class CanvasRoom extends DurableObject<Env> {
   private nodeOrder: Map<string, string[]> = new Map()
   private pageOrder: string[] = []
   private stateLoaded = false
+  private roomProjectId: string | null = null
 
   // ============================================================
   // SQLite Schema Setup
@@ -162,6 +169,12 @@ export class CanvasRoom extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
 
+    // Record the room project key from the routed path for auth checks.
+    const projectMatch = url.pathname.match(/^\/(?:room|snapshot)\/([a-zA-Z0-9_-]+)$/)
+    if (projectMatch) {
+      this.roomProjectId = projectMatch[1]
+    }
+
     // Internal snapshot endpoint used by the Next.js server.
     if (request.method === 'GET' && /^\/snapshot\/[a-zA-Z0-9_-]+$/.test(url.pathname)) {
       this.ensureStateLoaded()
@@ -209,7 +222,13 @@ export class CanvasRoom extends DurableObject<Env> {
 
     // Handle join (auth) — must be first message
     if (msg.type === 'join') {
-      await this.handleJoin(ws, msg.token)
+      await this.handleJoin(ws, msg.projectId, msg.token)
+      return
+    }
+
+    // Handle public share join (read-only auth)
+    if (msg.type === 'share:join') {
+      await this.handleShareJoin(ws, msg.token)
       return
     }
 
@@ -217,6 +236,11 @@ export class CanvasRoom extends DurableObject<Env> {
     const attachment = this.getAttachment(ws)
     if (!attachment) {
       this.sendTo(ws, { type: 'error', message: 'Not authenticated. Send join first.' })
+      return
+    }
+
+    if (attachment.role === 'viewer') {
+      this.sendTo(ws, { type: 'error', message: 'Read-only share sessions cannot send updates' })
       return
     }
 
@@ -281,7 +305,13 @@ export class CanvasRoom extends DurableObject<Env> {
   // Join / Auth
   // ============================================================
 
-  private async handleJoin(ws: WebSocket, token: string): Promise<void> {
+  private async handleJoin(ws: WebSocket, projectId: string, token: string): Promise<void> {
+    if (!this.roomProjectId || projectId !== this.roomProjectId) {
+      this.sendTo(ws, { type: 'error', message: 'Project mismatch' })
+      ws.close(4003, 'Project mismatch')
+      return
+    }
+
     let auth: AuthResult
     try {
       auth = await verifyToken(token, this.env)
@@ -292,11 +322,15 @@ export class CanvasRoom extends DurableObject<Env> {
       return
     }
 
-    // Store userId in WebSocket's serializable attachment (survives hibernation)
-    ws.serializeAttachment({ userId: auth.userId, pageId: this.pageOrder[0] ?? '' })
-
     // Load state from SQLite
     this.ensureStateLoaded()
+
+    // Store user identity and role in attachment (survives hibernation).
+    ws.serializeAttachment({
+      userId: auth.userId,
+      pageId: this.pageOrder[0] ?? '',
+      role: 'editor',
+    } satisfies SocketAttachment)
 
     // Send full state to the newly connected client
     const initState = this.getInitState()
@@ -306,15 +340,58 @@ export class CanvasRoom extends DurableObject<Env> {
     this.broadcastPresence()
   }
 
+  private async handleShareJoin(ws: WebSocket, token: string): Promise<void> {
+    if (!this.roomProjectId) {
+      this.sendTo(ws, { type: 'error', message: 'Project context unavailable' })
+      ws.close(4000, 'Project context unavailable')
+      return
+    }
+
+    let shareAuth: Awaited<ReturnType<typeof verifyShareToken>>
+    try {
+      shareAuth = await verifyShareToken(token, this.env)
+    } catch (err) {
+      const statusSuffix = err instanceof AuthError ? ` (${err.status})` : ''
+      this.sendTo(ws, { type: 'error', message: `Share authentication failed${statusSuffix}` })
+      ws.close(4001, 'Unauthorized')
+      return
+    }
+
+    if (shareAuth.projectId !== this.roomProjectId) {
+      this.sendTo(ws, { type: 'error', message: 'Share token project mismatch' })
+      ws.close(4003, 'Project mismatch')
+      return
+    }
+
+    this.ensureStateLoaded()
+
+    ws.serializeAttachment({
+      userId: `share:${shareAuth.shareId}:${crypto.randomUUID()}`,
+      pageId: this.pageOrder[0] ?? '',
+      role: 'viewer',
+    } satisfies SocketAttachment)
+
+    const initState = this.getInitState()
+    this.sendTo(ws, { type: 'init', state: initState })
+
+    this.broadcastPresence()
+  }
+
   // ============================================================
   // Get userId from WebSocket (using serialized attachment)
   // ============================================================
 
-  private getAttachment(ws: WebSocket): { userId: string; pageId: string } | null {
+  private getAttachment(ws: WebSocket): SocketAttachment | null {
     try {
       const attachment = ws.deserializeAttachment()
-      if (attachment && typeof attachment === 'object' && 'userId' in attachment) {
-        return attachment as { userId: string; pageId: string }
+      if (
+        attachment &&
+        typeof attachment === 'object' &&
+        'userId' in attachment &&
+        'pageId' in attachment &&
+        'role' in attachment
+      ) {
+        return attachment as SocketAttachment
       }
     } catch {
       // No attachment
