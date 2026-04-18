@@ -129,14 +129,13 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
     // Sync from props
     useEffect(() => {
         if (!hexFocused && fill.type === 'solid') {
-            setLocalHex(normaliseHex(fill.color).toUpperCase())
+            setLocalHex(normaliseHex(fill.color).replace('#', '').toUpperCase())
         }
     }, [fill, hexFocused])
 
     const commitHex = (val: string) => {
         if (fill.type !== 'solid') return;
         let v = val.trim().replace(/^#/, '')
-        // Expand 3-char to 6-char
         if (/^[0-9A-Fa-f]{3}$/.test(v)) {
             v = v[0] + v[0] + v[1] + v[1] + v[2] + v[2]
         }
@@ -144,7 +143,7 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
             onUpdate({ ...fill, color: v.toLowerCase() })
             setLocalHex(v.toUpperCase())
         } else {
-            setLocalHex(normaliseHex(fill.color).toUpperCase())
+            setLocalHex(normaliseHex(fill.color).replace('#', '').toUpperCase())
         }
         setHexFocused(false)
     }
@@ -242,11 +241,11 @@ function FillRow({ fill, fillId, fillIndex: _fillIndex, onUpdate, onRemove, docu
                     ) : fill.type === 'solid' ? (
                         <input
                             type="text"
-                            value={hexFocused ? localHex : normaliseHex(resolvedColor ?? fill.color).toUpperCase()}
+                            value={hexFocused ? localHex : normaliseHex(resolvedColor ?? fill.color).replace('#', '').toUpperCase()}
                             onChange={(e) => setLocalHex(e.target.value.toUpperCase())}
                             onFocus={(e) => {
                                 setHexFocused(true)
-                                setLocalHex(normaliseHex(resolvedColor ?? fill.color).toUpperCase())
+                                setLocalHex(normaliseHex(resolvedColor ?? fill.color).replace('#', '').toUpperCase())
                                 e.target.select()
                             }}
                             onBlur={() => commitHex(localHex)}

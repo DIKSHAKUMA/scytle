@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import type { ScytleNode, Border, BorderRadius, Fill, SolidFill } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
 import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
@@ -237,6 +237,29 @@ interface StrokeRowProps {
 function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProps) {
     const swatchRef = useRef<HTMLButtonElement>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
+    const [hexFocused, setHexFocused] = useState(false)
+    const [localHex, setLocalHex] = useState('')
+
+    // Sync from props
+    useEffect(() => {
+        if (!hexFocused) {
+            setLocalHex(normaliseHex(border.color).replace('#', '').toUpperCase())
+        }
+    }, [border.color, hexFocused])
+
+    const commitHex = (val: string) => {
+        let v = val.trim().replace(/^#/, '')
+        if (/^[0-9A-Fa-f]{3}$/.test(v)) {
+            v = v[0] + v[0] + v[1] + v[1] + v[2] + v[2]
+        }
+        if (/^[0-9A-Fa-f]{6}$/.test(v)) {
+            onUpdate({ color: '#' + v.toLowerCase() })
+            setLocalHex(v.toUpperCase())
+        } else {
+            setLocalHex(normaliseHex(border.color).replace('#', '').toUpperCase())
+        }
+        setHexFocused(false)
+    }
 
     // Theme resolution for border color
     const { table, mode } = useThemeTable()
@@ -270,64 +293,88 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
                 pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
             )}
         >
-            {/* Color swatch */}
-            <button
-                ref={swatchRef}
-                className={cn(
-                    'w-5 h-5 rounded-sm border shrink-0 transition-all',
-                    'border-border/40 hover:border-border/80',
-                    pickerOpen && 'ring-1 ring-primary/40',
-                    !isVisible && 'opacity-40',
-                )}
-                style={{ backgroundColor: hexOpacityToRgba(normaliseHex(resolvedColor), opacity) }}
-                onClick={() => setPickerOpen(true)}
-                title="Edit stroke color"
-            />
+            {/* Main encapsulate block (Swatch + Hex + Divider + Opacity) */}
+            <div className={cn(
+                "flex-1 flex items-center h-[26px] bg-muted/40 hover:bg-muted/60 transition-colors rounded-md px-1",
+                !isVisible && 'opacity-40'
+            )}>
+                {/* Color swatch */}
+                <button
+                    ref={swatchRef}
+                    className={cn(
+                        'w-3.5 h-3.5 rounded-[2px] border shadow-sm shrink-0 transition-all flex items-center justify-center',
+                        'border-border/60 hover:border-foreground/40',
+                        pickerOpen && 'ring-1 ring-primary/40'
+                    )}
+                    style={{ backgroundColor: hexOpacityToRgba(normaliseHex(resolvedColor), opacity) }}
+                    onClick={() => setPickerOpen(true)}
+                    title="Edit stroke color"
+                />
 
-            {/* Theme link indicator */}
-            <ThemeLinkBadge isLinked={isThemeLinked(border.colorRef, border.detached)} variableName={border.colorRef} />
+                {/* Hex code or Theme Link */}
+                <div className="flex-1 flex items-center pl-1.5 overflow-hidden">
+                    {isThemeLinked(border.colorRef, border.detached) ? (
+                        <ThemeLinkBadge 
+                            isLinked={true} 
+                            variableName={border.colorRef} 
+                        />
+                    ) : (
+                        <input
+                            type="text"
+                            value={hexFocused ? localHex : hex}
+                            onChange={(e) => setLocalHex(e.target.value.toUpperCase())}
+                            onFocus={(e) => {
+                                setHexFocused(true)
+                                setLocalHex(hex)
+                                e.target.select()
+                            }}
+                            onBlur={() => commitHex(localHex)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    commitHex(localHex)
+                                    ;(e.target as HTMLInputElement).blur()
+                                }
+                            }}
+                            className="w-full bg-transparent text-[11px] font-mono text-foreground outline-none uppercase truncate"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    )}
+                </div>
 
-            {/* Hex display — clickable to open picker */}
-            <span
-                className={cn(
-                    'flex-1 text-[11px] text-muted-foreground font-mono uppercase cursor-default truncate',
-                    !isVisible && 'opacity-40',
-                )}
-                onClick={() => setPickerOpen(true)}
-            >
-                {hex}
-            </span>
+                {/* Vertical Divider */}
+                <div className="w-[1px] h-3 bg-border/50 mx-1 shrink-0" />
 
-            {/* Opacity % */}
-            <input
-                type="text"
-                inputMode="numeric"
-                value={Math.round(opacity * 100)}
-                className={cn(
-                    'w-10 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
-                    'bg-transparent border border-transparent',
-                    'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                    'transition-colors tabular-nums',
-                    !isVisible && 'opacity-40',
-                )}
-                onChange={(e) => {
-                    const n = parseInt(e.target.value, 10)
-                    if (!isNaN(n)) onUpdate({ opacity: Math.max(0, Math.min(100, n)) / 100 })
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur()
-                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                        e.preventDefault()
-                        const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
-                        const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
-                        onUpdate({ opacity: newVal / 100 })
-                    }
-                }}
-                onFocus={(e) => e.target.select()}
-                onClick={(e) => e.stopPropagation()}
-            />
-            <span className="text-[10px] text-muted-foreground/40 w-2 shrink-0">%</span>
+                {/* Opacity % */}
+                <div className="flex items-center shrink-0 pr-0.5">
+                    <input
+                        type="text"
+                        inputMode="numeric"
+                        value={Math.round(opacity * 100)}
+                        className={cn(
+                            'w-7 h-5 px-0.5 text-[11px] text-right font-mono rounded-[2px] text-foreground',
+                            'bg-transparent border border-transparent outline-none tabular-nums',
+                            'hover:bg-muted/60 focus:bg-background focus:ring-1 focus:ring-primary/40 focus:border-border'
+                        )}
+                        onChange={(e) => {
+                            const n = parseInt(e.target.value, 10)
+                            if (!isNaN(n)) onUpdate({ opacity: Math.max(0, Math.min(100, n)) / 100 })
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur()
+                            } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                e.preventDefault()
+                                const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
+                                const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
+                                onUpdate({ opacity: newVal / 100 })
+                            }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="text-[10px] text-muted-foreground/50 shrink-0 select-none pointer-events-none">%</span>
+                </div>
+            </div>
 
             {/* Visibility toggle */}
             <button
