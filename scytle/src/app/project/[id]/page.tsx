@@ -119,7 +119,10 @@ function ProjectEditor() {
                 if (!jwt || disconnected) return
 
                 // Connect — the server will send an 'init' message with full state
-                canvasSync.connect(projectId, jwt.jwt)
+                canvasSync.connect(projectId, jwt.jwt, async () => {
+                    const fresh = await createJWT()
+                    return fresh?.jwt ?? null
+                })
 
                 // Listen for init completion to mark canvas as loaded
                 // Status only changes to 'connected' AFTER init data (or migration)

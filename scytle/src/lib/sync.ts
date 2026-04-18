@@ -81,11 +81,13 @@ const SYNC_URL = process.env.NEXT_PUBLIC_SYNC_URL || 'ws://localhost:8787'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected'
 type StatusListener = (status: ConnectionStatus) => void
+type TokenProvider = () => Promise<string | null>
 
 class CanvasSync {
   private ws: WebSocket | null = null
   private projectId: string | null = null
   private token: string | null = null
+  private tokenProvider: TokenProvider | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempt = 0
   private maxReconnectDelay = 30_000 // 30s max backoff
@@ -153,7 +155,7 @@ class CanvasSync {
   /**
    * Connect to the sync server for a given project.
    */
-  connect(projectId: string, token: string): void {
+  connect(projectId: string, token: string, tokenProvider?: TokenProvider): void {
     // Already connected to this project
     if (this.projectId === projectId && this.ws?.readyState === WebSocket.OPEN) return
 
@@ -162,10 +164,11 @@ class CanvasSync {
 
     this.projectId = projectId
     this.token = token
+    this.tokenProvider = tokenProvider ?? null
     this.intentionalClose = false
     this.reconnectAttempt = 0
 
-    this.openSocket()
+    void this.openSocket()
   }
 
   /**
@@ -175,6 +178,7 @@ class CanvasSync {
     this.intentionalClose = true
     this.projectId = null
     this.token = null
+    this.tokenProvider = null
     this.pendingMessages = []
     this.pendingUpdates.clear()
     if (this.updateRafId) {
@@ -266,8 +270,27 @@ class CanvasSync {
 
   // ── Internal: WebSocket lifecycle ───────────────────────────
 
-  private openSocket(): void {
-    if (!this.projectId || !this.token) return
+  private async openSocket(): Promise<void> {
+    if (!this.projectId) return
+
+    if (this.tokenProvider) {
+      try {
+        const freshToken = await this.tokenProvider()
+        if (freshToken) {
+          this.token = freshToken
+        } else {
+          console.warn('🔄 Sync: token refresh returned empty; using previous token if available')
+        }
+      } catch (err) {
+        console.warn('🔄 Sync: token refresh failed; using previous token if available', err)
+      }
+    }
+
+    if (!this.token) {
+      console.warn('🔄 Sync: no auth token available; skipping connection attempt')
+      this.setStatus('disconnected')
+      return
+    }
 
     this.setStatus('connecting')
 
@@ -300,7 +323,11 @@ class CanvasSync {
       this.setStatus('disconnected')
 
       if (!this.intentionalClose) {
-        console.warn(`🔄 Sync: connection closed (code ${event.code}), reconnecting...`)
+        if (event.code === 4001) {
+          console.warn('🔄 Sync: authentication rejected (4001), attempting token refresh + reconnect...')
+        } else {
+          console.warn(`🔄 Sync: connection closed (code ${event.code}), reconnecting...`)
+        }
         this.scheduleReconnect()
       }
     }
@@ -324,7 +351,7 @@ class CanvasSync {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      this.openSocket()
+      void this.openSocket()
     }, delay)
   }
 
@@ -411,7 +438,11 @@ class CanvasSync {
         for (const fn of this.chatListeners) fn(msg)
         break
       case 'error':
-        console.error('🔄 Sync: server error:', msg.message)
+        if (msg.message.toLowerCase().includes('auth')) {
+          console.error('🔄 Sync: auth error from server:', msg.message)
+        } else {
+          console.error('🔄 Sync: server error:', msg.message)
+        }
         break
     }
   }
@@ -545,7 +576,7 @@ class CanvasSync {
           const text = await res.text()
           if (text) loaded = JSON.parse(text)
         }
-      } catch (err) {
+      } catch {
         // File may not exist — that's fine
         console.log('🔄 Sync: no Appwrite Storage data found (expected for new projects)')
       }

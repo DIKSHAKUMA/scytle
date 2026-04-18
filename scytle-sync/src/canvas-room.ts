@@ -14,7 +14,7 @@
 // ============================================================
 
 import { DurableObject } from 'cloudflare:workers'
-import { verifyToken, type AuthResult } from './auth'
+import { verifyToken, type AuthResult, AuthError } from './auth'
 import type {
   Env,
   ClientMessage,
@@ -271,7 +271,8 @@ export class CanvasRoom extends DurableObject<Env> {
     try {
       auth = await verifyToken(token, this.env)
     } catch (err) {
-      this.sendTo(ws, { type: 'error', message: 'Authentication failed' })
+      const statusSuffix = err instanceof AuthError ? ` (${err.status})` : ''
+      this.sendTo(ws, { type: 'error', message: `Authentication failed${statusSuffix}` })
       ws.close(4001, 'Unauthorized')
       return
     }

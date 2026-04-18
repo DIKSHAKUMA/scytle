@@ -9,6 +9,16 @@ export interface AuthResult {
   email?: string
 }
 
+export class AuthError extends Error {
+  readonly status: number
+
+  constructor(status: number) {
+    super(`Auth failed: ${status}`)
+    this.name = 'AuthError'
+    this.status = status
+  }
+}
+
 /**
  * Verify an Appwrite JWT by calling the Appwrite Account API.
  * The JWT is a session token created via `account.createJWT()` on the client.
@@ -24,7 +34,7 @@ export async function verifyToken(token: string, env: Env): Promise<AuthResult> 
   })
 
   if (!res.ok) {
-    throw new Error(`Auth failed: ${res.status}`)
+    throw new AuthError(res.status)
   }
 
   const user = (await res.json()) as { $id: string; email?: string }
