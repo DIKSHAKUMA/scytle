@@ -92,7 +92,7 @@ function exportFilter(domNode: HTMLElement): boolean {
 async function createOffscreenClone(
     sourceEl: HTMLElement,
     node: ScytleNode,
-): Promise<{ wrapper: HTMLElement; clone: HTMLElement }> {
+): Promise<{ wrapper: HTMLElement; clone: HTMLElement; actualHeight: number }> {
     // Copy ALL stylesheets into the off-screen context so computed
     // styles (fonts, custom properties, etc.) resolve identically.
     // html-to-image walks getComputedStyle on the SOURCE element's
@@ -105,8 +105,10 @@ async function createOffscreenClone(
         'left: -99999px',
         'top: -99999px',
         `width: ${node.width}px`,
-        `height: ${node.height}px`,
-        'overflow: hidden',
+        // Use a large height initially so the clone can render fully
+        // (nodes with sizing.vertical='hug' grow beyond node.height)
+        'height: auto',
+        'overflow: visible',
         'pointer-events: none',
         'z-index: -1',
         // Force 1x scale, no pan — this is the key fix
@@ -124,20 +126,35 @@ async function createOffscreenClone(
     clone.style.position = 'relative'
     clone.style.left = '0'
     clone.style.top = '0'
-    // Ensure the clone has explicit 1x dimensions (not calc-based)
+    // Fix width at 1x. For height: if the node uses 'hug' sizing the stored
+    // node.height may be stale — let the DOM determine the actual height.
     clone.style.width = `${node.width}px`
-    clone.style.height = `${node.height}px`
+    // Remove any inline height so hug-sized frames expand to their content.
+    clone.style.height = ''
 
     wrapper.appendChild(clone)
     document.body.appendChild(wrapper)
 
-    // Wait for one animation frame so the browser computes layout
+    // Wait for two animation frames so the browser computes layout + paint
     await new Promise<void>((resolve) => requestAnimationFrame(() => {
-        // Double-rAF ensures layout + paint are both flushed
         requestAnimationFrame(() => resolve())
     }))
 
-    return { wrapper, clone }
+    // Measure the actual rendered height of the clone.
+    // Use scrollHeight so we capture all content even if the original
+    // had overflow:hidden that was masking content below node.height.
+    const actualHeight = Math.max(
+        clone.getBoundingClientRect().height,
+        clone.scrollHeight,
+        node.height,
+    )
+
+    // Now lock the wrapper to the actual rendered height so html-to-image
+    // captures the full content (not just the stored node.height).
+    wrapper.style.height = `${actualHeight}px`
+    wrapper.style.overflow = 'hidden'
+
+    return { wrapper, clone, actualHeight }
 }
 
 function removeOffscreenClone(wrapper: HTMLElement) {
@@ -146,15 +163,27 @@ function removeOffscreenClone(wrapper: HTMLElement) {
 
 // ── Shared html-to-image options builder ─────────────────────
 
-function buildOptions(node: ScytleNode, scale: number, extra?: Record<string, unknown>) {
+function buildOptions(node: ScytleNode, scale: number, actualHeight?: number, fontEmbedCSS?: string, extra?: Record<string, unknown>) {
     return {
         width: node.width,
-        height: node.height,
+        height: actualHeight ?? node.height,
         pixelRatio: scale,
+        // skipFonts avoids html-to-image reading cross-origin stylesheets (Tailwind CDN,
+        // Google Fonts CDN) which throws SecurityError: Cannot access cssRules.
+        // We pass fontEmbedCSS instead — pre-fetched from document fonts only, no CORS issue.
         skipFonts: true,
+        ...(fontEmbedCSS ? { fontEmbedCSS } : {}),
         filter: exportFilter,
         ...extra,
     }
+}
+
+// ── Pre-fetch font embed CSS safely (avoids CORS on cross-origin sheets) ─────
+// html-to-image's built-in font embed iterates document.styleSheets and throws
+// SecurityError on cross-origin sheets (Tailwind CDN, Google Fonts CDN).
+// We collect @font-face rules ourselves, skipping any cross-origin sheet.
+async function collectFontEmbedCSS(_el: HTMLElement): Promise<string> {
+    return collectSameOriginFontFaces()
 }
 
 // ── Core export pipeline ─────────────────────────────────────
@@ -164,8 +193,10 @@ async function captureRaster(
     el: HTMLElement,
     format: 'PNG' | 'JPG',
     scale: number,
+    actualHeight?: number,
 ): Promise<Blob> {
-    const options = buildOptions(node, scale, {
+    const fontEmbedCSS = await collectFontEmbedCSS(el)
+    const options = buildOptions(node, scale, actualHeight, fontEmbedCSS, {
         backgroundColor: format === 'JPG' ? '#ffffff' : undefined,
     })
 
@@ -178,18 +209,165 @@ async function captureRaster(
     }
 }
 
-async function captureSvg(node: ScytleNode, el: HTMLElement): Promise<Blob> {
-    const options = buildOptions(node, 1)
+async function captureSvg(node: ScytleNode, el: HTMLElement, actualHeight?: number): Promise<Blob> {
+    const fontEmbedCSS = await collectFontEmbedCSS(el)
+    const options = buildOptions(node, 1, actualHeight, fontEmbedCSS)
     const dataUrl = await toSvg(el, options)
     const svgXml = decodeURIComponent(dataUrl.split(',')[1] || '')
     return new Blob([svgXml], { type: 'image/svg+xml' })
 }
 
-function captureHtml(node: ScytleNode): Blob {
-    const html = node.type === 'frame'
-        ? wrapInDocument(pageFrameToHtml(node as FrameNode), node.name)
-        : wrapInDocument(nodeToHtml(node), node.name)
+// ── HTML capture: serialize the live DOM with inlined styles ─────────────────
+// The node-tree → Tailwind-class serializer (nodes-to-html.ts) loses fidelity:
+// oklch colors, icon SVGs, borders, shadows, etc. all differ subtly.
+// Instead we capture the actual rendered DOM, inline all computed styles,
+// collect all referenced stylesheets, and wrap in a standalone document.
+// This gives a pixel-accurate HTML snapshot of what the canvas shows.
+
+async function captureHtml(node: ScytleNode): Promise<Blob> {
+    const el = findNodeElement(node.id)
+    if (!el) {
+        // Fallback: node not in DOM (e.g. hidden page) — use tree serializer
+        const html = node.type === 'frame'
+            ? wrapInDocument(pageFrameToHtml(node as FrameNode), node.name)
+            : wrapInDocument(nodeToHtml(node), node.name)
+        return new Blob([html], { type: 'text/html' })
+    }
+
+    // Create off-screen clone at 1x so all calc() values resolve correctly
+    const { wrapper, clone, actualHeight } = await createOffscreenClone(el, node)
+
+    let html: string
+    try {
+        html = buildDomHtml(clone, node, actualHeight)
+    } finally {
+        removeOffscreenClone(wrapper)
+    }
+
     return new Blob([html], { type: 'text/html' })
+}
+
+/**
+ * Serialize a cloned DOM subtree into a self-contained HTML document.
+ * Inlines all computed styles on every element so the file renders identically
+ * in any browser without external stylesheets or CSS variables.
+ */
+function buildDomHtml(root: HTMLElement, node: ScytleNode, actualHeight: number): string {
+    // Deep-clone again so we can mutate styles without touching the capture clone
+    const snapshot = root.cloneNode(true) as HTMLElement
+
+    // Walk every element and bake computed styles into inline style attributes.
+    // This ensures colors (oklch, CSS vars), sizes, fonts, etc. are preserved.
+    inlineComputedStyles(root, snapshot)
+
+    // Set explicit dimensions on the root so it renders at the correct size
+    snapshot.style.width = `${node.width}px`
+    snapshot.style.height = `${actualHeight}px`
+    snapshot.style.position = 'relative'
+    snapshot.style.overflow = 'hidden'
+
+    const bodyHtml = snapshot.outerHTML
+
+    // Collect all @font-face rules from same-origin stylesheets
+    const fontCss = collectSameOriginFontFaces()
+
+    const safeTitle = node.name.replace(/[<>&"]/g, (c) =>
+        c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : '&quot;'
+    )
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=${node.width}, initial-scale=1.0">
+    <title>${safeTitle}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { width: ${node.width}px; }
+        ${fontCss}
+    </style>
+</head>
+<body>
+${bodyHtml}
+</body>
+</html>`
+}
+
+/**
+ * Recursively copy getComputedStyle() from source nodes into dest nodes'
+ * inline style attributes. This bakes every visual property so the HTML
+ * is standalone — no external CSS, no CSS variables, no custom properties needed.
+ *
+ * We walk both trees in parallel (same structure since dest is a clone of source).
+ */
+function inlineComputedStyles(source: Element, dest: Element): void {
+    if (source.nodeType !== Node.ELEMENT_NODE) return
+
+    const src = source as HTMLElement
+    const dst = dest as HTMLElement
+
+    const computed = window.getComputedStyle(src)
+    // Only inline the properties that matter for visual fidelity.
+    // Inlining ALL properties causes issues (e.g. 'all: initial' conflicts).
+    const VISUAL_PROPS = [
+        'display', 'position', 'top', 'left', 'right', 'bottom',
+        'width', 'height', 'min-width', 'max-width', 'min-height', 'max-height',
+        'flex', 'flex-direction', 'flex-wrap', 'flex-grow', 'flex-shrink', 'flex-basis',
+        'align-items', 'align-self', 'justify-content', 'gap', 'grid-template-columns',
+        'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+        'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+        'background-color', 'background-image', 'background-size', 'background-position',
+        'background-repeat', 'background-clip',
+        'color', 'font-family', 'font-size', 'font-weight', 'font-style',
+        'line-height', 'letter-spacing', 'text-align', 'text-transform', 'text-decoration',
+        'white-space', 'word-break', 'overflow', 'text-overflow',
+        'border', 'border-radius', 'border-top', 'border-right', 'border-bottom', 'border-left',
+        'box-shadow', 'opacity', 'transform', 'transform-origin',
+        'cursor', 'pointer-events', 'z-index',
+        'outline', 'outline-offset',
+    ]
+    for (const prop of VISUAL_PROPS) {
+        const val = computed.getPropertyValue(prop)
+        if (val && val !== 'initial' && val !== 'normal' && val !== 'none' && val !== '0px' && val !== 'auto') {
+            dst.style.setProperty(prop, val)
+        }
+    }
+
+    // Recurse into children
+    const srcChildren = Array.from(source.children)
+    const dstChildren = Array.from(dest.children)
+    for (let i = 0; i < srcChildren.length; i++) {
+        if (dstChildren[i]) {
+            inlineComputedStyles(srcChildren[i], dstChildren[i])
+        }
+    }
+}
+
+/**
+ * Collect @font-face rules from same-origin stylesheets only.
+ * Cross-origin sheets (Tailwind CDN, Google Fonts CDN) are skipped
+ * to avoid SecurityError: Cannot access cssRules.
+ */
+function collectSameOriginFontFaces(): string {
+    const rules: string[] = []
+    try {
+        for (const sheet of Array.from(document.styleSheets)) {
+            // Skip cross-origin sheets — accessing .cssRules throws SecurityError
+            if (sheet.href && !sheet.href.startsWith(window.location.origin)) continue
+            try {
+                for (const rule of Array.from(sheet.cssRules)) {
+                    if (rule.type === CSSRule.FONT_FACE_RULE) {
+                        rules.push(rule.cssText)
+                    }
+                }
+            } catch {
+                // Cross-origin sheet slipped through — skip silently
+            }
+        }
+    } catch {
+        // styleSheets not accessible — return empty
+    }
+    return rules.join('\n')
 }
 
 // ── Public API ───────────────────────────────────────────────
@@ -206,7 +384,7 @@ export async function exportNode(
     const filename = buildFilename(node.name, config)
 
     if (config.format === 'HTML') {
-        return { blob: captureHtml(node), filename }
+        return { blob: await captureHtml(node), filename }
     }
 
     const el = findNodeElement(node.id)
@@ -215,17 +393,17 @@ export async function exportNode(
     }
 
     // Create off-screen clone with --z=1 for accurate 1x capture
-    const { wrapper, clone } = await createOffscreenClone(el, node)
+    const { wrapper, clone, actualHeight } = await createOffscreenClone(el, node)
 
     let blob: Blob
     try {
         switch (config.format) {
             case 'PNG':
             case 'JPG':
-                blob = await captureRaster(node, clone, config.format, config.scale)
+                blob = await captureRaster(node, clone, config.format, config.scale, actualHeight)
                 break
             case 'SVG':
-                blob = await captureSvg(node, clone)
+                blob = await captureSvg(node, clone, actualHeight)
                 break
             default:
                 throw new Error(`Unsupported format: ${config.format}`)

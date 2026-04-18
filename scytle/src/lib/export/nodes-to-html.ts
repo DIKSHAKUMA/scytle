@@ -48,7 +48,7 @@ export function pageFrameToHtml(pageFrame: FrameNode): string {
 function frameToHtml(node: FrameNode, indent: number): string {
     const pad = '  '.repeat(indent)
     const tag = inferSemanticTag(node)
-    const classes = buildFrameClasses(node)
+    let classes = buildFrameClasses(node)
 
     // If this is a frame with an image fill and no children, emit <img>
     const imageFill = node.fills.find((f): f is ImageFill => f.type === 'image' && 'src' in f && !!f.src)
@@ -73,6 +73,19 @@ function frameToHtml(node: FrameNode, indent: number): string {
         return classes
             ? `${pad}<${tag} class="${classes}"></${tag}>`
             : `${pad}<${tag}></${tag}>`
+    }
+
+    // Add `relative` if any child uses absolute positioning (vector nodes, or
+    // explicitly absolute-positioned frames). Without it, position:absolute on
+    // a child escapes to a distant ancestor and the element appears in the wrong place.
+    const hasAbsoluteChild = node.children.some(
+        (c) => c.type === 'vector' || c.positioning === 'absolute'
+    )
+    if (hasAbsoluteChild) {
+        const existingClasses = classes ? classes.split(' ') : []
+        if (!existingClasses.includes('relative')) {
+            classes = classes ? `${classes} relative` : 'relative'
+        }
     }
 
     const childIndent = indent + 1

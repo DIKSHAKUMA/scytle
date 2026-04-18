@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useEditorStore } from '@/store/editor-store'
+import { useProjectStore } from '@/store/project-store'
 import type { CanvasTool } from '@/types/canvas'
 import {
     ArrowLeft,
@@ -10,6 +11,7 @@ import {
     Hand,
     Square,
     Type,
+    PenTool,
     Undo2,
     Redo2,
     Share2,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ShareDialog } from '@/components/share/share-dialog'
+import { ZoomControls } from './zoom-controls'
 
 // ────────────────────────────────────────────────────────────
 // Tool definitions (same order as Figma: Move, Hand, Frame, Text)
@@ -31,6 +34,7 @@ const TOOLS: {
         { tool: 'select', icon: MousePointer2, label: 'Move', shortcut: 'V' },
         { tool: 'hand', icon: Hand, label: 'Hand', shortcut: 'H' },
         { tool: 'frame', icon: Square, label: 'Frame', shortcut: 'F' },
+        { tool: 'pen', icon: PenTool, label: 'Pen', shortcut: 'P' },
         { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },
     ]
 
@@ -48,7 +52,46 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
     const setActiveTool = useEditorStore((s) => s.setActiveTool)
     const canUndo = useEditorStore((s) => s._past.length > 0)
     const canRedo = useEditorStore((s) => s._future.length > 0)
+    
+    const updateProject = useProjectStore((s) => s.updateProject)
+    
     const [shareOpen, setShareOpen] = useState(false)
+    const [isEditingTitle, setIsEditingTitle] = useState(false)
+    const [titleValue, setTitleValue] = useState(projectName)
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    // Sync local title with prop when it changes from elsewhere
+    useEffect(() => {
+        setTitleValue(projectName)
+    }, [projectName])
+
+    // Focus treatment when entering edit mode
+    useEffect(() => {
+        if (isEditingTitle && inputRef.current) {
+            inputRef.current.focus()
+            inputRef.current.select()
+        }
+    }, [isEditingTitle])
+
+    const handleTitleSubmit = async () => {
+        const trimmed = titleValue.trim()
+        setIsEditingTitle(false)
+        if (trimmed && trimmed !== projectName) {
+            await updateProject(projectId, { name: trimmed })
+        } else {
+            setTitleValue(projectName) // Reset to original if empty or unchanged
+        }
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleTitleSubmit()
+        } else if (e.key === 'Escape') {
+            setTitleValue(projectName)
+            setIsEditingTitle(false)
+        }
+    }
 
     return (
         <header className="flex items-center h-12 px-3 bg-card border-b border-border/60 shrink-0 select-none">
@@ -61,13 +104,34 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 <ArrowLeft className="w-4 h-4" />
             </Link>
 
-            <div className="flex items-center gap-2 mr-4">
-                <div className="w-5 h-5 rounded bg-gradient-to-br from-accent to-accent/70 flex items-center justify-center shrink-0">
-                    <Zap className="w-3 h-3 text-white" />
+            <div 
+                className={cn(
+                    "flex items-center gap-2 px-2 py-1 -ml-1 rounded-md transition-colors cursor-pointer group",
+                    !isEditingTitle && "hover:bg-muted/60"
+                )}
+                onDoubleClick={() => !isEditingTitle && setIsEditingTitle(true)}
+            >
+                {/* Project Icon */}
+                <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-foreground/5 dark:bg-foreground/10 border border-border/40">
+                    <Zap className="w-3 h-3 text-foreground/70" />
                 </div>
-                <span className="font-display font-semibold text-sm truncate max-w-[180px]">
-                    {projectName}
-                </span>
+                
+                {isEditingTitle ? (
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={titleValue}
+                        onChange={(e) => setTitleValue(e.target.value)}
+                        onBlur={handleTitleSubmit}
+                        onKeyDown={handleKeyDown}
+                        className="font-display font-semibold text-sm bg-transparent border-none p-0 focus:outline-none focus:ring-0 min-w-[120px] max-w-[300px]"
+                        style={{ width: `${Math.max(120, titleValue.length * 8)}px` }}
+                    />
+                ) : (
+                    <span className="font-display font-semibold text-sm truncate max-w-[240px] text-foreground/90 group-hover:text-foreground">
+                        {projectName}
+                    </span>
+                )}
             </div>
 
             {/* ── Center: Tool buttons + Undo/Redo ── */}
@@ -79,7 +143,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                             title={`${label} (${shortcut})`}
                             onClick={() => setActiveTool(tool)}
                             className={cn(
-                                'w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150',
+                                'w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150 outline-none',
                                 activeTool === tool
                                     ? 'bg-foreground text-background shadow-sm'
                                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
@@ -120,7 +184,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 </div>
             </div>
 
-            {/* ── Right: Share ── */}
+            {/* ── Right: Share and Zoom ── */}
             <div className="flex items-center gap-1.5">
                 <button
                     onClick={() => setShareOpen(true)}
@@ -129,6 +193,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                     <Share2 className="w-3.5 h-3.5" />
                     Share
                 </button>
+                <ZoomControls />
             </div>
 
             {/* Share Dialog */}

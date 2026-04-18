@@ -202,18 +202,20 @@ export function useKeyboardShortcuts() {
                 return
             }
 
-            // ── Bare key commands (no modifiers) ─────────────────
+            // ── Bare key / Shift + key commands (no ⌘/Ctrl) ─────
 
-            // Z-order (bracket keys)
-            if (key === ']' && store.selectedIds.length === 1) {
-                e.preventDefault()
-                store.bringForward(store.selectedIds[0])
-                return
-            }
-            if (key === '[' && store.selectedIds.length === 1) {
-                e.preventDefault()
-                store.sendBackward(store.selectedIds[0])
-                return
+            // Zoom to Fit (⇧1) and Zoom to Selection (⇧2)
+            if (shift) {
+                if (key === '1') {
+                    e.preventDefault()
+                    store.zoomToFit()
+                    return
+                }
+                if (key === '2') {
+                    e.preventDefault()
+                    store.zoomToSelection()
+                    return
+                }
             }
 
             // Delete
@@ -244,10 +246,14 @@ export function useKeyboardShortcuts() {
                     return
                 }
 
-                // Pen tool: commit current path and switch to select
-                if (store.penDrawingState) {
-                    store.commitPenPath()
-                    store.setActiveTool('select')
+                // Pen tool: commit current path (if drawing) and switch to select
+                if (store.activeTool === 'pen') {
+                    if (store.penDrawingState) {
+                        store.commitPenPath()
+                        store.setActiveTool('select')
+                    }
+                    // If penDrawingState is null (closed-path click), handlePenKeyDown
+                    // in use-pen-tool.ts handles Escape (it knows the committed nodeId)
                     return
                 }
 
@@ -293,6 +299,9 @@ export function useKeyboardShortcuts() {
 
             // ── Enter / Shift+Enter — layer navigation ───────────────
             if (key === 'enter' && !store.editingNodeId) {
+                // If pen tool is active (drawing or just committed a closed path),
+                // let handlePenKeyDown handle Enter
+                if (store.activeTool === 'pen' || store.penDrawingState) return
                 // Shift+Enter → select parent (go up one level)
                 if (shift) {
                     e.preventDefault()
@@ -490,7 +499,6 @@ export function useKeyboardShortcuts() {
                     const vectorToolMap: Record<string, import('@/store/editor-store').VectorEditTool> = {
                         v: 'move',
                         q: 'lasso',
-                        m: 'shape-builder',
                         x: 'cut',
                     }
                     const vtool = vectorToolMap[key]
@@ -499,10 +507,16 @@ export function useKeyboardShortcuts() {
                         store.setVectorEditTool(vtool)
                         return
                     }
-                    // Shift+B → paint, Shift+W → variable-width
+                    // P → activate pen tool (exit vector edit mode so pen gets full control)
+                    if (key === 'p') {
+                        e.preventDefault()
+                        store.exitVectorEditMode()
+                        store.setActiveTool('pen')
+                        return
+                    }
+                    // Shift+B → paint
                     if (shift) {
                         if (key === 'b') { e.preventDefault(); store.setVectorEditTool('paint'); return }
-                        if (key === 'w') { e.preventDefault(); store.setVectorEditTool('variable-width'); return }
                     }
                 }
                 // Don't fall through to main tool switch while in vector edit

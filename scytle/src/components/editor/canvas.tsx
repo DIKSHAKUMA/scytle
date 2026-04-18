@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useEditorStore } from '@/store/editor-store'
+import { cn } from '@/lib/utils'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
 import { NodeRenderer } from './node-renderer'
@@ -40,6 +41,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const canvasColor = useEditorStore((s) => s.canvasColor)
     const penNearStart = useEditorStore((s) => s.penDrawingState?.nearStartPoint ?? false)
     const penIsDrawing = useEditorStore((s) => s.penDrawingState?.isDrawing ?? false)
+    const isViewportAnimating = useEditorStore((s) => s.isViewportAnimating)
 
     // Local state for interactions
     const [spaceHeld, setSpaceHeld] = useState(false)
@@ -381,7 +383,11 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     // ----------------------------------------------------------
     const handlePointerDown = useCallback(
         (e: React.PointerEvent<HTMLDivElement>) => {
-            // ── Commit any active text editing ────────────────────
+            // ── Commit any active text editing (including TopBar inputs) ──
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur()
+            }
+
             const editorState = useEditorStore.getState()
             if (editorState.editingNodeId) {
                 const editingEl = viewportRef.current?.querySelector(
@@ -444,12 +450,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const textNode = createText({
                     x: adjustedX,
                     y: adjustedY,
-                    characters: 'Type something',
+                    characters: '',
                 })
                 store.addNode(textNode, parentId)
                 store.selectNode(textNode.id)
-                store.setEditingNodeId(textNode.id)
                 store.setActiveTool('select')
+                store.setEditingNodeId(textNode.id)
                 e.preventDefault()
                 return
             }
@@ -463,6 +469,13 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             // ── Select tool ───────────────────────────────────────
             if (activeTool === 'select') {
                 const target = e.target as HTMLElement
+
+                // Single-click while in vector edit mode → exit it (recomputes bbox, shows selection frame)
+                const currentVectorEditId = useEditorStore.getState().vectorEditNodeId
+                if (currentVectorEditId) {
+                    useEditorStore.getState().exitVectorEditMode()
+                    return
+                }
 
                 // Check if clicking a resize handle
                 const handleDir = target.dataset.handle as HandleDirection | undefined
@@ -792,9 +805,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     // ----------------------------------------------------------
     // Cursor
     // ----------------------------------------------------------
-    // Pen tool SVG cursors
-    const penCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M13.13 22.19L11.5 18.36C13.07 17.78 14.54 17 15.9 16.09L13.13 22.19M5.64 12.5L1.81 10.87L7.91 8.1C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39C21.61 2.39 16.66 .269 11 5.93C8.81 8.12 7.5 10.53 6.65 12.64C6.37 13.39 6.56 14.21 7.11 14.77L9.24 16.89C9.79 17.45 10.61 17.63 11.36 17.35C13.5 16.53 15.88 15.19 18.07 13C23.73 7.34 21.61 2.39 21.61 2.39M14.54 9.46C13.76 8.68 13.76 7.41 14.54 6.63S16.59 5.85 17.37 6.63C18.14 7.41 18.15 8.68 17.37 9.46C16.59 10.24 15.32 10.24 14.54 9.46Z' fill='%23333'/%3E%3C/svg%3E") 2 22, crosshair`
-    const penCloseCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M13.13 22.19L11.5 18.36C13.07 17.78 14.54 17 15.9 16.09L13.13 22.19M5.64 12.5L1.81 10.87L7.91 8.1C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39C21.61 2.39 16.66 .269 11 5.93C8.81 8.12 7.5 10.53 6.65 12.64C6.37 13.39 6.56 14.21 7.11 14.77L9.24 16.89C9.79 17.45 10.61 17.63 11.36 17.35C13.5 16.53 15.88 15.19 18.07 13C23.73 7.34 21.61 2.39 21.61 2.39M14.54 9.46C13.76 8.68 13.76 7.41 14.54 6.63S16.59 5.85 17.37 6.63C18.14 7.41 18.15 8.68 17.37 9.46C16.59 10.24 15.32 10.24 14.54 9.46Z' fill='%23333'/%3E%3Ccircle cx='18' cy='18' r='4' fill='none' stroke='%23333' stroke-width='1.5'/%3E%3C/svg%3E") 2 22, crosshair`
+    // Pen tool SVG cursors (pen nib shape, hotspot at tip)
+    const penCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l7-7 3 3-7 7-3-3z'/%3E%3Cpath d='M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/%3E%3Cpath d='M2 2l7.586 7.586'/%3E%3Ccircle cx='11' cy='11' r='2'/%3E%3C/svg%3E") 1 1, crosshair`
+    const penCloseCursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19l7-7 3 3-7 7-3-3z'/%3E%3Cpath d='M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z'/%3E%3Cpath d='M2 2l7.586 7.586'/%3E%3Ccircle cx='11' cy='11' r='2'/%3E%3Ccircle cx='20' cy='20' r='3' stroke='%231a6dff'/%3E%3C/svg%3E") 1 1, crosshair`
 
     const cursor = resizeInfo.isResizing
         ? handleToCursor(resizeInfo.handle!)
@@ -821,6 +834,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     return (
         <div
             ref={viewportRef}
+            data-canvas-viewport
             className="relative w-full h-full overflow-hidden select-none"
             style={{
                 cursor,
@@ -835,7 +849,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             {/* Transform container — CSS custom properties drive coordinate-space rendering */}
             <div
                 ref={transformRef}
-                className="absolute top-0 left-0"
+                className={cn("absolute top-0 left-0", isViewportAnimating && "transition-viewport")}
                 style={{ '--z': zoom, '--px': panX, '--py': panY } as unknown as CSSProperties}
             >
                 {nodes.map((node) => (

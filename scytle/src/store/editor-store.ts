@@ -28,6 +28,69 @@ const _snap = (state: any) => {
     }
 }
 
+/**
+ * Recompute a VectorNode's bounding box (x/y/width/height) from its
+ * current vertices + bezier control points, then re-origin the vertices
+ * so they are relative to the new top-left.
+ *
+ * Must be called on an immer draft node.
+ */
+function _recomputeVectorBBox(node: VectorNode) {
+    const vn = node.vectorNetwork
+    if (!vn.vertices.length) return
+
+    let minX = Infinity, minY = Infinity
+    let maxX = -Infinity, maxY = -Infinity
+
+    for (const v of vn.vertices) {
+        if (v.x < minX) minX = v.x
+        if (v.y < minY) minY = v.y
+        if (v.x > maxX) maxX = v.x
+        if (v.y > maxY) maxY = v.y
+    }
+
+    // Include bezier control points
+    for (const seg of vn.segments) {
+        const startV = vn.vertices[seg.start]
+        const endV = vn.vertices[seg.end]
+        if (!startV || !endV) continue
+
+        if (seg.tangentStart) {
+            const cpX = startV.x + seg.tangentStart.x
+            const cpY = startV.y + seg.tangentStart.y
+            if (cpX < minX) minX = cpX
+            if (cpY < minY) minY = cpY
+            if (cpX > maxX) maxX = cpX
+            if (cpY > maxY) maxY = cpY
+        }
+        if (seg.tangentEnd) {
+            const cpX = endV.x + seg.tangentEnd.x
+            const cpY = endV.y + seg.tangentEnd.y
+            if (cpX < minX) minX = cpX
+            if (cpY < minY) minY = cpY
+            if (cpX > maxX) maxX = cpX
+            if (cpY > maxY) maxY = cpY
+        }
+    }
+
+    const strokePad = (node.strokeWeight ?? 2) / 2
+    minX -= strokePad
+    minY -= strokePad
+    maxX += strokePad
+    maxY += strokePad
+
+    // Re-origin vertices relative to new top-left
+    for (const v of vn.vertices) {
+        v.x -= minX
+        v.y -= minY
+    }
+
+    node.x += minX
+    node.y += minY
+    node.width = Math.max(maxX - minX, 1)
+    node.height = Math.max(maxY - minY, 1)
+}
+
 // ============================================================
 // Page type (one canvas per page)
 // ============================================================
@@ -59,7 +122,7 @@ function createEditorPage(name: string): EditorPage {
 // ============================================================
 
 /** Sub-tools available within vector edit mode (overlay toolbar) */
-export type VectorEditTool = 'move' | 'lasso' | 'shape-builder' | 'paint' | 'bend' | 'cut' | 'variable-width'
+export type VectorEditTool = 'move' | 'lasso' | 'paint' | 'bend' | 'cut'
 
 /** Live state while the pen tool is actively placing vertices */
 export interface PenDrawingState {
@@ -82,6 +145,17 @@ export interface PenDrawingState {
     /** Incoming tangent for the first vertex (mirrored handle from first drag).
      *  Used as tangentEnd on the closing segment when the path is closed. */
     _firstVertexIncomingTangent?: { x: number; y: number }
+    /** Active alignment snap guides — orange lines shown when cursor aligns with an existing vertex.
+     *  vertexX/vertexY is the canvas position of the anchor that triggered the snap. */
+    _alignGuides?: Array<{ axis: 'x' | 'y'; value: number; vertexX: number; vertexY: number }>
+    /** When extending from an existing vertex, the index in the EXISTING vector network.
+     *  Vertices[0] in penDrawingState is a copy of this vertex. On commit, new
+     *  vertices/segments merge into the existing network instead of replacing it. */
+    _extendFromVertexIndex?: number
+    /** When connecting to an existing vertex (extend → existing vertex), the
+     *  LAST vertex in penDrawingState maps to this existing vertex index.
+     *  On commit, the segment end is remapped instead of adding a new vertex. */
+    _extendToVertexIndex?: number
 }
 
 
@@ -103,6 +177,8 @@ interface EditorState {
     zoom: number
     panX: number
     panY: number
+    /** Whether the viewport is currently undergoing an automated transition (zoom to node) */
+    isViewportAnimating: boolean
     /** Cached viewport size for zoomIn/zoomOut centering */
     viewportRect: { width: number; height: number } | null
 
@@ -176,6 +252,8 @@ interface EditorState {
     selectedVertexIndices: number[]
     /** Live in-progress pen drawing state (null when not actively drawing) */
     penDrawingState: PenDrawingState | null
+    /** NodeId of the last path committed via pen tool click-to-close (cleared when tool changes) */
+    lastPenCommittedNodeId: string | null
 
     // Viewport actions ----------------------------------------
     setZoom: (zoom: number) => void
@@ -227,6 +305,12 @@ interface EditorState {
     selectNode: (id: string, addToSelection?: boolean) => void
     deselectAll: () => void
     setHoveredId: (id: string | null) => void
+    /** Zoom and pan to center the given node in the viewport */
+    zoomToNode: (id: string) => void
+    /** Zoom and pan to fit all top-level nodes in the viewport */
+    zoomToFit: () => void
+    /** Zoom and pan to fit the currently selected nodes in the viewport */
+    zoomToSelection: () => void
     enterFrame: (id: string) => void
     exitFrame: () => void
 
@@ -309,10 +393,18 @@ interface EditorState {
     deleteSelectedVertices: (nodeId: string) => void
     /** Replace the entire VectorNetwork on a node */
     updateVectorNetwork: (nodeId: string, network: VectorNetwork) => void
+    /** Insert a new anchor point on a segment (keeps path connected, no break) */
+    insertPointOnSegment: (nodeId: string, segIdx: number, t: number) => void
     /** Update or clear the live pen drawing state */
     setPenDrawingState: (state: PenDrawingState | null) => void
     /** Commit the pen drawing state into the VectorNode and finalize bounding box */
     commitPenPath: () => void
+    /**
+     * Commit pen path (if still drawing) or use lastPenCommittedNodeId (if closed),
+     * then enter vector edit mode on that node and activate the given tool.
+     * Used by the vector edit toolbar when pen tool is active.
+     */
+    commitPenAndEnterVectorEdit: (tool: VectorEditTool) => void
 
     // Page management -----------------------------------------
     addPage: (name?: string) => string
@@ -335,6 +427,7 @@ export const useEditorStore = create<EditorState>()(
             zoom: 1,
             panX: 0,
             panY: 0,
+            isViewportAnimating: false,
             viewportRect: null,
             selectedIds: [],
             hoveredId: null,
@@ -360,6 +453,7 @@ export const useEditorStore = create<EditorState>()(
             vectorEditTool: 'move' as VectorEditTool,
             selectedVertexIndices: [] as number[],
             penDrawingState: null as PenDrawingState | null,
+            lastPenCommittedNodeId: null as string | null,
             _past: [],
             _future: [],
             _batchDepth: 0,
@@ -374,7 +468,17 @@ export const useEditorStore = create<EditorState>()(
             setZoom: (zoom) =>
                 set(
                     (state) => {
-                        state.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+                        const { zoom: oldZoom, panX, panY, viewportRect } = state
+                        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom))
+                        if (viewportRect) {
+                            const cx = viewportRect.width / 2
+                            const cy = viewportRect.height / 2
+                            const canvasX = (cx - panX) / oldZoom
+                            const canvasY = (cy - panY) / oldZoom
+                            state.panX = cx - canvasX * newZoom
+                            state.panY = cy - canvasY * newZoom
+                        }
+                        state.zoom = newZoom
                     },
                     false,
                     'setZoom'
@@ -522,6 +626,10 @@ export const useEditorStore = create<EditorState>()(
                             state.vectorEditNodeId = null
                             state.vectorEditTool = 'move'
                             state.selectedVertexIndices = []
+                        }
+                        // Clear last committed pen node when switching away from pen
+                        if (tool !== 'pen') {
+                            state.lastPenCommittedNodeId = null
                         }
                     },
                     false,
@@ -712,6 +820,157 @@ export const useEditorStore = create<EditorState>()(
                     false,
                     'setHoveredId'
                 ),
+
+            zoomToNode: (id) => {
+                const state = get()
+                const node = findNodeById(state.nodes, id)
+                if (!node || !state.viewportRect) return
+
+                const absPos = getNodeCanvasPosition(state.nodes, id)
+                if (!absPos) return
+
+                const { width: vw, height: vh } = state.viewportRect
+                const nodeW = node.width
+                const nodeH = node.height
+
+                // Calculate zoom to fit with padding
+                const padding = 64
+                const zoomX = (vw - padding) / nodeW
+                const zoomY = (vh - padding) / nodeH
+                let newZoom = Math.min(zoomX, zoomY, 2) // Cap at 200% zoom
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                // Center the node
+                const newPanX = vw / 2 - (absPos.x + nodeW / 2) * newZoom
+                const newPanY = vh / 2 - (absPos.y + nodeH / 2) * newZoom
+
+                set(
+                    (s) => {
+                        s.isViewportAnimating = true
+                        s.zoom = newZoom
+                        s.panX = newPanX
+                        s.panY = newPanY
+                    },
+                    false,
+                    'zoomToNode'
+                )
+
+                // Turn off animation after transition finishes
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
+            },
+
+            zoomToFit: () => {
+                const state = get()
+                const nodes = state.nodes
+                if (nodes.length === 0 || !state.viewportRect) {
+                    set((s) => {
+                        s.zoom = 1
+                        s.panX = 0
+                        s.panY = 0
+                    }, false, 'zoomToFit:empty')
+                    return
+                }
+
+                // Calculate bounding box of all top-level nodes
+                let minX = Infinity, minY = Infinity
+                let maxX = -Infinity, maxY = -Infinity
+                let hasVisibleNodes = false
+
+                for (const node of nodes) {
+                    if (node.visible === false) continue
+                    hasVisibleNodes = true
+                    minX = Math.min(minX, node.x)
+                    minY = Math.min(minY, node.y)
+                    maxX = Math.max(maxX, node.x + node.width)
+                    maxY = Math.max(maxY, node.y + node.height)
+                }
+
+                if (!hasVisibleNodes) {
+                    set((s) => {
+                        s.zoom = 1
+                        s.panX = 0
+                        s.panY = 0
+                    }, false, 'zoomToFit:invisible')
+                    return
+                }
+
+                const contentW = maxX - minX
+                const contentH = maxY - minY
+                const { width: vw, height: vh } = state.viewportRect
+
+                // Padding (approx 10% of viewport)
+                const padding = Math.min(vw, vh) * 0.1
+                const zoomX = (vw - padding * 2) / contentW
+                const zoomY = (vh - padding * 2) / contentH
+                // Figma zooms as much as needed, up to a reasonable limit (e.g. MAX_ZOOM)
+                let newZoom = Math.min(zoomX, zoomY)
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                const newPanX = vw / 2 - (minX + contentW / 2) * newZoom
+                const newPanY = vh / 2 - (minY + contentH / 2) * newZoom
+
+                set((s) => {
+                    s.isViewportAnimating = true
+                    s.zoom = newZoom
+                    s.panX = newPanX
+                    s.panY = newPanY
+                }, false, 'zoomToFit')
+
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
+            },
+
+            zoomToSelection: () => {
+                const state = get()
+                const { selectedIds, nodes, viewportRect } = state
+                if (selectedIds.length === 0 || !viewportRect) return
+
+                // Calculate bounding box of selection
+                let minX = Infinity, minY = Infinity
+                let maxX = -Infinity, maxY = -Infinity
+                let foundAny = false
+
+                for (const id of selectedIds) {
+                    const node = findNodeById(nodes, id)
+                    const absPos = getNodeCanvasPosition(nodes, id)
+                    if (node && absPos) {
+                        minX = Math.min(minX, absPos.x)
+                        minY = Math.min(minY, absPos.y)
+                        maxX = Math.max(maxX, absPos.x + node.width)
+                        maxY = Math.max(maxY, absPos.y + node.height)
+                        foundAny = true
+                    }
+                }
+
+                if (!foundAny) return
+
+                const contentW = maxX - minX
+                const contentH = maxY - minY
+                const { width: vw, height: vh } = viewportRect
+
+                const padding = Math.min(vw, vh) * 0.1
+                const zoomX = (vw - padding * 2) / contentW
+                const zoomY = (vh - padding * 2) / contentH
+                let newZoom = Math.min(zoomX, zoomY, 2.0) // Cap at 200% for selection
+                newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom))
+
+                const newPanX = vw / 2 - (minX + contentW / 2) * newZoom
+                const newPanY = vh / 2 - (minY + contentH / 2) * newZoom
+
+                set((s) => {
+                    s.isViewportAnimating = true
+                    s.zoom = newZoom
+                    s.panX = newPanX
+                    s.panY = newPanY
+                }, false, 'zoomToSelection')
+
+                setTimeout(() => {
+                    set((s) => { s.isViewportAnimating = false }, false, 'stopViewportAnimation')
+                }, 500)
+            },
 
             enterFrame: (id) =>
                 set(
@@ -1721,6 +1980,16 @@ export const useEditorStore = create<EditorState>()(
                     (state) => {
                         // Figma: exiting vector edit keeps the node selected
                         const nodeId = state.vectorEditNodeId
+
+                        // Recompute bounding box from current vertex positions
+                        if (nodeId) {
+                            const node = findNodeById(state.nodes, nodeId)
+                            if (node && node.type === 'vector') {
+                                _snap(state)
+                                _recomputeVectorBBox(node as VectorNode)
+                            }
+                        }
+
                         state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []
@@ -1738,6 +2007,10 @@ export const useEditorStore = create<EditorState>()(
             setVectorEditTool: (tool) =>
                 set(
                     (state) => {
+                        // Clear vertex selection when leaving lasso, but not when auto-switching to move
+                        if (state.vectorEditTool === 'lasso' && tool !== 'lasso' && tool !== 'move') {
+                            state.selectedVertexIndices = []
+                        }
                         state.vectorEditTool = tool
                     },
                     false,
@@ -1860,6 +2133,97 @@ export const useEditorStore = create<EditorState>()(
                     'updateVectorNetwork'
                 ),
 
+            insertPointOnSegment: (nodeId, segIdx, t) =>
+                set(
+                    (state) => {
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+                        _snap(state)
+                        const net = (node as VectorNode).vectorNetwork
+                        const seg = net.segments[segIdx]
+                        if (!seg) return
+
+                        const startV = net.vertices[seg.start]
+                        const endV = net.vertices[seg.end]
+                        if (!startV || !endV) return
+
+                        const ts = seg.tangentStart ?? { x: 0, y: 0 }
+                        const te = seg.tangentEnd ?? { x: 0, y: 0 }
+
+                        // Evaluate position on bezier at t
+                        const mt = 1 - t
+                        const newX = mt * mt * mt * startV.x + 3 * mt * mt * t * (startV.x + ts.x) +
+                            3 * mt * t * t * (endV.x + te.x) + t * t * t * endV.x
+                        const newY = mt * mt * mt * startV.y + 3 * mt * mt * t * (startV.y + ts.y) +
+                            3 * mt * t * t * (endV.y + te.y) + t * t * t * endV.y
+
+                        // Single new vertex (connected — no break)
+                        const newVertIdx = net.vertices.length
+                        const newVertex: VectorVertex = { x: newX, y: newY, handleMirroring: 'NONE' }
+
+                        // de Casteljau subdivision at t
+                        const p0 = { x: startV.x, y: startV.y }
+                        const p1 = { x: startV.x + ts.x, y: startV.y + ts.y }
+                        const p2 = { x: endV.x + te.x, y: endV.y + te.y }
+                        const p3 = { x: endV.x, y: endV.y }
+
+                        const q1 = { x: p0.x + t * (p1.x - p0.x), y: p0.y + t * (p1.y - p0.y) }
+                        const r2 = { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) }
+                        const r3_pre = { x: p2.x + t * (p3.x - p2.x), y: p2.y + t * (p3.y - p2.y) }
+                        const q2 = { x: q1.x + t * (r2.x - q1.x), y: q1.y + t * (r2.y - q1.y) }
+                        const r2b = { x: r2.x + t * (r3_pre.x - r2.x), y: r2.y + t * (r3_pre.y - r2.y) }
+
+                        // First half: seg.start → newVertex (connected)
+                        const firstHalf: VectorSegment = {
+                            start: seg.start,
+                            end: newVertIdx,
+                            tangentStart: { x: q1.x - p0.x, y: q1.y - p0.y },
+                            tangentEnd: { x: q2.x - newX, y: q2.y - newY },
+                        }
+                        // Second half: newVertex → seg.end (connected)
+                        const secondHalf: VectorSegment = {
+                            start: newVertIdx,
+                            end: seg.end,
+                            tangentStart: { x: r2b.x - newX, y: r2b.y - newY },
+                            tangentEnd: { x: r3_pre.x - p3.x, y: r3_pre.y - p3.y },
+                        }
+
+                        // Replace original segment with two halves
+                        net.vertices.push(newVertex)
+                        net.segments.splice(segIdx, 1, firstHalf, secondHalf)
+
+                        // If pen tool is active, start drawing from the new vertex
+                        // so user can continue placing points with dashed preview line
+                        if (state.activeTool === 'pen') {
+                            // Pen tool uses canvas-absolute coords, so convert node-relative to absolute
+                            const absX = node.x + newX
+                            const absY = node.y + newY
+                            state.penDrawingState = {
+                                nodeId,
+                                vertices: [{ x: absX, y: absY }],
+                                segments: [],
+                                isDrawing: true,
+                                cursorX: absX,
+                                cursorY: absY,
+                                nearStartPoint: false,
+                                _extendFromVertexIndex: newVertIdx,
+                            }
+                            state.vectorEditNodeId = null
+                            state.vectorEditTool = 'move'
+                            state.selectedVertexIndices = []
+                            state.selectedIds = [nodeId]
+                        } else {
+                            // Enter vector edit mode on this node and select the new vertex
+                            state.vectorEditNodeId = nodeId
+                            state.vectorEditTool = 'move'
+                            state.selectedVertexIndices = [newVertIdx]
+                            state.selectedIds = [nodeId]
+                        }
+                    },
+                    false,
+                    'insertPointOnSegment'
+                ),
+
             setPenDrawingState: (penState) =>
                 set(
                     (state) => {
@@ -1877,10 +2241,12 @@ export const useEditorStore = create<EditorState>()(
 
                         // Need at least 2 vertices for a valid path
                         if (ps.vertices.length < 2) {
-                            // Delete the empty vector node
-                            const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
-                            if (idx !== -1) state.nodes.splice(idx, 1)
-                            state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            // Delete the empty vector node (only if we created it, not extending)
+                            if (ps._extendFromVertexIndex == null) {
+                                const idx = state.nodes.findIndex((n) => n.id === ps.nodeId)
+                                if (idx !== -1) state.nodes.splice(idx, 1)
+                                state.selectedIds = state.selectedIds.filter((id) => id !== ps.nodeId)
+                            }
                             state.penDrawingState = null
                             return
                         }
@@ -1892,18 +2258,54 @@ export const useEditorStore = create<EditorState>()(
 
                         const vn = (node as VectorNode).vectorNetwork
 
-                        // Transfer vertices and segments from drawing state
-                        vn.vertices = ps.vertices
-                        vn.segments = ps.segments
+                        // ── Extend mode: merge new vertices/segments into existing network ──
+                        if (ps._extendFromVertexIndex != null) {
+                            const existingVertexCount = vn.vertices.length
+                            // Skip ps.vertices[0] — it's a copy of the extend-from vertex
+                            // Also skip the last vertex if _extendToVertexIndex is set (it maps to existing)
+                            const hasExtendTo = ps._extendToVertexIndex != null
+                            const newVertices = hasExtendTo
+                                ? ps.vertices.slice(1, -1)  // skip first AND last
+                                : ps.vertices.slice(1)       // skip first only
+                            const baseIdx = existingVertexCount
 
-                        // Recalculate bounding box from vertices AND bezier control points
-                        // This ensures the entire shape fits within the frame bounds
-                        if (ps.vertices.length > 0) {
+                            // Convert new vertices from canvas-absolute to node-relative coords
+                            for (const nv of newVertices) {
+                                nv.x -= node.x
+                                nv.y -= node.y
+                                vn.vertices.push(nv)
+                            }
+
+                            // Remap and append segments
+                            const lastPsIdx = ps.vertices.length - 1
+                            for (const seg of ps.segments) {
+                                const remapIdx = (i: number) => {
+                                    if (i === 0) return ps._extendFromVertexIndex!
+                                    if (hasExtendTo && i === lastPsIdx) return ps._extendToVertexIndex!
+                                    return baseIdx + (i - 1)
+                                }
+                                vn.segments.push({
+                                    start: remapIdx(seg.start),
+                                    end: remapIdx(seg.end),
+                                    ...(seg.tangentStart ? { tangentStart: seg.tangentStart } : {}),
+                                    ...(seg.tangentEnd ? { tangentEnd: seg.tangentEnd } : {}),
+                                })
+                            }
+
+                            // Recompute bounding box for the whole node
+                            _recomputeVectorBBox(node as VectorNode)
+                        } else {
+                            // ── Normal mode: replace entire network ──
+                            vn.vertices = ps.vertices
+                            vn.segments = ps.segments
+
+                            // Recalculate bounding box from ALL vertices AND bezier control points
+                            if (vn.vertices.length > 0) {
                             let minX = Infinity, minY = Infinity
                             let maxX = -Infinity, maxY = -Infinity
 
                             // Include vertex positions
-                            for (const v of ps.vertices) {
+                            for (const v of vn.vertices) {
                                 if (v.x < minX) minX = v.x
                                 if (v.y < minY) minY = v.y
                                 if (v.x > maxX) maxX = v.x
@@ -1911,9 +2313,9 @@ export const useEditorStore = create<EditorState>()(
                             }
 
                             // Include bezier control points (tangent extents)
-                            for (const seg of ps.segments) {
-                                const startV = ps.vertices[seg.start]
-                                const endV = ps.vertices[seg.end]
+                            for (const seg of vn.segments) {
+                                const startV = vn.vertices[seg.start]
+                                const endV = vn.vertices[seg.end]
                                 if (!startV || !endV) continue
 
                                 if (seg.tangentStart) {
@@ -1955,20 +2357,103 @@ export const useEditorStore = create<EditorState>()(
                             node.width = Math.max(maxX - minX, 1)
                             node.height = Math.max(maxY - minY, 1)
                         }
+                        } // end normal mode else
 
                         // Clear drawing state
                         state.penDrawingState = null
+                        // Remember committed node so toolbar can enter vector edit mode
+                        state.lastPenCommittedNodeId = ps.nodeId
 
-                        // Keep the node selected and exit pen tool to select mode
-                        state.selectedIds = [ps.nodeId]
-                        state.activeTool = 'select'
-                        // Don't auto-enter vector edit mode — Figma shows the shape selected
+                        // Figma behavior: stay in pen tool after closing/committing a path
+                        // so the user can immediately draw another shape.
+                        // Deselect the committed node — don't switch to select tool.
+                        state.selectedIds = []
+                        // activeTool stays as 'pen'
                         state.vectorEditNodeId = null
                         state.vectorEditTool = 'move'
                         state.selectedVertexIndices = []
                     },
                     false,
                     'commitPenPath'
+                ),
+
+            commitPenAndEnterVectorEdit: (tool) =>
+                set(
+                    (state) => {
+                        let nodeId: string | null = null
+
+                        // Case 1: still drawing (open path)
+                        const ps = state.penDrawingState
+                        if (ps && ps.vertices.length >= 2) {
+                            nodeId = ps.nodeId
+                            // Inline commitPenPath logic
+                            const node = findNodeById(state.nodes, ps.nodeId)
+                            if (node && node.type === 'vector') {
+                                _snap(state)
+                                const vn = (node as VectorNode).vectorNetwork
+                                vn.vertices = ps.vertices
+                                vn.segments = ps.segments
+                                if (ps.vertices.length > 0) {
+                                    let minX = Infinity, minY = Infinity
+                                    let maxX = -Infinity, maxY = -Infinity
+                                    for (const v of ps.vertices) {
+                                        if (v.x < minX) minX = v.x
+                                        if (v.y < minY) minY = v.y
+                                        if (v.x > maxX) maxX = v.x
+                                        if (v.y > maxY) maxY = v.y
+                                    }
+                                    for (const seg of ps.segments) {
+                                        const sv = ps.vertices[seg.start]
+                                        const ev = ps.vertices[seg.end]
+                                        if (!sv || !ev) continue
+                                        if (seg.tangentStart) {
+                                            const cpX = sv.x + seg.tangentStart.x
+                                            const cpY = sv.y + seg.tangentStart.y
+                                            if (cpX < minX) minX = cpX
+                                            if (cpY < minY) minY = cpY
+                                            if (cpX > maxX) maxX = cpX
+                                            if (cpY > maxY) maxY = cpY
+                                        }
+                                        if (seg.tangentEnd) {
+                                            const cpX = ev.x + seg.tangentEnd.x
+                                            const cpY = ev.y + seg.tangentEnd.y
+                                            if (cpX < minX) minX = cpX
+                                            if (cpY < minY) minY = cpY
+                                            if (cpX > maxX) maxX = cpX
+                                            if (cpY > maxY) maxY = cpY
+                                        }
+                                    }
+                                    for (const v of vn.vertices) {
+                                        v.x -= minX
+                                        v.y -= minY
+                                    }
+                                    node.x += minX
+                                    node.y += minY
+                                    node.width = Math.max(maxX - minX, 1)
+                                    node.height = Math.max(maxY - minY, 1)
+                                }
+                            }
+                            state.penDrawingState = null
+                        } else if (!ps && state.lastPenCommittedNodeId) {
+                            // Case 2: path already closed (click-to-close)
+                            nodeId = state.lastPenCommittedNodeId
+                        }
+
+                        if (!nodeId) return
+
+                        // Enter vector edit mode on the node
+                        const node = findNodeById(state.nodes, nodeId)
+                        if (!node || node.type !== 'vector') return
+
+                        state.vectorEditNodeId = nodeId
+                        state.vectorEditTool = tool
+                        state.selectedVertexIndices = []
+                        state.activeTool = 'select'
+                        state.selectedIds = [nodeId]
+                        state.lastPenCommittedNodeId = null
+                    },
+                    false,
+                    'commitPenAndEnterVectorEdit'
                 ),
         })),
         { name: 'editor-store' }

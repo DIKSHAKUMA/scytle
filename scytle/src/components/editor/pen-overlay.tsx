@@ -40,6 +40,24 @@ export const PenOverlay = memo(function PenOverlay() {
             className="absolute inset-0 pointer-events-none"
             style={{ width: '100%', height: '100%', overflow: 'visible', zIndex: 30 }}
         >
+            {/* Alignment guides — orange lines from the aligned anchor vertex to the cursor position */}
+            {ps._alignGuides && ps._alignGuides.map((guide, i) => {
+                // axis:'x' → cursor X snapped to vertex X → vertical line from vertex to cursor
+                // axis:'y' → cursor Y snapped to vertex Y → horizontal line from vertex to cursor
+                const vs = toScreen(guide.vertexX, guide.vertexY)
+                // The guide line endpoint: for 'x' snap, line stays at snapped X; for 'y' snap, stays at snapped Y
+                const ex = guide.axis === 'x' ? vs.x : cursor.x
+                const ey = guide.axis === 'x' ? cursor.y : vs.y
+                return (
+                    <line
+                        key={`guide-${i}`}
+                        x1={vs.x} y1={vs.y} x2={ex} y2={ey}
+                        stroke="#ff6b00"
+                        strokeWidth={1}
+                        opacity={0.9}
+                    />
+                )
+            })}
             {/* Committed segments — straight lines or cubic bezier */}
             {ps.segments.map((seg, i) => {
                 const a = verts[seg.start]

@@ -6,11 +6,9 @@ import type { VectorEditTool } from '@/store/editor-store'
 import {
     MousePointer2,
     Lasso,
-    Combine,
     PaintBucket,
     Spline,
     Scissors,
-    WrapText,
     X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -34,10 +32,8 @@ const TOOL_GROUPS: ToolDef[][] = [
     // Group 2: Editing tools
     [
         { id: 'paint', label: 'Paint', shortcut: '\u21E7B', icon: <PaintBucket size={ICON_SIZE} /> },
-        { id: 'shape-builder', label: 'Shape Builder', shortcut: 'J', icon: <Combine size={ICON_SIZE} /> },
         { id: 'bend', label: 'Bend', shortcut: '\u2318', icon: <Spline size={ICON_SIZE} /> },
         { id: 'cut', label: 'Cut', shortcut: 'C', icon: <Scissors size={ICON_SIZE} /> },
-        { id: 'variable-width', label: 'Variable Width', shortcut: 'W', icon: <WrapText size={ICON_SIZE} /> },
     ],
 ]
 
@@ -52,14 +48,51 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
     const vectorEditTool = useEditorStore((s) => s.vectorEditTool)
     const setVectorEditTool = useEditorStore((s) => s.setVectorEditTool)
     const exitVectorEditMode = useEditorStore((s) => s.exitVectorEditMode)
+    const enterVectorEditMode = useEditorStore((s) => s.enterVectorEditMode)
+    const commitPenAndEnterVectorEdit = useEditorStore((s) => s.commitPenAndEnterVectorEdit)
+    const activeTool = useEditorStore((s) => s.activeTool)
+    const setActiveTool = useEditorStore((s) => s.setActiveTool)
+    const commitPenPath = useEditorStore((s) => s.commitPenPath)
+    const deleteNode = useEditorStore((s) => s.deleteNode)
+    const setPenDrawingState = useEditorStore((s) => s.setPenDrawingState)
 
     const [hoveredTool, setHoveredTool] = useState<VectorEditTool | 'close' | null>(null)
 
-    const handleClose = useCallback(() => {
-        exitVectorEditMode()
-    }, [exitVectorEditMode])
+    /** When clicking a tool while pen is active, commit the path and enter vector edit mode first */
+    const handleToolClick = useCallback((toolId: VectorEditTool) => {
+        const store = useEditorStore.getState()
 
-    if (!vectorEditNodeId) return null
+        // Pen tool active (open or closed path) → commit + enter vector edit atomically
+        if (store.activeTool === 'pen') {
+            commitPenAndEnterVectorEdit(toolId)
+            return
+        }
+
+        // Already in vector edit mode — just switch tool
+        setVectorEditTool(toolId)
+    }, [commitPenAndEnterVectorEdit, setVectorEditTool])
+
+    const handleClose = useCallback(() => {
+        if (vectorEditNodeId) {
+            // Vector edit mode → exit it
+            exitVectorEditMode()
+        } else if (activeTool === 'pen') {
+            // Pen tool mode → commit open path (if ≥2 vertices) or discard, switch to select
+            const ps = useEditorStore.getState().penDrawingState
+            if (ps) {
+                if (ps.vertices.length >= 2) {
+                    commitPenPath()
+                } else {
+                    deleteNode(ps.nodeId)
+                    setPenDrawingState(null)
+                }
+            }
+            setActiveTool('select')
+        }
+    }, [vectorEditNodeId, activeTool, exitVectorEditMode, commitPenPath, deleteNode, setPenDrawingState, setActiveTool])
+
+    // Show toolbar in vector edit mode OR when pen tool is active
+    if (!vectorEditNodeId && activeTool !== 'pen') return null
 
     return (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1">
@@ -98,7 +131,7 @@ export const VectorEditToolbar = memo(function VectorEditToolbar() {
                                         ? 'bg-blue-500 text-white'
                                         : 'text-neutral-300 hover:text-white hover:bg-neutral-700',
                                 )}
-                                onClick={() => setVectorEditTool(tool.id)}
+                                onClick={() => handleToolClick(tool.id)}
                                 onMouseEnter={() => setHoveredTool(tool.id)}
                                 onMouseLeave={() => setHoveredTool(null)}
                             >
