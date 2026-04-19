@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Plus, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generateId } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
+import { InlineHexValueInput, InlinePercentInput } from './paint-row-inputs'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import {
@@ -118,7 +119,9 @@ function FillRow({ fill, fillId, onUpdate, onRemove, documentColors, onPickerOpe
     const [swatchEl, setSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
 
-    const resolvedColor = fill.type === 'solid' ? fill.color : undefined
+    const isSolid = fill.type === 'solid'
+    const resolvedColor = isSolid ? fill.color : undefined
+    const solidHex = isSolid ? normaliseHex(fill.color) : ''
 
     const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: fillId })
     const style: React.CSSProperties = {
@@ -140,16 +143,17 @@ function FillRow({ fill, fillId, onUpdate, onRemove, documentColors, onPickerOpe
             ref={setNodeRef}
             style={style}
             className={cn(
-                'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1',
+                'group relative flex items-center gap-1 h-8 rounded-sm px-1 -mx-1',
                 'transition-colors',
                 pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
             )}
         >
-            {/* Drag handle */}
+            {/* Drag handle (kept for multi-fill ordering without affecting row alignment) */}
             <button
                 className={cn(
-                    'w-3 h-5 flex items-center justify-center rounded-sm shrink-0',
-                    'text-muted-foreground/0 group-hover:text-muted-foreground/30',
+                    'absolute -left-2 top-1/2 -translate-y-1/2 z-10',
+                    'w-3 h-5 flex items-center justify-center rounded-sm',
+                    'text-muted-foreground/0 group-hover:text-muted-foreground/30 opacity-0 group-hover:opacity-100',
                     'hover:!text-muted-foreground/60 cursor-grab active:cursor-grabbing transition-colors',
                 )}
                 {...attributes}
@@ -158,73 +162,76 @@ function FillRow({ fill, fillId, onUpdate, onRemove, documentColors, onPickerOpe
             >
                 <GripVertical size={10} />
             </button>
-            {/* Color swatch */}
-            <button
-                ref={setSwatchEl}
-                className={cn(
-                    'w-5 h-5 rounded-sm border shrink-0 transition-all',
-                    'border-border/40 hover:border-border/80',
-                    pickerOpen && 'ring-1 ring-primary/40',
-                    !isVisible && 'opacity-40',
-                )}
-                style={fillSwatchStyle(fill, resolvedColor)}
-                onClick={handleSwatchClick}
-                title="Edit fill"
-            >
-                {/* Checkerboard for transparent fills */}
-                {fill.type === 'solid' && opacity < 0.05 && (
-                    <div className="absolute inset-0 rounded-sm"
-                        style={{ background: 'repeating-conic-gradient(#aaa 0% 25%, #fff 0% 50%) 0 0 / 6px 6px' }} />
-                )}
-            </button>
 
-            {/* Fill type label + blend mode */}
-            <span
+            {/* Main value control: swatch + value + opacity */}
+            <div
                 className={cn(
-                    'flex-1 text-[11px] text-muted-foreground truncate cursor-default',
+                    'flex items-center min-w-0 flex-1 h-7 rounded-sm border overflow-hidden',
+                    'border-border/35 bg-muted/20',
+                    pickerOpen && 'ring-1 ring-primary/40 ring-inset',
                     !isVisible && 'opacity-40',
                 )}
-                onClick={handleSwatchClick}
-                title={blendLabel(fill.blendMode) ? `${fillLabel(fill)} · ${blendLabel(fill.blendMode)}` : fillLabel(fill)}
             >
-                {fillLabel(fill)}
-                {blendLabel(fill.blendMode) && (
-                    <span className="text-[10px] text-primary/60 ml-1">
-                        · {blendLabel(fill.blendMode)}
-                    </span>
-                )}
-            </span>
+                {/* Color swatch */}
+                <button
+                    ref={setSwatchEl}
+                    className={cn(
+                        'relative w-6 h-6 rounded-[4px] border shrink-0 ml-0.5 mr-1',
+                        'border-border/40 hover:border-border/80 transition-all',
+                        pickerOpen && 'ring-1 ring-primary/40',
+                    )}
+                    style={fillSwatchStyle(fill, resolvedColor)}
+                    onClick={handleSwatchClick}
+                    title="Edit fill"
+                >
+                    {/* Checkerboard for transparent fills */}
+                    {isSolid && opacity < 0.05 && (
+                        <div
+                            className="absolute inset-0 rounded-[4px]"
+                            style={{ background: 'repeating-conic-gradient(#aaa 0% 25%, #fff 0% 50%) 0 0 / 6px 6px' }}
+                        />
+                    )}
+                </button>
 
-            {/* Opacity % — compact */}
-            <input
-                type="text"
-                inputMode="numeric"
-                value={Math.round(opacity * 100)}
-                className={cn(
-                    'w-10 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
-                    'bg-transparent border border-transparent',
-                    'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                    'transition-colors tabular-nums',
-                    !isVisible && 'opacity-40',
+                <div className="w-px h-full bg-border/35 shrink-0" />
+
+                {/* Value: editable HEX for solid, type label for gradient/image */}
+                {isSolid ? (
+                    <InlineHexValueInput
+                        value={solidHex}
+                        onCommit={(nextHex) => onUpdate({ ...fill, color: nextHex })}
+                        className="flex-1 min-w-0 h-full border-0 hover:bg-transparent focus:bg-transparent"
+                    />
+                ) : (
+                    <button
+                        className={cn(
+                            'flex-1 min-w-0 h-full px-1.5 text-left text-[11px] text-muted-foreground truncate',
+                            'hover:bg-muted/30 transition-colors',
+                        )}
+                        onClick={handleSwatchClick}
+                        title={blendLabel(fill.blendMode) ? `${fillLabel(fill)} · ${blendLabel(fill.blendMode)}` : fillLabel(fill)}
+                    >
+                        {fillLabel(fill)}
+                        {blendLabel(fill.blendMode) && (
+                            <span className="text-[10px] text-primary/60 ml-1">
+                                · {blendLabel(fill.blendMode)}
+                            </span>
+                        )}
+                    </button>
                 )}
-                onChange={(e) => {
-                    const n = parseInt(e.target.value, 10)
-                    if (!isNaN(n)) onUpdate({ ...fill, opacity: Math.max(0, Math.min(100, n)) / 100 })
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur()
-                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                        e.preventDefault()
-                        const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
-                        const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
-                        onUpdate({ ...fill, opacity: newVal / 100 })
-                    }
-                }}
-                onFocus={(e) => e.target.select()}
-                onClick={(e) => e.stopPropagation()}
-            />
-            <span className="text-[10px] text-muted-foreground/40 w-2 shrink-0">%</span>
+
+                <div className="w-px h-full bg-border/35 shrink-0" />
+
+                {/* Opacity */}
+                <div className="flex items-center w-[52px] shrink-0 pr-1">
+                    <InlinePercentInput
+                        value={opacity}
+                        onCommit={(nextOpacity) => onUpdate({ ...fill, opacity: nextOpacity })}
+                        className="w-9 h-full border-0 hover:bg-transparent focus:bg-transparent"
+                    />
+                    <span className="text-[10px] text-muted-foreground/45">%</span>
+                </div>
+            </div>
 
             {/* Visibility toggle */}
             <button
@@ -285,7 +292,7 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
     const setGradientEditingFillIdx = useEditorStore((s) => s.setGradientEditingFillIdx)
     const setImageCropEditingFillIdx = useEditorStore((s) => s.setImageCropEditingFillIdx)
     const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
-    const fills = node.fills ?? []
+    const fills = useMemo(() => node.fills ?? [], [node.fills])
     const documentColors = collectDocumentColors(allNodes)
 
     // Ensure stable DnD IDs — use fill.id if set, fallback to index-based

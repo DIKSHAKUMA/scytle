@@ -7,6 +7,7 @@ import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
+import { InlineHexValueInput, InlinePercentInput } from './paint-row-inputs'
 import { useEditorStore } from '@/store/editor-store'
 
 interface SectionProps {
@@ -232,7 +233,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
     const fill = borderToFill({ ...border, color: resolvedColor })
     const isVisible = border.visible !== false
     const opacity = border.opacity ?? 1
-    const hex = normaliseHex(resolvedColor).replace('#', '').toUpperCase()
+    const hex = normaliseHex(resolvedColor)
 
     const handlePickerChange = useCallback((updated: Fill) => {
         if (updated.type === 'solid') {
@@ -246,66 +247,52 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
     return (
         <div
             className={cn(
-                'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1',
+                'group flex items-center gap-1 h-8 rounded-sm px-1 -mx-1',
                 'transition-colors',
                 pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
             )}
         >
-            {/* Color swatch */}
-            <button
-                ref={setSwatchEl}
+            {/* Main value control: swatch + editable hex + opacity */}
+            <div
                 className={cn(
-                    'w-5 h-5 rounded-sm border shrink-0 transition-all',
-                    'border-border/40 hover:border-border/80',
-                    pickerOpen && 'ring-1 ring-primary/40',
+                    'flex items-center min-w-0 flex-1 h-7 rounded-sm border overflow-hidden',
+                    'border-border/35 bg-muted/20',
+                    pickerOpen && 'ring-1 ring-primary/40 ring-inset',
                     !isVisible && 'opacity-40',
                 )}
-                style={{ backgroundColor: hexOpacityToRgba(normaliseHex(resolvedColor), opacity) }}
-                onClick={() => setPickerOpen(true)}
-                title="Edit stroke color"
-            />
-
-            {/* Hex display — clickable to open picker */}
-            <span
-                className={cn(
-                    'flex-1 text-[11px] text-muted-foreground font-mono uppercase cursor-default truncate',
-                    !isVisible && 'opacity-40',
-                )}
-                onClick={() => setPickerOpen(true)}
             >
-                {hex}
-            </span>
+                {/* Color swatch */}
+                <button
+                    ref={setSwatchEl}
+                    className={cn(
+                        'w-6 h-6 rounded-[4px] border shrink-0 ml-0.5 mr-1 transition-all',
+                        'border-border/40 hover:border-border/80',
+                        pickerOpen && 'ring-1 ring-primary/40',
+                    )}
+                    style={{ backgroundColor: hexOpacityToRgba(normaliseHex(resolvedColor), opacity) }}
+                    onClick={() => setPickerOpen(true)}
+                    title="Edit stroke color"
+                />
 
-            {/* Opacity % */}
-            <input
-                type="text"
-                inputMode="numeric"
-                value={Math.round(opacity * 100)}
-                className={cn(
-                    'w-10 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
-                    'bg-transparent border border-transparent',
-                    'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                    'transition-colors tabular-nums',
-                    !isVisible && 'opacity-40',
-                )}
-                onChange={(e) => {
-                    const n = parseInt(e.target.value, 10)
-                    if (!isNaN(n)) onUpdate({ opacity: Math.max(0, Math.min(100, n)) / 100 })
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                        (e.target as HTMLInputElement).blur()
-                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                        e.preventDefault()
-                        const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
-                        const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
-                        onUpdate({ opacity: newVal / 100 })
-                    }
-                }}
-                onFocus={(e) => e.target.select()}
-                onClick={(e) => e.stopPropagation()}
-            />
-            <span className="text-[10px] text-muted-foreground/40 w-2 shrink-0">%</span>
+                <div className="w-px h-full bg-border/35 shrink-0" />
+
+                <InlineHexValueInput
+                    value={hex}
+                    onCommit={(nextHex) => onUpdate({ color: nextHex })}
+                    className="flex-1 min-w-0 h-full border-0 hover:bg-transparent focus:bg-transparent"
+                />
+
+                <div className="w-px h-full bg-border/35 shrink-0" />
+
+                <div className="flex items-center w-[52px] shrink-0 pr-1">
+                    <InlinePercentInput
+                        value={opacity}
+                        onCommit={(nextOpacity) => onUpdate({ opacity: nextOpacity })}
+                        className="w-9 h-full border-0 hover:bg-transparent focus:bg-transparent"
+                    />
+                    <span className="text-[10px] text-muted-foreground/45">%</span>
+                </div>
+            </div>
 
             {/* Visibility toggle */}
             <button
@@ -373,7 +360,7 @@ export function StrokeSection({ node, onUpdate }: SectionProps) {
     const addStroke = useCallback(() => {
         onUpdate({
             border: {
-                color: '#000000',
+                color: '000000',
                 width: 1,
                 style: 'solid',
                 position: 'inside',
