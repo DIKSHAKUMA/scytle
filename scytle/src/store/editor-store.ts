@@ -1655,8 +1655,10 @@ export const useEditorStore = create<EditorState>()(
 
                         // Determine paste target:
                         // 1. If drilled into a frame (enteredFrameId), paste inside it.
-                        // 2. If a single frame is explicitly selected, paste inside it
-                        //    (except self-paste to avoid frame self-nesting).
+                        // 2. With a single selection, use explicit frame selection OR
+                        //    the selected node's parent frame as destination context.
+                        //    This matches Figma-style paste intent where child selection
+                        //    still pastes into its containing frame.
                         // 3. Otherwise regular paste targets top-level unless same-source
                         //    context preservation applies below.
                         let targetFrame: FrameNode | null = null
@@ -1666,10 +1668,24 @@ export const useEditorStore = create<EditorState>()(
                                 state.enteredFrameId
                             ) as FrameNode | null
                             if (f && f.type === 'frame') targetFrame = f
-                        } else if (selectedFrames.length === 1 && state.selectedIds.length === 1) {
-                            const selectedFrame = selectedFrames[0]
-                            if (!copiedSourceIds.has(selectedFrame.id)) {
-                                targetFrame = selectedFrame
+                        } else if (state.selectedIds.length === 1) {
+                            const selectedId = state.selectedIds[0]
+                            const selectedNode = findNodeById(state.nodes, selectedId)
+
+                            if (selectedNode?.type === 'frame') {
+                                if (!copiedSourceIds.has(selectedNode.id)) {
+                                    targetFrame = selectedNode
+                                }
+                            } else {
+                                const parentInfo = findParentOfNode(state.nodes, selectedId)
+                                const parentFrame = parentInfo?.parent
+                                if (
+                                    parentFrame &&
+                                    parentFrame.type === 'frame' &&
+                                    !copiedSourceIds.has(parentFrame.id)
+                                ) {
+                                    targetFrame = parentFrame
+                                }
                             }
                         }
 
