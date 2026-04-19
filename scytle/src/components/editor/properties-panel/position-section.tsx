@@ -27,6 +27,8 @@ interface PositionSectionProps {
     isAutoLayout: boolean
     /** Whether this node's parent uses auto layout (regardless of node's own positioning) */
     isInAutoLayoutParent: boolean
+    /** Hide alignment controls (used by multi-select, which has its own align section). */
+    hideAlignment?: boolean
 }
 
 /**
@@ -297,7 +299,14 @@ function ConstraintVisual({ constraints, onToggleH, onToggleV }: ConstraintVisua
 
 /* ── Position Section ────────────────────────────────────────── */
 
-export function PositionSection({ node, parentNode, onUpdate, isAutoLayout, isInAutoLayoutParent }: PositionSectionProps) {
+export function PositionSection({
+    node,
+    parentNode,
+    onUpdate,
+    isAutoLayout,
+    isInAutoLayoutParent,
+    hideAlignment = false,
+}: PositionSectionProps) {
     const updateNode = useEditorStore((s) => s.updateNode)
 
     const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
@@ -472,55 +481,56 @@ export function PositionSection({ node, parentNode, onUpdate, isAutoLayout, isIn
     return (
         <Section title="Position" action={ignoreAction}>
             {/* Alignment buttons — Figma: 6-button grid */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
-                    <IconButton
-                        icon={<AlignHorizontalJustifyStart size={14} />}
-                        onClick={handleAlignLeft}
-                        title="Align left"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
-                    <IconButton
-                        icon={<AlignHorizontalJustifyCenter size={14} />}
-                        onClick={handleAlignCenterH}
-                        title="Align center"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
-                    <IconButton
-                        icon={<AlignHorizontalJustifyEnd size={14} />}
-                        onClick={handleAlignRight}
-                        title="Align right"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
+            {!hideAlignment && (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
+                        <IconButton
+                            icon={<AlignHorizontalJustifyStart size={14} />}
+                            onClick={handleAlignLeft}
+                            title="Align left"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                        <IconButton
+                            icon={<AlignHorizontalJustifyCenter size={14} />}
+                            onClick={handleAlignCenterH}
+                            title="Align center"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                        <IconButton
+                            icon={<AlignHorizontalJustifyEnd size={14} />}
+                            onClick={handleAlignRight}
+                            title="Align right"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                    </div>
+                    <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
+                        <IconButton
+                            icon={<AlignVerticalJustifyStart size={14} />}
+                            onClick={handleAlignTop}
+                            title="Align top"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                        <IconButton
+                            icon={<AlignVerticalJustifyCenter size={14} />}
+                            onClick={handleAlignCenterV}
+                            title="Align middle"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                        <IconButton
+                            icon={<AlignVerticalJustifyEnd size={14} />}
+                            onClick={handleAlignBottom}
+                            title="Align bottom"
+                            disabled={isAutoLayout}
+                            disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
+                        />
+                    </div>
                 </div>
-                <div className="flex items-center gap-px rounded-sm bg-muted/45 p-0.5">
-                    <IconButton
-                        icon={<AlignVerticalJustifyStart size={14} />}
-                        onClick={handleAlignTop}
-                        title="Align top"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
-                    <IconButton
-                        icon={<AlignVerticalJustifyCenter size={14} />}
-                        onClick={handleAlignCenterV}
-                        title="Align middle"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
-                    <IconButton
-                        icon={<AlignVerticalJustifyEnd size={14} />}
-                        onClick={handleAlignBottom}
-                        title="Align bottom"
-                        disabled={isAutoLayout}
-                        disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
-                    />
-                </div>
-            </div>
-
+            )}
             {/* X / Y */}
             <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
                 <NumberInput

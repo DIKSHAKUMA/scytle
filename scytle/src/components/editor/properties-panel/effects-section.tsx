@@ -1,13 +1,12 @@
 'use client'
 
-import { useRef, useState, useCallback, useMemo, useEffect, memo } from 'react'
-import type { ScytleNode, Shadow, Fill, SolidFill } from '@/types/canvas'
-import { NumberInput, SelectInput } from './inputs'
-import { Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Fill, ScytleNode, Shadow, SolidFill } from '@/types/canvas'
+import { ChevronDown, Eye, EyeOff, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
-import { ColorPicker } from './color-picker'
+import { hexOpacityToRgba, normaliseHex } from '@/lib/color-utils'
 import { useEditorStore } from '@/store/editor-store'
+import { EffectSettingsOverlay } from './effects/effect-settings-overlay'
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -30,212 +29,158 @@ function collectDocumentColors(nodes: ScytleNode[]): string[] {
 function shadowColorToFill(color: string): SolidFill {
     const m = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\s*\)/)
     if (m) {
-        const r = parseInt(m[1]), g = parseInt(m[2]), b = parseInt(m[3])
+        const r = parseInt(m[1], 10)
+        const g = parseInt(m[2], 10)
+        const b = parseInt(m[3], 10)
         const hex = `${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
         return { type: 'solid', color: hex, opacity: m[4] ? parseFloat(m[4]) : 1 }
     }
-    return { type: 'solid', color: normaliseHex(color).replace('#', ''), opacity: 1 }
+    return { type: 'solid', color: normaliseHex(color), opacity: 1 }
 }
 
 function fillToShadowColor(fill: Fill): string {
-    if (fill.type === 'solid') {
-        const hex = normaliseHex(fill.color)
-        const opacity = fill.opacity ?? 1
-        if (opacity >= 1) return `#${hex}`
-        const r = parseInt(hex.slice(0, 2), 16)
-        const g = parseInt(hex.slice(2, 4), 16)
-        const b = parseInt(hex.slice(4, 6), 16)
-        return `rgba(${r},${g},${b},${opacity})`
-    }
-    return '#000000'
+    if (fill.type !== 'solid') return '#000000'
+
+    const hex = normaliseHex(fill.color)
+    const opacity = fill.opacity ?? 1
+    if (opacity >= 1) return `#${hex}`
+
+    const r = parseInt(hex.slice(0, 2), 16)
+    const g = parseInt(hex.slice(2, 4), 16)
+    const b = parseInt(hex.slice(4, 6), 16)
+    return `rgba(${r},${g},${b},${opacity})`
 }
 
 // ─────────────────────────────────────────────────────────────
-// ShadowRow — identical React tree depth to StrokeRow
-// Returns a fragment: main row + optional expanded row
+// Row
 // ─────────────────────────────────────────────────────────────
-
-const SHADOW_TYPE_OPTIONS = [
-    { value: 'drop', label: 'Drop shadow' },
-    { value: 'inner', label: 'Inner shadow' },
-]
 
 interface ShadowRowProps {
     shadow: Shadow
     index: number
+    isSettingsOpen: boolean
+    documentColors: string[]
+    onOpenSettings: (index: number) => void
+    onCloseSettings: () => void
     onUpdate: (index: number, partial: Partial<Shadow>) => void
     onRemove: (index: number) => void
-    documentColors: string[]
 }
 
-const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, documentColors }: ShadowRowProps) {
-    const [swatchEl, setSwatchEl] = useState<HTMLButtonElement | null>(null)
-    const [pickerOpen, setPickerOpen] = useState(false)
-    const [expanded, setExpanded] = useState(false)
+const ShadowRow = memo(function ShadowRow({
+    shadow,
+    index,
+    isSettingsOpen,
+    documentColors,
+    onOpenSettings,
+    onCloseSettings,
+    onUpdate,
+    onRemove,
+}: ShadowRowProps) {
+    const [settingsAnchorEl, setSettingsAnchorEl] = useState<HTMLButtonElement | null>(null)
 
-    // Memoize fill so ColorPicker doesn't get a new object reference every render
     const fill = useMemo(() => shadowColorToFill(shadow.color), [shadow.color])
     const isVisible = shadow.visible !== false
-    const opacity = fill.opacity ?? 1
-    const hex = fill.color.toUpperCase()
+    const effectLabel = shadow.type === 'drop' ? 'Drop shadow' : 'Inner shadow'
 
-    const handlePickerChange = useCallback((updated: Fill) => {
-        if (updated.type === 'solid') {
-            const partial: Partial<Shadow> = {
-                color: fillToShadowColor(updated),
-            }
-            onUpdate(index, partial)
+    const handleToggleSettings = useCallback(() => {
+        if (isSettingsOpen) {
+            onCloseSettings()
+            return
         }
-    }, [index, onUpdate])
+        onOpenSettings(index)
+    }, [index, isSettingsOpen, onCloseSettings, onOpenSettings])
+
+    const swatchBg = useMemo(
+        () => hexOpacityToRgba(normaliseHex(fill.color), fill.opacity ?? 1),
+        [fill.color, fill.opacity],
+    )
 
     return (
         <>
-            {/* Main row — exact same structure as StrokeRow */}
             <div
                 className={cn(
-                    'group flex items-center gap-1 h-7 rounded-sm px-1 -mx-1',
-                    !pickerOpen && 'transition-colors',
-                    pickerOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
+                    'group flex items-center gap-1 h-8 rounded-sm px-1 -mx-1',
+                    'transition-colors',
+                    isSettingsOpen ? 'bg-muted/40' : 'hover:bg-muted/20',
                 )}
             >
-                {/* Expand toggle */}
+                {/* Settings / preview chip */}
                 <button
+                    ref={setSettingsAnchorEl}
                     className={cn(
-                        'w-4 h-5 flex items-center justify-center rounded-sm transition-colors shrink-0',
-                        expanded ? 'text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground',
+                        'w-7 h-7 rounded-md border flex items-center justify-center shrink-0 transition-all',
+                        isSettingsOpen
+                            ? 'border-primary/35 bg-primary/10 text-primary'
+                            : 'border-border/35 bg-muted/20 text-muted-foreground/75 hover:text-foreground hover:border-border/55',
                     )}
-                    onClick={() => setExpanded(v => !v)}
+                    onClick={handleToggleSettings}
                     title="Effect settings"
                 >
-                    {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                    <span
+                        className="w-4 h-4 rounded-[3px] border border-black/10"
+                        style={{ backgroundColor: swatchBg }}
+                    />
                 </button>
 
-                {/* Color swatch */}
+                {/* Effect type row control */}
                 <button
-                    ref={setSwatchEl}
                     className={cn(
-                        'w-5 h-5 rounded-sm border shrink-0',
-                        !pickerOpen && 'transition-all',
-                        'border-border/40 hover:border-border/80',
-                        pickerOpen && 'ring-1 ring-primary/40',
-                        !isVisible && 'opacity-40',
+                        'flex items-center gap-1.5 min-w-0 flex-1 h-7 px-2 rounded-md border',
+                        'border-border/35 bg-muted/20 hover:bg-muted/35 transition-colors',
                     )}
-                    style={{ backgroundColor: hexOpacityToRgba(normaliseHex(fill.color), opacity) }}
-                    onClick={() => setPickerOpen(true)}
-                    title="Edit shadow color"
-                />
-
-                {/* Hex */}
-                <span
-                    className={cn(
-                        'flex-1 text-[11px] text-muted-foreground font-mono uppercase cursor-default truncate',
-                        !isVisible && 'opacity-40',
-                    )}
-                    onClick={() => setPickerOpen(true)}
+                    onClick={handleToggleSettings}
+                    title="Open effect settings"
                 >
-                    {hex}
-                </span>
-
-                {/* Type label */}
-                <span className="text-[10px] text-muted-foreground/50 shrink-0">
-                    {shadow.type === 'drop' ? 'Drop' : 'Inner'}
-                </span>
-
-                {/* Opacity % */}
-                <input
-                    type="text"
-                    inputMode="numeric"
-                    value={Math.round(opacity * 100)}
-                    className={cn(
-                        'w-10 h-6 px-1 text-[11px] text-center font-mono rounded-sm text-foreground',
-                        'bg-transparent border border-transparent',
-                        'hover:bg-muted/50 focus:bg-muted/60 focus:border-border focus:outline-none',
-                        'transition-colors tabular-nums',
-                        !isVisible && 'opacity-40',
-                    )}
-                    onChange={(e) => {
-                        const n = parseInt(e.target.value, 10)
-                        if (!isNaN(n)) onUpdate(index, { color: fillToShadowColor({ ...fill, opacity: Math.max(0, Math.min(100, n)) / 100 }) })
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            (e.target as HTMLInputElement).blur()
-                        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                            e.preventDefault()
-                            const delta = (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)
-                            const newVal = Math.max(0, Math.min(100, Math.round(opacity * 100) + delta))
-                            onUpdate(index, { color: fillToShadowColor({ ...fill, opacity: newVal / 100 }) })
-                        }
-                    }}
-                    onFocus={(e) => e.target.select()}
-                    onClick={(e) => e.stopPropagation()}
-                />
-                <span className="text-[10px] text-muted-foreground/40 w-2 shrink-0">%</span>
+                    <span className="text-[11px] text-foreground/90 truncate">{effectLabel}</span>
+                    <ChevronDown size={12} className="text-muted-foreground/45 shrink-0" />
+                </button>
 
                 {/* Visibility */}
                 <button
                     className={cn(
-                        'w-5 h-5 flex items-center justify-center rounded-sm transition-colors shrink-0',
+                        'w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0',
                         isVisible
-                            ? 'text-muted-foreground/40 hover:text-foreground hover:bg-muted/50'
-                            : 'text-muted-foreground/25 hover:text-muted-foreground',
+                            ? 'text-muted-foreground/45 hover:text-foreground hover:bg-muted/50'
+                            : 'text-muted-foreground/30 hover:text-muted-foreground',
                     )}
                     onClick={() => onUpdate(index, { visible: !isVisible })}
                     title={isVisible ? 'Hide effect' : 'Show effect'}
                 >
-                    {isVisible ? <Eye size={11} /> : <EyeOff size={11} />}
+                    {isVisible ? <Eye size={14} /> : <EyeOff size={14} />}
                 </button>
 
                 {/* Remove */}
                 <button
                     className={cn(
-                        'w-5 h-5 flex items-center justify-center rounded-sm transition-all shrink-0',
-                        'text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10',
+                        'w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0',
+                        'text-muted-foreground/45 hover:text-destructive hover:bg-destructive/10',
                     )}
                     onClick={() => onRemove(index)}
                     title="Remove effect"
                 >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                        <path d="M2 5H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2.5 6H9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                     </svg>
                 </button>
-
-                {/* ColorPicker — last child, identical position to StrokeRow */}
-                <ColorPicker
-                    fill={fill}
-                    onChange={handlePickerChange}
-                    anchorEl={swatchEl}
-                    open={pickerOpen}
-                    onClose={() => setPickerOpen(false)}
-                    documentColors={documentColors}
-                    solidOnly
-                />
             </div>
 
-            {/* Expanded controls — sibling div, not a wrapper */}
-            {expanded && (
-                <div className="pl-6 pr-1 pt-1 pb-1.5 space-y-1.5">
-                    <SelectInput
-                        value={shadow.type}
-                        options={SHADOW_TYPE_OPTIONS}
-                        onChange={(v) => onUpdate(index, { type: v as Shadow['type'] })}
-                    />
-                    <div className="grid grid-cols-2 gap-x-2">
-                        <NumberInput label="X" value={shadow.x} onChange={(v) => onUpdate(index, { x: v })} step={1} labelWidth="w-4" />
-                        <NumberInput label="Y" value={shadow.y} onChange={(v) => onUpdate(index, { y: v })} step={1} labelWidth="w-4" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-2">
-                        <NumberInput label="Bl" value={shadow.blur} onChange={(v) => onUpdate(index, { blur: v })} min={0} step={1} labelWidth="w-4" />
-                        <NumberInput label="Sp" value={shadow.spread} onChange={(v) => onUpdate(index, { spread: v })} step={1} labelWidth="w-4" />
-                    </div>
-                </div>
-            )}
+            <EffectSettingsOverlay
+                key={isSettingsOpen ? 'open' : 'closed'}
+                shadow={shadow}
+                colorFill={fill}
+                open={isSettingsOpen}
+                anchorEl={settingsAnchorEl}
+                documentColors={documentColors}
+                onUpdate={(partial) => onUpdate(index, partial)}
+                onColorFillChange={(nextFill) => onUpdate(index, { color: fillToShadowColor(nextFill) })}
+                onClose={onCloseSettings}
+            />
         </>
     )
 })
 
 // ─────────────────────────────────────────────────────────────
-// EffectsSection
+// Section
 // ─────────────────────────────────────────────────────────────
 
 interface EffectsSectionProps {
@@ -246,12 +191,12 @@ interface EffectsSectionProps {
 export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
     const allNodes = useEditorStore((s) => s.nodes)
     const documentColors = useMemo(() => collectDocumentColors(allNodes), [allNodes])
+
+    const [openSettingsIndex, setOpenSettingsIndex] = useState<number | null>(null)
+
     const shadows = node.shadows
 
-    // Use refs so updateShadow/removeShadow callbacks stay stable across renders.
-    // Without this, every shadow change invalidates the callbacks, which creates
-    // new inline closures in the .map(), defeating React.memo on ShadowRow and
-    // causing re-render storms during high-frequency drag operations.
+    // Keep callbacks stable for row memoization during high-frequency edits.
     const shadowsRef = useRef(shadows)
     const onUpdateRef = useRef(onUpdate)
 
@@ -263,37 +208,65 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
         onUpdateRef.current = onUpdate
     }, [onUpdate])
 
-    const updateShadow = useCallback(
-        (index: number, partial: Partial<Shadow>) => {
-            onUpdateRef.current({ shadows: shadowsRef.current.map((s, i) => i === index ? { ...s, ...partial } : s) })
-        },
-        []
-    )
+    const updateShadow = useCallback((index: number, partial: Partial<Shadow>) => {
+        onUpdateRef.current({
+            shadows: shadowsRef.current.map((s, i) => (i === index ? { ...s, ...partial } : s)),
+        })
+    }, [])
 
     const addShadow = useCallback(() => {
         onUpdateRef.current({
             shadows: [
-                { type: 'drop', color: 'rgba(0,0,0,0.25)', x: 0, y: 4, blur: 4, spread: 0, visible: true },
+                {
+                    type: 'drop',
+                    color: 'rgba(0,0,0,0.25)',
+                    x: 0,
+                    y: 4,
+                    blur: 4,
+                    spread: 0,
+                    visible: true,
+                    blendMode: 'NORMAL',
+                },
                 ...shadowsRef.current,
             ],
         })
+        setOpenSettingsIndex(0)
     }, [])
 
-    const removeShadow = useCallback(
-        (index: number) => onUpdateRef.current({ shadows: shadowsRef.current.filter((_, i) => i !== index) }),
-        []
-    )
+    const removeShadow = useCallback((index: number) => {
+        onUpdateRef.current({ shadows: shadowsRef.current.filter((_, i) => i !== index) })
+        setOpenSettingsIndex((current) => {
+            if (current === null) return null
+            if (current === index) return null
+            if (current > index) return current - 1
+            return current
+        })
+    }, [])
+
+    const safeOpenSettingsIndex =
+        openSettingsIndex !== null && openSettingsIndex < shadows.length
+            ? openSettingsIndex
+            : null
 
     return (
         <div className="border-b border-border/40">
             {/* Header */}
             <div className="flex items-center gap-1.5 px-3 h-8">
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted-foreground/60 shrink-0">
-                    <path d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5L6 1Z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" fill="none" />
+                    <path
+                        d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5L6 1Z"
+                        stroke="currentColor"
+                        strokeWidth="1.1"
+                        strokeLinejoin="round"
+                        fill="none"
+                    />
                 </svg>
                 <span className="flex-1 text-[11px] font-medium text-muted-foreground">Effects</span>
                 <button
-                    className="w-5 h-5 flex items-center justify-center rounded-sm transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-muted/50"
+                    className={cn(
+                        'w-5 h-5 flex items-center justify-center rounded-sm transition-colors',
+                        'text-muted-foreground/40 hover:text-foreground hover:bg-muted/50',
+                    )}
                     onClick={addShadow}
                     title="Add effect"
                 >
@@ -309,9 +282,12 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
                             key={i}
                             shadow={shadow}
                             index={i}
+                            isSettingsOpen={safeOpenSettingsIndex === i}
+                            documentColors={documentColors}
+                            onOpenSettings={setOpenSettingsIndex}
+                            onCloseSettings={() => setOpenSettingsIndex(null)}
                             onUpdate={updateShadow}
                             onRemove={removeShadow}
-                            documentColors={documentColors}
                         />
                     ))}
                 </div>
@@ -321,9 +297,11 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
             {shadows.length === 0 && (
                 <div className="px-3 pb-2">
                     <button
-                        className="w-full h-7 text-[11px] text-muted-foreground/40 hover:text-muted-foreground
-                            border border-dashed border-border/30 hover:border-border/60
-                            rounded-sm transition-colors flex items-center justify-center gap-1"
+                        className={cn(
+                            'w-full h-7 text-[11px] text-muted-foreground/40 hover:text-muted-foreground',
+                            'border border-dashed border-border/30 hover:border-border/60',
+                            'rounded-sm transition-colors flex items-center justify-center gap-1',
+                        )}
                         onClick={addShadow}
                     >
                         <Plus size={10} />

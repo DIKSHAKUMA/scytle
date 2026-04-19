@@ -92,6 +92,7 @@ export const ShadowSchema = z.object({
     blur: z.number(),
     spread: z.number(),
     visible: z.boolean().optional(),
+    blendMode: BlendModeSchema.optional(),
 })
 
 export const BorderSchema = z.object({

@@ -69,6 +69,164 @@ function PageSettings() {
     )
 }
 
+interface MultiSelectSettingsProps {
+    allNodes: ScytleNode[]
+    selectedIds: string[]
+}
+
+function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps) {
+    const updateNode = useEditorStore((s) => s.updateNode)
+    const beginBatch = useEditorStore((s) => s.beginBatch)
+    const endBatch = useEditorStore((s) => s.endBatch)
+
+    const selectedNodes = useMemo(() => {
+        const resolved: ScytleNode[] = []
+        for (const id of selectedIds) {
+            const node = findNodeById(allNodes, id)
+            if (node) resolved.push(node)
+        }
+        return resolved
+    }, [allNodes, selectedIds])
+
+    const primaryNode = selectedNodes[0] ?? null
+    const parentNode = useMemo<FrameNode | null>(() => {
+        if (!primaryNode) return null
+        const result = findParentOfNode(allNodes, primaryNode.id)
+        if (!result?.parent) return null
+        return result.parent
+    }, [allNodes, primaryNode])
+
+    const isPrimaryFrame = primaryNode?.type === 'frame'
+    const isAutoLayout = useMemo(() => {
+        if (!primaryNode) return false
+        return isInAutoLayoutFlow(primaryNode, parentNode)
+    }, [primaryNode, parentNode])
+
+    const isInAutoLayoutParent = useMemo(() => {
+        return !!parentNode && parentNode.layout.mode !== 'none'
+    }, [parentNode])
+
+    const allText = selectedNodes.length > 0 && selectedNodes.every((n) => n.type === 'text')
+    const allVectors = selectedNodes.length > 0 && selectedNodes.every((n) => n.type === 'vector')
+
+    const applyBatch = useCallback((updater: (node: ScytleNode) => Record<string, unknown> | null) => {
+        if (selectedNodes.length === 0) return
+
+        beginBatch()
+        try {
+            for (const node of selectedNodes) {
+                const updates = updater(node)
+                if (!updates) continue
+                updateNode(node.id, updates)
+            }
+        } finally {
+            endBatch()
+        }
+    }, [beginBatch, endBatch, selectedNodes, updateNode])
+
+    const applySharedUpdate = useCallback((
+        updates: Record<string, unknown>,
+        predicate?: (node: ScytleNode) => boolean,
+    ) => {
+        applyBatch((node) => {
+            if (predicate && !predicate(node)) return null
+            // Clone once per node so array/object fields are not shared references.
+            return JSON.parse(JSON.stringify(updates)) as Record<string, unknown>
+        })
+    }, [applyBatch])
+
+    const hasAutoLayoutParent = useCallback((node: ScytleNode): boolean => {
+        const parent = findParentOfNode(allNodes, node.id)?.parent
+        return !!parent && parent.layout.mode !== 'none'
+    }, [allNodes])
+
+    if (!primaryNode) {
+        return (
+            <div className="h-full">
+                <SectionHeader title="Design" />
+                <div className="flex items-center justify-center pt-12">
+                    <p className="text-[11px] text-muted-foreground/50 select-none">
+                        Selection unavailable
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div
+            data-properties-panel
+            className="h-full overflow-y-auto overflow-x-hidden scrollbar-thin overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+        >
+            <SectionHeader title="Design" />
+
+            <MultiSelectAlignSection />
+
+            <PositionSection
+                node={primaryNode}
+                parentNode={parentNode}
+                onUpdate={(updates) => applySharedUpdate(updates)}
+                isAutoLayout={isAutoLayout}
+                isInAutoLayoutParent={isInAutoLayoutParent}
+                hideAlignment
+            />
+
+            <MarginSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+
+            {isPrimaryFrame && (
+                <LayoutSection
+                    node={primaryNode as FrameNode}
+                    onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'frame')}
+                />
+            )}
+
+            {parentNode && (
+                <AutoLayoutChildSection
+                    node={primaryNode}
+                    parentNode={parentNode}
+                    onUpdate={(updates) => applySharedUpdate(updates, hasAutoLayoutParent)}
+                />
+            )}
+
+            <SizeSection node={primaryNode} parentNode={parentNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+
+            <AppearanceSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+
+            {allVectors ? (
+                <VectorSection
+                    node={primaryNode as VectorNode}
+                    onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'vector')}
+                />
+            ) : (
+                <>
+                    <FillSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+                    <StrokeSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type !== 'vector')} />
+                </>
+            )}
+
+            {allText && (
+                <TypographySection
+                    node={primaryNode as TextNode}
+                    onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'text')}
+                />
+            )}
+
+            <EffectsSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+
+            <ExportSection node={primaryNode} />
+
+            <div className="flex items-center justify-center py-4 border-b border-border/40">
+                <p className="text-[11px] text-muted-foreground/50 select-none">
+                    {selectedNodes.length} elements selected
+                </p>
+            </div>
+
+            <div className="h-8 shrink-0" />
+        </div>
+    )
+}
+
 /* ── Main Panel ───────────────────────────────────────────── */
 
 export function PropertiesPanel() {
@@ -119,17 +277,7 @@ export function PropertiesPanel() {
     }
 
     if (selectedIds.length > 1) {
-        return (
-            <div className="h-full">
-                <SectionHeader title="Design" />
-                <MultiSelectAlignSection />
-                <div className="flex items-center justify-center pt-4">
-                    <p className="text-[11px] text-muted-foreground/50 select-none">
-                        {selectedIds.length} elements selected
-                    </p>
-                </div>
-            </div>
-        )
+        return <MultiSelectSettings allNodes={nodes} selectedIds={selectedIds} />
     }
 
     if (!node) {

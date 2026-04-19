@@ -62,6 +62,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const [isDragging, setIsDragging] = useState(false)
     const panSourceRef = useRef<'space' | 'middle' | null>(null)
     const lastPointerRef = useRef({ x: 0, y: 0 })
+    const lastHoverPointerRef = useRef<{ x: number; y: number } | null>(null)
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
 
     const isHandMode = activeTool === 'hand' || spaceHeld
@@ -847,10 +848,12 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             // would be selected on click (Figma behaviour)
             if (activeTool === 'select') {
                 const target = e.target as HTMLElement
-                const nodeId = resolveClickTarget(target)
+                lastHoverPointerRef.current = { x: e.clientX, y: e.clientY }
+                const deepSelect = e.metaKey || e.ctrlKey
                 const state = useEditorStore.getState()
-                if (nodeId !== state.hoveredId) {
-                    state.setHoveredId(nodeId)
+                const nextHoveredId = resolveClickTarget(target, deepSelect)
+                if (nextHoveredId !== state.hoveredId) {
+                    state.setHoveredId(nextHoveredId)
                 }
             }
         },
@@ -868,6 +871,42 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             queueMarqueeSelection,
         ]
     )
+
+    useEffect(() => {
+        const isModifierKey = (key: string) => key === 'Meta' || key === 'Control' || key === 'Shift'
+
+        const refreshHoverFromModifierState = (e: KeyboardEvent) => {
+            if (!isModifierKey(e.key)) return
+            if (activeTool !== 'select') return
+            if (isDragging || dragInfo.isDragging || resizeInfo.isResizing || drawState || marquee) return
+
+            const viewport = viewportRef.current
+            const pointer = lastHoverPointerRef.current
+            if (!viewport || !pointer) return
+
+            const target = document.elementFromPoint(pointer.x, pointer.y) as HTMLElement | null
+            const state = useEditorStore.getState()
+            if (!target || !viewport.contains(target)) {
+                if (state.hoveredId !== null) {
+                    state.setHoveredId(null)
+                }
+                return
+            }
+
+            const deepSelect = e.metaKey || e.ctrlKey
+            const nextHoveredId = resolveClickTarget(target, deepSelect)
+            if (nextHoveredId !== state.hoveredId) {
+                state.setHoveredId(nextHoveredId)
+            }
+        }
+
+        window.addEventListener('keydown', refreshHoverFromModifierState)
+        window.addEventListener('keyup', refreshHoverFromModifierState)
+        return () => {
+            window.removeEventListener('keydown', refreshHoverFromModifierState)
+            window.removeEventListener('keyup', refreshHoverFromModifierState)
+        }
+    }, [activeTool, isDragging, dragInfo.isDragging, resizeInfo.isResizing, drawState, marquee, resolveClickTarget])
 
     const handlePointerUp = useCallback(() => {
         // Pen tool: finalize drag gesture (bezier handle)
@@ -982,6 +1021,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     }, [isDragging, activeTool, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp, handlePenPointerUp])
 
     const handlePointerLeave = useCallback(() => {
+        lastHoverPointerRef.current = null
         useEditorStore.getState().setHoveredId(null)
     }, [])
 

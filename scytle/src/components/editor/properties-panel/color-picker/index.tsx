@@ -15,7 +15,7 @@ import type { Fill, SolidFill, GradientFill, ImageFill, BlendMode } from '@/type
 // Blend mode options
 // ─────────────────────────────────────────────────────────────
 
-const BLEND_MODES: { value: BlendMode; label: string }[] = [
+export const BLEND_MODES: { value: BlendMode; label: string }[] = [
     { value: 'NORMAL', label: 'Normal' },
     { value: 'DARKEN', label: 'Darken' },
     { value: 'MULTIPLY', label: 'Multiply' },
@@ -146,7 +146,7 @@ function BlendModeDropdown({
             {isOpen && (
                 <div
                     className={cn(
-                        'absolute right-0 bottom-full mb-1 z-[10000]',
+                        'absolute right-0 bottom-full mb-1 z-10000',
                         'w-32 max-h-48 overflow-y-auto py-0.5',
                         'bg-popover border border-border/60 rounded-md shadow-lg',
                     )}
@@ -194,6 +194,10 @@ interface ColorPickerProps {
     documentColors?: string[]
     /** Restrict to solid color only (hides gradient/image tabs) — for stroke and effect pickers */
     solidOnly?: boolean
+    /** Optional element to dock against (used by effect settings popup parity). */
+    dockToEl?: HTMLElement | null
+    /** Horizontal docking gap in px (0 for Figma-like flush docking). */
+    dockGap?: number
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -223,9 +227,10 @@ export function ColorPicker({
     onClose,
     documentColors = [],
     solidOnly = false,
+    dockToEl = null,
+    dockGap = 8,
 }: ColorPickerProps) {
     const pickerRef = useRef<HTMLDivElement>(null)
-    const [activeTab, setActiveTab] = useState<FillTypeTab>(() => tabFromFill(fill))
     const [colorFormat, setColorFormat] = useState<ColorFormat>(() => {
         if (typeof window === 'undefined') return 'HEX'
         return (localStorage.getItem('scytle:colorFormat') as ColorFormat) ?? 'HEX'
@@ -233,9 +238,15 @@ export function ColorPicker({
 
     // ── Refs for latest fill/onChange — prevents stale closures during drag ──
     const fillRef = useRef(fill)
-    fillRef.current = fill
     const onChangeRef = useRef(onChange)
-    onChangeRef.current = onChange
+
+    useEffect(() => {
+        fillRef.current = fill
+    }, [fill])
+
+    useEffect(() => {
+        onChangeRef.current = onChange
+    }, [onChange])
 
     // ── Drag-to-reposition (all refs — zero re-renders during drag) ──
     const posRef = useRef({ left: 0, top: 0 })         // base position (set on open)
@@ -270,43 +281,56 @@ export function ColorPicker({
     // Compute picker position once when it opens — runs before browser paint (no flicker)
     useLayoutEffect(() => {
         if (!open || !anchorEl || !pickerRef.current) return
+
         const anchorRect = anchorEl.getBoundingClientRect()
+        const dockRect = dockToEl?.getBoundingClientRect()
         const PICKER_W = 240
-        let baseLeft = anchorRect.left - PICKER_W - 8
+        const PICKER_H = solidOnly ? 448 : 460
+
+        let baseLeft = dockRect
+            ? dockRect.left - PICKER_W - dockGap
+            : anchorRect.left - PICKER_W - 8
         let baseTop = anchorRect.top
-        if (baseLeft < 8) baseLeft = anchorRect.right + 8
-        if (baseTop + 460 > window.innerHeight - 8) baseTop = window.innerHeight - 460 - 8
+
+        if (baseLeft < 8) {
+            baseLeft = dockRect
+                ? dockRect.right + dockGap
+                : anchorRect.right + 8
+        }
+        if (baseTop + PICKER_H > window.innerHeight - 8) {
+            baseTop = window.innerHeight - PICKER_H - 8
+        }
         if (baseTop < 8) baseTop = 8
+
         posRef.current = { left: baseLeft, top: baseTop }
         dragOffsetRef.current = { x: 0, y: 0 }
         pickerRef.current.style.left = `${baseLeft}px`
         pickerRef.current.style.top = `${baseTop}px`
-    }, [open, anchorEl])
+    }, [open, anchorEl, dockToEl, dockGap, solidOnly])
 
     const handleFormatChange = useCallback((format: ColorFormat) => {
         setColorFormat(format)
         localStorage.setItem('scytle:colorFormat', format)
     }, [])
 
-    // Sync tab when fill type changes externally
-    useEffect(() => {
-        setActiveTab(tabFromFill(fill))
-    }, [fill.type])
+    const activeTab = tabFromFill(fill)
 
     // Close on outside click
     useEffect(() => {
         if (!open) return
         const handleMouseDown = (e: MouseEvent) => {
+            const target = e.target as Node
             if (
-                pickerRef.current && !pickerRef.current.contains(e.target as Node) &&
-                anchorEl && !anchorEl.contains(e.target as Node)
+                pickerRef.current && !pickerRef.current.contains(target) &&
+                anchorEl && !anchorEl.contains(target) &&
+                (!dockToEl || !dockToEl.contains(target))
             ) {
                 onClose()
             }
         }
         document.addEventListener('mousedown', handleMouseDown)
         return () => document.removeEventListener('mousedown', handleMouseDown)
-    }, [open, onClose, anchorEl])
+    }, [open, onClose, anchorEl, dockToEl])
 
     // Escape key
     useEffect(() => {
@@ -349,7 +373,7 @@ export function ColorPicker({
             offsetX: dragOffsetRef.current.x,
             offsetY: dragOffsetRef.current.y,
         }
-        ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+            ; (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
     }
 
     const handleHeaderPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -382,7 +406,6 @@ export function ColorPicker({
     // ── Tab switch logic ─────────────────────────────────────
 
     const handleTabChange = (tab: FillTypeTab) => {
-        setActiveTab(tab)
         if (tab === fill.type) return // No conversion needed
 
         if (tab === 'solid') {
@@ -439,8 +462,9 @@ export function ColorPicker({
     const picker = (
         <div
             ref={pickerRef}
+            data-color-picker-root
             className={cn(
-                'fixed z-[9999] w-[240px] rounded-lg shadow-2xl',
+                'fixed z-9999 w-60 rounded-lg shadow-2xl',
                 'bg-popover border border-border/60',
                 'flex flex-col overflow-hidden',
             )}
