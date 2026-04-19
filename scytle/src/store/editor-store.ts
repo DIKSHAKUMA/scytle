@@ -1649,12 +1649,15 @@ export const useEditorStore = create<EditorState>()(
                             )
                             state._clipboard = nextClipboard.clipboard
                             state._clipboardMeta = nextClipboard.meta
+                            state._pasteAnchor = null
                             return
                         }
 
                         // Determine paste target:
                         // 1. If drilled into a frame (enteredFrameId), paste inside it.
-                        // 2. Otherwise regular paste targets top-level unless same-source
+                        // 2. If a single frame is explicitly selected, paste inside it
+                        //    (except self-paste to avoid frame self-nesting).
+                        // 3. Otherwise regular paste targets top-level unless same-source
                         //    context preservation applies below.
                         let targetFrame: FrameNode | null = null
                         if (state.enteredFrameId) {
@@ -1663,6 +1666,11 @@ export const useEditorStore = create<EditorState>()(
                                 state.enteredFrameId
                             ) as FrameNode | null
                             if (f && f.type === 'frame') targetFrame = f
+                        } else if (selectedFrames.length === 1 && state.selectedIds.length === 1) {
+                            const selectedFrame = selectedFrames[0]
+                            if (!copiedSourceIds.has(selectedFrame.id)) {
+                                targetFrame = selectedFrame
+                            }
                         }
 
                         // Preserve source parent context for same-page copy/paste
