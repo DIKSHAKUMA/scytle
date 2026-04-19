@@ -17,7 +17,9 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { SupportWidget } from '@/components/layout/support-widget'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -27,6 +29,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore, useProjectStore } from '@/store'
+import { storage, BUCKETS } from '@/lib/appwrite'
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -69,6 +72,17 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
         .map(n => n[0])
         .join('')
         .toUpperCase() || 'U'
+
+    const avatarId = user?.prefs?.avatarId as string | undefined
+    let avatarUrl: string | undefined = undefined
+
+    if (avatarId) {
+        try {
+            avatarUrl = storage.getFilePreview(BUCKETS.AVATARS, avatarId).toString()
+        } catch (error) {
+            console.error('Failed to get header avatar preview:', error)
+        }
+    }
 
     return (
         <div className="min-h-screen bg-background">
@@ -114,80 +128,78 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1.5">
-                        <button
-                            onClick={handleNewProject}
-                            disabled={isCreating}
-                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
-                        >
-                            {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                            <span className="hidden sm:inline">New</span>
-                        </button>
+                        {user && (
+                            <button
+                                onClick={handleNewProject}
+                                disabled={isCreating}
+                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+                            >
+                                {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                <span className="hidden sm:inline">New</span>
+                            </button>
+                        )}
 
-                        {/* User Menu */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button className="flex items-center rounded-full p-0.5 hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20">
-                                    <Avatar className="w-7 h-7">
-                                        <AvatarImage src={undefined} />
-                                        <AvatarFallback className="text-[11px] font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
-                                            {initials}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
-                                <DropdownMenuLabel className="pb-2">
-                                    <div className="flex items-center gap-3">
-                                        <Avatar className="w-8 h-8">
-                                            <AvatarImage src={undefined} />
-                                            <AvatarFallback className="text-xs font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
+                        {/* User Menu / Login Buttons */}
+                        {user ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button className="flex items-center rounded-full p-0.5 hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20">
+                                        <Avatar className="w-7 h-7">
+                                            <AvatarImage src={avatarUrl} className="object-cover" />
+                                            <AvatarFallback className="text-[11px] font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
                                                 {initials}
                                             </AvatarFallback>
                                         </Avatar>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium text-sm">{user?.name || 'User'}</span>
-                                            <span className="text-xs text-muted-foreground font-normal truncate max-w-[160px]">
-                                                {user?.email}
-                                            </span>
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
+                                    <DropdownMenuLabel className="pb-2">
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="w-8 h-8">
+                                                <AvatarImage src={avatarUrl} className="object-cover" />
+                                                <AvatarFallback className="text-xs font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
+                                                    {initials}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex flex-col text-left">
+                                                <span className="font-medium text-sm">{user?.name || 'User'}</span>
+                                                <span className="text-xs text-muted-foreground font-normal truncate max-w-[150px]">
+                                                    {user?.email}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                    <Link href="/settings/profile" className="cursor-pointer">
-                                        <User className="w-4 h-4 mr-2" />
-                                        Profile
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/settings/billing" className="cursor-pointer">
-                                        <CreditCard className="w-4 h-4 mr-2" />
-                                        Billing
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/settings" className="cursor-pointer">
-                                        <Settings className="w-4 h-4 mr-2" />
-                                        Settings
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                    <Link href="/help" className="cursor-pointer">
-                                        <HelpCircle className="w-4 h-4 mr-2" />
-                                        Help & Support
-                                    </Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={() => logout()}
-                                    className="text-destructive focus:text-destructive cursor-pointer"
-                                >
-                                    <LogOut className="w-4 h-4 mr-2" />
-                                    Log out
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/settings/profile" className="cursor-pointer">
+                                            <Settings className="w-4 h-4 mr-2" />
+                                            Settings
+                                        </Link>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        onClick={() => logout()}
+                                        className="text-destructive focus:text-destructive cursor-pointer"
+                                    >
+                                        <LogOut className="w-4 h-4 mr-2" />
+                                        Log out
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <Link href="/login">
+                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-md text-xs font-semibold">
+                                        Log In
+                                    </Button>
+                                </Link>
+                                <Link href="/signup">
+                                    <Button size="sm" className="h-8 px-3 rounded-md text-xs font-semibold bg-foreground text-background hover:opacity-90 transition-opacity">
+                                        Start for free
+                                    </Button>
+                                </Link>
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
@@ -196,6 +208,9 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
             <main className="flex-1">
                 {children}
             </main>
+
+            {/* Global Support Widget - Only visible outside of the project editor */}
+            {!pathname.startsWith('/project') && <SupportWidget />}
         </div>
     )
 }

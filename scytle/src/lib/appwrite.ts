@@ -40,6 +40,7 @@ export const COLLECTIONS = {
     RESEARCH_DATA: 'research_data',
     AI_CONVERSATIONS: 'ai_conversations',
     SHARES: 'shares',
+    SUPPORT_TICKETS: 'support_tickets',
 } as const
 
 // Storage bucket IDs
