@@ -1,14 +1,12 @@
 'use client'
 
-import { useRef, useState, useCallback, useMemo, memo } from 'react'
+import { useRef, useState, useCallback, useMemo, useEffect, memo } from 'react'
 import type { ScytleNode, Shadow, Fill, SolidFill } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
 import { Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
-import { ThemeLinkBadge } from './theme-link-badge'
-import { VariablePicker } from './variable-picker'
 import { useEditorStore } from '@/store/editor-store'
 
 // ─────────────────────────────────────────────────────────────
@@ -71,10 +69,8 @@ interface ShadowRowProps {
 }
 
 const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, documentColors }: ShadowRowProps) {
-    const swatchRef = useRef<HTMLButtonElement>(null)
-    const badgeRef = useRef<HTMLSpanElement>(null)
+    const [swatchEl, setSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
-    const [varPickerOpen, setVarPickerOpen] = useState(false)
     const [expanded, setExpanded] = useState(false)
 
     // Memoize fill so ColorPicker doesn't get a new object reference every render
@@ -116,7 +112,7 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
 
                 {/* Color swatch */}
                 <button
-                    ref={swatchRef}
+                    ref={setSwatchEl}
                     className={cn(
                         'w-5 h-5 rounded-sm border shrink-0',
                         !pickerOpen && 'transition-all',
@@ -127,29 +123,6 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
                     style={{ backgroundColor: hexOpacityToRgba(normaliseHex(fill.color), opacity) }}
                     onClick={() => setPickerOpen(true)}
                     title="Edit shadow color"
-                />
-
-                {/* Theme link indicator + Variable picker */}
-                <span ref={badgeRef}>
-                    <ThemeLinkBadge
-                        isLinked={false}
-                        showUnlinked
-                        onClick={() => setVarPickerOpen(v => !v)}
-                    />
-                </span>
-                <VariablePicker
-                    open={varPickerOpen}
-                    anchorEl={badgeRef.current}
-                    scope="EFFECT_COLOR"
-                    resolvedType="COLOR"
-                    currentVariableId={undefined}
-                    onBind={(_variableId) => {
-                        // TODO: Wire up boundVariables for effects
-                    }}
-                    onDetach={() => {
-                        // TODO: Wire up boundVariables for effects
-                    }}
-                    onClose={() => setVarPickerOpen(false)}
                 />
 
                 {/* Hex */}
@@ -231,7 +204,7 @@ const ShadowRow = memo(function ShadowRow({ shadow, index, onUpdate, onRemove, d
                 <ColorPicker
                     fill={fill}
                     onChange={handlePickerChange}
-                    anchorEl={swatchRef.current}
+                    anchorEl={swatchEl}
                     open={pickerOpen}
                     onClose={() => setPickerOpen(false)}
                     documentColors={documentColors}
@@ -280,9 +253,15 @@ export function EffectsSection({ node, onUpdate }: EffectsSectionProps) {
     // new inline closures in the .map(), defeating React.memo on ShadowRow and
     // causing re-render storms during high-frequency drag operations.
     const shadowsRef = useRef(shadows)
-    shadowsRef.current = shadows
     const onUpdateRef = useRef(onUpdate)
-    onUpdateRef.current = onUpdate
+
+    useEffect(() => {
+        shadowsRef.current = shadows
+    }, [shadows])
+
+    useEffect(() => {
+        onUpdateRef.current = onUpdate
+    }, [onUpdate])
 
     const updateShadow = useCallback(
         (index: number, partial: Partial<Shadow>) => {

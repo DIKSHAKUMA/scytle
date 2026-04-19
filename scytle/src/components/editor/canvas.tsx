@@ -24,6 +24,18 @@ import { GridOverlay } from './grid-overlay'
 
 import type { HandleDirection } from './hooks/use-node-resize'
 
+function areIdArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false
+    }
+    return true
+}
+
+function mergeUniqueIds(base: readonly string[], incoming: readonly string[]): string[] {
+    return Array.from(new Set([...base, ...incoming]))
+}
+
 // ============================================================
 // Canvas Component
 // ============================================================
@@ -76,8 +88,42 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
         active: boolean
         /** Whether shift was held at marquee start (merge with existing selection) */
         shiftHeld: boolean
+        /** Whether deep marquee selection is active (Cmd/Ctrl) */
+        deepSelect: boolean
+        /** Selection snapshot before marquee started (used for stable Shift union) */
+        baseSelectionIds: string[]
     } | null>(null)
     const MARQUEE_THRESHOLD = 3 // px before marquee activates
+
+    const marqueeSelectionRafRef = useRef<number | null>(null)
+    const marqueeSelectionQueuedRef = useRef<string[] | null>(null)
+    const marqueeSelectionLastRef = useRef<string[] | null>(null)
+
+    const queueMarqueeSelection = useCallback((ids: string[]) => {
+        marqueeSelectionQueuedRef.current = ids
+        if (marqueeSelectionRafRef.current !== null) return
+
+        marqueeSelectionRafRef.current = requestAnimationFrame(() => {
+            marqueeSelectionRafRef.current = null
+            const nextIds = marqueeSelectionQueuedRef.current
+            marqueeSelectionQueuedRef.current = null
+            if (!nextIds) return
+
+            const prevIds = marqueeSelectionLastRef.current ?? useEditorStore.getState().selectedIds
+            if (areIdArraysEqual(prevIds, nextIds)) return
+
+            useEditorStore.getState().setSelectedIds(nextIds)
+            marqueeSelectionLastRef.current = nextIds
+        })
+    }, [])
+
+    useEffect(() => {
+        return () => {
+            if (marqueeSelectionRafRef.current !== null) {
+                cancelAnimationFrame(marqueeSelectionRafRef.current)
+            }
+        }
+    }, [])
 
     /** Convert screen coordinates (clientX/Y) to canvas coordinates */
     const screenToCanvas = useCallback((clientX: number, clientY: number) => {
@@ -92,38 +138,80 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
     /** Find all top-level node IDs whose bounding boxes overlap a canvas-space rect */
     const getNodesInRect = useCallback((
-        x1: number, y1: number, x2: number, y2: number
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number,
+        options?: { deepSelect?: boolean }
     ): string[] => {
         const left = Math.min(x1, x2)
         const top = Math.min(y1, y2)
         const right = Math.max(x1, x2)
         const bottom = Math.max(y1, y2)
+        const deepSelect = options?.deepSelect ?? false
+
+        const candidates: Array<{ id: string; left: number; top: number; right: number; bottom: number }> = []
+
+        const collectCandidates = (
+            list: readonly ScytleNode[],
+            offsetX: number,
+            offsetY: number,
+            parentLocked: boolean,
+        ) => {
+            for (const node of list) {
+                const nodeLocked = parentLocked || node.locked
+                if (node.visible === false || nodeLocked) continue
+
+                const nodeLeft = offsetX + node.x
+                const nodeTop = offsetY + node.y
+                const nodeRight = nodeLeft + node.width
+                const nodeBottom = nodeTop + node.height
+
+                // Deep marquee prefers selecting nested descendants over their parent frames.
+                const shouldSkipSelf = deepSelect && node.type === 'frame' && node.children.length > 0
+                if (!shouldSkipSelf) {
+                    candidates.push({
+                        id: node.id,
+                        left: nodeLeft,
+                        top: nodeTop,
+                        right: nodeRight,
+                        bottom: nodeBottom,
+                    })
+                }
+
+                if (deepSelect && node.type === 'frame' && node.children.length > 0) {
+                    collectCandidates(node.children, nodeLeft, nodeTop, nodeLocked)
+                }
+            }
+        }
 
         const state = useEditorStore.getState()
         const enteredId = state.enteredFrameId
-        const targetNodes: ScytleNode[] = enteredId
-            ? (findNodeById(state.nodes, enteredId) as import('@/types/canvas').FrameNode | null)?.children ?? []
-            : state.nodes
+
+        if (enteredId) {
+            const enteredFrame = findNodeById(state.nodes, enteredId) as import('@/types/canvas').FrameNode | null
+            if (enteredFrame) {
+                const parentPos = getNodeCanvasPosition(state.nodes, enteredId)
+                collectCandidates(
+                    enteredFrame.children,
+                    parentPos?.x ?? 0,
+                    parentPos?.y ?? 0,
+                    enteredFrame.locked,
+                )
+            }
+        } else {
+            collectCandidates(state.nodes, 0, 0, false)
+        }
 
         const ids: string[] = []
-        for (const node of targetNodes) {
-            // Canvas-space position (for children of entered frame, position is relative to parent)
-            let nodeX = node.x
-            let nodeY = node.y
-            if (enteredId) {
-                const parentPos = getNodeCanvasPosition(state.nodes, enteredId)
-                if (parentPos) {
-                    nodeX += parentPos.x
-                    nodeY += parentPos.y
-                }
-            }
-
-            const nodeRight = nodeX + node.width
-            const nodeBottom = nodeY + node.height
-
-            // Check overlap (rectangle intersection)
-            if (nodeRight > left && nodeX < right && nodeBottom > top && nodeY < bottom) {
-                ids.push(node.id)
+        for (const candidate of candidates) {
+            if (
+                candidate.right > left &&
+                candidate.left < right &&
+                candidate.bottom > top &&
+                candidate.top < bottom
+            ) {
+                ids.push(candidate.id)
             }
         }
         return ids
@@ -536,9 +624,20 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     }
                 } else {
                     // Clicked on empty canvas → start marquee selection
+                    const state = useEditorStore.getState()
+                    const baseSelectionIds = [...state.selectedIds]
+
                     if (!e.shiftKey) {
-                        useEditorStore.getState().deselectAll()
+                        state.deselectAll()
                     }
+
+                    if (marqueeSelectionRafRef.current !== null) {
+                        cancelAnimationFrame(marqueeSelectionRafRef.current)
+                        marqueeSelectionRafRef.current = null
+                    }
+                    marqueeSelectionQueuedRef.current = null
+                    marqueeSelectionLastRef.current = e.shiftKey ? baseSelectionIds : []
+
                     const pos = screenToCanvas(e.clientX, e.clientY)
                     setMarquee({
                         startX: pos.x,
@@ -547,6 +646,8 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                         currentY: pos.y,
                         active: false,
                         shiftHeld: e.shiftKey,
+                        deepSelect: e.metaKey || e.ctrlKey,
+                        baseSelectionIds,
                     })
                     viewportRef.current?.setPointerCapture(e.pointerId)
                     e.preventDefault()
@@ -690,11 +791,31 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const dx = pos.x - marquee.startX
                 const dy = pos.y - marquee.startY
                 const isActive = marquee.active || (Math.abs(dx) + Math.abs(dy)) > MARQUEE_THRESHOLD
+
+                const shiftHeld = e.shiftKey
+                const deepSelect = e.metaKey || e.ctrlKey
+
+                if (isActive) {
+                    const ids = getNodesInRect(
+                        marquee.startX,
+                        marquee.startY,
+                        pos.x,
+                        pos.y,
+                        { deepSelect },
+                    )
+                    const nextSelection = shiftHeld
+                        ? mergeUniqueIds(marquee.baseSelectionIds, ids)
+                        : ids
+                    queueMarqueeSelection(nextSelection)
+                }
+
                 setMarquee(prev => prev ? {
                     ...prev,
                     currentX: pos.x,
                     currentY: pos.y,
                     active: isActive,
+                    shiftHeld,
+                    deepSelect,
                 } : null)
                 return
             }
@@ -732,7 +853,19 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 }
             }
         },
-        [isDragging, activeTool, drawState, marquee, resolveClickTarget, onDragPointerMove, onResizePointerMove, screenToCanvas, handlePenPointerMove]
+        [
+            isDragging,
+            activeTool,
+            drawState,
+            marquee,
+            resolveClickTarget,
+            onDragPointerMove,
+            onResizePointerMove,
+            screenToCanvas,
+            handlePenPointerMove,
+            getNodesInRect,
+            queueMarqueeSelection,
+        ]
     )
 
     const handlePointerUp = useCallback(() => {
@@ -747,19 +880,27 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             if (marquee.active) {
                 const ids = getNodesInRect(
                     marquee.startX, marquee.startY,
-                    marquee.currentX, marquee.currentY
+                    marquee.currentX, marquee.currentY,
+                    { deepSelect: marquee.deepSelect },
                 )
-                if (ids.length > 0) {
-                    // Shift-marquee: merge with existing selection (union)
-                    if (marquee.shiftHeld) {
-                        const existing = useEditorStore.getState().selectedIds
-                        const merged = [...new Set([...existing, ...ids])]
-                        useEditorStore.getState().setSelectedIds(merged)
-                    } else {
-                        useEditorStore.getState().setSelectedIds(ids)
-                    }
+
+                const nextSelection = marquee.shiftHeld
+                    ? mergeUniqueIds(marquee.baseSelectionIds, ids)
+                    : ids
+
+                const prevSelection = marqueeSelectionLastRef.current ?? useEditorStore.getState().selectedIds
+                if (!areIdArraysEqual(prevSelection, nextSelection)) {
+                    useEditorStore.getState().setSelectedIds(nextSelection)
                 }
             }
+
+            if (marqueeSelectionRafRef.current !== null) {
+                cancelAnimationFrame(marqueeSelectionRafRef.current)
+                marqueeSelectionRafRef.current = null
+            }
+            marqueeSelectionQueuedRef.current = null
+            marqueeSelectionLastRef.current = null
+
             setMarquee(null)
             return
         }

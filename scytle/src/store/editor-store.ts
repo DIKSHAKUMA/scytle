@@ -4,9 +4,7 @@ import { devtools } from 'zustand/middleware'
 import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, findContainingFrame, getEffectiveNodeSize, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
-import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
 import { canvasSync } from '@/lib/sync'
-import { useVariableStore } from '@/store/variable-store'
 
 // ============================================================
 // History constants
@@ -398,10 +396,6 @@ interface EditorState {
     /** Whether the Type Settings floating overlay is open */
     typeSettingsOpen: boolean
 
-    // Variables panel overlay ----------------------------------------
-    /** Whether the Variables panel overlay is open */
-    variablesPanelOpen: boolean
-
     // Vector / Pen editing ----------------------------------------
     /** ID of the VectorNode currently in edit mode (null when not in vector edit) */
     vectorEditNodeId: string | null
@@ -456,10 +450,6 @@ interface EditorState {
     openTypeSettings: () => void
     closeTypeSettings: () => void
 
-    // Variables panel overlay actions --------------------------------
-    openVariablesPanel: () => void
-    closeVariablesPanel: () => void
-
     // Selection actions ---------------------------------------
     selectNode: (id: string, addToSelection?: boolean) => void
     deselectAll: () => void
@@ -504,9 +494,6 @@ interface EditorState {
     redo: () => void
     beginBatch: () => void
     endBatch: () => void
-
-    // Theme relink (called by theme sync subscription) ----------
-    _relinkTheme: () => void
 
     // Z-order actions -----------------------------------------
     bringForward: (id: string) => void
@@ -614,7 +601,6 @@ export const useEditorStore = create<EditorState>()(
             fontPickerOpen: false,
             fontPickerNodeId: null,
             typeSettingsOpen: false,
-            variablesPanelOpen: false,
             vectorEditNodeId: null,
             vectorEditTool: 'move' as VectorEditTool,
             selectedVertexIndices: [] as number[],
@@ -912,26 +898,6 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'closeTypeSettings'
-                ),
-
-            // Variables panel overlay ───────────────────────────────────
-
-            openVariablesPanel: () =>
-                set(
-                    (state) => {
-                        state.variablesPanelOpen = true
-                    },
-                    false,
-                    'openVariablesPanel'
-                ),
-
-            closeVariablesPanel: () =>
-                set(
-                    (state) => {
-                        state.variablesPanelOpen = false
-                    },
-                    false,
-                    'closeVariablesPanel'
                 ),
 
             // Canvas settings --------------------------------------
@@ -1435,19 +1401,6 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'endBatch'
-                ),
-
-            _relinkTheme: () =>
-                set(
-                    (state) => {
-                        if (state.nodes.length === 0) return
-                        _snap(state)
-                        // Use new variable store for relinking
-                        const { variables, collections, activeModeId } = useVariableStore.getState()
-                        relinkNodesWithVariables(state.nodes, variables, collections, activeModeId ?? '')
-                    },
-                    false,
-                    'relinkTheme'
                 ),
 
             // ── Z-order actions ───────────────────────────────────
@@ -3194,35 +3147,3 @@ if (typeof window !== 'undefined') {
 
 }
 
-// ============================================================
-// Theme → Canvas Sync: relink all nodes when theme changes
-// ============================================================
-
-if (typeof window !== 'undefined') {
-    // Lazy import to avoid circular dependency at module load time
-    let _sgStoreLoaded = false
-    const initThemeSync = () => {
-        if (_sgStoreLoaded) return
-        _sgStoreLoaded = true
-
-        // Dynamic import breaks the circular dep chain
-        import('@/store/variable-store').then(({ useVariableStore }) => {
-            let prevVariables = useVariableStore.getState().variables
-            let prevModeId = useVariableStore.getState().activeModeId
-
-            useVariableStore.subscribe((state) => {
-                const { variables, activeModeId } = state
-                // Only relink when variables or mode actually changed
-                if (variables === prevVariables && activeModeId === prevModeId) return
-                prevVariables = variables
-                prevModeId = activeModeId
-
-                // Relink all nodes with the new variables (with undo support)
-                useEditorStore.getState()._relinkTheme()
-            })
-        })
-    }
-
-    // Init after a tick to ensure all stores are created
-    setTimeout(initThemeSync, 0)
-}

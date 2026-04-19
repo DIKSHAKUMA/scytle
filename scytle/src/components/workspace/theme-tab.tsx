@@ -1,15 +1,12 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Moon, Sun, Shuffle, Plus, Trash2, Copy, ChevronDown, Type, Palette, Layers } from 'lucide-react'
+import { Moon, Sun, Shuffle, Plus, Trash2, Copy, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStyleGuideStore } from '@/store'
-import { useEditorStore } from '@/store/editor-store'
-import { COLOR_PALETTES, type ColorPalette, PALETTE_CATEGORIES } from '@/lib/theme/tokens/palettes'
 import { FONT_PAIRS, type FontPair, loadGoogleFonts } from '@/lib/theme/tokens/font-pairs'
 import type { RadiusPreset, ButtonStyle, CardStyle } from '@/lib/theme/tokens'
 import { Separator } from '@/components/ui/separator'
-import { VariablesPanel } from '@/components/editor/properties-panel/variables-panel'
 
 // ════════════════════════════════════════════════════════════
 // Section wrapper
@@ -100,64 +97,6 @@ function ConceptSwitcher() {
                 </div>
             )}
         </div>
-    )
-}
-
-// ════════════════════════════════════════════════════════════
-// Color Palette Grid
-// ════════════════════════════════════════════════════════════
-
-function ThemePresets() {
-    const applyPalette = useStyleGuideStore(s => s.applyPalette)
-    const activePaletteId = useStyleGuideStore(s => s.activePaletteId)
-    const [category, setCategory] = useState<string>('all')
-
-    const filtered = category === 'all'
-        ? COLOR_PALETTES
-        : COLOR_PALETTES.filter(p => p.category === category)
-
-    return (
-        <Section
-            title="Color Presets"
-            action={
-                <select
-                    value={category}
-                    onChange={e => setCategory(e.target.value)}
-                    className="text-[10px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer"
-                >
-                    <option value="all">All</option>
-                    {PALETTE_CATEGORIES.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.label}</option>
-                    ))}
-                </select>
-            }
-        >
-            <div className="grid grid-cols-4 gap-1">
-                {filtered.slice(0, 24).map(palette => (
-                    <button
-                        key={palette.id}
-                        onClick={() => applyPalette(palette)}
-                        title={palette.name}
-                        className={cn(
-                            'rounded-md p-1 transition-all',
-                            activePaletteId === palette.id
-                                ? 'ring-2 ring-foreground ring-offset-1 ring-offset-card'
-                                : 'hover:bg-muted/40'
-                        )}
-                    >
-                        <div className="flex gap-px justify-center">
-                            {palette.accents.slice(0, 3).map(a => (
-                                <div
-                                    key={a.id}
-                                    className="w-3 h-3 rounded-sm"
-                                    style={{ backgroundColor: a.hex }}
-                                />
-                            ))}
-                        </div>
-                    </button>
-                ))}
-            </div>
-        </Section>
     )
 }
 
@@ -540,41 +479,6 @@ function ThemeUIStyling() {
 }
 
 // ════════════════════════════════════════════════════════════
-// Variables Section — button to open the draggable overlay
-// ════════════════════════════════════════════════════════════
-
-function ThemeVariables() {
-    const variablesPanelOpen = useEditorStore(s => s.variablesPanelOpen)
-    const openVariablesPanel = useEditorStore(s => s.openVariablesPanel)
-    const closeVariablesPanel = useEditorStore(s => s.closeVariablesPanel)
-
-    return (
-        <Section title="Variables">
-            <button
-                onClick={() => variablesPanelOpen ? closeVariablesPanel() : openVariablesPanel()}
-                className={cn(
-                    'w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[11px] transition-colors border',
-                    variablesPanelOpen
-                        ? 'bg-primary/10 border-primary/20 text-primary'
-                        : 'bg-muted/20 border-border/30 hover:bg-muted/40 text-muted-foreground hover:text-foreground',
-                )}
-            >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
-                    <path d="M3 4H11M3 7H11M3 10H8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                </svg>
-                <span className="flex-1 text-left">
-                    {variablesPanelOpen ? 'Variables panel open' : '4 collections · 24 variables'}
-                </span>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-current opacity-50">
-                    <path d="M1 1L5 5L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-            </button>
-            {variablesPanelOpen && <VariablesPanel />}
-        </Section>
-    )
-}
-
-// ════════════════════════════════════════════════════════════
 // Theme Tab (composed)
 // ════════════════════════════════════════════════════════════
 
@@ -588,8 +492,6 @@ export function ThemeTab() {
             <ThemeTypography />
             <Separator />
             <ThemeUIStyling />
-            <Separator />
-            <ThemeVariables />
         </div>
     )
 }

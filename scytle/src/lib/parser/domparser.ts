@@ -11,7 +11,7 @@
  *   - Dimensions estimated (not measured)
  *
  * Pipeline:
- *   AI HTML → tailwind-to-inline → DOMParser → walkElement → relinkNodesWithVariables → ScytleNode tree
+ *   AI HTML → tailwind-to-inline → DOMParser → walkElement → ScytleNode tree
  */
 
 import { generateId } from '@/lib/utils'
@@ -22,11 +22,6 @@ import {
     type Layout, type Padding, type Sizing, type BorderRadius,
     type LayoutConstraints,
 } from '@/types/canvas'
-import {
-    normalizeHex,
-} from '@/lib/variables/build-link-maps'
-import { relinkNodesWithVariables } from '@/lib/variables/relink-nodes'
-import type { Variable, VariableCollection } from '@/lib/variables/types'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
 import { estimateTextHeight } from './size-utils'
 
@@ -82,6 +77,13 @@ function resolveParentHeight(el: HTMLElement, containerWidth: number): number {
     return containerWidth
 }
 
+function normalizeHex(hex: string): string {
+    let h = hex.trim().toLowerCase()
+    if (!h.startsWith('#')) h = '#' + h
+    if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3]
+    return h
+}
+
 // ═══════════════════════════════════════════════════
 // Types
 // ═══════════════════════════════════════════════════
@@ -89,10 +91,6 @@ function resolveParentHeight(el: HTMLElement, containerWidth: number): number {
 export interface DOMParserOptions {
     rootWidth?: number
     fonts?: string[]
-    /** New variable system — if provided, parser binds via boundVariables */
-    variables?: Map<string, Variable>
-    collections?: Map<string, VariableCollection>
-    activeModeId?: string
 }
 
 /**
@@ -248,18 +246,6 @@ export async function parseHtmlViaDOMParser(
 
     // Assign sequential positions to children
     assignChildPositions(pageFrame)
-
-    // NEW VARIABLE SYSTEM: relink using boundVariables
-    // If new variable store data is provided, run the new relinker
-    // which assigns boundVariables instead of *Ref fields.
-    if (options?.variables && options?.collections && options?.activeModeId) {
-        relinkNodesWithVariables(
-            pageFrame.children,
-            options.variables,
-            options.collections,
-            options.activeModeId,
-        )
-    }
 
     return pageFrame
 }

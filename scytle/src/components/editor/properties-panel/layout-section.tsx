@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-// (Old theme resolution removed — new variable system resolves via boundVariables)
 import { useEditorStore } from '@/store/editor-store'
 
 // ── Figma-style flow radio group ─────────────────────────────
@@ -602,7 +601,6 @@ function GapInput({
     const isSpaceBetween = layout.justify === 'between'
     const isGrid = layout.mode === 'grid'
 
-    // Use raw gap value directly (new variable system resolves via boundVariables)
     const resolvedGap = layout.gap ?? 0
     const resolvedGridColumnGap = Math.max(0, layout.columnGap ?? resolvedGap)
     const resolvedGridRowGap = Math.max(0, layout.rowGap ?? resolvedGap)

@@ -3,7 +3,6 @@
 // ============================================================
 
 import type { FrameNode } from '@/types/canvas'
-import type { Variable, VariableCollection } from '@/lib/variables/types'
 
 // DOMParser-based parser (primary and only parser)
 export { parseHtmlViaDOMParser } from './domparser'
@@ -19,10 +18,6 @@ export { PAGE_WIDTH, estimateTextHeight, estimateContainerHeight, estimateNodeHe
 export interface ParseHtmlOptions {
     rootWidth?: number
     fonts?: string[]
-    /** New variable system — if provided, parser binds via boundVariables */
-    variables?: Map<string, Variable>
-    collections?: Map<string, VariableCollection>
-    activeModeId?: string
 }
 
 // ════════════════════════════════════════════════════

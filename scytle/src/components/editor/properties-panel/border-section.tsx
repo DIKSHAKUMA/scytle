@@ -1,14 +1,12 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
-import type { ScytleNode, Border, BorderRadius, Fill, SolidFill } from '@/types/canvas'
+import { useState, useCallback } from 'react'
+import type { ScytleNode, Border, Fill, SolidFill } from '@/types/canvas'
 import { NumberInput, SelectInput } from './inputs'
 import { Plus, Eye, EyeOff, CornerUpRight, Blend, Scissors } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
-// (Old theme resolution removed — new variable system resolves via boundVariables)
-import { ThemeLinkBadge } from './theme-link-badge'
 import { useEditorStore } from '@/store/editor-store'
 
 interface SectionProps {
@@ -43,7 +41,6 @@ function RadiusCornerIcon({ size = 12 }: { size?: number }) {
 export function AppearanceSection({ node, onUpdate }: SectionProps) {
     const radius = node.borderRadius
 
-    // Use raw values directly (new variable system resolves via boundVariables)
     const isUniformRadius = typeof radius === 'number'
     const [perCorner, setPerCorner] = useState(!isUniformRadius)
     const rawUniformRadius = typeof radius === 'number' ? radius : radius.topLeft
@@ -227,10 +224,9 @@ interface StrokeRowProps {
 }
 
 function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProps) {
-    const swatchRef = useRef<HTMLButtonElement>(null)
+    const [swatchEl, setSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
 
-    // Use raw color directly (new variable system resolves via boundVariables)
     const resolvedColor = border.color
 
     const fill = borderToFill({ ...border, color: resolvedColor })
@@ -257,7 +253,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
         >
             {/* Color swatch */}
             <button
-                ref={swatchRef}
+                ref={setSwatchEl}
                 className={cn(
                     'w-5 h-5 rounded-sm border shrink-0 transition-all',
                     'border-border/40 hover:border-border/80',
@@ -268,9 +264,6 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
                 onClick={() => setPickerOpen(true)}
                 title="Edit stroke color"
             />
-
-            {/* Theme link indicator */}
-            <ThemeLinkBadge isLinked={false} />
 
             {/* Hex display — clickable to open picker */}
             <span
@@ -345,7 +338,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
             <ColorPicker
                 fill={fill}
                 onChange={handlePickerChange}
-                anchorEl={swatchRef.current}
+                anchorEl={swatchEl}
                 open={pickerOpen}
                 onClose={() => setPickerOpen(false)}
                 documentColors={documentColors}

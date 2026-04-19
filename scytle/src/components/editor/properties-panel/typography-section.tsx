@@ -20,9 +20,6 @@ import { FontSizeCombobox } from './typography/font-size-combobox'
 import { LineHeightInput } from './typography/line-height-input'
 import { LetterSpacingInput } from './typography/letter-spacing-input'
 import { ColorPicker } from './color-picker'
-// (Old theme resolution removed — new variable system resolves via boundVariables)
-import { ThemeLinkBadge } from './theme-link-badge'
-import { VariablePicker } from './variable-picker'
 import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
 
 // ── Custom inline SVG icons ────────────────────────────────────────────────────
@@ -128,22 +125,16 @@ interface TypographySectionProps {
 }
 
 export function TypographySection({ node, onUpdate }: TypographySectionProps) {
-    const fontTriggerRef = useRef<HTMLDivElement>(null)
-    const settingsBtnRef = useRef<HTMLButtonElement>(null)
-    const styleTriggerRef = useRef<HTMLButtonElement>(null)
-    const colorSwatchRef = useRef<HTMLButtonElement>(null)
-    const fontBadgeRef = useRef<HTMLSpanElement>(null)
-    const colorBadgeRef = useRef<HTMLSpanElement>(null)
+    const [fontTriggerEl, setFontTriggerEl] = useState<HTMLDivElement | null>(null)
+    const [settingsBtnEl, setSettingsBtnEl] = useState<HTMLButtonElement | null>(null)
+    const [styleTriggerEl, setStyleTriggerEl] = useState<HTMLButtonElement | null>(null)
+    const [colorSwatchEl, setColorSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [stylePickerOpen, setStylePickerOpen] = useState(false)
     const [colorPickerOpen, setColorPickerOpen] = useState(false)
-    const [fontVarPickerOpen, setFontVarPickerOpen] = useState(false)
-    const [colorVarPickerOpen, setColorVarPickerOpen] = useState(false)
 
-    // Use raw values directly (new variable system resolves via boundVariables at render time)
     const displayFontFamily = node.fontFamily
     const displayFontSize = node.fontSize
     const displayColor = node.color
-    const displayFontWeight = node.fontWeight
 
     // Font picker state from store
     const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
@@ -242,7 +233,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             title="Typography"
             action={
                 <button
-                    ref={settingsBtnRef}
+                    ref={setSettingsBtnEl}
                     data-section-action
                     title="Type Settings"
                     onClick={(e) => {
@@ -262,32 +253,15 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             }
         >
             {/* ── Row 1: Font family ─────────────────────────────────── */}
-            <div className="flex items-center gap-0.5">
-                <span ref={fontBadgeRef}>
-                    <ThemeLinkBadge
-                        isLinked={false}
-                        showUnlinked
-                        onClick={() => setFontVarPickerOpen(v => !v)}
-                    />
-                </span>
-                <VariablePicker
-                    open={fontVarPickerOpen}
-                    anchorEl={fontBadgeRef.current}
-                    scope="FONT_FAMILY"
-                    resolvedType="STRING"
-                    currentVariableId={undefined}
-                    onBind={(_variableId) => { /* TODO: Wire up boundVariables for fontFamily */ }}
-                    onDetach={() => { /* TODO: Wire up boundVariables for fontFamily */ }}
-                    onClose={() => setFontVarPickerOpen(false)}
-                />
-                <div ref={fontTriggerRef} className="flex-1">
+            <div className="flex items-center">
+                <div ref={setFontTriggerEl} className="flex-1">
                     <FontFamilyTrigger value={displayFontFamily} nodeId={node.id} />
                 </div>
             </div>
             {showFontPicker && (
                 <FontFamilyPicker
                     currentFamily={displayFontFamily}
-                    anchorEl={fontTriggerRef.current}
+                    anchorEl={fontTriggerEl}
                     onSelect={handleFontSelect}
                     onPreview={handleFontPreview}
                     onClose={handleFontPickerClose}
@@ -297,7 +271,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             {/* ── Row 2: Font style (dynamic) + Size ────────────────── */}
             <div className="flex items-center gap-1.5">
                 <button
-                    ref={styleTriggerRef}
+                    ref={setStyleTriggerEl}
                     className={cn(
                         INPUT_BASE,
                         'flex items-center gap-1 text-left flex-1',
@@ -314,7 +288,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     <FontStylePicker
                         fontFamily={node.fontFamily}
                         currentStyle={node.fontStyleName ?? 'Regular'}
-                        anchorEl={styleTriggerRef.current}
+                        anchorEl={styleTriggerEl}
                         onSelect={handleStyleSelect}
                         onPreview={handleStylePreview}
                         onClose={handleStylePickerClose}
@@ -363,25 +337,8 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
 
             {/* ── Color ──────────────────────────────────────────────── */}
             <div className="flex items-center gap-1.5">
-                <span ref={colorBadgeRef}>
-                    <ThemeLinkBadge
-                        isLinked={false}
-                        showUnlinked
-                        onClick={() => setColorVarPickerOpen(v => !v)}
-                    />
-                </span>
-                <VariablePicker
-                    open={colorVarPickerOpen}
-                    anchorEl={colorBadgeRef.current}
-                    scope="TEXT_FILL"
-                    resolvedType="COLOR"
-                    currentVariableId={undefined}
-                    onBind={(_variableId) => { /* TODO: Wire up boundVariables for text color */ }}
-                    onDetach={() => { /* TODO: Wire up boundVariables for text color */ }}
-                    onClose={() => setColorVarPickerOpen(false)}
-                />
                 <button
-                    ref={colorSwatchRef}
+                    ref={setColorSwatchEl}
                     className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer
                         shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
                     style={{ backgroundColor: displayColor }}
@@ -399,7 +356,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                         onUpdate({ color: `#${normaliseHex(fill.color)}` })
                     }
                 }}
-                anchorEl={colorSwatchRef.current}
+                anchorEl={colorSwatchEl}
                 open={colorPickerOpen}
                 onClose={() => setColorPickerOpen(false)}
                 solidOnly
@@ -409,7 +366,7 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
             {typeSettingsOpen && (
                 <TypeSettingsOverlay
                     node={node}
-                    anchorEl={settingsBtnRef.current}
+                    anchorEl={settingsBtnEl}
                     onUpdate={onUpdate}
                 />
             )}

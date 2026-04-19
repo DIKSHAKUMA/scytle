@@ -3,9 +3,6 @@ import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
 import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
-import { useResolvedVariables } from '@/lib/variables/use-variables'
-import { isColorValue } from '@/lib/variables/types'
-import { colorValueToHex } from '@/lib/variables/resolve'
 
 // ============================================================
 // Props
@@ -35,21 +32,10 @@ export const TextRenderer = memo(function TextRenderer({
     const editingNodeId = useEditorStore((s) => s.editingNodeId)
     const isEditing = editingNodeId === node.id
 
-    // ── New variable system (resolves at render time via boundVariables) ──
-    const resolved = useResolvedVariables(node.boundVariables)
-
-    // ── Resolve values: new variable system → raw node value ──
-    const resolvedFontFamily = (typeof resolved.fontFamily === 'string' ? resolved.fontFamily : undefined)
-        ?? node.fontFamily
-    const resolvedFontSize = (typeof resolved.fontSize === 'number' ? resolved.fontSize : undefined)
-        ?? node.fontSize
-    const resolvedColorRaw = resolved.color
-    const resolvedColor = (resolvedColorRaw !== undefined
-        ? (isColorValue(resolvedColorRaw) ? colorValueToHex(resolvedColorRaw) : typeof resolvedColorRaw === 'string' ? resolvedColorRaw : undefined)
-        : undefined)
-        ?? node.color
-    const resolvedFontWeight = (typeof resolved.fontWeight === 'number' ? resolved.fontWeight : undefined)
-        ?? node.fontWeight
+    const resolvedFontFamily = node.fontFamily
+    const resolvedFontSize = node.fontSize
+    const resolvedColor = node.color
+    const resolvedFontWeight = node.fontWeight
 
     // ── Google Font loading ────────────────────────────────────
     // Load the font on mount and whenever fontFamily changes.
@@ -109,7 +95,7 @@ export const TextRenderer = memo(function TextRenderer({
     }, [commitEdit])
 
     // ── Styles ────────────────────────────────────────────────
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, undefined, zIndex)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, zIndex)
 
     // ── Line height (unit-aware) ───────────────────────────────────────────────
     // Legacy nodes may have lineHeight:'auto' or a unitless ratio (≤4) or absolute px.

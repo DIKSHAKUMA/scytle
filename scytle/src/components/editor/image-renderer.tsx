@@ -1,8 +1,7 @@
 import { memo, type CSSProperties } from 'react'
 import { ImageIcon } from 'lucide-react'
 import type { ImageNode } from '@/types/canvas'
-import { computeBaseStyles, type VarCtx } from './render-utils'
-import { useVariableStore } from '@/store/variable-store'
+import { computeBaseStyles } from './render-utils'
 
 // ============================================================
 // Props
@@ -28,11 +27,7 @@ export const ImageRenderer = memo(function ImageRenderer({
     parentLayoutMode,
     zIndex,
 }: ImageRendererProps) {
-    const variables = useVariableStore(s => s.variables)
-    const collections = useVariableStore(s => s.collections)
-    const activeModeId = useVariableStore(s => s.activeModeId)
-    const varCtx: VarCtx = { modeId: activeModeId ?? '', variables, collections }
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, varCtx, zIndex)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, zIndex)
 
     // ── Placeholder ───────────────────────────────────────────
     if (node.isPlaceholder || !node.src) {

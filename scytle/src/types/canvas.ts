@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { generateId } from '@/lib/utils'
-import type { BoundVariables, ExplicitVariableModes } from '@/lib/variables/types'
 
 // ============================================================
 // Canvas Constants
@@ -408,12 +407,6 @@ export interface BaseNodeProperties {
     cssWidth?: string
     cssHeight?: string
 
-    // === NEW VARIABLE SYSTEM (Figma-clone) ===
-    /** Bindings from node properties to variables. See BoundVariables type. */
-    boundVariables?: BoundVariables
-    /** ID of the variable collection associated with this design (set on page frames) */
-    _variableCollectionId?: string
-
     /** Raw CSS position values for absolute elements (Paper-style deferred resolution).
      *  The canvas renderer resolves these against actual parent dimensions at render time,
      *  instead of the parser guessing parent dimensions during conversion. */
@@ -448,9 +441,6 @@ export interface FrameNode extends BaseNodeProperties {
     /** Self alignment (overrides parent's alignItems) */
     alignSelf?: 'auto' | 'start' | 'center' | 'end' | 'stretch' | 'baseline'
 
-    // === NEW VARIABLE SYSTEM (Figma-clone) ===
-    /** Per-collection mode overrides. Children inherit unless they set their own. */
-    explicitVariableModes?: ExplicitVariableModes
 }
 
 /** Text leaf node — renders as heading/paragraph/span */

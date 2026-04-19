@@ -1,21 +1,13 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Plus, Eye, EyeOff, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { generateId } from '@/lib/utils'
 import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
-
-import { ThemeLinkBadge } from './theme-link-badge'
-import { VariablePicker } from './variable-picker'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
-import type { VariableAlias } from '@/lib/variables/types'
-import { isColorValue } from '@/lib/variables/types'
-import { resolveVariable, colorValueToHex } from '@/lib/variables/resolve'
 import { useEditorStore } from '@/store/editor-store'
-import { useVariableStore } from '@/store/variable-store'
-import { findNodeById } from '@/types/canvas'
 import {
     DndContext,
     closestCenter,
@@ -116,54 +108,17 @@ function fillSwatchStyle(fill: Fill, resolvedColor?: string): React.CSSPropertie
 interface FillRowProps {
     fill: Fill
     fillId: string
-    fillIndex: number
     onUpdate: (newFill: Fill) => void
     onRemove: () => void
     documentColors: string[]
     onPickerOpenChange: (open: boolean) => void
 }
 
-function FillRow({ fill, fillId, fillIndex, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
-    const swatchRef = useRef<HTMLButtonElement>(null)
-    const badgeRef = useRef<HTMLButtonElement>(null)
+function FillRow({ fill, fillId, onUpdate, onRemove, documentColors, onPickerOpenChange }: FillRowProps) {
+    const [swatchEl, setSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [pickerOpen, setPickerOpen] = useState(false)
-    const [varPickerOpen, setVarPickerOpen] = useState(false)
 
-    // Theme resolution for solid fills — removed old system, use boundVariables only
-
-    // New variable system: resolve fill color from boundVariables
-    const variables = useVariableStore(s => s.variables)
-    const collections = useVariableStore(s => s.collections)
-    const activeModeId = useVariableStore(s => s.activeModeId)
-
-    // Get the node from editor store to access boundVariables
-    const selectedNode = useEditorStore(s => {
-        const ids = s.selectedIds
-        if (ids.length !== 1) return null
-        return findNodeById(s.nodes, ids[0]) ?? null
-    })
-    const boundVariables = selectedNode?.boundVariables
-    const fillBinding = boundVariables?.fills && Array.isArray(boundVariables.fills)
-        ? (boundVariables.fills as VariableAlias[])[fillIndex]
-        : undefined
-    const isVarLinked = !!fillBinding
-
-    // Resolve color: new system first, then old system, then raw
-    let resolvedColor: string | undefined
-    if (fill.type === 'solid') {
-        if (fillBinding) {
-            const modeId = activeModeId ?? ''
-            const resolved = resolveVariable(fillBinding.id, modeId, variables, collections)
-            if (resolved !== undefined && isColorValue(resolved)) {
-                resolvedColor = colorValueToHex(resolved)
-            } else if (typeof resolved === 'string') {
-                resolvedColor = resolved
-            }
-        }
-        if (!resolvedColor) {
-            resolvedColor = fill.color
-        }
-    }
+    const resolvedColor = fill.type === 'solid' ? fill.color : undefined
 
     const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: fillId })
     const style: React.CSSProperties = {
@@ -205,7 +160,7 @@ function FillRow({ fill, fillId, fillIndex, onUpdate, onRemove, documentColors, 
             </button>
             {/* Color swatch */}
             <button
-                ref={swatchRef}
+                ref={setSwatchEl}
                 className={cn(
                     'w-5 h-5 rounded-sm border shrink-0 transition-all',
                     'border-border/40 hover:border-border/80',
@@ -222,45 +177,6 @@ function FillRow({ fill, fillId, fillIndex, onUpdate, onRemove, documentColors, 
                         style={{ background: 'repeating-conic-gradient(#aaa 0% 25%, #fff 0% 50%) 0 0 / 6px 6px' }} />
                 )}
             </button>
-
-            {/* Theme link indicator + Variable picker */}
-            {fill.type === 'solid' && (
-                <>
-                    <span ref={badgeRef as React.RefObject<HTMLSpanElement>}>
-                        <ThemeLinkBadge
-                            isLinked={isVarLinked}
-                            variableName={fillBinding?.id}
-                            showUnlinked
-                            onClick={() => setVarPickerOpen(v => !v)}
-                        />
-                    </span>
-                    <VariablePicker
-                        open={varPickerOpen}
-                        anchorEl={badgeRef.current}
-                        scope="ALL_FILLS"
-                        resolvedType="COLOR"
-                        currentVariableId={fillBinding?.id}
-                        onBind={(variableId) => {
-                            // Update boundVariables on the node
-                            const bv = { ...(boundVariables ?? {}) }
-                            const fills = Array.isArray(bv.fills) ? [...(bv.fills as VariableAlias[])] : []
-                            fills[fillIndex] = { type: 'VARIABLE_ALIAS', id: variableId }
-                            bv.fills = fills
-                            useEditorStore.getState().updateNode(selectedNode!.id, { boundVariables: bv })
-                        }}
-                        onDetach={() => {
-                            const bv = { ...(boundVariables ?? {}) }
-                            if (Array.isArray(bv.fills)) {
-                                const fills = [...(bv.fills as VariableAlias[])]
-                                delete fills[fillIndex]
-                                bv.fills = fills
-                            }
-                            useEditorStore.getState().updateNode(selectedNode!.id, { boundVariables: bv })
-                        }}
-                        onClose={() => setVarPickerOpen(false)}
-                    />
-                </>
-            )}
 
             {/* Fill type label + blend mode */}
             <span
@@ -344,24 +260,9 @@ function FillRow({ fill, fillId, fillIndex, onUpdate, onRemove, documentColors, 
                     ? { ...fill, color: resolvedColor }
                     : fill}
                 onChange={(updated) => {
-                    // Auto-detach from theme when user edits a theme-linked color
-                    if (updated.type === 'solid' && fill.type === 'solid' && isVarLinked) {
-                        // Detach from new variable system
-                        if (selectedNode) {
-                            const bv = { ...(boundVariables ?? {}) }
-                            if (Array.isArray(bv.fills)) {
-                                const fills = [...(bv.fills as VariableAlias[])]
-                                delete fills[fillIndex]
-                                bv.fills = fills
-                            }
-                            useEditorStore.getState().updateNode(selectedNode.id, { boundVariables: bv })
-                        }
-                        onUpdate(updated)
-                    } else {
-                        onUpdate(updated)
-                    }
+                    onUpdate(updated)
                 }}
-                anchorEl={swatchRef.current}
+                anchorEl={swatchEl}
                 open={pickerOpen}
                 onClose={() => { setPickerOpen(false); onPickerOpenChange(false) }}
                 documentColors={documentColors}
@@ -472,7 +373,6 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
                                     key={fillIds[i]}
                                     fill={fill}
                                     fillId={fillIds[i]}
-                                    fillIndex={i}
                                     onUpdate={(newFill) => updateFill(i, newFill)}
                                     onRemove={() => removeFill(i)}
                                     documentColors={documentColors}

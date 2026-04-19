@@ -45,7 +45,7 @@ export const VectorRenderer = memo(function VectorRenderer({
     // computeBaseStyles handles: position, sizing (fixed/fill/hug), opacity,
     // rotation, flip, margins, min/max constraints — same as FrameRenderer/TextRenderer.
     // We strip background/border/shadow since VectorNode visuals are on the SVG path.
-    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, undefined, zIndex)
+    const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, zIndex)
 
     const wrapStyle: CSSProperties = {
         ...baseStyle,
