@@ -4,6 +4,7 @@ import type { ScytleNode, FrameNode, Padding, LayoutConstraints } from '@/types/
 import { findParentOfNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { Section, NumberInput, IconButton, SelectInput } from './inputs'
+import { getDefaultConstraints, shouldShowConstraints as shouldShowNodeConstraints } from './layout-capabilities'
 import {
     AlignHorizontalJustifyStart,
     AlignHorizontalJustifyCenter,
@@ -20,6 +21,7 @@ import { cn } from '@/lib/utils'
 
 interface PositionSectionProps {
     node: ScytleNode
+    parentNode: FrameNode | null
     onUpdate: (updates: Record<string, unknown>) => void
     /** Whether this node is in an auto-layout container (position is auto) */
     isAutoLayout: boolean
@@ -106,10 +108,7 @@ const V_CONSTRAINT_OPTIONS = [
     { value: 'scale', label: 'Scale' },
 ]
 
-const DEFAULT_CONSTRAINTS: LayoutConstraints = {
-    horizontal: 'left',
-    vertical: 'top',
-}
+const DEFAULT_CONSTRAINTS: LayoutConstraints = getDefaultConstraints()
 
 type AlignHorizontalConstraint = Extract<LayoutConstraints['horizontal'], 'left' | 'center' | 'right'>
 type AlignVerticalConstraint = Extract<LayoutConstraints['vertical'], 'top' | 'center' | 'bottom'>
@@ -247,7 +246,7 @@ function ConstraintVisual({ constraints, onToggleH, onToggleV }: ConstraintVisua
     const inactiveOpacity = 0.2
 
     return (
-        <div className="w-[42px] h-[42px] shrink-0 relative">
+        <div className="w-10.5 h-10.5 shrink-0 relative">
             <svg width="42" height="42" viewBox="0 0 42 42" fill="none" className="text-muted-foreground">
                 {/* Outer frame */}
                 <rect x="1" y="1" width="40" height="40" rx="2" stroke="currentColor" strokeWidth="1" opacity="0.3" />
@@ -298,10 +297,11 @@ function ConstraintVisual({ constraints, onToggleH, onToggleV }: ConstraintVisua
 
 /* ── Position Section ────────────────────────────────────────── */
 
-export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutParent }: PositionSectionProps) {
+export function PositionSection({ node, parentNode, onUpdate, isAutoLayout, isInAutoLayoutParent }: PositionSectionProps) {
     const updateNode = useEditorStore((s) => s.updateNode)
 
     const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
+    const showConstraints = shouldShowNodeConstraints(node, parentNode)
 
     const getHorizontalAlignUpdates = useCallback(
         (x: number, horizontal: AlignHorizontalConstraint): Record<string, unknown> => {
@@ -541,8 +541,8 @@ export function PositionSection({ node, onUpdate, isAutoLayout, isInAutoLayoutPa
                 />
             </div>
 
-            {/* Constraints — shown when node is absolute-positioned in auto layout parent */}
-            {isIgnoringAutoLayout && (
+            {/* Constraints — regular-frame children, plus absolute children in auto layout */}
+            {showConstraints && (
                 <ConstraintsSection
                     constraints={node.constraints ?? DEFAULT_CONSTRAINTS}
                     onUpdate={onUpdate}

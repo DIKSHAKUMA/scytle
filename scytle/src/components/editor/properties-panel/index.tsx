@@ -9,11 +9,12 @@
 import { useCallback, useMemo } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
-import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode } from '@/types/canvas'
+import type { ScytleNode, FrameNode, TextNode, VectorNode } from '@/types/canvas'
 import { PositionSection, MarginSection } from './position-section'
 import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
 import { LayoutSection, AutoLayoutChildSection } from './layout-section'
+import { isInAutoLayoutFlow } from './layout-capabilities'
 import { FillSection } from './fill-section'
 import { AppearanceSection, StrokeSection } from './border-section'
 import { TypographySection } from './typography-section'
@@ -83,31 +84,24 @@ export function PropertiesPanel() {
         return findNodeById(nodes, selectedIds[0])
     }, [nodes, selectedIds])
 
-    // Detect if node is in an auto-layout parent
-    const isAutoLayout = useMemo(() => {
-        if (!node) return false
-        if (node.positioning === 'absolute') return false
-        const result = findParentOfNode(nodes, node.id)
-        if (!result || !result.parent) return false
-        return result.parent.layout.mode !== 'none'
-    }, [nodes, node])
-
-    // Whether node is inside an auto-layout parent (regardless of its own positioning)
-    const isInAutoLayoutParent = useMemo(() => {
-        if (!node) return false
-        const result = findParentOfNode(nodes, node.id)
-        if (!result || !result.parent) return false
-        return result.parent.layout.mode !== 'none'
-    }, [nodes, node])
-
-    // Get the parent frame node (for auto-layout child section)
-    const parentFrameNode = useMemo(() => {
+    // Direct parent frame (if any)
+    const parentNode = useMemo<FrameNode | null>(() => {
         if (!node) return null
         const result = findParentOfNode(nodes, node.id)
         if (!result || !result.parent) return null
-        if (result.parent.layout.mode === 'none') return null
         return result.parent
     }, [nodes, node])
+
+    // Detect if node is in an auto-layout flow (not ignoring auto layout)
+    const isAutoLayout = useMemo(() => {
+        if (!node) return false
+        return isInAutoLayoutFlow(node, parentNode)
+    }, [node, parentNode])
+
+    // Whether node is inside an auto-layout parent (regardless of its own positioning)
+    const isInAutoLayoutParent = useMemo(() => {
+        return !!parentNode && parentNode.layout.mode !== 'none'
+    }, [parentNode])
 
     // Stable update callback
     const onUpdate = useCallback(
@@ -192,13 +186,19 @@ export function PropertiesPanel() {
 
             {/* Property sections — Figma order */}
 
-            <PositionSection node={node} onUpdate={onUpdate} isAutoLayout={isAutoLayout} isInAutoLayoutParent={isInAutoLayoutParent} />
+            <PositionSection
+                node={node}
+                parentNode={parentNode}
+                onUpdate={onUpdate}
+                isAutoLayout={isAutoLayout}
+                isInAutoLayoutParent={isInAutoLayoutParent}
+            />
             <MarginSection node={node} onUpdate={onUpdate} />
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
-            {parentFrameNode && <AutoLayoutChildSection node={node} parentNode={parentFrameNode} onUpdate={onUpdate} />}
+            {parentNode && <AutoLayoutChildSection node={node} parentNode={parentNode} onUpdate={onUpdate} />}
 
-            <SizeSection node={node} onUpdate={onUpdate} />
+            <SizeSection node={node} parentNode={parentNode} onUpdate={onUpdate} />
 
             {isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
             {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}

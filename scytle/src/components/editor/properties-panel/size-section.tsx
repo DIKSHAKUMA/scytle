@@ -1,22 +1,24 @@
 'use client'
 
-import type { ScytleNode, Sizing, TextNode } from '@/types/canvas'
+import type { FrameNode, ScytleNode, Sizing, TextNode } from '@/types/canvas'
 import { Section, NumberInput, SelectInput } from './inputs'
 import { Lock, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween, Square, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getAllowedSizingModes, normalizeSizingMode } from './layout-capabilities'
 
-// Only Frame gets Fill/Hug, Text/Image only get Fixed/Fill
-const FRAME_SIZE_OPTIONS = [
-    { value: 'fixed', label: 'Fixed' },
-    { value: 'hug', label: 'Hug' },
-    { value: 'fill', label: 'Fill' },
-]
+const SIZE_LABELS: Record<Sizing['horizontal'], string> = {
+    fixed: 'Fixed',
+    hug: 'Hug',
+    fill: 'Fill',
+}
 
-const LEAF_SIZE_OPTIONS = [
-    { value: 'fixed', label: 'Fixed' },
-    { value: 'fill', label: 'Fill' },
-]
+function toSizeOptions(modes: Sizing['horizontal'][]) {
+    return modes.map((mode) => ({
+        value: mode,
+        label: SIZE_LABELS[mode],
+    }))
+}
 
 // Figma text resize modes
 type TextResizeMode = 'auto-width' | 'auto-height' | 'fixed'
@@ -29,25 +31,77 @@ function getTextResizeMode(node: TextNode): TextResizeMode {
 
 interface SizeSectionProps {
     node: ScytleNode
+    parentNode: FrameNode | null
     onUpdate: (updates: Record<string, unknown>) => void
 }
 
-export function SizeSection({ node, onUpdate }: SizeSectionProps) {
-    const sizeOpts = node.type === 'frame' ? FRAME_SIZE_OPTIONS : LEAF_SIZE_OPTIONS
+export function SizeSection({ node, parentNode, onUpdate }: SizeSectionProps) {
     const [lockRatio, setLockRatio] = useState(false)
     const ratio = node.width / (node.height || 1)
 
     const isText = node.type === 'text'
     const textResizeMode = isText ? getTextResizeMode(node as TextNode) : null
 
-    // Show constraints when any min/max is set, or user toggles open
+    const allowedSizingModes = useMemo(
+        () => getAllowedSizingModes(node, parentNode),
+        [node, parentNode]
+    )
+
+    const horizontalOptions = useMemo(
+        () => toSizeOptions(allowedSizingModes.horizontal),
+        [allowedSizingModes.horizontal]
+    )
+
+    const verticalOptions = useMemo(
+        () => toSizeOptions(allowedSizingModes.vertical),
+        [allowedSizingModes.vertical]
+    )
+
+    const normalizedHorizontal = normalizeSizingMode(
+        node.sizing.horizontal,
+        allowedSizingModes.horizontal
+    )
+    const normalizedVertical = normalizeSizingMode(
+        node.sizing.vertical,
+        allowedSizingModes.vertical
+    )
+
+    // Show size limits when any min/max is set, or user toggles open.
     const hasConstraints = useMemo(() => (
         node.minWidth != null || node.maxWidth != null ||
         node.minHeight != null || node.maxHeight != null
     ), [node.minWidth, node.maxWidth, node.minHeight, node.maxHeight])
     const [constraintsOpen, setConstraintsOpen] = useState(hasConstraints)
 
+    useEffect(() => {
+        if (isText) return
+
+        if (
+            node.sizing.horizontal !== normalizedHorizontal ||
+            node.sizing.vertical !== normalizedVertical
+        ) {
+            onUpdate({
+                sizing: {
+                    ...node.sizing,
+                    horizontal: normalizedHorizontal,
+                    vertical: normalizedVertical,
+                },
+            })
+        }
+    }, [
+        isText,
+        node.sizing,
+        normalizedHorizontal,
+        normalizedVertical,
+        onUpdate,
+    ])
+
     const updateSizing = (axis: 'horizontal' | 'vertical', mode: string) => {
+        const allowed = axis === 'horizontal'
+            ? allowedSizingModes.horizontal
+            : allowedSizingModes.vertical
+        if (!allowed.includes(mode as Sizing['horizontal'])) return
+
         onUpdate({
             sizing: {
                 ...node.sizing,
@@ -157,8 +211,8 @@ export function SizeSection({ node, onUpdate }: SizeSectionProps) {
                     />
                     {!isText && (
                         <SelectInput
-                            value={node.sizing.horizontal}
-                            options={sizeOpts}
+                            value={normalizedHorizontal}
+                            options={horizontalOptions}
                             onChange={(v) => updateSizing('horizontal', v)}
                             className="w-16"
                         />
@@ -178,8 +232,8 @@ export function SizeSection({ node, onUpdate }: SizeSectionProps) {
                     />
                     {!isText && (
                         <SelectInput
-                            value={node.sizing.vertical}
-                            options={sizeOpts}
+                            value={normalizedVertical}
+                            options={verticalOptions}
                             onChange={(v) => updateSizing('vertical', v)}
                             className="w-16"
                         />
@@ -201,7 +255,7 @@ export function SizeSection({ node, onUpdate }: SizeSectionProps) {
                     <span>{lockRatio ? 'Constrain proportions' : 'Lock ratio'}</span>
                 </button>
 
-                {/* Min/Max constraints toggle + inputs */}
+                {/* Min/Max size limits */}
                 <div className="pt-1">
                     <button
                         className={cn(
@@ -211,10 +265,10 @@ export function SizeSection({ node, onUpdate }: SizeSectionProps) {
                                 : 'text-muted-foreground/50 hover:text-muted-foreground'
                         )}
                         onClick={() => setConstraintsOpen(!constraintsOpen)}
-                        title={constraintsOpen ? 'Hide constraints' : 'Show constraints'}
+                        title={constraintsOpen ? 'Hide size limits' : 'Show size limits'}
                     >
                         <ChevronsUpDown size={10} />
-                        <span>Constraints</span>
+                        <span>Size limits</span>
                     </button>
 
                     {constraintsOpen && (

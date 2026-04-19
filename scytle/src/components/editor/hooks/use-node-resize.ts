@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { findNodeById } from '@/types/canvas'
-import type { Sizing, TextNode, VectorNetwork, VectorNode } from '@/types/canvas'
+import type {
+    FrameNode,
+    LayoutConstraints,
+    Sizing,
+    TextNode,
+    VectorNetwork,
+    VectorNode,
+} from '@/types/canvas'
 
 // ============================================================
 // Constants
@@ -11,6 +18,11 @@ import type { Sizing, TextNode, VectorNetwork, VectorNode } from '@/types/canvas
 
 const RESIZE_THRESHOLD = 2 // px of movement before resize activates
 const MIN_SIZE = 1 // minimum width/height in canvas units
+
+const DEFAULT_CONSTRAINTS: LayoutConstraints = {
+    horizontal: 'left',
+    vertical: 'top',
+}
 
 // ============================================================
 // Module-level resize flag (shared with page.tsx for Escape gating)
@@ -47,6 +59,21 @@ interface ResizeState {
     pointerId: number
     /** Original vectorNetwork for VectorNodes — used to scale vertices from pristine state */
     startVectorNetwork?: VectorNetwork
+    /** Child snapshots for constraint-based repositioning when a frame is resized */
+    constrainedChildren?: ConstraintChildSnapshot[]
+}
+
+interface ConstraintChildSnapshot {
+    id: string
+    startX: number
+    startY: number
+    startWidth: number
+    startHeight: number
+    minWidth?: number
+    maxWidth?: number
+    minHeight?: number
+    maxHeight?: number
+    constraints: LayoutConstraints
 }
 
 const INITIAL_STATE: ResizeState = {
@@ -61,6 +88,129 @@ const INITIAL_STATE: ResizeState = {
     startHeight: 0,
     aspectRatio: 1,
     pointerId: -1,
+}
+
+function clampDimension(value: number, min?: number, max?: number): number {
+    let next = Math.max(MIN_SIZE, value)
+    if (min != null) next = Math.max(next, min)
+    if (max != null) next = Math.min(next, max)
+    return next
+}
+
+function getConstrainedChildren(parentNode: FrameNode): ConstraintChildSnapshot[] {
+    const isAutoLayoutParent = parentNode.layout.mode !== 'none'
+
+    return parentNode.children
+        .filter((child) => !isAutoLayoutParent || child.positioning === 'absolute')
+        .map((child) => ({
+            id: child.id,
+            startX: child.x,
+            startY: child.y,
+            startWidth: child.width,
+            startHeight: child.height,
+            minWidth: child.minWidth,
+            maxWidth: child.maxWidth,
+            minHeight: child.minHeight,
+            maxHeight: child.maxHeight,
+            constraints: child.constraints ?? DEFAULT_CONSTRAINTS,
+        }))
+}
+
+function resolveConstrainedChildBounds(
+    child: ConstraintChildSnapshot,
+    parentStartWidth: number,
+    parentStartHeight: number,
+    parentNextWidth: number,
+    parentNextHeight: number
+) {
+    const safeStartWidth = Math.max(parentStartWidth, MIN_SIZE)
+    const safeStartHeight = Math.max(parentStartHeight, MIN_SIZE)
+
+    const left = child.startX
+    const right = parentStartWidth - (child.startX + child.startWidth)
+    const top = child.startY
+    const bottom = parentStartHeight - (child.startY + child.startHeight)
+
+    const centerOffsetX = child.startX + child.startWidth / 2 - parentStartWidth / 2
+    const centerOffsetY = child.startY + child.startHeight / 2 - parentStartHeight / 2
+
+    let nextX = child.startX
+    let nextY = child.startY
+    let nextWidth = child.startWidth
+    let nextHeight = child.startHeight
+
+    switch (child.constraints.horizontal) {
+        case 'left':
+            nextX = left
+            nextWidth = child.startWidth
+            break
+        case 'right':
+            nextWidth = child.startWidth
+            nextX = parentNextWidth - right - nextWidth
+            break
+        case 'center':
+            nextWidth = child.startWidth
+            nextX = parentNextWidth / 2 + centerOffsetX - nextWidth / 2
+            break
+        case 'leftRight':
+            nextX = left
+            nextWidth = parentNextWidth - left - right
+            break
+        case 'scale': {
+            const scaleX = parentNextWidth / safeStartWidth
+            nextX = child.startX * scaleX
+            nextWidth = child.startWidth * scaleX
+            break
+        }
+    }
+
+    switch (child.constraints.vertical) {
+        case 'top':
+            nextY = top
+            nextHeight = child.startHeight
+            break
+        case 'bottom':
+            nextHeight = child.startHeight
+            nextY = parentNextHeight - bottom - nextHeight
+            break
+        case 'center':
+            nextHeight = child.startHeight
+            nextY = parentNextHeight / 2 + centerOffsetY - nextHeight / 2
+            break
+        case 'topBottom':
+            nextY = top
+            nextHeight = parentNextHeight - top - bottom
+            break
+        case 'scale': {
+            const scaleY = parentNextHeight / safeStartHeight
+            nextY = child.startY * scaleY
+            nextHeight = child.startHeight * scaleY
+            break
+        }
+    }
+
+    nextWidth = clampDimension(nextWidth, child.minWidth, child.maxWidth)
+    nextHeight = clampDimension(nextHeight, child.minHeight, child.maxHeight)
+
+    // Re-apply anchors after clamping where anchor depends on dimension.
+    if (child.constraints.horizontal === 'right') {
+        nextX = parentNextWidth - right - nextWidth
+    } else if (child.constraints.horizontal === 'center') {
+        nextX = parentNextWidth / 2 + centerOffsetX - nextWidth / 2
+    }
+
+    if (child.constraints.vertical === 'bottom') {
+        nextY = parentNextHeight - bottom - nextHeight
+    } else if (child.constraints.vertical === 'center') {
+        nextY = parentNextHeight / 2 + centerOffsetY - nextHeight / 2
+    }
+
+    return {
+        x: nextX,
+        y: nextY,
+        width: nextWidth,
+        height: nextHeight,
+    }
 }
 
 // ============================================================
@@ -147,6 +297,9 @@ export function useNodeResize(
             const node = findNodeById(store.nodes, nodeId)
             if (!node || node.locked) return
 
+            const constrainedChildren =
+                node.type === 'frame' ? getConstrainedChildren(node as FrameNode) : undefined
+
             stateRef.current = {
                 phase: 'pending',
                 nodeId,
@@ -161,6 +314,9 @@ export function useNodeResize(
                 pointerId,
                 ...(node.type === 'vector'
                     ? { startVectorNetwork: (node as VectorNode).vectorNetwork }
+                    : {}),
+                ...(constrainedChildren && constrainedChildren.length > 0
+                    ? { constrainedChildren }
                     : {}),
             }
         },
@@ -352,6 +508,19 @@ export function useNodeResize(
 
             store.updateNode(s.nodeId, updatePayload)
 
+            if (s.constrainedChildren && s.constrainedChildren.length > 0) {
+                for (const child of s.constrainedChildren) {
+                    const childUpdates = resolveConstrainedChildBounds(
+                        child,
+                        s.startWidth,
+                        s.startHeight,
+                        newWidth,
+                        newHeight
+                    )
+                    store.updateNode(child.id, childUpdates)
+                }
+            }
+
             return true // consumed
         },
         []
@@ -406,8 +575,21 @@ export function useNodeResize(
             if (startSizingRef.current) {
                 restoreUpdates.sizing = { ...startSizingRef.current }
             }
-            useEditorStore.getState().updateNode(s.nodeId, restoreUpdates)
-            useEditorStore.getState().endBatch()
+            const store = useEditorStore.getState()
+            store.updateNode(s.nodeId, restoreUpdates)
+
+            if (s.constrainedChildren && s.constrainedChildren.length > 0) {
+                for (const child of s.constrainedChildren) {
+                    store.updateNode(child.id, {
+                        x: child.startX,
+                        y: child.startY,
+                        width: child.startWidth,
+                        height: child.startHeight,
+                    })
+                }
+            }
+
+            store.endBatch()
         }
 
         stateRef.current = { ...INITIAL_STATE }

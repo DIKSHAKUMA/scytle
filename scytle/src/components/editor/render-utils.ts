@@ -345,8 +345,8 @@ function computePadding(p: Padding, varCtx?: VarCtx): CSSProperties {
 // Constraints (left/right/center/leftRight/scale, top/bottom/center/topBottom/scale)
 // define how a child repositions/resizes when its PARENT is resized.
 // They do NOT affect the child's current position — that's always stored
-// in node.x / node.y. Constraints are purely declarative metadata until
-// parent-resize logic is implemented. The node always renders at (x, y).
+// in node.x / node.y. Parent-resize interactions update node.x/y/width/height
+// according to these constraints, and rendering simply reflects that state.
 
 // ============================================================
 // CSS Position Resolution (Paper-style deferred positioning)

@@ -60,25 +60,11 @@ export function LeftPanel() {
         }
     }, [])
 
-    if (collapsed) {
-        return (
-            <div className="flex flex-col w-10 bg-card border-r border-border/60 shrink-0 select-none items-center pt-2 gap-1">
-                <button
-                    onClick={() => setCollapsed(false)}
-                    className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                    title="Expand panel"
-                >
-                    <PanelLeft className="w-3.5 h-3.5" />
-                </button>
-            </div>
-        )
-    }
-
     return (
-        <div className="relative flex shrink-0" style={{ width }}>
+        <div className="relative flex shrink-0" style={{ width: collapsed ? 40 : width }}>
             <div className="flex flex-col flex-1 bg-card border-r border-border/60 select-none overflow-hidden">
                 {/* ── Tab bar ── */}
-                <div className="flex h-10 border-b border-border/40 shrink-0">
+                <div className={cn('flex h-10 border-b border-border/40 shrink-0', collapsed && 'hidden')}>
                     {TABS.map((tab) => (
                         <button
                             key={tab}
@@ -106,7 +92,7 @@ export function LeftPanel() {
                 </div>
 
                 {/* ── Tab content ── */}
-                <div className="flex-1 min-h-0 overflow-hidden relative">
+                <div className={cn('flex-1 min-h-0 overflow-hidden relative', collapsed && 'hidden')}>
                     <div className={cn('absolute inset-0', activeTab !== 'Files' && 'hidden')}>
                         <FilesTab />
                     </div>
@@ -114,13 +100,26 @@ export function LeftPanel() {
                         <ChatPanel />
                     </div>
                 </div>
+
+                {/* Collapsed rail (keep tab content mounted above; only hide it) */}
+                <div className={cn('flex flex-col w-10 shrink-0 items-center pt-2 gap-1', !collapsed && 'hidden')}>
+                    <button
+                        onClick={() => setCollapsed(false)}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                        title="Expand panel"
+                    >
+                        <PanelLeft className="w-3.5 h-3.5" />
+                    </button>
+                </div>
             </div>
 
             {/* ── Drag handle ── */}
-            <div
-                onMouseDown={handleMouseDown}
-                className="absolute top-0 right-0 w-1 h-full cursor-col-resize z-10 hover:bg-primary/30 active:bg-primary/50 transition-colors"
-            />
+            {!collapsed && (
+                <div
+                    onMouseDown={handleMouseDown}
+                    className="absolute top-0 right-0 w-1 h-full cursor-col-resize z-10 hover:bg-primary/30 active:bg-primary/50 transition-colors"
+                />
+            )}
         </div>
     )
 }

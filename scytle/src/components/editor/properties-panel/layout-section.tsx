@@ -46,6 +46,12 @@ function modeToLayout(mode: LayoutMode, prev: Layout): Partial<Layout> {
     }
 }
 
+function shouldForceFixedSizingOnAutoLayout(node: FrameNode): boolean {
+    // Auto-layout hug sizing with no in-flow children collapses to 0x0.
+    // Figma keeps fixed dimensions in this edge case instead of making the frame invisible.
+    return node.children.every((child) => child.positioning === 'absolute')
+}
+
 const FLOW_OPTIONS: { value: LayoutMode; icon: React.ReactNode; label: string }[] = [
     { value: 'none', icon: <Move size={14} />, label: 'Free' },
     { value: 'flex-col', icon: <ArrowDown size={14} />, label: 'V' },
@@ -556,7 +562,7 @@ function DistributionDropdown({
             </button>
 
             {open && (
-                <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-50 py-1 min-w-[140px]">
+                <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-md shadow-lg z-50 py-1 min-w-35">
                     <button
                         className={cn(
                             'w-full px-3 py-1.5 text-[11px] text-left flex items-center gap-2 transition-colors',
@@ -887,6 +893,34 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
         onUpdate({ layout: { ...layout, ...partialLayout } })
     }
 
+    const handleModeChange = (nextMode: LayoutMode) => {
+        const partial = modeToLayout(nextMode, layout)
+        const updates: Record<string, unknown> = {
+            layout: { ...layout, ...partial },
+        }
+
+        // Prevent a visibility cliff when entering auto layout with no in-flow children.
+        if (nextMode !== 'none' && shouldForceFixedSizingOnAutoLayout(node)) {
+            const nextSizing = { ...node.sizing }
+            let changed = false
+
+            if (nextSizing.horizontal === 'hug') {
+                nextSizing.horizontal = 'fixed'
+                changed = true
+            }
+            if (nextSizing.vertical === 'hug') {
+                nextSizing.vertical = 'fixed'
+                changed = true
+            }
+
+            if (changed) {
+                updates.sizing = nextSizing
+            }
+        }
+
+        onUpdate(updates)
+    }
+
     const updatePadding = (partialPad: Partial<Padding>) => {
         onUpdate({ padding: { ...padding, ...partialPad } })
     }
@@ -906,10 +940,7 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                                         ? 'bg-background text-foreground shadow-sm'
                                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                                 )}
-                                onClick={() => {
-                                    const partial = modeToLayout(opt.value, layout)
-                                    updateLayout(partial)
-                                }}
+                                onClick={() => handleModeChange(opt.value)}
                                 title={opt.label}
                             >
                                 {opt.icon}
@@ -918,8 +949,8 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                         ))}
                     </div>
 
-                    {/* Wrap toggle — for both horizontal and vertical flex */}
-                    {(mode === 'flex-row' || mode === 'flex-col') && (
+                    {/* Wrap toggle — horizontal flow only */}
+                    {mode === 'flex-row' && (
                         <button
                             className={cn(
                                 'w-7 h-7 flex items-center justify-center rounded-sm transition-colors shrink-0',
@@ -994,7 +1025,7 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
                                         { value: 'stretch', label: 'Stretch' },
                                     ]}
                                     onChange={(v) => updateLayout({ wrapAlign: v === 'start' ? undefined : v as Layout['wrapAlign'] })}
-                                    className="w-[70px]"
+                                    className="w-17.5"
                                 />
                             </div>
                         )}
@@ -1109,7 +1140,6 @@ interface AutoLayoutChildSectionProps {
 export function AutoLayoutChildSection({ node, parentNode, onUpdate }: AutoLayoutChildSectionProps) {
     const isFlexParent = parentNode.layout.mode === 'flex'
     const isGridParent = parentNode.layout.mode === 'grid'
-    const updateNode = useEditorStore((s) => s.updateNode)
 
     if (!isFlexParent && !isGridParent) return null
 
