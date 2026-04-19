@@ -58,16 +58,16 @@ export function ProfileForm() {
         console.log('🔄 ProfileFormSync - Current User:', user);
         console.log('📦 Prefs:', user?.prefs);
         if (user) {
-            setName(prev => (prev !== user.name ? (user.name || '') : prev))
-            setEmail(prev => (prev !== user.email ? (user.email || '') : prev))
+            setName((prev: string) => (prev !== user.name ? (user.name || '') : prev))
+            setEmail((prev: string) => (prev !== user.email ? (user.email || '') : prev))
             
             const userRole = ((user.prefs?.role as string) || '').trim()
             console.log('📍 Syncing role to state:', userRole);
             console.log('✅ Is role valid?', ROLES.includes(userRole));
-            setRole(prev => (prev !== userRole ? userRole : prev))
+            setRole((prev: string) => (prev !== userRole ? userRole : prev))
             
             const userBio = (user.prefs?.bio as string) || ''
-            setBio(prev => (prev !== userBio ? userBio : prev))
+            setBio((prev: string) => (prev !== userBio ? userBio : prev))
         }
     }, [user?.$id, user?.name, user?.email, JSON.stringify(user?.prefs || {})])
 
