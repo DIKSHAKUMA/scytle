@@ -1,7 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
-import { Loader2, Save, Mail, User as UserIcon, Briefcase, Text, CheckCircle2 } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import {
+    Loader2,
+    Save,
+    Mail,
+    User as UserIcon,
+    Briefcase,
+    Text,
+    CheckCircle2,
+    ShieldAlert,
+    KeyRound,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,7 +26,6 @@ import {
 } from '@/components/ui/select'
 import { account } from '@/lib/appwrite'
 import { useAuthStore } from '@/store'
-import { cn } from '@/lib/utils'
 import {
     Dialog,
     DialogContent,
@@ -37,6 +46,16 @@ const ROLES = [
     'Other',
 ]
 
+const MAX_BIO_LENGTH = 200
+
+function getPreferenceString(value: unknown): string {
+    return typeof value === 'string' ? value : ''
+}
+
+function normalize(value: string): string {
+    return value.trim()
+}
+
 export function ProfileForm() {
     const { user, setUser, resetPassword: requestPasswordReset } = useAuthStore()
     const [isLoading, setIsLoading] = useState(false)
@@ -44,77 +63,95 @@ export function ProfileForm() {
     const [isResetSending, setIsResetSending] = useState(false)
     const [isVerifying, setIsVerifying] = useState(false)
     const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
-    
-    // Form state initialized directly from store to prevent navigation flickers
+
     const [name, setName] = useState(() => user?.name || '')
     const [email, setEmail] = useState(() => user?.email || '')
     const [pendingEmail, setPendingEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [role, setRole] = useState(() => (user?.prefs?.role as string) || '')
-    const [bio, setBio] = useState(() => (user?.prefs?.bio as string) || '')
+    const [role, setRole] = useState(() => getPreferenceString(user?.prefs?.role).trim())
+    const [bio, setBio] = useState(() => getPreferenceString(user?.prefs?.bio))
 
-    // Sync state when user is loaded
     React.useEffect(() => {
-        console.log('🔄 ProfileFormSync - Current User:', user);
-        console.log('📦 Prefs:', user?.prefs);
-        if (user) {
-            setName((prev: string) => (prev !== user.name ? (user.name || '') : prev))
-            setEmail((prev: string) => (prev !== user.email ? (user.email || '') : prev))
-            
-            const userRole = ((user.prefs?.role as string) || '').trim()
-            console.log('📍 Syncing role to state:', userRole);
-            console.log('✅ Is role valid?', ROLES.includes(userRole));
-            setRole((prev: string) => (prev !== userRole ? userRole : prev))
-            
-            const userBio = (user.prefs?.bio as string) || ''
-            setBio((prev: string) => (prev !== userBio ? userBio : prev))
-        }
-    }, [user?.$id, user?.name, user?.email, JSON.stringify(user?.prefs || {})])
+        if (!user) return
+
+        setName(user.name || '')
+        setEmail(user.email || '')
+        setRole(getPreferenceString(user.prefs?.role).trim())
+        setBio(getPreferenceString(user.prefs?.bio))
+    }, [user?.$id, user?.name, user?.email, user?.prefs?.role, user?.prefs?.bio])
+
+    const normalizedName = normalize(name)
+    const normalizedRole = normalize(role)
+    const normalizedBio = normalize(bio)
+
+    const hasChanges = useMemo(() => {
+        const currentName = normalize(user?.name || '')
+        const currentRole = normalize(getPreferenceString(user?.prefs?.role))
+        const currentBio = normalize(getPreferenceString(user?.prefs?.bio))
+
+        return (
+            normalizedName !== currentName ||
+            normalizedRole !== currentRole ||
+            normalizedBio !== currentBio
+        )
+    }, [normalizedName, normalizedRole, normalizedBio, user?.name, user?.prefs?.role, user?.prefs?.bio])
 
     const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        if (!user) {
+            toast.error('Please sign in again to update your profile.')
+            return
+        }
+
+        if (!normalizedName) {
+            toast.error('Name cannot be empty.')
+            return
+        }
+
+        if (normalizedBio.length > MAX_BIO_LENGTH) {
+            toast.error(`Bio must be ${MAX_BIO_LENGTH} characters or less.`)
+            return
+        }
+
+        if (!hasChanges) {
+            toast('No changes to save.')
+            return
+        }
+
         setIsLoading(true)
-        console.log('💾 Saving profile...', { name, role, bio });
 
         try {
-            // 1. Update name if changed
-            if (name !== user?.name) {
-                console.log('📝 Updating name to:', name);
-                await account.updateName(name)
+            if (normalizedName !== normalize(user.name || '')) {
+                await account.updateName(normalizedName)
             }
 
-            // 2. Update preferences (role, bio)
-            console.log('⚙️ Fetching current prefs before update...');
-            let currentPrefs = {}
+            let currentPrefs: Record<string, unknown> = {}
             try {
-                currentPrefs = await account.getPrefs()
-                console.log('📄 Current prefs from server:', currentPrefs);
-            } catch (e) {
-                console.warn('Could not fetch prefs, starting with empty', e)
+                currentPrefs = (await account.getPrefs()) as Record<string, unknown>
+            } catch {
+                currentPrefs = {}
             }
-            
-            const newPrefs = { ...currentPrefs, role, bio }
-            console.log('🚀 Sending new prefs to Appwrite:', newPrefs);
+
+            const newPrefs = {
+                ...currentPrefs,
+                role: normalizedRole,
+                bio: normalizedBio,
+            }
             await account.updatePrefs(newPrefs)
 
-            // 3. Sync local store with FRESH data from server
-            console.log('🔄 Fetching fresh user data after save...');
             const { getUser } = await import('@/lib/appwrite')
-            const fresUser = await getUser()
-            console.log('✅ Fresh user data received:', fresUser);
-            
-            if (fresUser) {
-                setUser(fresUser)
-                console.log('✨ Auth store updated with fresh user');
+            const freshUser = await getUser()
+            if (freshUser) {
+                setUser(freshUser)
             }
-            
-            // 4. Success feedback
+
             setIsSaved(true)
             toast.success('Profile updated successfully')
             setTimeout(() => setIsSaved(false), 3000)
-        } catch (error: any) {
-            console.error('❌ Failed to update profile:', error)
-            toast.error(error.message || 'Failed to update profile')
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to update profile'
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -122,25 +159,48 @@ export function ProfileForm() {
 
     const handleEmailUpdate = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        const nextEmail = pendingEmail.trim().toLowerCase()
+        if (!nextEmail) {
+            toast.error('Please enter a valid email.')
+            return
+        }
+
+        if (!password) {
+            toast.error('Please enter your current password.')
+            return
+        }
+
+        if (nextEmail === email.toLowerCase()) {
+            toast('This is already your current email.')
+            return
+        }
+
         setIsLoading(true)
 
         try {
-            await account.updateEmail(pendingEmail, password)
-            
-            // Send verification email to the new address
+            await account.updateEmail(nextEmail, password)
+
             const { sendVerificationEmail } = useAuthStore.getState()
             await sendVerificationEmail()
-            
-            // If successful, update local user
-            const updatedUser = { ...user!, email: pendingEmail, emailVerification: false }
-            setUser(updatedUser)
-            setEmail(pendingEmail)
+
+            const updatedUser = user
+                ? { ...user, email: nextEmail, emailVerification: false }
+                : null
+
+            if (updatedUser) {
+                setUser(updatedUser)
+            }
+
+            setEmail(nextEmail)
             setIsEmailDialogOpen(false)
             setPassword('')
             toast.success('Email updated! Please check your new inbox for verification.')
-        } catch (error: any) {
-            console.error('Email update failed:', error)
-            toast.error(error.message || 'Failed to update email. Please check your password.')
+        } catch (error: unknown) {
+            const message = error instanceof Error
+                ? error.message
+                : 'Failed to update email. Please check your password.'
+            toast.error(message)
         } finally {
             setIsLoading(false)
         }
@@ -154,8 +214,7 @@ export function ProfileForm() {
             if (success) {
                 toast.success('Verification email sent!')
             }
-        } catch (error) {
-            console.error('Failed to resend verification:', error)
+        } catch {
             toast.error('Failed to resend verification')
         } finally {
             setIsVerifying(false)
@@ -169,11 +228,12 @@ export function ProfileForm() {
         try {
             const success = await requestPasswordReset(user.email)
             if (success) {
-                alert(`Password reset instructions have been sent to ${user.email}`)
+                toast.success(`Password reset instructions sent to ${user.email}`)
+            } else {
+                toast.error('Failed to send reset email. Please try again.')
             }
-        } catch (error) {
-            console.error('Failed to send reset email:', error)
-            alert('Failed to send reset email. Please try again later.')
+        } catch {
+            toast.error('Failed to send reset email. Please try again later.')
         } finally {
             setIsResetSending(false)
         }
@@ -181,149 +241,177 @@ export function ProfileForm() {
 
     const openEmailDialog = () => {
         setPendingEmail(email)
+        setPassword('')
         setIsEmailDialogOpen(true)
     }
 
     return (
-        <div className="space-y-8">
-            <form onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="grid grid-cols-1 gap-6">
-                    {/* Name */}
-                    <div className="space-y-2">
-                        <Label htmlFor="name" className="text-sm font-medium flex items-center gap-2">
-                            <UserIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                            Full Name
-                        </Label>
-                        <Input
-                            id="name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Your name"
-                            className="bg-muted/40 backdrop-blur-sm border-border/40 focus:bg-background/80 transition-all rounded-xl focus:ring-accent/10"
-                        />
-                    </div>
+        <div className="space-y-8 pb-10">
+            <form onSubmit={handleSaveProfile}>
+                <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+                    <div className="p-6 sm:p-8 space-y-6">
+                        <div>
+                            <h2 className="text-lg font-medium text-foreground">Personal Information</h2>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Update your personal details and public profile.
+                            </p>
+                        </div>
 
-                    {/* Email (Trigger Dialog) */}
-                    <div className="space-y-2">
-                        <Label htmlFor="email" className="text-sm font-medium flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                                Email Address
+                        <div className="grid gap-6 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="name" className="text-sm font-medium">Full Name</Label>
+                                <Input
+                                    id="name"
+                                    value={name}
+                                    onChange={(e) => {
+                                        setName(e.target.value)
+                                        setIsSaved(false)
+                                    }}
+                                    className="h-10 bg-background"
+                                />
                             </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="role" className="text-sm font-medium">Role</Label>
+                                <Select
+                                    value={role || undefined}
+                                    onValueChange={(value) => {
+                                        setRole(value)
+                                        setIsSaved(false)
+                                    }}
+                                >
+                                    <SelectTrigger className="h-10 bg-background">
+                                        <SelectValue placeholder="Select your role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {ROLES.map((option) => (
+                                            <SelectItem key={option} value={option}>
+                                                {option}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="bio" className="text-sm font-medium">Short Bio</Label>
+                            <Textarea
+                                id="bio"
+                                value={bio}
+                                onChange={(e) => {
+                                    setBio(e.target.value.slice(0, MAX_BIO_LENGTH))
+                                    setIsSaved(false)
+                                }}
+                                rows={4}
+                                placeholder="Share a short intro about your expertise..."
+                                className="resize-none bg-background"
+                            />
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span>Keep it concise and clear.</span>
+                                <span>{bio.length}/{MAX_BIO_LENGTH}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">Please use a maximum of 200 characters.</p>
+                        <Button type="submit" disabled={isLoading || !hasChanges}>
+                            {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Save changes
+                        </Button>
+                    </div>
+                </section>
+            </form>
+
+            <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+                <div className="p-6 sm:p-8 space-y-4">
+                    <div>
+                        <h2 className="text-lg font-medium text-foreground">Email Address</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            The email address associated with your account.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Input
+                            readOnly
+                            value={email}
+                            className="max-w-md h-10 bg-muted/50 text-muted-foreground font-mono text-sm"
+                        />
+                        <div className="flex items-center gap-2">
                             {user?.emailVerification ? (
-                                <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
                                     Verified
                                 </span>
                             ) : (
-                                <button 
-                                    type="button"
-                                    onClick={handleResendVerification}
-                                    disabled={isVerifying}
-                                    className="text-[10px] text-amber-500 font-bold uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full hover:bg-amber-500/20 transition-colors"
-                                >
-                                    {isVerifying ? 'Sending...' : 'Unverified - Verify Now'}
-                                </button>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                    <ShieldAlert className="w-3.5 h-3.5" />
+                                    Unverified
+                                </span>
                             )}
-                        </Label>
-                        <div className="flex gap-2">
-                            <Input
-                                id="email"
-                                value={email}
-                                readOnly
-                                className="bg-muted/20 text-muted-foreground cursor-not-allowed border-dashed rounded-xl"
-                            />
-                            <Button 
-                                type="button" 
-                                variant="outline" 
-                                onClick={openEmailDialog}
-                                className="shrink-0 rounded-xl hover:bg-foreground hover:text-background transition-all duration-300 border-border/60 hover:border-foreground active:scale-95"
-                            >
-                                Change
-                            </Button>
                         </div>
                     </div>
-
-                    {/* Role */}
-                    <div className="space-y-2">
-                        <Label htmlFor="role" className="text-sm font-medium flex items-center gap-2">
-                            <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
-                            What do you do?
-                        </Label>
-                        <Select 
-                            value={role || undefined} 
-                            onValueChange={setRole}
-                        >
-                            <SelectTrigger className="w-full bg-muted/40 backdrop-blur-sm border-border/40 focus:bg-background/80 rounded-xl h-11">
-                                <SelectValue placeholder="Select your role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {ROLES.map((r) => (
-                                    <SelectItem key={r} value={r}>
-                                        {r}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                </div>
+                <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex flex-wrap items-center justify-between gap-4">
+                    <p className="text-sm text-muted-foreground">We will email you to verify the change.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {!user?.emailVerification && (
+                            <Button variant="outline" onClick={handleResendVerification} disabled={isVerifying}>
+                                {isVerifying ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                Resend verification
+                            </Button>
+                        )}
+                        <Button variant="secondary" onClick={openEmailDialog}>
+                            Change email
+                        </Button>
                     </div>
+                </div>
+            </section>
 
-                    {/* Bio */}
-                    <div className="space-y-2">
-                        <Label htmlFor="bio" className="text-sm font-medium flex items-center gap-2">
-                            <Text className="w-3.5 h-3.5 text-muted-foreground" />
-                            Personal Bio
-                        </Label>
-                        <Textarea
-                            id="bio"
-                            value={bio}
-                            onChange={(e) => setBio(e.target.value)}
-                            placeholder="Tell us about yourself..."
-                            rows={4}
-                            className="bg-muted/40 backdrop-blur-sm border-border/40 focus:bg-background/80 transition-all resize-none rounded-xl focus:ring-accent/10"
-                        />
-                        <p className="text-[11px] text-muted-foreground">
-                            Keep it short and sweet. Max 200 characters.
+            <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+                <div className="p-6 sm:p-8 space-y-4">
+                    <div>
+                        <h2 className="text-lg font-medium text-foreground">Password & Security</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Secure your account by updating your password.
                         </p>
                     </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <Input
+                            readOnly
+                            type="password"
+                            value="password1234"
+                            className="max-w-md h-10 bg-muted/50 text-muted-foreground"
+                        />
+                    </div>
                 </div>
-
-                <div className="pt-4 flex justify-end">
-                    <Button 
-                        type="submit" 
-                        disabled={isLoading || isSaved}
-                        className={cn(
-                            "min-w-40 rounded-full shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                            isSaved 
-                                ? "bg-emerald-500 text-white hover:bg-emerald-600" 
-                                : "bg-foreground text-background hover:opacity-90 shadow-foreground/10"
-                        )}
-                    >
-                        {isLoading ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : null}
-                        {isSaved ? 'Saved' : 'Save'}
+                <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between gap-4">
+                    <p className="text-sm text-muted-foreground">A secure reset link will be sent to your inbox.</p>
+                    <Button variant="outline" onClick={handleForgotPassword} disabled={isResetSending}>
+                        {isResetSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
+                        Reset password
                     </Button>
                 </div>
-            </form>
+            </section>
 
-            {/* Email Change Dialog */}
             <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>Change Email Address</DialogTitle>
+                        <DialogTitle>Change Email</DialogTitle>
                         <DialogDescription>
-                            Enter your new email and confirm with your current password.
+                            Enter your new email and confirm with your password.
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleEmailUpdate} className="space-y-4 py-4">
+                    <form onSubmit={handleEmailUpdate} className="space-y-4 pt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="new-email">New Email</Label>
+                            <Label htmlFor="new-email">New Email Address</Label>
                             <Input
                                 id="new-email"
                                 type="email"
                                 value={pendingEmail}
                                 onChange={(e) => setPendingEmail(e.target.value)}
                                 required
+                                className="h-10"
                             />
                         </div>
                         <div className="space-y-2">
@@ -334,28 +422,14 @@ export function ProfileForm() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                className="h-10"
                             />
-                        </div>
-                        <div className="flex items-center justify-between pt-1">
-                            <span className="text-sm text-muted-foreground italic">Forgot your current password?</span>
-                            <Button 
-                                type="button" 
-                                variant="link" 
-                                onClick={handleForgotPassword}
-                                disabled={isResetSending}
-                                className="h-auto p-0 text-accent font-medium hover:text-accent/80"
-                            >
-                                {isResetSending ? 'Sending...' : 'Reset it here'}
-                            </Button>
                         </div>
 
                         <DialogFooter className="pt-4">
-                            <Button type="button" variant="ghost" onClick={() => setIsEmailDialogOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={isLoading}>
+                            <Button type="submit" disabled={isLoading} className="w-full">
                                 {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                                Update Email
+                                Confirm Change
                             </Button>
                         </DialogFooter>
                     </form>
