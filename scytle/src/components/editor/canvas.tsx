@@ -597,8 +597,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     return
                 }
 
-                // Cmd/Ctrl+Click → deep select (bypass all parent frames)
-                const isDeepSelect = (e.metaKey || e.ctrlKey) && !e.shiftKey
+                // Cmd/Ctrl modifier enables deep target resolution.
+                // Combined with Shift, this becomes deep multi-select.
+                const isDeepSelect = e.metaKey || e.ctrlKey
                 const nodeId = resolveClickTarget(target, isDeepSelect)
 
                 if (nodeId) {

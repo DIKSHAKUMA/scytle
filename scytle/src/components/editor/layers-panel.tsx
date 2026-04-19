@@ -81,7 +81,10 @@ interface LayerRowProps {
     isDragOver: 'above' | 'below' | 'inside' | null
     renamingId: string | null
     onToggleExpand: (id: string) => void
-    onSelect: (id: string, addToSelection: boolean) => void
+    onSelect: (
+        id: string,
+        modifiers: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }
+    ) => void
     onToggleVisibility: (id: string) => void
     onStartRename: (id: string) => void
     onCommitRename: (id: string, name: string) => void
@@ -219,7 +222,11 @@ function LayerRow({
                 } else {
                     // Single click → select
                     lastClickRef.current = { id: node.id, time: now }
-                    onSelect(node.id, e.shiftKey || e.metaKey)
+                    onSelect(node.id, {
+                        shiftKey: e.shiftKey,
+                        metaKey: e.metaKey,
+                        ctrlKey: e.ctrlKey,
+                    })
                 }
             }}
         >
@@ -320,7 +327,10 @@ interface LayerTreeProps {
     dragOverState: { id: string; position: 'above' | 'below' | 'inside' } | null
     renamingId: string | null
     onToggleExpand: (id: string) => void
-    onSelect: (id: string, addToSelection: boolean) => void
+    onSelect: (
+        id: string,
+        modifiers: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }
+    ) => void
     onToggleVisibility: (id: string) => void
     onStartRename: (id: string) => void
     onCommitRename: (id: string, name: string) => void
@@ -426,6 +436,7 @@ export function LayersPanel() {
         position: 'above' | 'below' | 'inside'
     } | null>(null)
     const dragSourceId = useRef<string | null>(null)
+    const lastSelectedLayerIdRef = useRef<string | null>(null)
 
     // Auto-expand top-level frames when nodes load/change
     const prevNodeLenRef = useRef(0)
@@ -489,9 +500,42 @@ export function LayersPanel() {
         })
     }, [])
 
-    const handleSelect = useCallback((id: string, addToSelection: boolean) => {
-        useEditorStore.getState().selectNode(id, addToSelection)
-    }, [])
+    const handleSelect = useCallback((
+        id: string,
+        modifiers: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }
+    ) => {
+        const { shiftKey, metaKey, ctrlKey } = modifiers
+        const isToggle = metaKey || ctrlKey
+        const state = useEditorStore.getState()
+
+        if (shiftKey) {
+            const orderedIds = getVisibleNodeIdsInOrder(nodes, expandedIds)
+            const anchorId =
+                lastSelectedLayerIdRef.current ??
+                state.selectedIds[state.selectedIds.length - 1] ??
+                id
+
+            const anchorIndex = orderedIds.indexOf(anchorId)
+            const targetIndex = orderedIds.indexOf(id)
+
+            if (anchorIndex !== -1 && targetIndex !== -1) {
+                const from = Math.min(anchorIndex, targetIndex)
+                const to = Math.max(anchorIndex, targetIndex)
+                const rangeIds = orderedIds.slice(from, to + 1)
+
+                const nextIds = isToggle
+                    ? Array.from(new Set([...state.selectedIds, ...rangeIds]))
+                    : rangeIds
+
+                state.setSelectedIds(nextIds)
+                lastSelectedLayerIdRef.current = id
+                return
+            }
+        }
+
+        state.selectNode(id, isToggle || shiftKey)
+        lastSelectedLayerIdRef.current = id
+    }, [nodes, expandedIds])
 
     const handleToggleVisibility = useCallback((id: string) => {
         const storeNodes = useEditorStore.getState().nodes
@@ -572,6 +616,15 @@ export function LayersPanel() {
         }
     }, [])
 
+    const cleanupDrag = useCallback((e: DragEvent) => {
+        setDragOverState(null)
+        dragSourceId.current = null
+        // Reset ghost opacity
+        if (e.currentTarget instanceof HTMLElement) {
+            e.currentTarget.style.opacity = ''
+        }
+    }, [])
+
     const handleDrop = useCallback((e: DragEvent, targetId: string) => {
         e.preventDefault()
 
@@ -602,16 +655,7 @@ export function LayersPanel() {
         }
 
         cleanupDrag(e)
-    }, [dragOverState])
-
-    const cleanupDrag = (e: DragEvent) => {
-        setDragOverState(null)
-        dragSourceId.current = null
-        // Reset ghost opacity
-        if (e.currentTarget instanceof HTMLElement) {
-            e.currentTarget.style.opacity = ''
-        }
-    }
+    }, [dragOverState, cleanupDrag])
 
     // Handle dragend to restore opacity if drop doesn't fire
     useEffect(() => {
@@ -667,6 +711,22 @@ export function LayersPanel() {
 // ============================================================
 // Helpers
 // ============================================================
+
+function getVisibleNodeIdsInOrder(nodes: ScytleNode[], expandedIds: Set<string>): string[] {
+    const ids: string[] = []
+
+    const visit = (items: ScytleNode[]) => {
+        for (const node of items) {
+            ids.push(node.id)
+            if (node.type === 'frame' && expandedIds.has(node.id)) {
+                visit((node as FrameNode).children)
+            }
+        }
+    }
+
+    visit(nodes)
+    return ids
+}
 
 /** Find a node by ID from a tree (non-immer, read-only) */
 function findNodeFromTree(nodes: ScytleNode[], id: string): ScytleNode | null {
