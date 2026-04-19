@@ -42,53 +42,79 @@ export function ProfileForm() {
     const [isLoading, setIsLoading] = useState(false)
     const [isSaved, setIsSaved] = useState(false)
     const [isResetSending, setIsResetSending] = useState(false)
+    const [isVerifying, setIsVerifying] = useState(false)
     const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false)
     
-    // Form state
-    const [name, setName] = useState('')
-    const [email, setEmail] = useState('')
+    // Form state initialized directly from store to prevent navigation flickers
+    const [name, setName] = useState(() => user?.name || '')
+    const [email, setEmail] = useState(() => user?.email || '')
     const [pendingEmail, setPendingEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [role, setRole] = useState('')
-    const [bio, setBio] = useState('')
+    const [role, setRole] = useState(() => (user?.prefs?.role as string) || '')
+    const [bio, setBio] = useState(() => (user?.prefs?.bio as string) || '')
 
     // Sync state when user is loaded
     React.useEffect(() => {
+        console.log('🔄 ProfileFormSync - Current User:', user);
+        console.log('📦 Prefs:', user?.prefs);
         if (user) {
-            setName(user.name || '')
-            setEmail(user.email || '')
-            setRole((user.prefs?.role as string) || '')
-            setBio((user.prefs?.bio as string) || '')
+            setName(prev => (prev !== user.name ? (user.name || '') : prev))
+            setEmail(prev => (prev !== user.email ? (user.email || '') : prev))
+            
+            const userRole = ((user.prefs?.role as string) || '').trim()
+            console.log('📍 Syncing role to state:', userRole);
+            console.log('✅ Is role valid?', ROLES.includes(userRole));
+            setRole(prev => (prev !== userRole ? userRole : prev))
+            
+            const userBio = (user.prefs?.bio as string) || ''
+            setBio(prev => (prev !== userBio ? userBio : prev))
         }
-    }, [user?.name, user?.email, user?.prefs?.role, user?.prefs?.bio])
+    }, [user?.$id, user?.name, user?.email, JSON.stringify(user?.prefs || {})])
 
     const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsLoading(true)
+        console.log('💾 Saving profile...', { name, role, bio });
 
         try {
             // 1. Update name if changed
             if (name !== user?.name) {
+                console.log('📝 Updating name to:', name);
                 await account.updateName(name)
             }
 
             // 2. Update preferences (role, bio)
-            // Fetch latest to avoid overwriting recent changes from other components (like avatar)
-            const currentPrefs = await account.getPrefs()
+            console.log('⚙️ Fetching current prefs before update...');
+            let currentPrefs = {}
+            try {
+                currentPrefs = await account.getPrefs()
+                console.log('📄 Current prefs from server:', currentPrefs);
+            } catch (e) {
+                console.warn('Could not fetch prefs, starting with empty', e)
+            }
+            
             const newPrefs = { ...currentPrefs, role, bio }
+            console.log('🚀 Sending new prefs to Appwrite:', newPrefs);
             await account.updatePrefs(newPrefs)
 
-            // 3. Sync local store
-            const updatedUser = { ...user!, name, prefs: newPrefs }
-            setUser(updatedUser)
+            // 3. Sync local store with FRESH data from server
+            console.log('🔄 Fetching fresh user data after save...');
+            const { getUser } = await import('@/lib/appwrite')
+            const fresUser = await getUser()
+            console.log('✅ Fresh user data received:', fresUser);
+            
+            if (fresUser) {
+                setUser(fresUser)
+                console.log('✨ Auth store updated with fresh user');
+            }
             
             // 4. Success feedback
             setIsSaved(true)
             toast.success('Profile updated successfully')
             setTimeout(() => setIsSaved(false), 3000)
-        } catch (error) {
-            console.error('Failed to update profile:', error)
-            toast.error('Failed to update profile')
+        } catch (error: any) {
+            console.error('❌ Failed to update profile:', error)
+            toast.error(error.message || 'Failed to update profile')
         } finally {
             setIsLoading(false)
         }
@@ -101,17 +127,38 @@ export function ProfileForm() {
         try {
             await account.updateEmail(pendingEmail, password)
             
+            // Send verification email to the new address
+            const { sendVerificationEmail } = useAuthStore.getState()
+            await sendVerificationEmail()
+            
             // If successful, update local user
-            const updatedUser = { ...user!, email: pendingEmail }
+            const updatedUser = { ...user!, email: pendingEmail, emailVerification: false }
             setUser(updatedUser)
             setEmail(pendingEmail)
             setIsEmailDialogOpen(false)
             setPassword('')
+            toast.success('Email updated! Please check your new inbox for verification.')
         } catch (error: any) {
             console.error('Email update failed:', error)
-            alert(error.message || 'Failed to update email. Please check your password.')
+            toast.error(error.message || 'Failed to update email. Please check your password.')
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleResendVerification = async () => {
+        setIsVerifying(true)
+        try {
+            const { sendVerificationEmail } = useAuthStore.getState()
+            const success = await sendVerificationEmail()
+            if (success) {
+                toast.success('Verification email sent!')
+            }
+        } catch (error) {
+            console.error('Failed to resend verification:', error)
+            toast.error('Failed to resend verification')
+        } finally {
+            setIsVerifying(false)
         }
     }
 
@@ -158,16 +205,33 @@ export function ProfileForm() {
 
                     {/* Email (Trigger Dialog) */}
                     <div className="space-y-2">
-                        <Label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
-                            <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                            Email Address
+                        <Label htmlFor="email" className="text-sm font-medium flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                                Email Address
+                            </div>
+                            {user?.emailVerification ? (
+                                <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <CheckCircle2 className="w-2.5 h-2.5" />
+                                    Verified
+                                </span>
+                            ) : (
+                                <button 
+                                    type="button"
+                                    onClick={handleResendVerification}
+                                    disabled={isVerifying}
+                                    className="text-[10px] text-amber-500 font-bold uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full hover:bg-amber-500/20 transition-colors"
+                                >
+                                    {isVerifying ? 'Sending...' : 'Unverified - Verify Now'}
+                                </button>
+                            )}
                         </Label>
                         <div className="flex gap-2">
                             <Input
                                 id="email"
                                 value={email}
                                 readOnly
-                                className="bg-muted/20 text-muted-foreground cursor-not-allowed border-dashed"
+                                className="bg-muted/20 text-muted-foreground cursor-not-allowed border-dashed rounded-xl"
                             />
                             <Button 
                                 type="button" 
@@ -186,8 +250,11 @@ export function ProfileForm() {
                             <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
                             What do you do?
                         </Label>
-                        <Select value={role} onValueChange={setRole}>
-                            <SelectTrigger className="bg-muted/40 backdrop-blur-sm border-border/40 focus:bg-background/80 rounded-xl">
+                        <Select 
+                            value={role || undefined} 
+                            onValueChange={setRole}
+                        >
+                            <SelectTrigger className="w-full bg-muted/40 backdrop-blur-sm border-border/40 focus:bg-background/80 rounded-xl h-11">
                                 <SelectValue placeholder="Select your role" />
                             </SelectTrigger>
                             <SelectContent>

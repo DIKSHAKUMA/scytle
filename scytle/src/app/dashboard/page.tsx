@@ -115,34 +115,18 @@ export default function DashboardPage() {
         }
     }, [createProject, projects, router, isCreating])
 
-    // Check authentication on mount
+    // Fetch data when authenticated
     useEffect(() => {
-        let cancelled = false
-        useProjectStore.setState({ isLoading: false })
-
-        const verifyAuth = async () => {
-            try {
-                const { getUser } = await import('@/lib/appwrite')
-                const currentUser = await getUser()
-                if (cancelled) return
-                if (currentUser) {
-                    setIsAuthenticated(true)
-                    setUser(currentUser)
-                    fetchProjects()
-                    setAuthChecked(true)
-                } else {
-                    setAuthChecked(true)
-                    window.location.href = '/login?redirect=/dashboard'
-                }
-            } catch {
-                if (cancelled) return
-                setAuthChecked(true)
-                window.location.href = '/login?redirect=/dashboard'
-            }
+        if (user) {
+            setIsAuthenticated(true)
+            setAuthChecked(true)
+            fetchProjects()
+        } else if (!useAuthStore.getState().isLoading) {
+            // If checkSession finished and no user, redirect
+            setAuthChecked(true)
+            router.push('/login?redirect=/dashboard')
         }
-        verifyAuth()
-        return () => { cancelled = true }
-    }, [setUser, fetchProjects])
+    }, [user, fetchProjects, router])
 
     // Staggered mount animation
     useEffect(() => {

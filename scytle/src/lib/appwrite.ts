@@ -172,3 +172,43 @@ export async function resetPassword(email: string) {
         return { success: false, error: error instanceof Error ? error.message : 'Reset failed' }
     }
 }
+
+/**
+ * Complete password reset
+ */
+export async function completePasswordReset(userId: string, secret: string, password: string) {
+    try {
+        await account.updateRecovery(userId, secret, password)
+        return { success: true }
+    } catch (error) {
+        console.error('❌ Password reset completion failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Reset completion failed' }
+    }
+}
+
+/**
+ * Send email verification
+ */
+export async function sendVerificationEmail() {
+    try {
+        const verifyUrl = `${window.location.origin}/verify-email`
+        await account.createVerification(verifyUrl)
+        return { success: true }
+    } catch (error) {
+        console.error('❌ Email verification request failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Verification request failed' }
+    }
+}
+
+/**
+ * Complete email verification
+ */
+export async function verifyEmail(userId: string, secret: string) {
+    try {
+        await account.updateVerification(userId, secret)
+        return { success: true }
+    } catch (error) {
+        console.error('❌ Email verification completion failed:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Verification failed' }
+    }
+}

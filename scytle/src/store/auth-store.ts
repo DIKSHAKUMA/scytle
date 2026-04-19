@@ -10,6 +10,9 @@ import {
     getUser,
     loginWithOAuth,
     resetPassword as appwriteResetPassword,
+    completePasswordReset as appwriteCompleteReset,
+    sendVerificationEmail as appwriteSendVerification,
+    verifyEmail as appwriteVerifyEmail,
 } from '@/lib/appwrite'
 
 interface AuthState {
@@ -26,6 +29,9 @@ interface AuthState {
     loginWithGoogle: () => void
     loginWithGithub: () => void
     resetPassword: (email: string) => Promise<boolean>
+    completePasswordReset: (userId: string, secret: string, password: string) => Promise<boolean>
+    sendVerificationEmail: () => Promise<boolean>
+    verifyEmail: (userId: string, secret: string) => Promise<boolean>
     checkSession: () => Promise<void>
     clearError: () => void
     setUser: (user: Models.User<Models.Preferences> | null) => void
@@ -56,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
                 })
 
                 const result = await appwriteLogin(email, password)
+                console.log('🔐 Login attempt result:', result.success ? 'Success' : 'Failed')
 
                 if (result.success) {
                     const user = await getUser()
@@ -157,14 +164,79 @@ export const useAuthStore = create<AuthState>()(
                 return result.success
             },
 
+            // Complete password reset
+            completePasswordReset: async (userId, secret, password) => {
+                set(state => {
+                    state.isLoading = true
+                    state.error = null
+                })
+
+                const result = await appwriteCompleteReset(userId, secret, password)
+
+                set(state => {
+                    state.isLoading = false
+                    if (!result.success) {
+                        state.error = result.error || 'Password reset failed'
+                    }
+                })
+
+                return result.success
+            },
+
+            // Send verification email
+            sendVerificationEmail: async () => {
+                set(state => {
+                    state.isLoading = true
+                    state.error = null
+                })
+
+                const result = await appwriteSendVerification()
+
+                set(state => {
+                    state.isLoading = false
+                    if (!result.success) {
+                        state.error = result.error || 'Failed to send verification email'
+                    }
+                })
+
+                return result.success
+            },
+
+            // Verify email
+            verifyEmail: async (userId, secret) => {
+                set(state => {
+                    state.isLoading = true
+                    state.error = null
+                })
+
+                const result = await appwriteVerifyEmail(userId, secret)
+
+                if (result.success) {
+                    const user = await getUser()
+                    set(state => {
+                        state.user = user
+                        state.isLoading = false
+                    })
+                } else {
+                    set(state => {
+                        state.isLoading = false
+                        state.error = result.error || 'Email verification failed'
+                    })
+                }
+
+                return result.success
+            },
+
             // Check existing session
             checkSession: async () => {
                 set(state => {
                     state.isLoading = true
                 })
 
+                console.log('🔍 Checking session...')
                 try {
                     const user = await getUser()
+                    console.log('👤 Session user found:', user ? `${user.name} (${user.email})` : 'None')
                     set(state => {
                         state.user = user
                         state.isAuthenticated = !!user

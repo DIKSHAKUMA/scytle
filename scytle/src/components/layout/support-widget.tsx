@@ -80,7 +80,7 @@ export function SupportWidget() {
                 <PopoverTrigger asChild>
                     <Button 
                         size="icon" 
-                        className="h-14 w-14 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] bg-[#1A1A1A] hover:bg-black text-white hover:scale-[1.04] active:scale-[0.96] transition-all duration-300 border border-white/5"
+                        className="h-12 w-12 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] bg-[#1A1A1A] hover:bg-black text-white hover:scale-[1.04] active:scale-[0.96] transition-all duration-300 border border-white/5"
                     >
                         {isPopoverOpen ? <X className="w-6 h-6" /> : <HelpCircle className="w-[26px] h-[26px] stroke-[1.5]" />}
                     </Button>

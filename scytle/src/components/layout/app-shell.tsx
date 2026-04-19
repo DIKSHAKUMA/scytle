@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
     Zap,
     LayoutDashboard,
@@ -44,9 +44,16 @@ interface AppShellProps {
 export function AppShell({ children, hideNav = false }: AppShellProps) {
     const pathname = usePathname()
     const router = useRouter()
-    const { user, logout } = useAuthStore()
+    const { user, logout, checkSession, isLoading: isAuthLoading } = useAuthStore()
     const { projects, createProject } = useProjectStore()
     const [isCreating, setIsCreating] = useState(false)
+
+    // Verify session on mount
+    useEffect(() => {
+        if (!user) {
+            checkSession()
+        }
+    }, [user, checkSession])
 
     const handleNewProject = useCallback(async () => {
         if (isCreating) return
@@ -140,7 +147,11 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                         )}
 
                         {/* User Menu / Login Buttons */}
-                        {user ? (
+                        {isAuthLoading && !user ? (
+                            <div className="flex items-center justify-center w-8 h-8">
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/60" />
+                            </div>
+                        ) : user ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button className="flex items-center rounded-full p-0.5 hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20">
