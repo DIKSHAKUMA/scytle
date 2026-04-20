@@ -76,21 +76,16 @@ export function NumberInput({
     const inputRef = useRef<HTMLInputElement>(null)
     const arrowRafRef = useRef<number>(0)
     const pendingArrowValueRef = useRef<number | null>(null)
-    const latestValueRef = useRef(value)
-    const latestOnChangeRef = useRef(onChange)
-
-    latestValueRef.current = value
-    latestOnChangeRef.current = onChange
 
     const flushScheduledArrowChange = useCallback(() => {
         arrowRafRef.current = 0
         const next = pendingArrowValueRef.current
         pendingArrowValueRef.current = null
         if (next === null) return
-        if (next !== latestValueRef.current) {
-            latestOnChangeRef.current(next)
+        if (next !== value) {
+            onChange(next)
         }
-    }, [])
+    }, [onChange, value])
 
     const scheduleArrowChange = useCallback((next: number) => {
         pendingArrowValueRef.current = next

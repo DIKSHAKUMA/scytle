@@ -307,7 +307,6 @@ export function HoverOverlay({
         if (isNodeResizeActive) {
             if (rectRef.current !== null) {
                 rectRef.current = null
-                setRect(null)
             }
             return () => {
                 isMountedRef.current = false
@@ -425,7 +424,6 @@ export function PaddingOverlay({
         if (isNodeResizeActive) {
             if (rectRef.current !== null) {
                 rectRef.current = null
-                setRect(null)
             }
             return () => {
                 isMountedRef.current = false
@@ -644,7 +642,6 @@ export function CanvasPaddingZones({
         if (isNodeResizeActive) {
             if (rectRef.current !== null) {
                 rectRef.current = null
-                setRect(null)
             }
             return () => {
                 isMountedRef.current = false
@@ -1353,8 +1350,6 @@ export function CanvasGapZones({
             if (gapZonesRef.current.length > 0 || prevFrameRectRef.current !== null) {
                 gapZonesRef.current = []
                 prevFrameRectRef.current = null
-                setGapZones([])
-                setFrameRect(null)
             }
             return () => {
                 isMountedRef.current = false

@@ -687,8 +687,14 @@ export function useNodeResize(
                 cancelAnimationFrame(resizeFrameRef.current)
             }
             latestPointerRef.current = null
+            const store = useEditorStore.getState()
+            if (stateRef.current.phase === 'resizing') {
+                store.endBatch()
+            }
+            stateRef.current = { ...INITIAL_STATE }
+            startSizingRef.current = null
             _isResizeActive = false
-            useEditorStore.getState().setNodeResizeActive(false)
+            store.setNodeResizeActive(false)
         }
     }, [])
 
