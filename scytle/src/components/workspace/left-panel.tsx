@@ -117,7 +117,7 @@ export function LeftPanel() {
             {!collapsed && (
                 <div
                     onMouseDown={handleMouseDown}
-                    className="absolute top-0 right-0 w-1 h-full cursor-col-resize z-10 hover:bg-primary/30 active:bg-primary/50 transition-colors"
+                    className="absolute top-0 right-0 w-1 h-full cursor-col-resize z-10"
                 />
             )}
         </div>

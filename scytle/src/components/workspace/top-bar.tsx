@@ -52,9 +52,9 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
     const setActiveTool = useEditorStore((s) => s.setActiveTool)
     const canUndo = useEditorStore((s) => s._past.length > 0)
     const canRedo = useEditorStore((s) => s._future.length > 0)
-    
+
     const updateProject = useProjectStore((s) => s.updateProject)
-    
+
     const [shareOpen, setShareOpen] = useState(false)
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [titleValue, setTitleValue] = useState(projectName)
@@ -104,7 +104,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 <ArrowLeft className="w-4 h-4" />
             </Link>
 
-            <div 
+            <div
                 className={cn(
                     "flex items-center gap-2 px-2 py-1 -ml-1 rounded-md transition-colors cursor-pointer group",
                     !isEditingTitle && "hover:bg-muted/60"
@@ -115,7 +115,7 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-foreground/5 dark:bg-foreground/10 border border-border/40">
                     <Zap className="w-3 h-3 text-foreground/70" />
                 </div>
-                
+
                 {isEditingTitle ? (
                     <input
                         ref={inputRef}
