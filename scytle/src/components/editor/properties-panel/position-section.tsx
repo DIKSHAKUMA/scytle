@@ -19,15 +19,6 @@ import {
 import { useCallback } from 'react'
 import { cn } from '@/lib/utils'
 
-const ALIGN_SELF_OPTIONS = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'start', label: 'Start' },
-    { value: 'center', label: 'Center' },
-    { value: 'end', label: 'End' },
-    { value: 'stretch', label: 'Stretch' },
-    { value: 'baseline', label: 'Baseline' },
-]
-
 interface PositionSectionProps {
     node: ScytleNode
     parentNode: FrameNode | null
@@ -320,7 +311,6 @@ export function PositionSection({
 
     const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
     const showConstraints = shouldShowNodeConstraints(node, parentNode)
-    const isFlexParent = parentNode?.layout.mode === 'flex'
     const isGridParent = parentNode?.layout.mode === 'grid'
     const canUseGridCellAlignment = isGridParent && !isIgnoringAutoLayout
 
@@ -576,17 +566,7 @@ export function PositionSection({
                 />
             </div>
 
-            {/* Auto-layout child controls (Figma-style: contextual, inside Position) */}
-            {isFlexParent && !isIgnoringAutoLayout && (
-                <SelectInput
-                    label="Align"
-                    value={(node as FrameNode).alignSelf ?? 'auto'}
-                    options={ALIGN_SELF_OPTIONS}
-                    onChange={(v) => onUpdate({ alignSelf: v === 'auto' ? undefined : v })}
-                    className="w-full"
-                />
-            )}
-
+            {/* Grid child placement controls */}
             {isGridParent && !isIgnoringAutoLayout && (
                 <div className="space-y-1.5">
                     <div className="flex items-center gap-1.5">
