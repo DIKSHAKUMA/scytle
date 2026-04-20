@@ -13,7 +13,7 @@ import type { ScytleNode, FrameNode, TextNode, VectorNode } from '@/types/canvas
 import { PositionSection, MarginSection } from './position-section'
 import { MultiSelectAlignSection } from './multi-select-align'
 import { SizeSection } from './size-section'
-import { LayoutSection, AutoLayoutChildSection } from './layout-section'
+import { LayoutSection } from './layout-section'
 import { isInAutoLayoutFlow } from './layout-capabilities'
 import { FillSection } from './fill-section'
 import { AppearanceSection, StrokeSection } from './border-section'
@@ -135,11 +135,6 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
         })
     }, [applyBatch])
 
-    const hasAutoLayoutParent = useCallback((node: ScytleNode): boolean => {
-        const parent = findParentOfNode(allNodes, node.id)?.parent
-        return !!parent && parent.layout.mode !== 'none'
-    }, [allNodes])
-
     if (!primaryNode) {
         return (
             <div className="h-full">
@@ -178,14 +173,6 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
                 <LayoutSection
                     node={primaryNode as FrameNode}
                     onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'frame')}
-                />
-            )}
-
-            {parentNode && (
-                <AutoLayoutChildSection
-                    node={primaryNode}
-                    parentNode={parentNode}
-                    onUpdate={(updates) => applySharedUpdate(updates, hasAutoLayoutParent)}
                 />
             )}
 
@@ -344,7 +331,6 @@ export function PropertiesPanel() {
             <MarginSection node={node} onUpdate={onUpdate} />
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
-            {parentNode && <AutoLayoutChildSection node={node} parentNode={parentNode} onUpdate={onUpdate} />}
 
             <SizeSection node={node} parentNode={parentNode} onUpdate={onUpdate} />
 

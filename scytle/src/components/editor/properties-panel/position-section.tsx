@@ -19,6 +19,15 @@ import {
 import { useCallback } from 'react'
 import { cn } from '@/lib/utils'
 
+const ALIGN_SELF_OPTIONS = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'start', label: 'Start' },
+    { value: 'center', label: 'Center' },
+    { value: 'end', label: 'End' },
+    { value: 'stretch', label: 'Stretch' },
+    { value: 'baseline', label: 'Baseline' },
+]
+
 interface PositionSectionProps {
     node: ScytleNode
     parentNode: FrameNode | null
@@ -311,6 +320,22 @@ export function PositionSection({
 
     const isIgnoringAutoLayout = isInAutoLayoutParent && node.positioning === 'absolute'
     const showConstraints = shouldShowNodeConstraints(node, parentNode)
+    const isFlexParent = parentNode?.layout.mode === 'flex'
+    const isGridParent = parentNode?.layout.mode === 'grid'
+    const canUseGridCellAlignment = isGridParent && !isIgnoringAutoLayout
+
+    const colCount = isGridParent
+        ? (parentNode.layout.columnTracks?.length
+            ?? (typeof parentNode.layout.columns === 'number' ? parentNode.layout.columns : 2))
+        : 1
+    const rowCount = isGridParent
+        ? (parentNode.layout.rowTracks?.length
+            ?? (typeof parentNode.layout.rows === 'number' ? parentNode.layout.rows : undefined))
+        : undefined
+    const colStart = (node as FrameNode).gridColumnStart ?? 1
+    const rowStart = (node as FrameNode).gridRowStart ?? 1
+    const colSpan = (node as FrameNode).gridColumnSpan ?? 1
+    const rowSpan = (node as FrameNode).gridRowSpan ?? 1
 
     const getHorizontalAlignUpdates = useCallback(
         (x: number, horizontal: AlignHorizontalConstraint): Record<string, unknown> => {
@@ -488,21 +513,21 @@ export function PositionSection({
                             icon={<AlignHorizontalJustifyStart size={14} />}
                             onClick={handleAlignLeft}
                             title="Align left"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                         <IconButton
                             icon={<AlignHorizontalJustifyCenter size={14} />}
                             onClick={handleAlignCenterH}
                             title="Align center"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                         <IconButton
                             icon={<AlignHorizontalJustifyEnd size={14} />}
                             onClick={handleAlignRight}
                             title="Align right"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                     </div>
@@ -511,21 +536,21 @@ export function PositionSection({
                             icon={<AlignVerticalJustifyStart size={14} />}
                             onClick={handleAlignTop}
                             title="Align top"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                         <IconButton
                             icon={<AlignVerticalJustifyCenter size={14} />}
                             onClick={handleAlignCenterV}
                             title="Align middle"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                         <IconButton
                             icon={<AlignVerticalJustifyEnd size={14} />}
                             onClick={handleAlignBottom}
                             title="Align bottom"
-                            disabled={isAutoLayout}
+                            disabled={isAutoLayout && !canUseGridCellAlignment}
                             disabledClassName="opacity-70 cursor-not-allowed text-muted-foreground/80 bg-muted/35"
                         />
                     </div>
@@ -550,6 +575,63 @@ export function PositionSection({
                     disabledClassName="opacity-75 cursor-not-allowed bg-muted/35 border-border/30 text-muted-foreground"
                 />
             </div>
+
+            {/* Auto-layout child controls (Figma-style: contextual, inside Position) */}
+            {isFlexParent && !isIgnoringAutoLayout && (
+                <SelectInput
+                    label="Align"
+                    value={(node as FrameNode).alignSelf ?? 'auto'}
+                    options={ALIGN_SELF_OPTIONS}
+                    onChange={(v) => onUpdate({ alignSelf: v === 'auto' ? undefined : v })}
+                    className="w-full"
+                />
+            )}
+
+            {isGridParent && !isIgnoringAutoLayout && (
+                <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                        <NumberInput
+                            label="Col"
+                            value={colStart}
+                            onChange={(v) => onUpdate({ gridColumnStart: v })}
+                            min={1}
+                            max={colCount}
+                            step={1}
+                            className="flex-1"
+                        />
+                        <NumberInput
+                            label="Span"
+                            value={colSpan === -1 ? colCount : colSpan}
+                            onChange={(v) => onUpdate({ gridColumnSpan: v >= colCount ? -1 : Math.max(1, v) })}
+                            min={1}
+                            max={Math.max(1, colCount - colStart + 1)}
+                            step={1}
+                            className="flex-1"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                        <NumberInput
+                            label="Row"
+                            value={rowStart}
+                            onChange={(v) => onUpdate({ gridRowStart: v })}
+                            min={1}
+                            max={rowCount ?? 999}
+                            step={1}
+                            className="flex-1"
+                        />
+                        <NumberInput
+                            label="Span"
+                            value={rowSpan === -1 ? (rowCount ?? 1) : rowSpan}
+                            onChange={(v) => onUpdate({ gridRowSpan: rowCount && v >= rowCount ? -1 : Math.max(1, v) })}
+                            min={1}
+                            max={rowCount ? Math.max(1, rowCount - rowStart + 1) : 999}
+                            step={1}
+                            className="flex-1"
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Constraints — regular-frame children, plus absolute children in auto layout */}
             {showConstraints && (
