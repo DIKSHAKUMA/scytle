@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ShieldCheck } from 'lucide-react'
 import { LandingHeader } from '@/components/layout/landing-header'
 
 export const metadata: Metadata = {
@@ -18,39 +17,60 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-2xl border border-border/60 bg-card p-6 md:p-8 shadow-sm">
-      <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
-      <div className="mt-4 space-y-3 text-sm md:text-[15px] leading-7 text-muted-foreground">{children}</div>
+    <section id={id} className="scroll-mt-24 border-t border-border/60 py-7 md:py-9">
+      <h2 className="text-lg md:text-xl font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="mt-3 space-y-3 text-sm md:text-[15px] leading-7 text-muted-foreground">{children}</div>
     </section>
   )
 }
 
 export default function PrivacyPage() {
+  const tableOfContents = [
+    { id: 'scope', title: '1. Scope' },
+    { id: 'collect', title: '2. Information We Collect' },
+    { id: 'use', title: '3. How We Use Information' },
+    { id: 'ai', title: '4. AI Processing' },
+    { id: 'share', title: '5. How We Share Information' },
+    { id: 'retention', title: '6. Retention' },
+    { id: 'security', title: '7. Security' },
+    { id: 'rights', title: '8. Your Rights and Choices' },
+    { id: 'transfers', title: '9. International Transfers' },
+    { id: 'children', title: '10. Children' },
+    { id: 'changes', title: '11. Changes to This Policy' },
+    { id: 'contact', title: '12. Contact Us' },
+  ]
+
   return (
     <div className="min-h-screen bg-background">
       <LandingHeader />
 
-      <main className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute -top-28 left-1/4 h-72 w-72 rounded-full bg-accent/10 blur-[120px]" />
-          <div className="absolute top-1/3 right-[10%] h-80 w-80 rounded-full bg-primary/10 blur-[120px]" />
-        </div>
-
-        <div className="container py-14 md:py-20">
-          <div className="mx-auto max-w-4xl space-y-8">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                Legal
-              </div>
-              <h1 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-foreground">Privacy Policy</h1>
+      <main>
+        <div className="container py-12 md:py-16">
+          <div className="mx-auto max-w-3xl">
+            <header className="space-y-3 pb-8">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Legal</p>
+              <h1 className="text-3xl md:text-4xl font-display font-bold tracking-tight text-foreground">Privacy Policy</h1>
               <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
                 This policy explains how Scytle collects, uses, and protects personal information when you use
                 our website and product.
               </p>
               <p className="text-xs md:text-sm text-muted-foreground">Effective date: April 19, 2026</p>
-            </div>
+            </header>
 
+            <nav aria-label="Table of contents" className="border-y border-border/60 py-4">
+              <p className="text-sm font-medium text-foreground">On this page</p>
+              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {tableOfContents.map((item) => (
+                  <li key={item.id}>
+                    <a href={`#${item.id}`} className="hover:text-foreground transition-colors">
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            <div>
             <Section id="scope" title="1. Scope">
               <p>
                 This Privacy Policy applies to Scytle websites, applications, APIs, and related services where this
@@ -166,6 +186,7 @@ export default function PrivacyPage() {
                 You can also review our <Link href="/terms" className="text-foreground underline underline-offset-4">Terms of Service</Link>.
               </p>
             </Section>
+            </div>
           </div>
         </div>
       </main>

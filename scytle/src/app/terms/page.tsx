@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Scale } from 'lucide-react'
 import { LandingHeader } from '@/components/layout/landing-header'
 
 export const metadata: Metadata = {
@@ -18,38 +17,60 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-2xl border border-border/60 bg-card p-6 md:p-8 shadow-sm">
-      <h2 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">{title}</h2>
-      <div className="mt-4 space-y-3 text-sm md:text-[15px] leading-7 text-muted-foreground">{children}</div>
+    <section id={id} className="scroll-mt-24 border-t border-border/60 py-7 md:py-9">
+      <h2 className="text-lg md:text-xl font-semibold tracking-tight text-foreground">{title}</h2>
+      <div className="mt-3 space-y-3 text-sm md:text-[15px] leading-7 text-muted-foreground">{children}</div>
     </section>
   )
 }
 
 export default function TermsPage() {
+  const tableOfContents = [
+    { id: 'acceptance', title: '1. Acceptance of Terms' },
+    { id: 'eligibility', title: '2. Eligibility and Accounts' },
+    { id: 'use', title: '3. Permitted Use and Restrictions' },
+    { id: 'content', title: '4. Customer Content and AI Output' },
+    { id: 'billing', title: '5. Billing, Subscriptions, and Fees' },
+    { id: 'ip', title: '6. Intellectual Property' },
+    { id: 'third-party', title: '7. Third-Party Services' },
+    { id: 'disclaimers', title: '8. Disclaimers' },
+    { id: 'liability', title: '9. Limitation of Liability' },
+    { id: 'termination', title: '10. Termination' },
+    { id: 'law', title: '11. Governing Law and Disputes' },
+    { id: 'updates', title: '12. Updates to These Terms' },
+    { id: 'contact', title: '13. Contact Us' },
+  ]
+
   return (
     <div className="min-h-screen bg-background">
       <LandingHeader />
 
-      <main className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute -top-28 right-1/4 h-72 w-72 rounded-full bg-accent/10 blur-[120px]" />
-          <div className="absolute top-1/3 left-[10%] h-80 w-80 rounded-full bg-primary/10 blur-[120px]" />
-        </div>
-
-        <div className="container py-14 md:py-20">
-          <div className="mx-auto max-w-4xl space-y-8">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-                <Scale className="h-3.5 w-3.5 text-blue-500" />
-                Legal
-              </div>
-              <h1 className="text-3xl md:text-5xl font-display font-bold tracking-tight text-foreground">Terms of Service</h1>
-              <p className="text-sm md:text-base text-muted-foreground max-w-2xl">
+      <main>
+        <div className="container py-12 md:py-16">
+          <div className="mx-auto max-w-3xl">
+            <header className="space-y-3 pb-8">
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Legal</p>
+              <h1 className="text-3xl md:text-4xl font-display font-bold tracking-tight text-foreground">Terms of Service</h1>
+              <p className="text-sm md:text-base text-muted-foreground">
                 These Terms govern your use of Scytle websites, products, and services.
               </p>
-              <p className="text-xs md:text-sm text-muted-foreground">Effective date: April 19, 2026</p>
-            </div>
+              <p className="text-xs md:text-sm text-muted-foreground">Effective date: April 20, 2026</p>
+            </header>
 
+            <nav aria-label="Table of contents" className="border-y border-border/60 py-4">
+              <p className="text-sm font-medium text-foreground">On this page</p>
+              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {tableOfContents.map((item) => (
+                  <li key={item.id}>
+                    <a href={`#${item.id}`} className="hover:text-foreground transition-colors">
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            <div>
             <Section id="acceptance" title="1. Acceptance of Terms">
               <p>
                 By accessing or using Scytle, you agree to these Terms. If you use Scytle on behalf of an organization,
@@ -87,10 +108,28 @@ export default function TermsPage() {
             <Section id="billing" title="5. Billing, Subscriptions, and Fees">
               <ul className="list-disc pl-5 space-y-2">
                 <li>Paid features may require a subscription or usage-based fees.</li>
-                <li>Unless otherwise stated, subscriptions renew automatically until canceled.</li>
-                <li>Fees are generally non-refundable except where required by law.</li>
+                <li>Subscriptions renew automatically until canceled before the next renewal date.</li>
+                <li>
+                  You may cancel any time. Cancellation stops future renewals and your access continues until the end
+                  of the current paid period.
+                </li>
+                <li>
+                  Fees are generally non-refundable and non-prorated once a billing period starts, except where
+                  required by law.
+                </li>
+                <li>
+                  Refund requests may be considered for duplicate charges or verified billing errors when reported
+                  promptly.
+                </li>
+                <li>
+                  If you cancel renewal and your plan is still active, you can resume renewal before expiry without an
+                  immediate new charge. If your plan has ended, re-subscribing starts a new billing cycle.
+                </li>
                 <li>Payment processing is handled by third-party processors.</li>
               </ul>
+              <p>
+                This section serves as Scytle&apos;s cancellation and refund policy.
+              </p>
             </Section>
 
             <Section id="ip" title="6. Intellectual Property">
@@ -162,6 +201,7 @@ export default function TermsPage() {
                 .
               </p>
             </Section>
+            </div>
           </div>
         </div>
       </main>
