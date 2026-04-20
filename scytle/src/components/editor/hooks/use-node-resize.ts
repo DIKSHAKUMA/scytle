@@ -282,6 +282,13 @@ export function useNodeResize(
     }>({ isResizing: false, handle: null })
 
     const stateRef = useRef<ResizeState>({ ...INITIAL_STATE })
+    const startSizingRef = useRef<{ horizontal: string; vertical: string } | null>(null)
+    const latestPointerRef = useRef<{
+        clientX: number
+        clientY: number
+        shiftKey: boolean
+    } | null>(null)
+    const resizeFrameRef = useRef<number>(0)
 
     // ── Start tracking a potential resize ────────────────────
 
@@ -323,66 +330,13 @@ export function useNodeResize(
         []
     )
 
-    // ── Pointer move (called continuously) ──────────────────
-
-    const onResizePointerMove = useCallback(
-        (clientX: number, clientY: number, shiftKey: boolean): boolean => {
+    const applyResizeStep = useCallback(
+        (clientX: number, clientY: number, shiftKey: boolean) => {
             const s = stateRef.current
-            if (s.phase === 'idle') return false
+            if (s.phase !== 'resizing') return
 
             const screenDx = clientX - s.startPointerX
             const screenDy = clientY - s.startPointerY
-
-            // Threshold check — don't consume events until exceeded
-            if (s.phase === 'pending') {
-                if (Math.abs(screenDx) + Math.abs(screenDy) < RESIZE_THRESHOLD)
-                    return false
-                s.phase = 'resizing'
-                _isResizeActive = true
-                useEditorStore.getState().beginBatch()
-                setResizeInfo({ isResizing: true, handle: s.handle })
-
-                // Capture original sizing before switching to 'fixed'
-                const store = useEditorStore.getState()
-                const node = findNodeById(store.nodes, s.nodeId)
-                if (node) {
-                    startSizingRef.current = { ...node.sizing }
-                    const axes = handleAxes(s.handle)
-                    const newSizing: Sizing = { ...node.sizing }
-                    let changed = false
-
-                    if (axes.x && node.sizing.horizontal !== 'fixed') {
-                        newSizing.horizontal = 'fixed'
-                        changed = true
-                    }
-                    if (axes.y && node.sizing.vertical !== 'fixed') {
-                        newSizing.vertical = 'fixed'
-                        changed = true
-                    }
-                    if (changed) {
-                        store.updateNode(s.nodeId, { sizing: newSizing })
-                    }
-
-                    // For TextNodes, sync the autoResize mode with the resize interaction (Figma parity)
-                    if (node.type === 'text') {
-                        const text = node as TextNode
-                        let newAutoResize = text.autoResize
-                        const isCorner = axes.x && axes.y
-
-                        if (isCorner) {
-                            newAutoResize = 'none' // Corner -> Fixed Size
-                        } else if (axes.y) {
-                            newAutoResize = 'none' // N/S side handle -> Fixed Size
-                        } else if (axes.x && text.autoResize === 'width-and-height') {
-                            newAutoResize = 'height' // E/W side handle -> Auto Height (wraps)
-                        }
-
-                        if (newAutoResize !== text.autoResize) {
-                            store.updateNode(s.nodeId, { autoResize: newAutoResize })
-                        }
-                    }
-                }
-            }
 
             // Convert screen delta to canvas delta
             const zoom = useEditorStore.getState().zoom
@@ -466,7 +420,7 @@ export function useNodeResize(
             if (newWidth < MIN_SIZE) newWidth = MIN_SIZE
             if (newHeight < MIN_SIZE) newHeight = MIN_SIZE
 
-            // Apply
+            // Apply target node + constrained children in one store mutation to avoid transient visual states.
             const store = useEditorStore.getState()
             const updatePayload: Parameters<typeof store.updateNode>[1] = {
                 width: newWidth,
@@ -499,14 +453,16 @@ export function useNodeResize(
                         ? { tangentEnd: { x: seg.tangentEnd.x * scaleX * signX, y: seg.tangentEnd.y * scaleY * signY } }
                         : {}),
                 }))
-                ;(updatePayload as Record<string, unknown>).vectorNetwork = {
-                    ...s.startVectorNetwork,
-                    vertices: scaledVertices,
-                    segments: scaledSegments,
-                }
+                    ; (updatePayload as Record<string, unknown>).vectorNetwork = {
+                        ...s.startVectorNetwork,
+                        vertices: scaledVertices,
+                        segments: scaledSegments,
+                    }
             }
 
-            store.updateNode(s.nodeId, updatePayload)
+            const updates: Array<{ id: string; updates: Record<string, unknown> }> = [
+                { id: s.nodeId, updates: updatePayload },
+            ]
 
             if (s.constrainedChildren && s.constrainedChildren.length > 0) {
                 for (const child of s.constrainedChildren) {
@@ -517,13 +473,101 @@ export function useNodeResize(
                         newWidth,
                         newHeight
                     )
-                    store.updateNode(child.id, childUpdates)
+                    updates.push({ id: child.id, updates: childUpdates })
                 }
             }
 
-            return true // consumed
+            store.updateNodes(updates)
         },
         []
+    )
+
+    const flushResizeFrame = useCallback(() => {
+        resizeFrameRef.current = 0
+        const latest = latestPointerRef.current
+        if (!latest) return
+        latestPointerRef.current = null
+        applyResizeStep(latest.clientX, latest.clientY, latest.shiftKey)
+    }, [applyResizeStep])
+
+    const scheduleResizeFrame = useCallback(() => {
+        if (resizeFrameRef.current !== 0) return
+        resizeFrameRef.current = requestAnimationFrame(flushResizeFrame)
+    }, [flushResizeFrame])
+
+    // ── Pointer move (called continuously) ──────────────────
+
+    const onResizePointerMove = useCallback(
+        (clientX: number, clientY: number, shiftKey: boolean): boolean => {
+            const s = stateRef.current
+            if (s.phase === 'idle') return false
+
+            const screenDx = clientX - s.startPointerX
+            const screenDy = clientY - s.startPointerY
+
+            // Threshold check — don't consume events until exceeded
+            if (s.phase === 'pending') {
+                if (Math.abs(screenDx) + Math.abs(screenDy) < RESIZE_THRESHOLD)
+                    return false
+                s.phase = 'resizing'
+                _isResizeActive = true
+                const store = useEditorStore.getState()
+                store.beginBatch()
+                store.setNodeResizeActive(true)
+                setResizeInfo({ isResizing: true, handle: s.handle })
+
+                // Capture original sizing before switching to 'fixed'
+                const node = findNodeById(store.nodes, s.nodeId)
+                if (node) {
+                    startSizingRef.current = { ...node.sizing }
+                    const axes = handleAxes(s.handle)
+                    const newSizing: Sizing = { ...node.sizing }
+                    let changed = false
+                    const resizeStartUpdates: Record<string, unknown> = {}
+
+                    if (axes.x && node.sizing.horizontal !== 'fixed') {
+                        newSizing.horizontal = 'fixed'
+                        changed = true
+                    }
+                    if (axes.y && node.sizing.vertical !== 'fixed') {
+                        newSizing.vertical = 'fixed'
+                        changed = true
+                    }
+                    if (changed) {
+                        resizeStartUpdates.sizing = newSizing
+                    }
+
+                    // For TextNodes, sync the autoResize mode with the resize interaction (Figma parity)
+                    if (node.type === 'text') {
+                        const text = node as TextNode
+                        let newAutoResize = text.autoResize
+                        const isCorner = axes.x && axes.y
+
+                        if (isCorner) {
+                            newAutoResize = 'none' // Corner -> Fixed Size
+                        } else if (axes.y) {
+                            newAutoResize = 'none' // N/S side handle -> Fixed Size
+                        } else if (axes.x && text.autoResize === 'width-and-height') {
+                            newAutoResize = 'height' // E/W side handle -> Auto Height (wraps)
+                        }
+
+                        if (newAutoResize !== text.autoResize) {
+                            resizeStartUpdates.autoResize = newAutoResize
+                        }
+                    }
+
+                    if (Object.keys(resizeStartUpdates).length > 0) {
+                        store.updateNode(s.nodeId, resizeStartUpdates)
+                    }
+                }
+            }
+
+            latestPointerRef.current = { clientX, clientY, shiftKey }
+            scheduleResizeFrame()
+
+            return true // consumed
+        },
+        [scheduleResizeFrame]
     )
 
     // ── Pointer up (commit) ─────────────────────────────────
@@ -533,6 +577,18 @@ export function useNodeResize(
         if (s.phase === 'idle') return false
 
         const wasResizing = s.phase === 'resizing'
+        const store = useEditorStore.getState()
+
+        if (resizeFrameRef.current !== 0) {
+            cancelAnimationFrame(resizeFrameRef.current)
+            resizeFrameRef.current = 0
+        }
+
+        const latest = latestPointerRef.current
+        latestPointerRef.current = null
+        if (wasResizing && latest) {
+            applyResizeStep(latest.clientX, latest.clientY, latest.shiftKey)
+        }
 
         // Release pointer capture
         if (s.pointerId >= 0) {
@@ -540,24 +596,29 @@ export function useNodeResize(
         }
 
         stateRef.current = { ...INITIAL_STATE }
+        startSizingRef.current = null
         _isResizeActive = false
         setResizeInfo({ isResizing: false, handle: null })
 
         if (wasResizing) {
-            useEditorStore.getState().endBatch()
+            store.endBatch()
         }
+        store.setNodeResizeActive(false)
 
         return true
-    }, [viewportRef])
+    }, [applyResizeStep, viewportRef])
 
     // ── Cancel resize (Escape key) ──────────────────────────
-
-    // Store the original sizing so we can restore it on cancel
-    const startSizingRef = useRef<{ horizontal: string; vertical: string } | null>(null)
 
     const cancelResize = useCallback(() => {
         const s = stateRef.current
         if (s.phase === 'idle') return
+
+        if (resizeFrameRef.current !== 0) {
+            cancelAnimationFrame(resizeFrameRef.current)
+            resizeFrameRef.current = 0
+        }
+        latestPointerRef.current = null
 
         // Release pointer capture
         if (s.pointerId >= 0) {
@@ -565,6 +626,7 @@ export function useNodeResize(
         }
 
         // Restore original dimensions AND sizing mode
+        const store = useEditorStore.getState()
         if (s.phase === 'resizing') {
             const restoreUpdates: Record<string, unknown> = {
                 x: s.startX,
@@ -575,26 +637,34 @@ export function useNodeResize(
             if (startSizingRef.current) {
                 restoreUpdates.sizing = { ...startSizingRef.current }
             }
-            const store = useEditorStore.getState()
-            store.updateNode(s.nodeId, restoreUpdates)
+
+            const updates: Array<{ id: string; updates: Record<string, unknown> }> = [
+                { id: s.nodeId, updates: restoreUpdates },
+            ]
 
             if (s.constrainedChildren && s.constrainedChildren.length > 0) {
                 for (const child of s.constrainedChildren) {
-                    store.updateNode(child.id, {
-                        x: child.startX,
-                        y: child.startY,
-                        width: child.startWidth,
-                        height: child.startHeight,
+                    updates.push({
+                        id: child.id,
+                        updates: {
+                            x: child.startX,
+                            y: child.startY,
+                            width: child.startWidth,
+                            height: child.startHeight,
+                        },
                     })
                 }
             }
 
+            store.updateNodes(updates)
             store.endBatch()
         }
 
         stateRef.current = { ...INITIAL_STATE }
+        startSizingRef.current = null
         _isResizeActive = false
         setResizeInfo({ isResizing: false, handle: null })
+        store.setNodeResizeActive(false)
     }, [viewportRef])
 
     // ── Escape key handler ──────────────────────────────────
@@ -610,6 +680,17 @@ export function useNodeResize(
         window.addEventListener('keydown', handleKeyDown, true)
         return () => window.removeEventListener('keydown', handleKeyDown, true)
     }, [cancelResize])
+
+    useEffect(() => {
+        return () => {
+            if (resizeFrameRef.current !== 0) {
+                cancelAnimationFrame(resizeFrameRef.current)
+            }
+            latestPointerRef.current = null
+            _isResizeActive = false
+            useEditorStore.getState().setNodeResizeActive(false)
+        }
+    }, [])
 
     return {
         resizeInfo,

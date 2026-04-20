@@ -29,6 +29,8 @@ import { quickExport } from '@/lib/export/export-node'
 // │ Shift+Enter           │ Select parent layer            │
 // │ Tab                   │ Select next sibling            │
 // │ Shift+Tab             │ Select previous sibling        │
+// │ Arrow keys            │ Nudge selected (1px)           │
+// │ Shift+Arrow keys      │ Nudge selected (10px)          │
 // │ \                     │ Select parent layer            │
 // │ ]                     │ Bring forward                  │
 // │ [                     │ Send backward                  │
@@ -386,115 +388,125 @@ export function useKeyboardShortcuts() {
                 return
             }
 
-            // ── Arrow keys — grid cell navigation ───────────────────
-            // For auto-placed children (no gridColumnStart/gridRowStart):
-            //   Swap position in parent.children array — CSS Grid auto-flow
-            //   determines visual position from DOM order, so reordering = moving.
-            // For explicitly placed children:
-            //   Swap gridColumnStart/gridRowStart with the occupant at the target cell.
+            // ── Arrow keys — grid navigation + general nudging ───────
+            // Grid children preserve existing arrow behavior.
+            // All other movable selections fall back to Figma-like nudging:
+            //   Arrow = 1px, Shift+Arrow = 10px.
             if (
                 (key === 'arrowup' || key === 'arrowdown' || key === 'arrowleft' || key === 'arrowright') &&
                 !meta && !ctrl && !e.altKey &&
-                store.selectedIds.length === 1 &&
+                store.selectedIds.length > 0 &&
                 !store.vectorEditNodeId &&
                 !store.editingNodeId
             ) {
-                const selectedId = store.selectedIds[0]
-                const parentResult = findParentOfNode(store.nodes, selectedId)
-                const parent = parentResult?.parent
+                // Preserve existing single-selection grid arrow behavior.
+                if (store.selectedIds.length === 1) {
+                    const selectedId = store.selectedIds[0]
+                    const parentResult = findParentOfNode(store.nodes, selectedId)
+                    const parent = parentResult?.parent
 
-                if (parent && parent.layout?.mode === 'grid') {
-                    const node = findNodeById(store.nodes, selectedId)
-                    if (!node) return
+                    if (parent && parent.layout?.mode === 'grid') {
+                        const node = findNodeById(store.nodes, selectedId)
+                        if (!node) return
 
-                    e.preventDefault()
+                        e.preventDefault()
 
-                    const colCount = parent.layout.columnTracks?.length
-                        ?? (typeof parent.layout.columns === 'number' ? parent.layout.columns : 2)
+                        const colCount = parent.layout.columnTracks?.length
+                            ?? (typeof parent.layout.columns === 'number' ? parent.layout.columns : 2)
 
-                    const isExplicit = node.gridColumnStart != null && node.gridRowStart != null
+                        const isExplicit = node.gridColumnStart != null && node.gridRowStart != null
 
-                    if (!isExplicit) {
-                        // ── Auto-placed: swap in children array ──────────
-                        const idx = parent.children.findIndex(c => c.id === selectedId)
-                        if (idx === -1) return
+                        if (!isExplicit) {
+                            // ── Auto-placed: swap in children array ──────────
+                            const idx = parent.children.findIndex(c => c.id === selectedId)
+                            if (idx === -1) return
 
-                        let targetIdx = idx
-                        switch (key) {
-                            case 'arrowright': targetIdx = idx + 1; break
-                            case 'arrowleft': targetIdx = idx - 1; break
-                            case 'arrowdown': targetIdx = idx + colCount; break
-                            case 'arrowup': targetIdx = idx - colCount; break
-                        }
-
-                        // Bounds check
-                        if (targetIdx < 0 || targetIdx >= parent.children.length) return
-                        if (targetIdx === idx) return
-
-                        // Use reorderNode — gapIndex is "insert before" position
-                        // Moving forward: gapIndex = targetIdx + 1 (insert after target)
-                        // Moving backward: gapIndex = targetIdx (insert before target)
-                        const gapIndex = targetIdx > idx ? targetIdx + 1 : targetIdx
-                        store.reorderNode(selectedId, gapIndex)
-                    } else {
-                        // ── Explicitly placed: swap gridColumnStart/gridRowStart ──
-                        const rowCount = parent.layout.rowTracks?.length
-                            ?? (typeof parent.layout.rows === 'number' ? parent.layout.rows : undefined)
-
-                        const currentCol = node.gridColumnStart!
-                        const currentRow = node.gridRowStart!
-                        const span = node.gridColumnSpan ?? 1
-                        const rowSpan = node.gridRowSpan ?? 1
-
-                        let newCol = currentCol
-                        let newRow = currentRow
-
-                        switch (key) {
-                            case 'arrowleft':
-                                newCol = Math.max(1, currentCol - 1)
-                                break
-                            case 'arrowright':
-                                newCol = span === -1
-                                    ? currentCol
-                                    : Math.min(colCount - span + 1, currentCol + 1)
-                                break
-                            case 'arrowup':
-                                newRow = Math.max(1, currentRow - 1)
-                                break
-                            case 'arrowdown':
-                                if (rowCount) {
-                                    newRow = rowSpan === -1
-                                        ? currentRow
-                                        : Math.min(rowCount - rowSpan + 1, currentRow + 1)
-                                } else {
-                                    newRow = currentRow + 1
-                                }
-                                break
-                        }
-
-                        if (newCol !== currentCol || newRow !== currentRow) {
-                            store.beginBatch()
-                            // Find occupant at target cell and swap
-                            const occupant = parent.children.find(
-                                c => c.id !== selectedId &&
-                                    c.gridColumnStart === newCol &&
-                                    c.gridRowStart === newRow
-                            )
-                            if (occupant) {
-                                store.updateNode(occupant.id, {
-                                    gridColumnStart: currentCol,
-                                    gridRowStart: currentRow,
-                                })
+                            let targetIdx = idx
+                            switch (key) {
+                                case 'arrowright': targetIdx = idx + 1; break
+                                case 'arrowleft': targetIdx = idx - 1; break
+                                case 'arrowdown': targetIdx = idx + colCount; break
+                                case 'arrowup': targetIdx = idx - colCount; break
                             }
-                            store.updateNode(selectedId, {
-                                gridColumnStart: newCol,
-                                gridRowStart: newRow,
-                            })
-                            store.endBatch()
+
+                            // Bounds check
+                            if (targetIdx < 0 || targetIdx >= parent.children.length) return
+                            if (targetIdx === idx) return
+
+                            // Use reorderNode — gapIndex is "insert before" position
+                            // Moving forward: gapIndex = targetIdx + 1 (insert after target)
+                            // Moving backward: gapIndex = targetIdx (insert before target)
+                            const gapIndex = targetIdx > idx ? targetIdx + 1 : targetIdx
+                            store.reorderNode(selectedId, gapIndex)
+                        } else {
+                            // ── Explicitly placed: swap gridColumnStart/gridRowStart ──
+                            const rowCount = parent.layout.rowTracks?.length
+                                ?? (typeof parent.layout.rows === 'number' ? parent.layout.rows : undefined)
+
+                            const currentCol = node.gridColumnStart!
+                            const currentRow = node.gridRowStart!
+                            const span = node.gridColumnSpan ?? 1
+                            const rowSpan = node.gridRowSpan ?? 1
+
+                            let newCol = currentCol
+                            let newRow = currentRow
+
+                            switch (key) {
+                                case 'arrowleft':
+                                    newCol = Math.max(1, currentCol - 1)
+                                    break
+                                case 'arrowright':
+                                    newCol = span === -1
+                                        ? currentCol
+                                        : Math.min(colCount - span + 1, currentCol + 1)
+                                    break
+                                case 'arrowup':
+                                    newRow = Math.max(1, currentRow - 1)
+                                    break
+                                case 'arrowdown':
+                                    if (rowCount) {
+                                        newRow = rowSpan === -1
+                                            ? currentRow
+                                            : Math.min(rowCount - rowSpan + 1, currentRow + 1)
+                                    } else {
+                                        newRow = currentRow + 1
+                                    }
+                                    break
+                            }
+
+                            if (newCol !== currentCol || newRow !== currentRow) {
+                                store.beginBatch()
+                                // Find occupant at target cell and swap
+                                const occupant = parent.children.find(
+                                    c => c.id !== selectedId &&
+                                        c.gridColumnStart === newCol &&
+                                        c.gridRowStart === newRow
+                                )
+                                if (occupant) {
+                                    store.updateNode(occupant.id, {
+                                        gridColumnStart: currentCol,
+                                        gridRowStart: currentRow,
+                                    })
+                                }
+                                store.updateNode(selectedId, {
+                                    gridColumnStart: newCol,
+                                    gridRowStart: newRow,
+                                })
+                                store.endBatch()
+                            }
                         }
+                        return
                     }
-                    return
                 }
+
+                const step = shift ? 10 : 1
+                const dx = key === 'arrowleft' ? -step : key === 'arrowright' ? step : 0
+                const dy = key === 'arrowup' ? -step : key === 'arrowdown' ? step : 0
+
+                if (store.nudgeSelectedNodes(dx, dy)) {
+                    e.preventDefault()
+                }
+                return
             }
 
             // ── Vector edit mode sub-tool shortcuts ───────────────────

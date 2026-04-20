@@ -74,6 +74,37 @@ export function NumberInput({
 }: NumberInputProps) {
     const [localValue, setLocalValue] = useState(String(roundToStep(value, step)))
     const inputRef = useRef<HTMLInputElement>(null)
+    const arrowRafRef = useRef<number>(0)
+    const pendingArrowValueRef = useRef<number | null>(null)
+    const latestValueRef = useRef(value)
+    const latestOnChangeRef = useRef(onChange)
+
+    latestValueRef.current = value
+    latestOnChangeRef.current = onChange
+
+    const flushScheduledArrowChange = useCallback(() => {
+        arrowRafRef.current = 0
+        const next = pendingArrowValueRef.current
+        pendingArrowValueRef.current = null
+        if (next === null) return
+        if (next !== latestValueRef.current) {
+            latestOnChangeRef.current(next)
+        }
+    }, [])
+
+    const scheduleArrowChange = useCallback((next: number) => {
+        pendingArrowValueRef.current = next
+        if (arrowRafRef.current !== 0) return
+        arrowRafRef.current = requestAnimationFrame(flushScheduledArrowChange)
+    }, [flushScheduledArrowChange])
+
+    const clearScheduledArrowChange = useCallback(() => {
+        if (arrowRafRef.current !== 0) {
+            cancelAnimationFrame(arrowRafRef.current)
+            arrowRafRef.current = 0
+        }
+        pendingArrowValueRef.current = null
+    }, [])
 
     // Sync from external value changes
     useEffect(() => {
@@ -82,7 +113,11 @@ export function NumberInput({
         }
     }, [value, step])
 
+    useEffect(() => clearScheduledArrowChange, [clearScheduledArrowChange])
+
     const commit = useCallback(() => {
+        clearScheduledArrowChange()
+
         // Handle comma-separated shorthand (e.g., "10,20,30,40")
         if (onShorthand && localValue.includes(',')) {
             const parts = localValue.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n))
@@ -102,13 +137,14 @@ export function NumberInput({
         if (max !== undefined) num = Math.min(max, num)
         setLocalValue(String(num))
         if (num !== value) onChange(num)
-    }, [localValue, value, onChange, min, max, step, onShorthand])
+    }, [clearScheduledArrowChange, localValue, value, onChange, min, max, step, onShorthand])
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             commit()
             inputRef.current?.blur()
         } else if (e.key === 'Escape') {
+            clearScheduledArrowChange()
             setLocalValue(String(roundToStep(value, step)))
             inputRef.current?.blur()
         } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -119,7 +155,7 @@ export function NumberInput({
             if (min !== undefined) num = Math.max(min, num)
             if (max !== undefined) num = Math.min(max, num)
             setLocalValue(String(num))
-            onChange(num)
+            scheduleArrowChange(num)
         }
     }
 

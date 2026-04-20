@@ -290,6 +290,7 @@ export function HoverOverlay({
 }) {
     const hoveredId = useEditorStore((s) => s.hoveredId)
     const selectedIds = useEditorStore((s) => s.selectedIds)
+    const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
 
     const [rect, setRect] = useState<ScreenRect | null>(null)
     const rafRef = useRef<number>(0)
@@ -302,6 +303,17 @@ export function HoverOverlay({
 
     useEffect(() => {
         isMountedRef.current = true
+
+        if (isNodeResizeActive) {
+            if (rectRef.current !== null) {
+                rectRef.current = null
+                setRect(null)
+            }
+            return () => {
+                isMountedRef.current = false
+                cancelAnimationFrame(rafRef.current)
+            }
+        }
 
         const loop = () => {
             if (!isMountedRef.current) return
@@ -345,9 +357,9 @@ export function HoverOverlay({
             isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [effectiveHoveredId, viewportRef])
+    }, [effectiveHoveredId, isNodeResizeActive, viewportRef])
 
-    if (!rect) return null
+    if (!rect || isNodeResizeActive) return null
 
     return (
         <div
@@ -394,6 +406,7 @@ export function PaddingOverlay({
 }) {
     const paddingOverlayNodeId = useEditorStore((s) => s.paddingOverlayNodeId)
     const paddingOverlayDirection = useEditorStore((s) => s.paddingOverlayDirection)
+    const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
 
@@ -408,6 +421,17 @@ export function PaddingOverlay({
 
     useEffect(() => {
         isMountedRef.current = true
+
+        if (isNodeResizeActive) {
+            if (rectRef.current !== null) {
+                rectRef.current = null
+                setRect(null)
+            }
+            return () => {
+                isMountedRef.current = false
+                cancelAnimationFrame(rafRef.current)
+            }
+        }
 
         const loop = () => {
             if (!isMountedRef.current) return
@@ -451,11 +475,11 @@ export function PaddingOverlay({
             isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [paddingOverlayNodeId, viewportRef])
+    }, [paddingOverlayNodeId, isNodeResizeActive, viewportRef])
 
     const direction = paddingOverlayDirection ?? 'all'
 
-    if (!rect || !overlayPadding) return null
+    if (isNodeResizeActive || !rect || !overlayPadding) return null
 
     return (
         <div className="pointer-events-none" style={{ position: 'absolute', inset: 0, zIndex: 997 }}>
@@ -570,6 +594,7 @@ export function CanvasPaddingZones({
     viewportRef: React.RefObject<HTMLDivElement | null>
 }) {
     const selectedIds = useEditorStore((s) => s.selectedIds)
+    const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
     const panX = useEditorStore((s) => s.panX)
@@ -616,6 +641,17 @@ export function CanvasPaddingZones({
     useEffect(() => {
         isMountedRef.current = true
 
+        if (isNodeResizeActive) {
+            if (rectRef.current !== null) {
+                rectRef.current = null
+                setRect(null)
+            }
+            return () => {
+                isMountedRef.current = false
+                cancelAnimationFrame(rafRef.current)
+            }
+        }
+
         const loop = () => {
             if (!isMountedRef.current) return
 
@@ -659,7 +695,7 @@ export function CanvasPaddingZones({
             isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [frameId, viewportRef])
+    }, [frameId, isNodeResizeActive, viewportRef])
 
     // Close inline input when selection changes
     useEffect(() => {
@@ -842,7 +878,7 @@ export function CanvasPaddingZones({
         setInlineInput(null)
     }, [frameId, inlineInput, updateNode])
 
-    if (!rect || !framePadding || !frameId) return null
+    if (isNodeResizeActive || !rect || !framePadding || !frameId) return null
 
     const pt = framePadding.top * zoom
     const pr = framePadding.right * zoom
@@ -1257,6 +1293,7 @@ export function CanvasGapZones({
     viewportRef: React.RefObject<HTMLDivElement | null>
 }) {
     const selectedIds = useEditorStore((s) => s.selectedIds)
+    const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
     const panX = useEditorStore((s) => s.panX)
@@ -1311,6 +1348,19 @@ export function CanvasGapZones({
 
     useEffect(() => {
         isMountedRef.current = true
+
+        if (isNodeResizeActive) {
+            if (gapZonesRef.current.length > 0 || prevFrameRectRef.current !== null) {
+                gapZonesRef.current = []
+                prevFrameRectRef.current = null
+                setGapZones([])
+                setFrameRect(null)
+            }
+            return () => {
+                isMountedRef.current = false
+                cancelAnimationFrame(rafRef.current)
+            }
+        }
 
         const loop = () => {
             if (!isMountedRef.current) return
@@ -1498,7 +1548,7 @@ export function CanvasGapZones({
             isMountedRef.current = false
             cancelAnimationFrame(rafRef.current)
         }
-    }, [frameId, viewportRef, allowsNegativeGap])
+    }, [frameId, viewportRef, allowsNegativeGap, isNodeResizeActive])
 
     // Close inline input when selection changes
     useEffect(() => {
@@ -1630,7 +1680,7 @@ export function CanvasGapZones({
         setInlineInput(null)
     }, [frameId, allowsNegativeGap, updateNode])
 
-    if (gapZones.length === 0) return null
+    if (isNodeResizeActive || gapZones.length === 0) return null
 
     const handleIsVertical = !isColumn // perpendicular to gap direction
 

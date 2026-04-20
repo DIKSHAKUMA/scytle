@@ -351,6 +351,8 @@ interface EditorState {
     // Inline editing ------------------------------------------
     /** ID of the text node currently being edited inline */
     editingNodeId: string | null
+    /** True while a node resize drag interaction is active */
+    isNodeResizeActive: boolean
 
     // Padding overlay -----------------------------------------
     /** ID of the frame node whose padding is being visualized */
@@ -423,6 +425,7 @@ interface EditorState {
 
     // Inline editing actions -----------------------------------
     setEditingNodeId: (id: string | null) => void
+    setNodeResizeActive: (active: boolean) => void
 
     // Padding overlay actions ----------------------------------
     setPaddingOverlay: (id: string | null, direction?: 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom') => void
@@ -471,6 +474,7 @@ interface EditorState {
     setNodes: (nodes: ScytleNode[]) => void
     addNode: (node: ScytleNode, parentId?: string, index?: number) => void
     updateNode: (id: string, updates: Record<string, unknown>) => void
+    updateNodes: (entries: Array<{ id: string; updates: Record<string, unknown> }>) => void
     /** Replace a top-level node entirely (used for skeleton → real frame swap) */
     replaceNode: (oldId: string, newNode: ScytleNode) => void
     deleteNode: (id: string) => void
@@ -480,6 +484,8 @@ interface EditorState {
     /** Reorder a node within its parent's children array.
      *  gapIndex is 0..N where N = number of siblings. */
     reorderNode: (nodeId: string, gapIndex: number) => void
+    /** Move selected movable nodes by a delta. Returns true if at least one node moved. */
+    nudgeSelectedNodes: (dx: number, dy: number) => boolean
 
     // History (internal) --------------------------------------
     _past: ScytleNode[][]
@@ -587,6 +593,7 @@ export const useEditorStore = create<EditorState>()(
             enteredFrameId: null,
             activeTool: 'select' as CanvasTool,
             editingNodeId: null,
+            isNodeResizeActive: false,
             paddingOverlayNodeId: null,
             paddingOverlayDirection: null,
             gapOverlayNodeId: null,
@@ -797,6 +804,15 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setEditingNodeId'
+                ),
+
+            setNodeResizeActive: (active) =>
+                set(
+                    (state) => {
+                        state.isNodeResizeActive = active
+                    },
+                    false,
+                    'setNodeResizeActive'
                 ),
 
             setPaddingOverlay: (id, direction) =>
@@ -1198,6 +1214,65 @@ export const useEditorStore = create<EditorState>()(
                     'updateNode'
                 )
                 // Sync handled by auto-sync subscriber
+            },
+
+            updateNodes: (entries) => {
+                if (entries.length === 0) return
+
+                set(
+                    (state) => {
+                        _snap(state)
+                        for (const entry of entries) {
+                            const node = findNodeById(state.nodes, entry.id)
+                            if (node) {
+                                Object.assign(node, entry.updates)
+                            }
+                        }
+                    },
+                    false,
+                    'updateNodes'
+                )
+                // Sync handled by auto-sync subscriber
+            },
+
+            nudgeSelectedNodes: (dx, dy) => {
+                if (dx === 0 && dy === 0) return false
+
+                let moved = false
+
+                set(
+                    (state) => {
+                        if (state.selectedIds.length === 0) return
+
+                        let hasSnapshot = false
+
+                        for (const id of state.selectedIds) {
+                            const node = findNodeById(state.nodes, id)
+                            if (!node || node.locked) continue
+
+                            const parent = findParentOfNode(state.nodes, id)?.parent
+                            const canMove =
+                                !parent ||
+                                parent.layout.mode === 'none' ||
+                                node.positioning === 'absolute'
+
+                            if (!canMove) continue
+
+                            if (!hasSnapshot) {
+                                _snap(state)
+                                hasSnapshot = true
+                            }
+
+                            node.x += dx
+                            node.y += dy
+                            moved = true
+                        }
+                    },
+                    false,
+                    'nudgeSelectedNodes'
+                )
+
+                return moved
             },
 
             replaceNode: (oldId, newNode) => {
@@ -2230,6 +2305,7 @@ export const useEditorStore = create<EditorState>()(
                         draft.hoveredId = null
                         draft.enteredFrameId = null
                         draft.editingNodeId = null
+                        draft.isNodeResizeActive = false
                         draft.vectorEditNodeId = null
                         draft.vectorEditTool = 'move'
                         draft.selectedVertexIndices = []
@@ -3051,6 +3127,9 @@ if (typeof window !== 'undefined') {
         if (canvasSync._applyingRemote) return
         // Skip if not connected
         if (canvasSync.status !== 'connected') return
+        // Defer expensive sync diffing while interaction batches are active.
+        // We'll diff once after batch ends using the latest node tree.
+        if (state._batchDepth > 0 || state.isNodeResizeActive) return
 
         const { nodes, activePageId } = state
 
