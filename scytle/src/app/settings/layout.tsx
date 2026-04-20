@@ -1,63 +1,64 @@
 'use client'
 
-import React from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { User, Settings, CreditCard, Shield, HelpCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import React, { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Loader2 } from 'lucide-react'
 import { AppShell } from '@/components/layout/app-shell'
 import { useAuthStore } from '@/store'
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+    const router = useRouter()
     const pathname = usePathname()
-    const { user } = useAuthStore()
+    const { user, checkSession } = useAuthStore()
+    const [authChecked, setAuthChecked] = useState(false)
 
-    const settingsNavigation = [
-        { name: 'Profile', href: '/settings/profile', icon: User, protected: true },
-    ].filter(item => !item.protected || !!user)
+    useEffect(() => {
+        let cancelled = false
+
+        const verifyAuth = async () => {
+            if (!user) {
+                await checkSession()
+            }
+
+            if (!cancelled) {
+                setAuthChecked(true)
+            }
+        }
+
+        verifyAuth()
+
+        return () => {
+            cancelled = true
+        }
+    }, [checkSession, user])
+
+    useEffect(() => {
+        if (!authChecked) return
+        if (user) return
+
+        const redirectPath = pathname || '/settings'
+        router.replace(`/login?redirect=${encodeURIComponent(redirectPath)}`)
+    }, [authChecked, user, router, pathname])
+
+    if (!authChecked || !user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+        )
+    }
 
     return (
         <AppShell>
-            <div className="container py-10 max-w-6xl">
-                <div className="flex flex-col md:flex-row gap-10">
-                    {/* Sidebar */}
-                    <aside className="w-full md:w-64 shrink-0">
-                        <div className="space-y-1">
-                            <h2 className="text-lg font-display font-semibold px-3 mb-4">Settings</h2>
-                            <nav className="space-y-1">
-                                {settingsNavigation.map((item) => {
-                                    const isActive = pathname === item.href
-                                    return (
-                                        <Link
-                                            key={item.name}
-                                            href={item.href}
-                                            className={cn(
-                                                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                                                isActive 
-                                                    ? "bg-foreground text-background shadow-md shadow-foreground/10" 
-                                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                                            )}
-                                        >
-                                            <item.icon className="w-4 h-4" />
-                                            {item.name}
-                                        </Link>
-                                    )
-                                })}
-                            </nav>
-                        </div>
-                    </aside>
+            <div className="relative min-h-[calc(100vh-3.5rem)] overflow-hidden">
+                <div className="pointer-events-none absolute inset-0 -z-10">
+                    <div className="absolute -top-24 left-[20%] h-72 w-72 rounded-full bg-accent/10 blur-[120px]" />
+                    <div className="absolute bottom-0 right-[8%] h-80 w-80 rounded-full bg-accent/10 blur-[120px]" />
+                </div>
 
-                    {/* Content Area */}
-                    <main className="flex-1 min-h-screen relative overflow-hidden">
-                        {/* Background Treatment */}
-                        <div className="absolute inset-0 -z-10 pointer-events-none">
-                            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px]" />
-                            <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-accent/3 rounded-full blur-[120px]" />
-                        </div>
-
-                        <div className="max-w-4xl px-8 py-10 mx-auto relative">
-                            {children}
-                        </div>
+                <div className="container py-8 md:py-10">
+                    <main className="mx-auto w-full max-w-6xl">
+                        {children}
                     </main>
                 </div>
             </div>
