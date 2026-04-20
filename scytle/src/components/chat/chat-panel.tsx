@@ -10,7 +10,7 @@
  *   → makeAssistantToolUI registers tool side-effects + visual cards
  */
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
     AssistantRuntimeProvider,
     makeAssistantToolUI,
@@ -20,7 +20,7 @@ import { useAISDKRuntime } from '@assistant-ui/react-ai-sdk'
 import { AssistantChatTransport } from '@assistant-ui/react-ai-sdk'
 import { useChat } from '@ai-sdk/react'
 import { useAuiState } from '@assistant-ui/store'
-import { Thread } from '@/components/assistant-ui/thread'
+import { Thread, type ThreadSelectedScope } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { Code2, Pencil, Check, Loader2, Search, Copy, ChevronDown } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
@@ -362,24 +362,62 @@ const GenerateSectionToolUI = makeAssistantToolUI({
 const EditNodeToolUI = makeAssistantToolUI({
     toolName: 'editNode',
     render: ({ args, result, status, toolCallId }) => {
+        const [expanded, setExpanded] = useState(false)
+        const [copied, setCopied] = useState(false)
+        const html = (result as any)?.html || ''
+
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 enqueueToolResult('editNode', result)
             }
         }, [status.type, result, toolCallId])
 
+        const handleCopy = useCallback((e: React.MouseEvent) => {
+            e.stopPropagation()
+            if (!html) return
+            navigator.clipboard.writeText(html).then(() => {
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+            })
+        }, [html])
+
         return (
-            <div className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                <Pencil className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <span className="font-medium text-foreground/80">
-                        {status.type === 'running' ? 'Editing node' : 'Node edited'}
-                    </span>
-                    {args?.reason && (
-                        <span className="text-muted-foreground"> — {String(args.reason)}</span>
+            <div className="rounded-lg border border-border/50 bg-muted/30 text-sm">
+                <div
+                    className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => html && setExpanded(!expanded)}
+                >
+                    <Pencil className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <span className="font-medium text-foreground/80">
+                            {status.type === 'running' ? 'Editing node' : 'Node edited'}
+                        </span>
+                        {args?.reason && (
+                            <span className="text-muted-foreground"> — {String(args.reason)}</span>
+                        )}
+                        {html && (
+                            <span className="text-muted-foreground/50 text-xs ml-1">({(html.length / 1024).toFixed(1)}kb)</span>
+                        )}
+                    </div>
+                    {html && (
+                        <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
                     )}
+                    <StatusIcon status={status} />
                 </div>
-                <StatusIcon status={status} />
+                {expanded && html && (
+                    <div className="border-t border-border/50 relative">
+                        <button
+                            onClick={handleCopy}
+                            className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 hover:bg-background border border-border/50 text-muted-foreground hover:text-foreground transition-colors z-10"
+                            title="Copy HTML"
+                        >
+                            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                        <pre className="p-3 overflow-x-auto text-xs text-foreground/70 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">
+                            <code>{html}</code>
+                        </pre>
+                    </div>
+                )}
             </div>
         )
     },
@@ -432,6 +470,38 @@ export function ChatPanel() {
     const selectedIds = useEditorStore((s) => s.selectedIds)
     const projectId = useEditorStore((s) => s._projectId) ?? 'default'
 
+    const selectedNodeSummary = useMemo<ThreadSelectedScope | null>(() => {
+        if (selectedIds.length === 0) return null
+
+        if (selectedIds.length > 1) {
+            return {
+                id: selectedIds.join(','),
+                name: `${selectedIds.length} sections selected`,
+                type: 'multi',
+            }
+        }
+
+        const selectedId = selectedIds[0]
+        if (!selectedId) return null
+
+        const state = useEditorStore.getState()
+        const selectedNode = findNodeById(state.nodes as ScytleNode[], selectedId)
+
+        if (!selectedNode) {
+            return {
+                id: selectedId,
+                name: 'Selected section',
+                type: 'section',
+            }
+        }
+
+        return {
+            id: selectedNode.id,
+            name: selectedNode.name || selectedNode.type,
+            type: selectedNode.type,
+        }
+    }, [selectedIds])
+
     // Read canvas context lazily via getState() — NOT by subscribing to `nodes`.
     // Subscribing caused re-renders on every canvas change (tool results adding nodes),
     // which recreated the transport, potentially aborting the active AI stream.
@@ -441,24 +511,18 @@ export function ChatPanel() {
         return buildContext(s.nodes, s.selectedIds)
     }, [])
 
-    // Mutable body object — the transport stores a REFERENCE to this, not a clone.
-    // Mutating bodyRef.current.context updates what the transport sends at call-time.
-    const bodyRef = useRef<Record<string, unknown>>({ context: getContext() })
-
-    // Refresh context on selection changes (not on every node change)
-    useEffect(() => {
-        bodyRef.current.context = getContext()
-    }, [selectedIds, getContext])
-
     // Transport created ONCE — stable reference across renders.
     const transport = useMemo(
         () => new AssistantChatTransport({
             api: '/api/chat',
-            body: bodyRef.current,
+            body: () => ({ context: getContext() }),
         }),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        []
+        [getContext]
     )
+
+    const handleClearSelection = useCallback(() => {
+        useEditorStore.getState().deselectAll()
+    }, [])
 
     // Persistence adapter — localStorage scoped per project
     const adapter = useMemo(
@@ -491,7 +555,10 @@ export function ChatPanel() {
             <div className="flex flex-col h-full">
                 {/* Thread fills the space */}
                 <div className="flex-1 min-h-0">
-                    <Thread />
+                    <Thread
+                        selectedScope={selectedNodeSummary}
+                        onClearSelectedScope={handleClearSelection}
+                    />
                 </div>
 
                 {/* Thread pills — horizontal scroll at bottom */}

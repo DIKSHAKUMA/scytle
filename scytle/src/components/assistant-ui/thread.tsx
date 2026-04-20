@@ -40,6 +40,7 @@ import {
   RefreshCwIcon,
   Sparkles,
   SquareIcon,
+  XIcon,
 } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
@@ -78,7 +79,21 @@ const MODEL_OPTIONS: ModelOption[] = MODELS.map((m) => ({
   icon: getModelIcon(m.key),
 }));
 
-export const Thread: FC = () => {
+export type ThreadSelectedScope = {
+  id: string;
+  name: string;
+  type: string;
+};
+
+type ThreadProps = {
+  selectedScope?: ThreadSelectedScope | null;
+  onClearSelectedScope?: () => void;
+};
+
+export const Thread: FC<ThreadProps> = ({
+  selectedScope,
+  onClearSelectedScope,
+}) => {
   return (
     <ThreadPrimitive.Root
       className="aui-root aui-thread-root @container flex h-full flex-col bg-background"
@@ -106,7 +121,10 @@ export const Thread: FC = () => {
 
         <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer sticky bottom-0 mx-auto mt-auto flex w-full max-w-(--thread-max-width) flex-col gap-3 overflow-visible rounded-t-(--composer-radius) bg-background pb-3">
           <ThreadScrollToBottom />
-          <Composer />
+          <Composer
+            selectedScope={selectedScope}
+            onClearSelectedScope={onClearSelectedScope}
+          />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -185,7 +203,42 @@ const ThreadSuggestionItem: FC = () => {
   );
 };
 
-const Composer: FC = () => {
+type ComposerScopeChipProps = {
+  scope: ThreadSelectedScope;
+  onClear?: () => void;
+};
+
+const ComposerScopeChip: FC<ComposerScopeChipProps> = ({ scope, onClear }) => {
+  return (
+    <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-foreground/30 bg-background px-3 py-1.5 shadow-sm">
+      <span
+        className="min-w-0 max-w-55 truncate text-sm font-medium text-foreground"
+        title={`${scope.name} (${scope.type})`}
+      >
+        {scope.name}
+      </span>
+      <button
+        type="button"
+        onClick={onClear}
+        disabled={!onClear}
+        className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        aria-label="Clear selected section"
+      >
+        <XIcon className="size-4" />
+      </button>
+    </div>
+  );
+};
+
+type ComposerProps = {
+  selectedScope?: ThreadSelectedScope | null;
+  onClearSelectedScope?: () => void;
+};
+
+const Composer: FC<ComposerProps> = ({
+  selectedScope,
+  onClearSelectedScope,
+}) => {
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone asChild>
@@ -193,9 +246,19 @@ const Composer: FC = () => {
           data-slot="composer-shell"
           className="flex w-full flex-col gap-1.5 rounded-(--composer-radius) border border-border/60 bg-background p-(--composer-padding) transition-shadow focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
         >
+          {selectedScope && (
+            <ComposerScopeChip
+              scope={selectedScope}
+              onClear={onClearSelectedScope}
+            />
+          )}
           <ComposerAttachments />
           <ComposerPrimitive.Input
-            placeholder="Ask a question..."
+            placeholder={
+              selectedScope
+                ? "What would you like to change or create?"
+                : "Ask a question..."
+            }
             className="aui-composer-input max-h-28 min-h-9 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground/60"
             rows={1}
             autoFocus
@@ -221,34 +284,34 @@ const ComposerAction: FC = () => {
         />
       </div>
       <div className="shrink-0">
-      <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send message"
-            side="bottom"
-            type="button"
-            variant="default"
-            size="icon"
-            className="aui-composer-send size-8 rounded-full"
-            aria-label="Send message"
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-4" />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
-      </AuiIf>
-      <AuiIf condition={(s) => s.thread.isRunning}>
-        <ComposerPrimitive.Cancel asChild>
-          <Button
-            type="button"
-            variant="default"
-            size="icon"
-            className="aui-composer-cancel size-8 rounded-full"
-            aria-label="Stop generating"
-          >
-            <SquareIcon className="aui-composer-cancel-icon size-3 fill-current" />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </AuiIf>
+        <AuiIf condition={(s) => !s.thread.isRunning}>
+          <ComposerPrimitive.Send asChild>
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-send size-8 rounded-full"
+              aria-label="Send message"
+            >
+              <ArrowUpIcon className="aui-composer-send-icon size-4" />
+            </TooltipIconButton>
+          </ComposerPrimitive.Send>
+        </AuiIf>
+        <AuiIf condition={(s) => s.thread.isRunning}>
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="default"
+              size="icon"
+              className="aui-composer-cancel size-8 rounded-full"
+              aria-label="Stop generating"
+            >
+              <SquareIcon className="aui-composer-cancel-icon size-3 fill-current" />
+            </Button>
+          </ComposerPrimitive.Cancel>
+        </AuiIf>
       </div>
     </div>
   );

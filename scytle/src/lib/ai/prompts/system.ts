@@ -53,8 +53,9 @@ Choose a clear conceptual direction and execute it with precision.
 Bold maximalism and refined minimalism both work — the key is intentionality, not intensity.
 No two designs should use the same palette, fonts, or layout structure.
 
-CRITICAL: After writing your design brief, you MUST call generateSection() tool calls in the SAME response.
-NEVER generate ONLY text without tool calls — that leaves the canvas empty.`)
+CRITICAL: After writing your design brief, you MUST call at least one canvas tool in the SAME response.
+Use generateSection() for NEW sections and editNode() for selected-section modifications.
+NEVER generate ONLY text without tool calls — that leaves the canvas unchanged.`)
 
   // ─── Section 3: Frontend Aesthetics ──────────────────────────
   sections.push(`# FRONTEND AESTHETICS

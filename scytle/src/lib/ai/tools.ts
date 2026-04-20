@@ -22,6 +22,7 @@ import { searchImages as unsplashSearch } from '@/lib/ai/unsplash'
 // ═══════════════════════════════════════════════════════════
 export const generateSection = tool({
   description: `Generate HTML+Tailwind for ONE visual section and add it to the canvas.
+Use this tool ONLY when creating NEW content (new section/page), not when editing an existing selected section.
 Call once per section: nav, hero, features, stats, testimonials, pricing, cta, footer.
 Use bg-[#hex] and text-[#hex] format for all colors. Include inline font-family styles for custom fonts.
 Keep colors consistent across sections — use the same palette throughout the design.

@@ -15,6 +15,7 @@ import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 
 import { resolveModel, installProxyFixer, DEFAULT_MODEL, MODELS } from '@/lib/ai/providers'
 import { buildSystemPrompt, type SystemPromptContext } from '@/lib/ai/prompts/system'
 import { ALL_TOOLS } from '@/lib/ai/tools'
+import { extractLastUserText, getToolRoutingMode } from '@/lib/ai/intent'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -59,7 +60,31 @@ export async function POST(req: Request) {
     }
 
     // Build system prompt with canvas context
-    const systemPrompt = buildSystemPrompt(context || {})
+    const promptContext = context || {}
+    const systemPrompt = buildSystemPrompt(promptContext)
+
+    // Selection-aware tool routing:
+    // selected + modify/unclear => editNode only
+    // selected + explicit add-new => generateSection only
+    // no selection => normal auto routing
+    const lastUserText = extractLastUserText(messages)
+    const toolRoutingMode = getToolRoutingMode({
+      context: promptContext,
+      lastUserText,
+    })
+
+    const toolsForRequest =
+      toolRoutingMode === 'force-edit'
+        ? { editNode: ALL_TOOLS.editNode, searchImages: ALL_TOOLS.searchImages }
+        : toolRoutingMode === 'force-add'
+          ? { generateSection: ALL_TOOLS.generateSection, searchImages: ALL_TOOLS.searchImages }
+          : ALL_TOOLS
+
+    if (toolRoutingMode !== 'auto') {
+      console.log(
+        `[chat] Tool routing: ${toolRoutingMode} (selected=${promptContext.selectedNodeId ?? 'none'})`
+      )
+    }
 
     // Convert UIMessages (from useChat) → model messages (for the provider)
     const modelMessages = await convertToModelMessages(messages)
@@ -68,7 +93,7 @@ export async function POST(req: Request) {
     const provider = modelDef?.provider || 'proxy'
 
     // Provider-specific options: enable thinking/reasoning for each provider
-    let providerOptions: Record<string, any>
+    let providerOptions: Record<string, unknown>
     if (provider === 'proxy') {
       providerOptions = { openai: { reasoningEffort: 'high' } }
     } else if (provider === 'vertex-global') {
@@ -86,7 +111,7 @@ export async function POST(req: Request) {
       system: systemPrompt,
       messages: modelMessages,
       stopWhen: stepCountIs(20),
-      tools: ALL_TOOLS,
+      tools: toolsForRequest,
       toolChoice: 'auto',
       providerOptions,
       onStepFinish({ toolCalls }) {
@@ -102,10 +127,17 @@ export async function POST(req: Request) {
     // Stream back as UIMessage format for useChat on the client
     // sendReasoning: true streams thinking tokens to frontend
     return result.toUIMessageStreamResponse({ sendReasoning: true })
-  } catch (error: any) {
-    console.error('[chat] Error:', error.message)
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : ''
+    const status =
+      typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        typeof (error as { status?: unknown }).status === 'number'
+        ? (error as { status: number }).status
+        : undefined
 
-    const msg = error.message || ''
+    console.error('[chat] Error:', msg)
 
     // Proxy credentials exhausted (gameron proxy overloaded)
     if (msg.includes('credentials exhausted') || msg.includes('proxy_all_credentials_exhausted')) {
@@ -118,7 +150,7 @@ export async function POST(req: Request) {
     }
 
     // Rate limit (proxy or Vertex)
-    if (msg.includes('rate limit') || error.status === 429 || msg.includes('RESOURCE_EXHAUSTED')) {
+    if (msg.includes('rate limit') || status === 429 || msg.includes('RESOURCE_EXHAUSTED')) {
       return new Response(
         JSON.stringify({
           error: 'Rate limited. Try again in a moment or switch to a different model.',
