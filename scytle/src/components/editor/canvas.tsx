@@ -4,8 +4,13 @@ import { useRef, useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { cn } from '@/lib/utils'
-import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, findContainingFrame, getNodeCanvasPosition } from '@/types/canvas'
+import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
+import {
+    findContainingFrameAtPoint,
+    isNodeWithinFrameScope,
+    shouldExitEnteredFrameOnCanvasClick,
+} from './canvas-parenting'
 import { NodeRenderer } from './node-renderer'
 import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
@@ -533,29 +538,16 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const pos = screenToCanvas(e.clientX, e.clientY)
                 const store = useEditorStore.getState()
 
-                // Match Figma-style intent: only nest text when the user is
-                // explicitly inside a frame context (entered frame or selected frame).
+                // Figma-like behavior: parent by pointer location, not stale selection context.
                 let parentId: string | undefined
                 let adjustedX = pos.x
                 let adjustedY = pos.y
 
-                if (store.enteredFrameId) {
-                    parentId = store.enteredFrameId
-                    const parentPos = getNodeCanvasPosition(store.nodes, parentId)
-                    if (parentPos) {
-                        adjustedX = pos.x - parentPos.x
-                        adjustedY = pos.y - parentPos.y
-                    }
-                } else if (store.selectedIds.length === 1) {
-                    const selectedNode = findNodeById(store.nodes, store.selectedIds[0])
-                    if (selectedNode?.type === 'frame') {
-                        parentId = selectedNode.id
-                        const parentPos = getNodeCanvasPosition(store.nodes, selectedNode.id)
-                        if (parentPos) {
-                            adjustedX = pos.x - parentPos.x
-                            adjustedY = pos.y - parentPos.y
-                        }
-                    }
+                const container = findContainingFrameAtPoint(store.nodes, pos.x, pos.y)
+                if (container) {
+                    parentId = container.frameId
+                    adjustedX = container.relX
+                    adjustedY = container.relY
                 }
 
                 const textNode = createText({
@@ -605,6 +597,16 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
                 if (nodeId) {
                     const currentState = useEditorStore.getState()
+
+                    if (
+                        currentState.enteredFrameId &&
+                        !isNodeWithinFrameScope(currentState.nodes, nodeId, currentState.enteredFrameId)
+                    ) {
+                        // Clicking outside the entered frame should clear drill-in context first.
+                        currentState.exitFrame()
+                        currentState.deselectAll()
+                    }
+
                     if (e.shiftKey) {
                         // Shift-click: toggle in selection
                         currentState.selectNode(nodeId, true)
@@ -627,9 +629,13 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 } else {
                     // Clicked on empty canvas → start marquee selection
                     const state = useEditorStore.getState()
+                    const pos = screenToCanvas(e.clientX, e.clientY)
                     const baseSelectionIds = [...state.selectedIds]
 
                     if (!e.shiftKey) {
+                        if (shouldExitEnteredFrameOnCanvasClick(state.nodes, state.enteredFrameId, pos.x, pos.y)) {
+                            state.exitFrame()
+                        }
                         state.deselectAll()
                     }
 
@@ -640,7 +646,6 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     marqueeSelectionQueuedRef.current = null
                     marqueeSelectionLastRef.current = e.shiftKey ? baseSelectionIds : []
 
-                    const pos = screenToCanvas(e.clientX, e.clientY)
                     setMarquee({
                         startX: pos.x,
                         startY: pos.y,
@@ -966,7 +971,11 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             let adjustedX = frameX
             let adjustedY = frameY
 
-            const container = findContainingFrame(store.nodes, drawState.startCanvasX, drawState.startCanvasY)
+            const container = findContainingFrameAtPoint(
+                store.nodes,
+                drawState.startCanvasX,
+                drawState.startCanvasY,
+            )
             if (container) {
                 const potentialParent = findNodeById(store.nodes, container.frameId)
                 // Check entire drawn rect fits inside the parent frame
@@ -980,14 +989,6 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                     parentId = container.frameId
                     adjustedX = frameX - container.frameAbsX
                     adjustedY = frameY - container.frameAbsY
-                }
-            } else if (store.enteredFrameId) {
-                // Fallback: if drilled into a frame, nest under it
-                parentId = store.enteredFrameId
-                const parentPos = getNodeCanvasPosition(store.nodes, parentId)
-                if (parentPos) {
-                    adjustedX = frameX - parentPos.x
-                    adjustedY = frameY - parentPos.y
                 }
             }
 
