@@ -197,9 +197,10 @@ function isButtonLikeFrame(node: FrameNode): boolean {
     if (node.children[0].type !== 'text') return false
     // Has background fill and padding
     const hasBg = node.fills.length > 0
+    const hasStroke = node.border !== undefined || (node.strokes?.some((stroke) => stroke.visible !== false && stroke.width > 0) ?? false)
     const hasPadding = node.padding.left >= 8 || node.padding.right >= 8
     const isSmall = node.children[0].type === 'text' && (node.children[0] as TextNode).characters.length < 50
-    return (hasBg || node.border !== undefined) && hasPadding && isSmall
+    return (hasBg || hasStroke) && hasPadding && isSmall
 }
 
 // ---- Utilities ----

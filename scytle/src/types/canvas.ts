@@ -587,6 +587,73 @@ const DEFAULT_LAYOUT: Layout = {
     mode: 'none',
 }
 
+function buildTextFillFromLegacyColor(color: string): SolidFill {
+    const raw = color.trim().toLowerCase()
+    if (raw === 'transparent') {
+        return {
+            type: 'solid',
+            color: '#000000',
+            opacity: 0,
+            visible: true,
+            blendMode: 'NORMAL',
+        }
+    }
+
+    const stripped = raw.replace(/^#/, '')
+    if (/^[0-9a-f]{8}$/.test(stripped)) {
+        return {
+            type: 'solid',
+            color: `#${stripped.slice(0, 6)}`,
+            opacity: parseInt(stripped.slice(6, 8), 16) / 255,
+            visible: true,
+            blendMode: 'NORMAL',
+        }
+    }
+    if (/^[0-9a-f]{4}$/.test(stripped)) {
+        const r = stripped[0] + stripped[0]
+        const g = stripped[1] + stripped[1]
+        const b = stripped[2] + stripped[2]
+        const a = stripped[3] + stripped[3]
+        return {
+            type: 'solid',
+            color: `#${r}${g}${b}`,
+            opacity: parseInt(a, 16) / 255,
+            visible: true,
+            blendMode: 'NORMAL',
+        }
+    }
+    if (/^[0-9a-f]{6}$/.test(stripped)) {
+        return {
+            type: 'solid',
+            color: `#${stripped}`,
+            opacity: 1,
+            visible: true,
+            blendMode: 'NORMAL',
+        }
+    }
+    if (/^[0-9a-f]{3}$/.test(stripped)) {
+        const expanded = stripped
+            .split('')
+            .map((ch) => ch + ch)
+            .join('')
+        return {
+            type: 'solid',
+            color: `#${expanded}`,
+            opacity: 1,
+            visible: true,
+            blendMode: 'NORMAL',
+        }
+    }
+
+    return {
+        type: 'solid',
+        color: '#000000',
+        opacity: 1,
+        visible: true,
+        blendMode: 'NORMAL',
+    }
+}
+
 // ============================================================
 // Factory Functions
 // ============================================================
@@ -611,7 +678,7 @@ export function createFrame(
 export function createText(
     overrides?: Partial<Omit<TextNode, 'type'>>
 ): TextNode {
-    return {
+    const node: TextNode = {
         ...DEFAULT_BASE,
         id: generateId(),
         name: 'Text',
@@ -631,8 +698,15 @@ export function createText(
         textDecoration: 'none',
         autoResize: 'width-and-height',
         color: '#000000',
+        fills: [buildTextFillFromLegacyColor('#000000')],
         ...overrides,
     }
+
+    if (overrides?.fills === undefined) {
+        node.fills = [buildTextFillFromLegacyColor(node.color)]
+    }
+
+    return node
 }
 
 /** Create a new ImageNode with sensible defaults */

@@ -9,6 +9,7 @@ import type {
     Fill, Border, Shadow, Padding, Layout, BorderRadius,
 } from '@/types/canvas'
 import { buildReverseColorMap } from '@/lib/parser/color-map'
+import { getTextColorHexForExport } from '@/lib/text-paint'
 
 // ---- Reverse Lookup Maps ----
 
@@ -144,7 +145,10 @@ export function buildTextClasses(node: TextNode): string {
     }
 
     // Text color
-    c.push(colorToTextClass(node.color))
+    const textColorHex = getTextColorHexForExport(node)
+    if (textColorHex) {
+        c.push(colorToTextClass(textColorHex))
+    }
 
     return c.filter(Boolean).join(' ')
 }

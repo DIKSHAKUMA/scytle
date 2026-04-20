@@ -8,6 +8,7 @@ import { normaliseHex, hexOpacityToRgba } from '@/lib/color-utils'
 import { ColorPicker } from './color-picker'
 import { InlineHexValueInput, InlinePercentInput } from './paint-row-inputs'
 import type { ScytleNode, Fill, SolidFill } from '@/types/canvas'
+import { getResolvedTextPaints } from '@/lib/text-paint'
 import { useEditorStore } from '@/store/editor-store'
 import {
     DndContext,
@@ -292,7 +293,12 @@ export function FillSection({ node, onUpdate }: FillSectionProps) {
     const setGradientEditingFillIdx = useEditorStore((s) => s.setGradientEditingFillIdx)
     const setImageCropEditingFillIdx = useEditorStore((s) => s.setImageCropEditingFillIdx)
     const imageCropEditingFillIdx = useEditorStore((s) => s.imageCropEditingFillIdx)
-    const fills = useMemo(() => node.fills ?? [], [node.fills])
+    const fills = useMemo(() => {
+        if (node.type === 'text' && (node.fills?.length ?? 0) === 0) {
+            return getResolvedTextPaints(node)
+        }
+        return node.fills ?? []
+    }, [node])
     const documentColors = collectDocumentColors(allNodes)
 
     // Ensure stable DnD IDs — use fill.id if set, fallback to index-based

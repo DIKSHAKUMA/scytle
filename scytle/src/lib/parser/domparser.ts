@@ -24,6 +24,7 @@ import {
 } from '@/types/canvas'
 import { parseSvgToNetwork, computeBoundingBox, normalizeNetwork } from './svg-path-parser'
 import { estimateTextHeight } from './size-utils'
+import { buildTextSolidFillFromColor } from '@/lib/text-paint'
 
 // ═══════════════════════════════════════════════════
 // Viewport Unit Resolution
@@ -401,7 +402,7 @@ function buildTextNode(
         rotation: 0,
         overflow: 'visible',
         borderRadius: 0,
-        fills: [],
+        fills: [buildTextSolidFillFromColor(color)],
         shadows: [],
         positioning: cs.position === 'absolute' || cs.position === 'fixed' ? 'absolute' : 'auto',
         margin: extractMargin(cs),
@@ -1479,7 +1480,7 @@ function extractLayout(cs: CSSStyleDeclaration, tag?: string, inherited?: Inheri
     const textAlign = eff(cs.textAlign, inherited?.textAlign)
     const flexAlign = textAlign === 'center' ? 'center'
         : textAlign === 'right' || textAlign === 'end' ? 'end'
-        : undefined
+            : undefined
 
     // Table elements → map to flex layout
     if (tag === 'tr') {

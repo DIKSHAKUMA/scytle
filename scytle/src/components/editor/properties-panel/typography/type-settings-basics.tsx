@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { loadFont } from '@/lib/fonts/google-fonts'
+import { getTextPaintStyle } from '@/lib/text-paint'
 
 // ── Option arrays ──────────────────────────────────────────────────────────────
 
@@ -128,6 +129,7 @@ interface TypeSettingsBasicsProps {
 
 export function TypeSettingsBasics({ node, onUpdate }: TypeSettingsBasicsProps) {
     const truncation = node.textTruncation ?? 'disabled'
+    const previewPaintStyle = getTextPaintStyle(node)
 
     // Ensure the font is loaded for the preview box
     useEffect(() => { loadFont(node.fontFamily) }, [node.fontFamily])
@@ -142,11 +144,11 @@ export function TypeSettingsBasics({ node, onUpdate }: TypeSettingsBasicsProps) 
     }>({})
 
     // Merged preview values — hover overrides node's committed state
-    const previewAlign      = previewOverrides.textAlign      ?? node.textAlign
+    const previewAlign = previewOverrides.textAlign ?? node.textAlign
     const previewDecoration = previewOverrides.textDecoration ?? node.textDecoration
-    const previewTransform  = previewOverrides.textTransform  ?? node.textTransform
-    const previewList       = previewOverrides.listStyle      ?? (node.listStyle ?? 'none')
-    const previewTrunc      = previewOverrides.textTruncation ?? (node.textTruncation ?? 'disabled')
+    const previewTransform = previewOverrides.textTransform ?? node.textTransform
+    const previewList = previewOverrides.listStyle ?? (node.listStyle ?? 'none')
+    const previewTrunc = previewOverrides.textTruncation ?? (node.textTruncation ?? 'disabled')
 
     // Preview text: use actual node text (first 40 chars) or fallback specimen
     const previewText = node.characters.trim().slice(0, 40) || 'Aa Bb Cc 012'
@@ -177,7 +179,7 @@ export function TypeSettingsBasics({ node, onUpdate }: TypeSettingsBasicsProps) 
                         : undefined,
                     letterSpacing: letterSpacingCSS,
                     textAlign: previewAlign as React.CSSProperties['textAlign'],
-                    color: node.color,
+                    ...previewPaintStyle,
                     lineHeight: 1.4,
                     wordBreak: 'break-word',
                     // Truncation preview

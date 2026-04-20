@@ -11,7 +11,6 @@ import {
     ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { normaliseHex } from '@/lib/color-utils'
 import { useEditorStore } from '@/store/editor-store'
 import { FontFamilyPicker } from './typography/font-family-picker'
 import { FontStylePicker } from './typography/font-style-picker'
@@ -19,7 +18,6 @@ import { TypeSettingsOverlay } from './typography/type-settings-overlay'
 import { FontSizeCombobox } from './typography/font-size-combobox'
 import { LineHeightInput } from './typography/line-height-input'
 import { LetterSpacingInput } from './typography/letter-spacing-input'
-import { ColorPicker } from './color-picker'
 import { loadFont, parseFontStyleName } from '@/lib/fonts/google-fonts'
 
 // ── Custom inline SVG icons ────────────────────────────────────────────────────
@@ -128,13 +126,10 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
     const [fontTriggerEl, setFontTriggerEl] = useState<HTMLDivElement | null>(null)
     const [settingsBtnEl, setSettingsBtnEl] = useState<HTMLButtonElement | null>(null)
     const [styleTriggerEl, setStyleTriggerEl] = useState<HTMLButtonElement | null>(null)
-    const [colorSwatchEl, setColorSwatchEl] = useState<HTMLButtonElement | null>(null)
     const [stylePickerOpen, setStylePickerOpen] = useState(false)
-    const [colorPickerOpen, setColorPickerOpen] = useState(false)
 
     const displayFontFamily = node.fontFamily
     const displayFontSize = node.fontSize
-    const displayColor = node.color
 
     // Font picker state from store
     const fontPickerOpen = useEditorStore((s) => s.fontPickerOpen)
@@ -334,33 +329,6 @@ export function TypographySection({ node, onUpdate }: TypographySectionProps) {
                     onChange={(v) => onUpdate({ textAlignVertical: v })}
                 />
             </div>
-
-            {/* ── Color ──────────────────────────────────────────────── */}
-            <div className="flex items-center gap-1.5">
-                <button
-                    ref={setColorSwatchEl}
-                    className="w-6 h-6 rounded-sm border border-border/60 shrink-0 cursor-pointer
-                        shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
-                    style={{ backgroundColor: displayColor }}
-                    onClick={() => setColorPickerOpen((v) => !v)}
-                    title="Pick color"
-                />
-                <span className="text-[11px] font-mono text-foreground/80 uppercase tracking-wide">
-                    {normaliseHex(displayColor)}
-                </span>
-            </div>
-            <ColorPicker
-                fill={{ type: 'solid', color: normaliseHex(displayColor), opacity: 1 }}
-                onChange={(fill) => {
-                    if (fill.type === 'solid') {
-                        onUpdate({ color: `#${normaliseHex(fill.color)}` })
-                    }
-                }}
-                anchorEl={colorSwatchEl}
-                open={colorPickerOpen}
-                onClose={() => setColorPickerOpen(false)}
-                solidOnly
-            />
 
             {/* ── Type Settings Overlay (floating, portal) ───────────── */}
             {typeSettingsOpen && (

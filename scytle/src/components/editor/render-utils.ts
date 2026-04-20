@@ -6,6 +6,7 @@ import type {
     ImageFill,
     Shadow,
     Border,
+    NodeEffect,
     BorderRadius,
     Padding,
     GridTrack,
@@ -180,6 +181,68 @@ function computeBoxShadow(shadows: Shadow[]): string | undefined {
             return `${inset}calc(${s.x}px * var(--z, 1)) calc(${s.y}px * var(--z, 1)) calc(${s.blur}px * var(--z, 1)) calc(${s.spread}px * var(--z, 1)) ${s.color}`
         })
         .join(', ')
+}
+
+/** Resolve canonical `effects` array with legacy fallback to `shadows` and blur fields. */
+function resolveNodeEffects(node: ScytleNode): NodeEffect[] {
+    if (node.effects && node.effects.length > 0) return node.effects
+
+    const effects: NodeEffect[] = node.shadows.map((shadow) => ({
+        type: shadow.type === 'drop' ? 'drop-shadow' : 'inner-shadow',
+        color: shadow.color,
+        x: shadow.x,
+        y: shadow.y,
+        blur: shadow.blur,
+        spread: shadow.spread,
+        visible: shadow.visible,
+        blendMode: shadow.blendMode,
+    }))
+
+    if (node.layerBlur && node.layerBlur > 0) {
+        effects.push({ type: 'layer-blur', radius: node.layerBlur, visible: true })
+    }
+    if (node.backgroundBlur && node.backgroundBlur > 0) {
+        effects.push({ type: 'background-blur', radius: node.backgroundBlur, visible: true })
+    }
+
+    return effects
+}
+
+/** Build CSS box-shadow from canonical effect entries. */
+function computeEffectShadows(effects: NodeEffect[]): string | undefined {
+    const shadowEffects = effects.filter(
+        (effect): effect is Extract<NodeEffect, { type: 'drop-shadow' | 'inner-shadow' }> =>
+            (effect.type === 'drop-shadow' || effect.type === 'inner-shadow') && effect.visible !== false,
+    )
+    if (shadowEffects.length === 0) return undefined
+
+    return shadowEffects
+        .map((effect) => {
+            const inset = effect.type === 'inner-shadow' ? 'inset ' : ''
+            return `${inset}calc(${effect.x}px * var(--z, 1)) calc(${effect.y}px * var(--z, 1)) calc(${effect.blur}px * var(--z, 1)) calc(${effect.spread}px * var(--z, 1)) ${effect.color}`
+        })
+        .join(', ')
+}
+
+/** Extract first visible blur radius by type from canonical effect entries. */
+function getBlurRadius(effects: NodeEffect[], blurType: 'layer-blur' | 'background-blur'): number {
+    const blur = effects.find((effect) => effect.type === blurType && effect.visible !== false)
+    if (!blur || blur.type !== blurType) return 0
+    return blur.radius > 0 ? blur.radius : 0
+}
+
+/** Resolve canonical multi-stroke layers with legacy `border` fallback. */
+function resolveStrokeLayers(node: ScytleNode): Border[] {
+    const visibleStrokeLayers = (node.strokes ?? []).filter((stroke) => stroke.visible !== false && stroke.width > 0)
+    if (visibleStrokeLayers.length > 0) return visibleStrokeLayers
+    if (node.border && node.border.visible !== false && node.border.width > 0) return [node.border]
+    return []
+}
+
+/** Non-solid stroke rendering path (dashed/dotted) — CSS can represent one effective layer only. */
+function computeNonSolidStroke(strokes: Border[]): CSSProperties {
+    const firstNonSolid = strokes.find((stroke) => stroke.style !== 'solid')
+    return computeBorder(firstNonSolid)
 }
 
 /** Build box-shadow string from a solid border with inside/center/outside position support.
@@ -379,6 +442,8 @@ export function computeBaseStyles(
     zIndexOverride?: number,
 ): CSSProperties {
     const s: CSSProperties = { boxSizing: 'border-box' }
+    const effects = resolveNodeEffects(node)
+    const strokeLayers = resolveStrokeLayers(node)
 
     // ── Position ──────────────────────────────────────────────
     // Absolute positioning when: top-level, explicit absolute, or child of freeform frame.
@@ -502,18 +567,27 @@ export function computeBaseStyles(
     if (transforms.length > 0) s.transform = transforms.join(' ')
 
     // ── Visual properties ─────────────────────────────────────
-    Object.assign(s, computeBackground(node.fills))
-    Object.assign(s, computeBorder(node.border))      // handles dashed/dotted only
+    if (node.type !== 'text') {
+        Object.assign(s, computeBackground(node.fills))
+    }
+    Object.assign(s, computeNonSolidStroke(strokeLayers))
     Object.assign(s, computeBorderRadius(node.borderRadius))
 
     // ── Box shadow — merge stroke + drop/inner shadows ────────
     // Must be ONE declaration: a second s.boxShadow assignment would silently overwrite.
     // Solid border stroke uses box-shadow for layout-safe inside/center/outside positioning.
     const shadowParts: string[] = []
-    const borderShadow = node.border ? computeBorderAsShadow(node.border) : undefined
-    if (borderShadow) shadowParts.push(borderShadow)
-    const nodeShadow = computeBoxShadow(node.shadows)
-    if (nodeShadow) shadowParts.push(nodeShadow)
+    for (const stroke of strokeLayers) {
+        const borderShadow = computeBorderAsShadow(stroke)
+        if (borderShadow) shadowParts.push(borderShadow)
+    }
+    const effectShadow = computeEffectShadows(effects)
+    if (effectShadow) shadowParts.push(effectShadow)
+    // Legacy fallback for projects that rely solely on shadows and have not migrated.
+    if (!effectShadow) {
+        const legacyShadow = computeBoxShadow(node.shadows)
+        if (legacyShadow) shadowParts.push(legacyShadow)
+    }
     if (shadowParts.length > 0) s.boxShadow = shadowParts.join(', ')
 
     // Apply CSS filter from image fill adjustments (single image fill only)
@@ -524,10 +598,21 @@ export function computeBaseStyles(
         if (imgFilter) filterParts.push(imgFilter)
     }
     // Layer blur (CSS filter: blur)
-    if (node.layerBlur && node.layerBlur > 0) {
-        filterParts.push(`blur(calc(${node.layerBlur}px * var(--z, 1)))`)
+    const layerBlur = getBlurRadius(effects, 'layer-blur')
+    if (layerBlur > 0) {
+        filterParts.push(`blur(calc(${layerBlur}px * var(--z, 1)))`)
     }
     if (filterParts.length > 0) s.filter = filterParts.join(' ')
+
+    // Background blur (Figma: BACKGROUND_BLUR)
+    const backgroundBlur = getBlurRadius(effects, 'background-blur')
+    if (backgroundBlur > 0) {
+        const blurValue = `blur(calc(${backgroundBlur}px * var(--z, 1)))`
+        s.backdropFilter = blurValue
+        // Safari fallback
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(s as any).WebkitBackdropFilter = blurValue
+    }
 
     // Apply blend mode from first visible fill (CSS mix-blend-mode on the element)
     const firstFill = visibleFills[0]

@@ -1320,11 +1320,17 @@ export function CanvasGapZones({
         isColumn: boolean
     } | null>(null)
 
-    // Only show on single selected flex frame with 2+ children
+    // Only show on single selected flex frame with 2+ in-flow children.
+    // Ignore-auto-layout (absolute) children are excluded from gap semantics.
     const frameNode = selectedIds.length === 1
         ? (() => {
             const n = findNodeById(nodes, selectedIds[0])
-            return n && n.type === 'frame' && n.layout.mode === 'flex' && n.children.length >= 2 ? n : null
+            if (!n || n.type !== 'frame' || n.layout.mode !== 'flex') {
+                return null
+            }
+
+            const flowChildren = n.children.filter((child) => child.positioning !== 'absolute')
+            return flowChildren.length >= 2 ? n : null
         })()
         : null
 
@@ -1375,7 +1381,7 @@ export function CanvasGapZones({
             }
 
             const viewportRect = viewport.getBoundingClientRect()
-            const children = currentFrameNode.children
+            const children = currentFrameNode.children.filter((child) => child.positioning !== 'absolute')
             const zones: GapZoneRect[] = []
 
             // Track frame rect for inline input positioning

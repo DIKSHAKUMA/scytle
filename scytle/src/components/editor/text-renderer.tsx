@@ -3,6 +3,7 @@ import type { TextNode } from '@/types/canvas'
 import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
 import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
+import { getTextPaintStyle, getTextPreviewColor } from '@/lib/text-paint'
 
 // ============================================================
 // Props
@@ -34,8 +35,9 @@ export const TextRenderer = memo(function TextRenderer({
 
     const resolvedFontFamily = node.fontFamily
     const resolvedFontSize = node.fontSize
-    const resolvedColor = node.color
     const resolvedFontWeight = node.fontWeight
+    const textPaintStyle = getTextPaintStyle(node)
+    const textCaretColor = getTextPreviewColor(node)
 
     // ── Google Font loading ────────────────────────────────────
     // Load the font on mount and whenever fontFamily changes.
@@ -163,7 +165,7 @@ export const TextRenderer = memo(function TextRenderer({
         textTransform: textTransformCSS,
         fontVariantCaps: isSmallCaps ? 'small-caps' : undefined,
         textDecoration: node.textDecoration !== 'none' ? node.textDecoration : undefined,
-        color: resolvedColor,
+        ...textPaintStyle,
         // Paragraph indent — CSS text-indent applies to first line of each paragraph
         textIndent: node.paragraphIndent ? `calc(${node.paragraphIndent}px * var(--z, 1))` : undefined,
         // Hanging punctuation (CSS, limited browser support but gracefully degrades)
@@ -182,7 +184,7 @@ export const TextRenderer = memo(function TextRenderer({
         // auto margins and explicit margins already set by computeBaseStyles
         ...(!baseStyle.margin ? { margin: 0 } : {}),
         // Editing overrides
-        ...(isEditing ? { outline: 'none', cursor: 'text', caretColor: 'currentColor' } : {}),
+        ...(isEditing ? { outline: 'none', cursor: 'text', caretColor: textCaretColor } : {}),
         // Truncation mode (disabled during editing to allow text selection)
         ...(node.autoResize === 'truncate' && !isEditing
             ? {
