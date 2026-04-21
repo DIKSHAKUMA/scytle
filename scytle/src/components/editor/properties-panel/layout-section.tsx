@@ -14,6 +14,7 @@ import {
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { useEditorStore } from '@/store/editor-store'
+import { isAutoGapLayout } from '../layout-gap-utils'
 
 // ── Figma-style flow radio group ─────────────────────────────
 
@@ -598,7 +599,7 @@ function GapInput({
     onChange: (partial: Partial<Layout>) => void
 }) {
     const isColumn = layout.direction === 'column' || layout.direction === undefined
-    const isSpaceBetween = layout.justify === 'between'
+    const isSpaceBetween = isAutoGapLayout(layout)
     const isGrid = layout.mode === 'grid'
 
     const resolvedGap = layout.gap ?? 0
@@ -607,8 +608,12 @@ function GapInput({
     const primaryGapMin = layout.wrap ? 0 : -999
 
     const handleGapChange = useCallback((partial: Partial<Layout>) => {
+        if (isSpaceBetween && partial.gap != null) {
+            onChange({ justify: 'start', gap: partial.gap })
+            return
+        }
         onChange(partial)
-    }, [onChange])
+    }, [isSpaceBetween, onChange])
 
     // All hooks called unconditionally (React rules of hooks)
     const gapScrub = useScrub(resolvedGap, (v) => handleGapChange({ gap: v }), 1, primaryGapMin)
@@ -884,7 +889,7 @@ export function LayoutSection({ node, onUpdate }: LayoutSectionProps) {
     const isFlex = layout.mode === 'flex'
     const isGrid = layout.mode === 'grid'
     const hasLayout = isFlex || isGrid
-    const isSpaceBetween = layout.justify === 'between'
+    const isSpaceBetween = isAutoGapLayout(layout)
     const updateNode = useEditorStore((s) => s.updateNode)
 
     const updateLayout = (partialLayout: Partial<Layout>) => {

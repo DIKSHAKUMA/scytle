@@ -12,6 +12,7 @@ import type {
     GridTrack,
 } from '@/types/canvas'
 import { blendModeToCSS, hexOpacityToRgba, normaliseHex } from '@/lib/color-utils'
+import { isAutoGapLayout } from './layout-gap-utils'
 
 // ============================================================
 // CSS Value Mappings
@@ -609,9 +610,9 @@ export function computeBaseStyles(
     if (backgroundBlur > 0) {
         const blurValue = `blur(calc(${backgroundBlur}px * var(--z, 1)))`
         s.backdropFilter = blurValue
-        // Safari fallback
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ;(s as any).WebkitBackdropFilter = blurValue
+            // Safari fallback
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ; (s as any).WebkitBackdropFilter = blurValue
     }
 
     // Apply blend mode from first visible fill (CSS mix-blend-mode on the element)
@@ -677,9 +678,10 @@ export function computeFrameLayoutStyles(node: FrameNode): CSSProperties {
     const s: CSSProperties = {}
 
     if (node.layout.mode === 'flex') {
+        const isAutoGap = isAutoGapLayout(node.layout)
         s.display = 'flex'
         s.flexDirection = node.layout.direction ?? 'column'
-        if (node.layout.gap != null) {
+        if (node.layout.gap != null && !isAutoGap) {
             if (node.layout.gap >= 0) {
                 const gapCSS = `calc(${node.layout.gap}px * var(--z, 1))`
                 // Use longhand rowGap/columnGap to avoid React warning when

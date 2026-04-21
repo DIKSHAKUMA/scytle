@@ -5,6 +5,7 @@ import { useEditorStore } from '@/store/editor-store'
 import type { ScytleNode } from '@/types/canvas'
 import { findNodeById } from '@/types/canvas'
 import type { InsertIndicator } from './hooks/use-node-drag'
+import { gapFromMeasuredPx, isAutoGapLayout, toFixedGapLayout } from './layout-gap-utils'
 
 // ============================================================
 // Types
@@ -1293,16 +1294,13 @@ export function CanvasGapZones({
     const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
-    const panX = useEditorStore((s) => s.panX)
-    const panY = useEditorStore((s) => s.panY)
     const updateNode = useEditorStore((s) => s.updateNode)
     const beginBatch = useEditorStore((s) => s.beginBatch)
     const endBatch = useEditorStore((s) => s.endBatch)
 
     const [gapZones, setGapZones] = useState<GapZoneRect[]>([])
     const [frameRect, setFrameRect] = useState<ScreenRect | null>(null)
-    const [isAnyHovered, setIsAnyHovered] = useState(false)
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+    const [activeZoneIndex, setActiveZoneIndex] = useState<number | null>(null)
     const [handleHoveredIndex, setHandleHoveredIndex] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [gapDragCursor, setGapDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
@@ -1311,6 +1309,7 @@ export function CanvasGapZones({
         x: number
         y: number
         value: number
+        index: number
     } | null>(null)
     const rafRef = useRef<number>(0)
     const dragRef = useRef<{
@@ -1336,6 +1335,7 @@ export function CanvasGapZones({
 
     const frameId = frameNode?.id ?? null
     const frameGap = frameNode?.layout.gap ?? 0
+    const isAutoGap = isAutoGapLayout(frameNode?.layout)
     const isColumn = frameNode?.layout.direction === 'column' || frameNode?.layout.direction === undefined
     const allowsNegativeGap = !(frameNode?.layout.wrap)
 
@@ -1554,8 +1554,8 @@ export function CanvasGapZones({
     // Close inline input when selection changes
     useEffect(() => {
         setInlineInput(null)
-        setHoveredIndex(null)
-        setIsAnyHovered(false)
+        setActiveZoneIndex(null)
+        setHandleHoveredIndex(null)
     }, [frameId])
 
     // Stable refs for drag handler — avoids stale closures and listener leaks
@@ -1572,6 +1572,8 @@ export function CanvasGapZones({
         e.preventDefault()
         e.stopPropagation()
         setInlineInput(null)
+        setActiveZoneIndex(zone.index)
+        setHandleHoveredIndex(zone.index)
 
         // Capture pointer on the target element for reliable tracking during drag
         const target = e.currentTarget as HTMLElement
@@ -1581,7 +1583,11 @@ export function CanvasGapZones({
         const startClientX = e.clientX
         const startClientY = e.clientY
         const startPos = isColumn ? e.clientY : e.clientX
-        const startGap = frameGapRef.current
+        const currentFrameNode = findNodeById(useEditorStore.getState().nodes, frameId)
+        const startIsAutoGap = currentFrameNode?.type === 'frame' && isAutoGapLayout(currentFrameNode.layout)
+        const startGap = startIsAutoGap
+            ? gapFromMeasuredPx(zone.actualGapPx, zoomRef.current)
+            : frameGapRef.current
         const DEAD_ZONE = 3
         let dragging = false
 
@@ -1592,6 +1598,14 @@ export function CanvasGapZones({
 
             if (!dragging && dist > DEAD_ZONE) {
                 dragging = true
+
+                if (startIsAutoGap) {
+                    const node = findNodeById(useEditorStore.getState().nodes, frameId)
+                    if (node && node.type === 'frame') {
+                        updateNode(frameId, { layout: toFixedGapLayout(node.layout, startGap) })
+                    }
+                }
+
                 dragRef.current = {
                     startGap,
                     startPos,
@@ -1613,7 +1627,7 @@ export function CanvasGapZones({
 
             const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
             if (!currentNode || currentNode.type !== 'frame') return
-            updateNode(frameId, { layout: { ...currentNode.layout, gap: newGap } })
+            updateNode(frameId, { layout: toFixedGapLayout(currentNode.layout, newGap) })
 
             // Track cursor position for drag tooltip (throttled via RAF)
             const viewportRect = viewportRef.current?.getBoundingClientRect()
@@ -1644,23 +1658,29 @@ export function CanvasGapZones({
                 setGapDragCursor(null)
                 endBatch()
                 // RAF loop will automatically sync zones on next frame
-                setHoveredIndex(null)
-                setIsAnyHovered(false)
+                setActiveZoneIndex(null)
+                setHandleHoveredIndex(null)
             } else {
                 // Was a click — open inline input at bottom of frame (Figma-style)
                 const fr = frameRectRef.current
-                const currentGap = frameGapRef.current
+                const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
+                const currentIsAutoGap = currentNode?.type === 'frame' && isAutoGapLayout(currentNode.layout)
+                const currentGap = currentIsAutoGap
+                    ? gapFromMeasuredPx(zone.actualGapPx, zoomRef.current)
+                    : frameGapRef.current
                 if (fr) {
                     setInlineInput({
                         x: fr.x + fr.width / 2,
                         y: fr.y + fr.height + 20,
                         value: currentGap,
+                        index: zone.index,
                     })
                 } else {
                     setInlineInput({
                         x: zone.x + zone.width / 2,
                         y: zone.y + zone.height + 20,
                         value: currentGap,
+                        index: zone.index,
                     })
                 }
             }
@@ -1677,7 +1697,7 @@ export function CanvasGapZones({
         const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
         if (!currentNode || currentNode.type !== 'frame') return
         const nextGap = allowsNegativeGap ? value : Math.max(0, value)
-        updateNode(frameId, { layout: { ...currentNode.layout, gap: nextGap } })
+        updateNode(frameId, { layout: toFixedGapLayout(currentNode.layout, nextGap) })
         setInlineInput(null)
     }, [frameId, allowsNegativeGap, updateNode])
 
@@ -1688,7 +1708,8 @@ export function CanvasGapZones({
     return (
         <>
             {gapZones.map((zone) => {
-                const isThisHovered = hoveredIndex === zone.index
+                const isActiveZone = activeZoneIndex === zone.index
+                const isInlineZone = inlineInput?.index === zone.index
                 const centerX = zone.x + zone.width / 2
                 const centerY = zone.y + zone.height / 2
 
@@ -1698,7 +1719,18 @@ export function CanvasGapZones({
                 const hitH = isColumn ? CENTER_HANDLE_HIT_DEPTH : CENTER_HANDLE_HIT_WIDTH
 
                 return (
-                    <div key={zone.index}>
+                    <div
+                        key={zone.index}
+                        onMouseEnter={() => {
+                            if (dragRef.current) return
+                            setActiveZoneIndex(zone.index)
+                        }}
+                        onMouseLeave={() => {
+                            if (dragRef.current) return
+                            setHandleHoveredIndex((prev) => (prev === zone.index ? null : prev))
+                            setActiveZoneIndex((prev) => (prev === zone.index ? null : prev))
+                        }}
+                    >
                         {/* Hover-detection zone — full gap area at z:999
                             (below resize handles at z:1000). Detects hover to
                             show pink hatch but has NO onPointerDown — clicks/drags
@@ -1713,24 +1745,6 @@ export function CanvasGapZones({
                                 zIndex: 999,
                                 pointerEvents: 'auto',
                                 cursor: 'default',
-                            }}
-                            onMouseEnter={() => {
-                                if (dragRef.current) return
-                                setHoveredIndex(zone.index)
-                                setIsAnyHovered(true)
-                            }}
-                            onMouseLeave={() => {
-                                if (!dragRef.current) {
-                                    setTimeout(() => {
-                                        setHoveredIndex((prev) => {
-                                            if (prev === zone.index) {
-                                                setIsAnyHovered(false)
-                                                return null
-                                            }
-                                            return prev
-                                        })
-                                    }, 50)
-                                }
                             }}
                         />
 
@@ -1749,29 +1763,17 @@ export function CanvasGapZones({
                             }}
                             onMouseEnter={() => {
                                 if (dragRef.current) return
-                                setHoveredIndex(zone.index)
+                                setActiveZoneIndex(zone.index)
                                 setHandleHoveredIndex(zone.index)
-                                setIsAnyHovered(true)
                             }}
                             onMouseLeave={() => {
-                                setHandleHoveredIndex(null)
-                                if (!dragRef.current) {
-                                    setTimeout(() => {
-                                        setHoveredIndex((prev) => {
-                                            if (prev === zone.index) {
-                                                setIsAnyHovered(false)
-                                                return null
-                                            }
-                                            return prev
-                                        })
-                                    }, 50)
-                                }
+                                setHandleHoveredIndex((prev) => (prev === zone.index ? null : prev))
                             }}
                             onPointerDown={(e) => handlePointerDown(zone, e)}
                         />
 
-                        {/* Pink hatch fill — ALL gaps highlight when ANY gap is hovered */}
-                        {isAnyHovered && !inlineInput && zone.actualGapPx > 0 && (
+                        {/* Pink hatch fill — only the active gap highlights on hover */}
+                        {isActiveZone && !inlineInput && zone.actualGapPx > 0 && (
                             <div
                                 className="pointer-events-none"
                                 style={{
@@ -1787,8 +1789,8 @@ export function CanvasGapZones({
                             />
                         )}
 
-                        {/* Pink outline — ALL gaps show outline when inline input is open */}
-                        {inlineInput && (
+                        {/* Pink outline — only the edited gap shows outline when inline input is open */}
+                        {isInlineZone && (
                             <div
                                 className="pointer-events-none"
                                 style={{
@@ -1838,14 +1840,14 @@ export function CanvasGapZones({
                                         fontWeight: 600,
                                         fontFamily: 'system-ui',
                                     }}>
-                                        {frameGap}
+                                        {isAutoGap ? 'Auto' : frameGap}
                                     </span>
                                 </div>
                             </div>
                         )}
 
-                        {/* Center handle — visual indicator, visible on all gaps when any hovered */}
-                        {(isAnyHovered || isDragging || inlineInput) && (
+                        {/* Center handle — visual indicator for active/edited gap */}
+                        {(isActiveZone || isInlineZone || (isDragging && isActiveZone)) && (
                             <div
                                 className="pointer-events-none"
                                 style={{
