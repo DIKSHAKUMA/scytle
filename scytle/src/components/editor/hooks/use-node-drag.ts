@@ -9,7 +9,7 @@ import type { FrameNode, ScytleNode } from '@/types/canvas'
 // Constants
 // ============================================================
 
-const DRAG_THRESHOLD = 3 // px of movement before drag activates
+const DRAG_THRESHOLD = 5 // px of movement before drag activates
 const REPARENT_INSET = 12
 const REPARENT_OVERLAP_THRESHOLD = 0.25
 
@@ -63,6 +63,8 @@ interface InternalDragState {
     currentGapIndex: number
     /** Pointer ID for capture release */
     pointerId: number
+    /** Node intended by click selection (can differ from drag anchor) */
+    clickTargetId: string
     /** Other selected nodes' starting positions (for multi-select drag) */
     additionalNodes: { id: string; startX: number; startY: number }[]
     /** Whether shift was held during pointer down (skip reduce-to-single on up) */
@@ -90,6 +92,7 @@ const INITIAL_STATE: InternalDragState = {
     originalIndex: -1,
     currentGapIndex: -1,
     pointerId: -1,
+    clickTargetId: '',
     additionalNodes: [],
     shiftHeld: false,
     gridCol: 1,
@@ -343,7 +346,14 @@ export function useNodeDrag(
     // ── Start tracking a potential drag ─────────────────────────
 
     const startPotentialDrag = useCallback(
-        (nodeId: string, pointerX: number, pointerY: number, pointerId: number, shiftHeld: boolean = false) => {
+        (
+            nodeId: string,
+            pointerX: number,
+            pointerY: number,
+            pointerId: number,
+            shiftHeld: boolean = false,
+            clickTargetId?: string,
+        ) => {
             const store = useEditorStore.getState()
             const node = findNodeById(store.nodes, nodeId)
             if (!node || node.locked) return
@@ -393,6 +403,7 @@ export function useNodeDrag(
                 originalIndex: parentResult?.index ?? -1,
                 currentGapIndex: parentResult?.index ?? -1,
                 pointerId,
+                clickTargetId: clickTargetId ?? nodeId,
                 additionalNodes,
                 shiftHeld,
                 gridCol: node.gridColumnStart ?? 1,
@@ -416,7 +427,7 @@ export function useNodeDrag(
 
             // Threshold check — don't consume events until exceeded
             if (s.phase === 'pending') {
-                if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return false
+                if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return false
 
                 s.phase = 'dragging'
                 _isDragActive = true
@@ -628,12 +639,12 @@ export function useNodeDrag(
             viewportRef.current?.releasePointerCapture(s.pointerId)
         }
 
-        // Click without drag — reduce multi-selection to the clicked node
+        // Click without drag — commit click-intended selection
         // (but NOT if shift was held — shift-click adds/removes from selection)
         if (s.phase === 'pending' && !s.shiftHeld) {
             const store = useEditorStore.getState()
-            if (store.selectedIds.length > 1 && store.selectedIds.includes(s.nodeId)) {
-                store.selectNode(s.nodeId, false)
+            if (store.selectedIds.length !== 1 || store.selectedIds[0] !== s.clickTargetId) {
+                store.selectNode(s.clickTargetId, false)
             }
         }
 

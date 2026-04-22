@@ -41,6 +41,17 @@ function mergeUniqueIds(base: readonly string[], incoming: readonly string[]): s
     return Array.from(new Set([...base, ...incoming]))
 }
 
+const DOUBLE_TAP_WINDOW_MS = 360
+const DOUBLE_TAP_MAX_DISTANCE = 10
+
+interface TapSnapshot {
+    time: number
+    x: number
+    y: number
+    clickTargetId: string | null
+    pathIds: string[]
+}
+
 // ============================================================
 // Canvas Component
 // ============================================================
@@ -68,6 +79,8 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const panSourceRef = useRef<'space' | 'middle' | null>(null)
     const lastPointerRef = useRef({ x: 0, y: 0 })
     const lastHoverPointerRef = useRef<{ x: number; y: number } | null>(null)
+    const lastTapRef = useRef<TapSnapshot | null>(null)
+    const lastManualDoubleTapAtRef = useRef<number>(-Infinity)
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
 
     const isHandMode = activeTool === 'hand' || spaceHeld
@@ -362,6 +375,17 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
         }
     }, [contextMenu])
 
+    const collectNodePathIds = useCallback((targetEl: HTMLElement): string[] => {
+        const nodeIds: string[] = []
+        let el: HTMLElement | null = targetEl
+        while (el && el !== viewportRef.current) {
+            const nodeId = el.getAttribute('data-node-id')
+            if (nodeId) nodeIds.push(nodeId)
+            el = el.parentElement
+        }
+        return nodeIds
+    }, [])
+
     /** Resolve which node ID to select given entry context.
      *  Implements Figma-like click-through:
      *  - First click selects top-level parent (or direct child of entered frame)
@@ -374,13 +398,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             const state = useEditorStore.getState()
 
             // Collect all node IDs from target up to viewport (deepest first)
-            const nodeIds: string[] = []
-            let el: HTMLElement | null = targetEl
-            while (el && el !== viewportRef.current) {
-                const nodeId = el.getAttribute('data-node-id')
-                if (nodeId) nodeIds.push(nodeId)
-                el = el.parentElement
-            }
+            const nodeIds = collectNodePathIds(targetEl)
 
             if (nodeIds.length === 0) return null
 
@@ -482,7 +500,108 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             return topLevelId
         },
+        [collectNodePathIds]
+    )
+
+    /**
+     * Resolve pointer-down target for drag interactions.
+     *
+     * When a frame is already selected, dragging from within its descendants
+     * should move that selected frame (unless deep-select is explicitly requested).
+     * This prevents accidental child drags in nested auto-layout content.
+     */
+    const resolvePointerDownTarget = useCallback(
+        (targetEl: HTMLElement, deepSelect = false): string | null => {
+            const clickTargetId = resolveClickTarget(targetEl, deepSelect)
+            if (!clickTargetId || deepSelect) return clickTargetId
+
+            const state = useEditorStore.getState()
+            if (state.selectedIds.length !== 1) return clickTargetId
+
+            const selectedId = state.selectedIds[0]
+            if (selectedId === clickTargetId) return clickTargetId
+
+            const selectedNode = findNodeById(state.nodes, selectedId)
+            if (!selectedNode || selectedNode.type !== 'frame') return clickTargetId
+
+            if (!isNodeWithinFrameScope(state.nodes, clickTargetId, selectedId)) {
+                return clickTargetId
+            }
+
+            return selectedId
+        },
+        [resolveClickTarget]
+    )
+
+    const activateNodeByDoubleTap = useCallback(
+        (nodeId: string, clickPathIds: readonly string[]): boolean => {
+            const state = useEditorStore.getState()
+            const node = findNodeById(state.nodes, nodeId)
+            if (!node) return false
+
+            // Double-click node with image fill → enter crop mode
+            const imgFillIdx = node.fills.findIndex((f) => f.type === 'image' && f.src)
+            if (imgFillIdx >= 0) {
+                const fill = node.fills[imgFillIdx]
+                if (fill.type === 'image' && fill.fit !== 'crop') {
+                    const newFills = node.fills.map((f, i) =>
+                        i === imgFillIdx ? { ...f, fit: 'crop' as const } : f
+                    )
+                    state.updateNode(nodeId, { fills: newFills })
+                }
+                state.setImageCropEditingFillIdx(imgFillIdx)
+                return true
+            }
+
+            if (node.type === 'text') {
+                state.setEditingNodeId(nodeId)
+                return true
+            }
+
+            if (node.type === 'vector') {
+                state.enterVectorEditMode(nodeId)
+                return true
+            }
+
+            if (node.type === 'frame' && node.children.length > 0) {
+                const directChildIds = new Set(node.children.map((child) => child.id))
+                const clickedChildId = clickPathIds.find((id) => directChildIds.has(id))
+                const childId = clickedChildId ?? node.children[0]?.id
+
+                state.enterFrame(nodeId)
+                if (childId) {
+                    state.selectNode(childId)
+                }
+                return true
+            }
+
+            return false
+        },
         []
+    )
+
+    const triggerDoubleTapAction = useCallback(
+        (targetEl: HTMLElement, clickTargetId: string | null): boolean => {
+            const state = useEditorStore.getState()
+            const clickPathIds = collectNodePathIds(targetEl)
+
+            // Match Figma cadence: first try the currently selected node for progressive drill-in.
+            if (state.selectedIds.length === 1) {
+                const selectedId = state.selectedIds[0]
+                if (activateNodeByDoubleTap(selectedId, clickPathIds)) {
+                    return true
+                }
+            }
+
+            if (!clickTargetId) return false
+
+            if (!state.selectedIds.includes(clickTargetId)) {
+                state.selectNode(clickTargetId, false)
+            }
+
+            return activateNodeByDoubleTap(clickTargetId, clickPathIds)
+        },
+        [activateNodeByDoubleTap, collectNodePathIds]
     )
 
     // ----------------------------------------------------------
@@ -508,6 +627,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             // ── Middle mouse / hand tool → pan ────────────────────
             if (e.button === 1 || isHandMode) {
+                lastTapRef.current = null
                 setIsDragging(true)
                 panSourceRef.current = e.button === 1 ? 'middle' : 'space'
                 lastPointerRef.current = { x: e.clientX, y: e.clientY }
@@ -517,10 +637,14 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             }
 
             // Only handle left click from here
-            if (e.button !== 0) return
+            if (e.button !== 0) {
+                lastTapRef.current = null
+                return
+            }
 
             // ── Frame tool → start drawing ────────────────────────
             if (activeTool === 'frame') {
+                lastTapRef.current = null
                 const pos = screenToCanvas(e.clientX, e.clientY)
                 setDrawState({
                     startCanvasX: pos.x,
@@ -535,6 +659,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             // ── Text tool → click to create + edit ────────────────
             if (activeTool === 'text') {
+                lastTapRef.current = null
                 const pos = screenToCanvas(e.clientX, e.clientY)
                 const store = useEditorStore.getState()
 
@@ -565,6 +690,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
             // ── Pen tool → place vertices ──────────────────────────
             if (activeTool === 'pen') {
+                lastTapRef.current = null
                 handlePenPointerDown(e)
                 return
             }
@@ -576,6 +702,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 // Single-click while in vector edit mode → exit it (recomputes bbox, shows selection frame)
                 const currentVectorEditId = useEditorStore.getState().vectorEditNodeId
                 if (currentVectorEditId) {
+                    lastTapRef.current = null
                     useEditorStore.getState().exitVectorEditMode()
                     return
                 }
@@ -584,6 +711,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 const handleDir = target.dataset.handle as HandleDirection | undefined
                 const handleNodeId = target.dataset.nodeHandle
                 if (handleDir && handleNodeId) {
+                    lastTapRef.current = null
                     startResize(handleDir, handleNodeId, e.clientX, e.clientY, e.pointerId)
                     viewportRef.current?.setPointerCapture(e.pointerId)
                     e.preventDefault()
@@ -593,14 +721,55 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 // Cmd/Ctrl modifier enables deep target resolution.
                 // Combined with Shift, this becomes deep multi-select.
                 const isDeepSelect = e.metaKey || e.ctrlKey
-                const nodeId = resolveClickTarget(target, isDeepSelect)
+                const clickPathIds = collectNodePathIds(target)
+                const clickTargetId = resolveClickTarget(target, isDeepSelect)
+                const dragTargetId = e.shiftKey
+                    ? clickTargetId
+                    : resolvePointerDownTarget(target, isDeepSelect)
 
-                if (nodeId) {
+                if (clickTargetId && !e.shiftKey && !isDeepSelect && !e.altKey) {
+                    const previousTap = lastTapRef.current
+                    const elapsed = previousTap ? e.timeStamp - previousTap.time : Number.POSITIVE_INFINITY
+                    const distance = previousTap
+                        ? Math.hypot(e.clientX - previousTap.x, e.clientY - previousTap.y)
+                        : Number.POSITIVE_INFINITY
+
+                    const targetMatches = !!previousTap && previousTap.clickTargetId !== null && (
+                        previousTap.clickTargetId === clickTargetId ||
+                        previousTap.pathIds.includes(clickTargetId) ||
+                        clickPathIds.includes(previousTap.clickTargetId)
+                    )
+
+                    const isDoubleTap = elapsed <= DOUBLE_TAP_WINDOW_MS &&
+                        distance <= DOUBLE_TAP_MAX_DISTANCE &&
+                        targetMatches
+
+                    if (isDoubleTap) {
+                        lastTapRef.current = null
+                        if (triggerDoubleTapAction(target, clickTargetId)) {
+                            lastManualDoubleTapAtRef.current = e.timeStamp
+                            e.preventDefault()
+                            return
+                        }
+                    }
+
+                    lastTapRef.current = {
+                        time: e.timeStamp,
+                        x: e.clientX,
+                        y: e.clientY,
+                        clickTargetId,
+                        pathIds: clickPathIds,
+                    }
+                } else {
+                    lastTapRef.current = null
+                }
+
+                if (clickTargetId && dragTargetId) {
                     const currentState = useEditorStore.getState()
 
                     if (
                         currentState.enteredFrameId &&
-                        !isNodeWithinFrameScope(currentState.nodes, nodeId, currentState.enteredFrameId)
+                        !isNodeWithinFrameScope(currentState.nodes, clickTargetId, currentState.enteredFrameId)
                     ) {
                         // Clicking outside the entered frame should clear drill-in context first.
                         currentState.exitFrame()
@@ -609,24 +778,46 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
 
                     if (e.shiftKey) {
                         // Shift-click: toggle in selection
-                        currentState.selectNode(nodeId, true)
+                        currentState.selectNode(clickTargetId, true)
                         // Only start drag if the node is still selected after toggle
                         const updatedState = useEditorStore.getState()
-                        if (updatedState.selectedIds.includes(nodeId)) {
-                            startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId, true)
+                        if (updatedState.selectedIds.includes(clickTargetId)) {
+                            startPotentialDrag(
+                                clickTargetId,
+                                e.clientX,
+                                e.clientY,
+                                e.pointerId,
+                                true,
+                                clickTargetId,
+                            )
                             viewportRef.current?.setPointerCapture(e.pointerId)
                         }
                     } else {
-                        if (!currentState.selectedIds.includes(nodeId)) {
+                        const shouldDeferClickSelection =
+                            !isDeepSelect &&
+                            dragTargetId !== clickTargetId &&
+                            currentState.selectedIds.length === 1 &&
+                            currentState.selectedIds[0] === dragTargetId
+
+                        if (!shouldDeferClickSelection && !currentState.selectedIds.includes(clickTargetId)) {
                             // Click on unselected node: replace selection
-                            currentState.selectNode(nodeId, false)
+                            currentState.selectNode(clickTargetId, false)
                         }
-                        // If nodeId already in selection without shift: keep multi-selection for drag
-                        startPotentialDrag(nodeId, e.clientX, e.clientY, e.pointerId, false)
+
+                        // Drag uses drag target while click intent is preserved for pointer-up commit.
+                        startPotentialDrag(
+                            dragTargetId,
+                            e.clientX,
+                            e.clientY,
+                            e.pointerId,
+                            false,
+                            clickTargetId,
+                        )
                         // Set pointer capture for smooth out-of-bounds tracking
                         viewportRef.current?.setPointerCapture(e.pointerId)
                     }
                 } else {
+                    lastTapRef.current = null
                     // Clicked on empty canvas → start marquee selection
                     const state = useEditorStore.getState()
                     const pos = screenToCanvas(e.clientX, e.clientY)
@@ -661,7 +852,18 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 }
             }
         },
-        [isHandMode, activeTool, resolveClickTarget, startPotentialDrag, startResize, screenToCanvas, handlePenPointerDown]
+        [
+            isHandMode,
+            activeTool,
+            collectNodePathIds,
+            resolveClickTarget,
+            resolvePointerDownTarget,
+            startPotentialDrag,
+            startResize,
+            screenToCanvas,
+            handlePenPointerDown,
+            triggerDoubleTapAction,
+        ]
     )
 
     // ----------------------------------------------------------
@@ -671,90 +873,21 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
         (e: React.MouseEvent<HTMLDivElement>) => {
             if (activeTool !== 'select') return
 
-            const state = useEditorStore.getState()
-
-            // Drill into the currently selected node (Figma behaviour:
-            // double-click enters the selected frame/group).
-            if (state.selectedIds.length === 1) {
-                const selectedId = state.selectedIds[0]
-                const node = findNodeById(state.nodes, selectedId)
-
-                // Double-click node with image fill → enter crop mode
-                if (node) {
-                    const imgFillIdx = node.fills.findIndex(
-                        (f) => f.type === 'image' && f.src
-                    )
-                    if (imgFillIdx >= 0) {
-                        const fill = node.fills[imgFillIdx]
-                        if (fill.type === 'image' && fill.fit !== 'crop') {
-                            const newFills = node.fills.map((f, i) =>
-                                i === imgFillIdx ? { ...f, fit: 'crop' as const } : f
-                            )
-                            state.updateNode(selectedId, { fills: newFills })
-                        }
-                        state.setImageCropEditingFillIdx(imgFillIdx)
-                        return
-                    }
-                }
-
-                // Double-click text → start inline editing
-                if (node && node.type === 'text') {
-                    state.setEditingNodeId(selectedId)
-                    return
-                }
-
-                // Double-click vector → enter vector edit mode
-                if (node && node.type === 'vector') {
-                    state.enterVectorEditMode(selectedId)
-                    return
-                }
-
-                // Double-click frame → drill in and select first child
-                if (node && node.type === 'frame' && node.children.length > 0) {
-                    state.enterFrame(selectedId)
-                    state.selectNode(node.children[0].id)
-                    return
-                }
+            // Ignore native dblclick if this gesture was already handled
+            // via manual pointer-based double-tap detection.
+            if (e.timeStamp - lastManualDoubleTapAtRef.current <= DOUBLE_TAP_WINDOW_MS) {
+                return
             }
 
-            // Fallback: try resolving from DOM target
             const target = e.target as HTMLElement
-            const nodeId = resolveClickTarget(target)
-            if (!nodeId) return
+            const clickTargetId = resolveClickTarget(target)
+            if (!clickTargetId) return
 
-            const node = findNodeById(state.nodes, nodeId)
-
-            // Fallback: image fill → crop mode
-            if (node) {
-                const imgFillIdx = node.fills.findIndex(
-                    (f) => f.type === 'image' && f.src
-                )
-                if (imgFillIdx >= 0) {
-                    state.selectNode(nodeId)
-                    const fill = node.fills[imgFillIdx]
-                    if (fill.type === 'image' && fill.fit !== 'crop') {
-                        const newFills = node.fills.map((f, i) =>
-                            i === imgFillIdx ? { ...f, fit: 'crop' as const } : f
-                        )
-                        state.updateNode(nodeId, { fills: newFills })
-                    }
-                    state.setImageCropEditingFillIdx(imgFillIdx)
-                    return
-                }
-            }
-
-            if (node && node.type === 'text') {
-                state.selectNode(nodeId)
-                state.setEditingNodeId(nodeId)
-            } else if (node && node.type === 'vector') {
-                state.selectNode(nodeId)
-                state.enterVectorEditMode(nodeId)
-            } else if (node && node.type === 'frame' && node.children.length > 0) {
-                state.enterFrame(nodeId)
-                state.selectNode(node.children[0].id)
+            if (triggerDoubleTapAction(target, clickTargetId)) {
+                lastManualDoubleTapAtRef.current = e.timeStamp
             }
         },
-        [activeTool, resolveClickTarget]
+        [activeTool, resolveClickTarget, triggerDoubleTapAction]
     )
 
     const handleContextMenu = useCallback(
@@ -1022,6 +1155,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     }, [isDragging, activeTool, drawState, marquee, getNodesInRect, onDragPointerUp, onResizePointerUp, handlePenPointerUp])
 
     const handlePointerLeave = useCallback(() => {
+        lastTapRef.current = null
         lastHoverPointerRef.current = null
         useEditorStore.getState().setHoveredId(null)
     }, [])

@@ -176,7 +176,12 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
                 />
             )}
 
-            <SizeSection node={primaryNode} parentNode={parentNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            <SizeSection
+                key={primaryNode.id}
+                node={primaryNode}
+                parentNode={parentNode}
+                onUpdate={(updates) => applySharedUpdate(updates)}
+            />
 
             <AppearanceSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
 
@@ -332,7 +337,7 @@ export function PropertiesPanel() {
 
             {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
 
-            <SizeSection node={node} parentNode={parentNode} onUpdate={onUpdate} />
+            <SizeSection key={node.id} node={node} parentNode={parentNode} onUpdate={onUpdate} />
 
             {isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
             {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
