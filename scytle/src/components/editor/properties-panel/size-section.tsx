@@ -110,6 +110,7 @@ function DimensionModeMenu({
 }: DimensionModeMenuProps) {
     const axisLabel = toAxisLabel(axis)
     const hasAnyLimit = hasMinLimit || hasMaxLimit
+    const supportsSizeVariables = false
 
     return (
         <DropdownMenu>
@@ -134,9 +135,10 @@ function DimensionModeMenu({
                     <DropdownMenuItem
                         key={allowedMode}
                         onSelect={() => onChangeMode(allowedMode)}
+                        variant="inspector"
                         className="h-7 text-[11px]"
                     >
-                        <span className="w-3 text-[10px] text-primary">{allowedMode === mode ? '✓' : ''}</span>
+                        <span className="w-3 text-[10px] text-foreground">{allowedMode === mode ? '✓' : ''}</span>
                         <span>{toAxisModeLabel(allowedMode, axis)}</span>
                     </DropdownMenuItem>
                 ))}
@@ -144,21 +146,21 @@ function DimensionModeMenu({
                 <DropdownMenuSeparator />
 
                 {hasMinLimit ? (
-                    <DropdownMenuItem onSelect={onRemoveMin} className="h-7 text-[11px]">
+                    <DropdownMenuItem onSelect={onRemoveMin} variant="inspector" className="h-7 text-[11px]">
                         Remove min {axisLabel}
                     </DropdownMenuItem>
                 ) : (
-                    <DropdownMenuItem onSelect={onAddMin} className="h-7 text-[11px]">
+                    <DropdownMenuItem onSelect={onAddMin} variant="inspector" className="h-7 text-[11px]">
                         Add min {axisLabel}...
                     </DropdownMenuItem>
                 )}
 
                 {hasMaxLimit ? (
-                    <DropdownMenuItem onSelect={onRemoveMax} className="h-7 text-[11px]">
+                    <DropdownMenuItem onSelect={onRemoveMax} variant="inspector" className="h-7 text-[11px]">
                         Remove max {axisLabel}
                     </DropdownMenuItem>
                 ) : (
-                    <DropdownMenuItem onSelect={onAddMax} className="h-7 text-[11px]">
+                    <DropdownMenuItem onSelect={onAddMax} variant="inspector" className="h-7 text-[11px]">
                         Add max {axisLabel}...
                     </DropdownMenuItem>
                 )}
@@ -168,17 +170,22 @@ function DimensionModeMenu({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onSelect={onRemoveMinAndMax}
-                            className="h-7 text-[11px] text-destructive focus:text-destructive"
+                            variant="destructive"
+                            className="h-7 text-[11px]"
                         >
                             Remove min and max
                         </DropdownMenuItem>
                     </>
                 )}
 
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled className="h-7 text-[11px]">
-                    Apply variable...
-                </DropdownMenuItem>
+                {supportsSizeVariables && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled variant="inspector" className="h-7 text-[11px]">
+                            Apply variable...
+                        </DropdownMenuItem>
+                    </>
+                )}
             </DropdownMenuContent>
         </DropdownMenu>
     )
