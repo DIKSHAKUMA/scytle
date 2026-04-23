@@ -570,6 +570,7 @@ function PaddingHatchRects({
 // ============================================================
 
 type PaddingSide = 'top' | 'right' | 'bottom' | 'left'
+type PaddingDragMode = 'single' | 'opposite' | 'all'
 
 const OPPOSITE_SIDE: Record<PaddingSide, PaddingSide> = {
     top: 'bottom',
@@ -577,6 +578,8 @@ const OPPOSITE_SIDE: Record<PaddingSide, PaddingSide> = {
     left: 'right',
     right: 'left',
 }
+
+const ALL_PADDING_SIDES: PaddingSide[] = ['top', 'right', 'bottom', 'left']
 
 // Center handle: small perpendicular line in the middle of each padding zone
 const CENTER_HANDLE_LENGTH = 16
@@ -586,6 +589,44 @@ const CENTER_HANDLE_THICKNESS = 2
 // remain accessible at edges/corners (fixes accidental padding drag).
 const CENTER_HANDLE_HIT_WIDTH = 16  // along the edge (perpendicular to drag)
 const CENTER_HANDLE_HIT_DEPTH = 12  // into the padding (parallel to drag)
+const PADDING_DRAG_DEAD_ZONE = 3
+const PADDING_BIG_NUDGE = 10
+
+function getPaddingDragMode(altKey: boolean, shiftKey: boolean): PaddingDragMode {
+    if (altKey && shiftKey) return 'all'
+    if (altKey) return 'opposite'
+    return 'single'
+}
+
+function getPaddingSidesForMode(side: PaddingSide, mode: PaddingDragMode): PaddingSide[] {
+    if (mode === 'all') return ALL_PADDING_SIDES
+    if (mode === 'opposite') return [side, OPPOSITE_SIDE[side]]
+    return [side]
+}
+
+function getPaddingOverlayDirectionForMode(
+    side: PaddingSide,
+    mode: PaddingDragMode
+): PaddingDirection {
+    if (mode === 'all') return 'all'
+    if (mode === 'opposite') {
+        return side === 'left' || side === 'right' ? 'horizontal' : 'vertical'
+    }
+    return side
+}
+
+function quantizePaddingDelta(delta: number, useBigNudge: boolean): number {
+    if (!useBigNudge) return delta
+    return Math.round(delta / PADDING_BIG_NUDGE) * PADDING_BIG_NUDGE
+}
+
+function computeDriverPaddingValue(
+    startPadding: { top: number; right: number; bottom: number; left: number },
+    side: PaddingSide,
+    delta: number
+): number {
+    return Math.max(0, Math.round(startPadding[side] + delta))
+}
 
 export function CanvasPaddingZones({
     viewportRef,
@@ -596,8 +637,6 @@ export function CanvasPaddingZones({
     const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
     const nodes = useEditorStore((s) => s.nodes)
     const zoom = useEditorStore((s) => s.zoom)
-    const panX = useEditorStore((s) => s.panX)
-    const panY = useEditorStore((s) => s.panY)
     const updateNode = useEditorStore((s) => s.updateNode)
     const setPaddingOverlay = useEditorStore((s) => s.setPaddingOverlay)
     const beginBatch = useEditorStore((s) => s.beginBatch)
@@ -608,6 +647,7 @@ export function CanvasPaddingZones({
     const [handleHoveredSide, setHandleHoveredSide] = useState<PaddingSide | null>(null)
     const [inlineInput, setInlineInput] = useState<{
         side: PaddingSide
+        targetSides: PaddingSide[]
         x: number
         y: number
         value: number
@@ -617,11 +657,11 @@ export function CanvasPaddingZones({
     const dragCursorRaf = useRef<number>(0)
     const dragRef = useRef<{
         side: PaddingSide
-        startValue: number
-        oppositeStartValue: number
+        startPadding: { top: number; right: number; bottom: number; left: number }
         startPos: number
         nodeId: string
     } | null>(null)
+    const pointerSessionCleanupRef = useRef<(() => void) | null>(null)
 
     // Only show on single selected auto-layout frame
     const frameNode = selectedIds.length === 1
@@ -699,7 +739,22 @@ export function CanvasPaddingZones({
     useEffect(() => {
         setInlineInput(null)
         setHoveredSide(null)
+        setHandleHoveredSide(null)
     }, [frameId])
+
+    // Ensure no orphaned pointer listeners/batches remain if the overlay unmounts.
+    useEffect(() => {
+        return () => {
+            pointerSessionCleanupRef.current?.()
+            pointerSessionCleanupRef.current = null
+            cancelAnimationFrame(dragCursorRaf.current)
+            if (dragRef.current) {
+                dragRef.current = null
+                endBatch()
+            }
+            setPaddingOverlay(null)
+        }
+    }, [endBatch, setPaddingOverlay])
 
     const handleMouseEnter = useCallback((side: PaddingSide) => {
         if (frameId && !dragRef.current) {
@@ -735,6 +790,10 @@ export function CanvasPaddingZones({
         // Close any open inline input
         setInlineInput(null)
 
+        // Abort any stale pointer session before starting a new one.
+        pointerSessionCleanupRef.current?.()
+        pointerSessionCleanupRef.current = null
+
         // Capture pointer on the target element for reliable tracking during drag
         const target = e.currentTarget as HTMLElement
         target.setPointerCapture(e.pointerId)
@@ -744,23 +803,25 @@ export function CanvasPaddingZones({
         const startClientX = e.clientX
         const startClientY = e.clientY
         const startPos = isHorizontal ? e.clientX : e.clientY
-        const DEAD_ZONE = 3
         let dragging = false
 
-        const startValue = framePadding[side]
-        const oppositeStartValue = framePadding[OPPOSITE_SIDE[side]]
+        const startPadding = {
+            top: framePadding.top,
+            right: framePadding.right,
+            bottom: framePadding.bottom,
+            left: framePadding.left,
+        }
 
         const handleMove = (ev: PointerEvent) => {
             const dx = ev.clientX - startClientX
             const dy = ev.clientY - startClientY
             const dist = Math.sqrt(dx * dx + dy * dy)
 
-            if (!dragging && dist > DEAD_ZONE) {
+            if (!dragging && dist > PADDING_DRAG_DEAD_ZONE) {
                 dragging = true
                 dragRef.current = {
                     side,
-                    startValue,
-                    oppositeStartValue,
+                    startPadding,
                     startPos,
                     nodeId: frameId,
                 }
@@ -772,23 +833,21 @@ export function CanvasPaddingZones({
             const isH = side === 'left' || side === 'right'
             const currentPos = isH ? ev.clientX : ev.clientY
             const invert = side === 'left' || side === 'top' ? -1 : 1
-            const delta = (currentPos - startPos) * invert / paddingZoomRef.current
-
-            const newValue = Math.max(0, Math.round(startValue + delta))
+            const rawDelta = (currentPos - startPos) * invert / paddingZoomRef.current
+            const delta = quantizePaddingDelta(rawDelta, ev.shiftKey)
+            const dragMode = getPaddingDragMode(ev.altKey, ev.shiftKey)
+            const targetSides = getPaddingSidesForMode(side, dragMode)
 
             const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
             if (!currentNode || currentNode.type !== 'frame') return
             const currentPadding = { ...currentNode.padding }
+            const driverValue = computeDriverPaddingValue(startPadding, side, delta)
 
-            currentPadding[side] = newValue
-
-            if (ev.altKey) {
-                const oppositeNewValue = Math.max(0, Math.round(oppositeStartValue + delta))
-                currentPadding[OPPOSITE_SIDE[side]] = oppositeNewValue
-                setPaddingOverlay(frameId, isH ? 'horizontal' : 'vertical')
-            } else {
-                setPaddingOverlay(frameId, side)
+            for (const targetSide of targetSides) {
+                currentPadding[targetSide] = driverValue
             }
+
+            setPaddingOverlay(frameId, getPaddingOverlayDirectionForMode(side, dragMode))
 
             updateNode(frameId, { padding: currentPadding })
 
@@ -799,7 +858,7 @@ export function CanvasPaddingZones({
                 const cursorData = {
                     x: ev.clientX - viewportRect.left,
                     y: ev.clientY - viewportRect.top,
-                    value: newValue,
+                    value: currentPadding[side],
                 }
                 dragCursorRaf.current = requestAnimationFrame(() => {
                     setDragCursor(cursorData)
@@ -808,11 +867,11 @@ export function CanvasPaddingZones({
         }
 
         const handleUp = (ev: PointerEvent) => {
+            pointerSessionCleanupRef.current?.()
+            pointerSessionCleanupRef.current = null
+
             // Release pointer capture
             try { target.releasePointerCapture(pointerId) } catch { /* already released */ }
-            target.removeEventListener('pointermove', handleMove)
-            target.removeEventListener('pointerup', handleUp)
-            target.removeEventListener('pointercancel', handleUp)
 
             if (dragging) {
                 // Was a drag — end batch
@@ -833,6 +892,8 @@ export function CanvasPaddingZones({
                 const pr = currentPad.right * currentZoom
                 const pb = currentPad.bottom * currentZoom
                 const pl = currentPad.left * currentZoom
+                const clickMode = getPaddingDragMode(ev.altKey, ev.shiftKey)
+                const targetSides = getPaddingSidesForMode(side, clickMode)
 
                 let x: number, y: number
                 switch (side) {
@@ -854,24 +915,34 @@ export function CanvasPaddingZones({
                         break
                 }
 
-                setInlineInput({ side, x, y, value: currentPad[side] })
+                setInlineInput({ side, targetSides, x, y, value: currentPad[side] })
                 setHoveredSide(null)
                 setPaddingOverlay(null)
             }
         }
 
-        // Use pointer events on the captured element, not window
-        target.addEventListener('pointermove', handleMove)
-        target.addEventListener('pointerup', handleUp)
-        target.addEventListener('pointercancel', handleUp)
-    }, [frameId, framePadding, rect, beginBatch, endBatch, updateNode, setPaddingOverlay])
+        const cleanupSession = () => {
+            window.removeEventListener('pointermove', handleMove)
+            window.removeEventListener('pointerup', handleUp)
+            window.removeEventListener('pointercancel', handleUp)
+        }
+
+        pointerSessionCleanupRef.current = cleanupSession
+
+        // Use window listeners so drag continues even if the originating handle re-renders.
+        window.addEventListener('pointermove', handleMove)
+        window.addEventListener('pointerup', handleUp)
+        window.addEventListener('pointercancel', handleUp)
+    }, [frameId, framePadding, rect, beginBatch, endBatch, updateNode, setPaddingOverlay, viewportRef])
 
     const handleInlineInputChange = useCallback((value: number) => {
         if (!frameId || !inlineInput) return
         const currentNode = findNodeById(useEditorStore.getState().nodes, frameId)
         if (!currentNode || currentNode.type !== 'frame') return
         const currentPadding = { ...currentNode.padding }
-        currentPadding[inlineInput.side] = Math.max(0, value)
+        for (const targetSide of inlineInput.targetSides) {
+            currentPadding[targetSide] = Math.max(0, value)
+        }
         updateNode(frameId, { padding: currentPadding })
         setInlineInput(null)
     }, [frameId, inlineInput, updateNode])
@@ -884,6 +955,7 @@ export function CanvasPaddingZones({
     const pl = framePadding.left * zoom
 
     const MIN_HIT = 6
+    const HANDLE_SAFE_OFFSET = Math.max(MIN_HIT / 2, EDGE_HIT_ZONE / 2 + 2)
 
     const zones: { side: PaddingSide; style: React.CSSProperties }[] = [
         {
@@ -928,15 +1000,16 @@ export function CanvasPaddingZones({
     const getCenterHandle = (side: PaddingSide): { x: number; y: number; isVertical: boolean } => {
         const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
         const p = Math.max(paddingPx[side], MIN_HIT)
+        const offset = Math.max(p / 2, HANDLE_SAFE_OFFSET)
         switch (side) {
             case 'top':
-                return { x: rect.x + rect.width / 2, y: rect.y + p / 2, isVertical: false }
+                return { x: rect.x + rect.width / 2, y: rect.y + offset, isVertical: false }
             case 'bottom':
-                return { x: rect.x + rect.width / 2, y: rect.y + rect.height - p / 2, isVertical: false }
+                return { x: rect.x + rect.width / 2, y: rect.y + rect.height - offset, isVertical: false }
             case 'left':
-                return { x: rect.x + p / 2, y: rect.y + rect.height / 2, isVertical: true }
+                return { x: rect.x + offset, y: rect.y + rect.height / 2, isVertical: true }
             case 'right':
-                return { x: rect.x + rect.width - p / 2, y: rect.y + rect.height / 2, isVertical: true }
+                return { x: rect.x + rect.width - offset, y: rect.y + rect.height / 2, isVertical: true }
         }
     }
 
@@ -944,8 +1017,8 @@ export function CanvasPaddingZones({
         <>
             {/* Hover-detection padding zones — pointer-events:auto at z:999
                 (below resize handles at z:1000) so they detect hover everywhere
-                EXCEPT where resize handles are. onPointerDown opens the inline
-                input when clicking anywhere on the blue hatch area. */}
+                EXCEPT where resize handles are. Pointer-down is intentionally
+                reserved for the center handles to mirror Figma controls. */}
             {zones.map(({ side, style }) => (
                 <div
                     key={`hover-${side}`}
@@ -958,7 +1031,6 @@ export function CanvasPaddingZones({
                     }}
                     onMouseEnter={() => handleMouseEnter(side)}
                     onMouseLeave={() => handleMouseLeave(side)}
-                    onPointerDown={(e) => handlePointerDown(side, e)}
                 />
             ))}
 
@@ -987,11 +1059,7 @@ export function CanvasPaddingZones({
                 const handle = getCenterHandle(side)
                 const isHovered = hoveredSide === side
                 const isOnHandle = handleHoveredSide === side
-                const paddingPx = { top: pt, right: pr, bottom: pb, left: pl }
-                const showHandle = paddingPx[side] >= 4
                 const isHorizontalSide = side === 'left' || side === 'right'
-
-                if (!showHandle) return null
 
                 // Hit area: wider along the edge, narrower into the padding
                 const hitW = isHorizontalSide ? CENTER_HANDLE_HIT_DEPTH : CENTER_HANDLE_HIT_WIDTH

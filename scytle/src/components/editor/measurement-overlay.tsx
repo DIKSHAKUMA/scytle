@@ -252,7 +252,7 @@ function calculateTargetMeasurements(
     // Check if one completely contains the other
     const isInsideH = S.x >= H.x && S.x + S.width <= H.x + H.width && S.y >= H.y && S.y + S.height <= H.y + H.height
     const hInsideS = H.x >= S.x && H.x + H.width <= S.x + S.width && H.y >= S.y && H.y + H.height <= S.y + S.height
-    
+
     if (isInsideH) return calculateParentMeasurements(S, H, zoom)
     if (hInsideS) return calculateParentMeasurements(H, S, zoom)
 
@@ -266,10 +266,10 @@ function calculateTargetMeasurements(
         const sy = targetIsAbove ? S.y : S.y + S.height
         const hy = targetIsAbove ? H.y + H.height : H.y
         const logicalDist = Math.round(Math.abs(sy - hy) / zoom)
-        
+
         if (logicalDist >= MIN_DISTANCE) {
             lines.push({ x1: scx, y1: sy, x2: scx, y2: hy, distance: logicalDist, direction: 'vertical' })
-            
+
             if (scx < H.x) {
                 lines.push({ x1: scx, y1: hy, x2: H.x, y2: hy, distance: 0, direction: 'horizontal', isDashed: true })
             } else if (scx > H.x + H.width) {
@@ -283,10 +283,10 @@ function calculateTargetMeasurements(
         const sx = targetIsLeft ? S.x : S.x + S.width
         const hx = targetIsLeft ? H.x + H.width : H.x
         const logicalDist = Math.round(Math.abs(sx - hx) / zoom)
-        
+
         if (logicalDist >= MIN_DISTANCE) {
             lines.push({ x1: sx, y1: scy, x2: hx, y2: scy, distance: logicalDist, direction: 'horizontal' })
-            
+
             if (scy < H.y) {
                 lines.push({ x1: hx, y1: scy, x2: hx, y2: H.y, distance: 0, direction: 'vertical', isDashed: true })
             } else if (scy > H.y + H.height) {
@@ -305,6 +305,8 @@ function calculateTargetMeasurements(
 //     to parent edges AND sibling frames
 //   - Dragging: show magenta alignment guide lines only (no numbers)
 //   - Alt+drag: duplicate + alignment guides only
+//   - While auto-layout spacing handles are active (padding/gap),
+//     suppress generic Alt measurement redlines.
 // ============================================================
 
 export function MeasurementOverlay({
@@ -320,11 +322,14 @@ export function MeasurementOverlay({
     const panX = useEditorStore((s) => s.panX)
     const panY = useEditorStore((s) => s.panY)
     const hoveredId = useEditorStore((s) => s.hoveredId)
+    const paddingOverlayNodeId = useEditorStore((s) => s.paddingOverlayNodeId)
+    const gapOverlayNodeId = useEditorStore((s) => s.gapOverlayNodeId)
 
     const [alignmentLines, setAlignmentLines] = useState<AlignmentLine[]>([])
     const [measurementLines, setMeasurementLines] = useState<MeasurementLine[]>([])
     const [altHeld, setAltHeld] = useState(false)
     const rafRef = useRef<number>(0)
+    const spacingHandlesActive = paddingOverlayNodeId !== null || gapOverlayNodeId !== null
 
     // Track Alt key state
     useEffect(() => {
@@ -393,6 +398,10 @@ export function MeasurementOverlay({
 
     // ALT (no drag) MODE: show measurement lines with numbers
     const updateAltOverlay = useCallback(() => {
+        if (spacingHandlesActive) {
+            return
+        }
+
         const ctx = getContext()
         if (!ctx) {
             setMeasurementLines([])
@@ -418,7 +427,7 @@ export function MeasurementOverlay({
 
         setMeasurementLines(lines)
         setAlignmentLines([]) // No alignment guides in static measurement mode
-    }, [getContext, zoom, hoveredId, viewportRef])
+    }, [getContext, zoom, hoveredId, viewportRef, spacingHandlesActive])
 
     // RAF loop for drag alignment
     useEffect(() => {
@@ -430,8 +439,6 @@ export function MeasurementOverlay({
         }
         if (isDragging) {
             loop()
-        } else {
-            setAlignmentLines([])
         }
         return () => {
             running = false
@@ -441,19 +448,32 @@ export function MeasurementOverlay({
 
     // Alt (no drag) measurement mode
     useEffect(() => {
-        if (altHeld && !isDragging && selectedIds.length === 1) {
-            updateAltOverlay()
-        } else if (!isDragging) {
-            setMeasurementLines([])
+        if (spacingHandlesActive && !isDragging) {
+            return
         }
-    }, [altHeld, isDragging, selectedIds, updateAltOverlay, panX, panY, zoom, hoveredId])
 
-    if (alignmentLines.length === 0 && measurementLines.length === 0) return null
+        if (altHeld && !isDragging && selectedIds.length === 1) {
+            const rafId = requestAnimationFrame(() => {
+                updateAltOverlay()
+            })
+            return () => cancelAnimationFrame(rafId)
+        } else if (!isDragging) {
+            const rafId = requestAnimationFrame(() => {
+                setMeasurementLines([])
+            })
+            return () => cancelAnimationFrame(rafId)
+        }
+    }, [altHeld, isDragging, selectedIds, updateAltOverlay, panX, panY, zoom, hoveredId, spacingHandlesActive])
+
+    const visibleAlignmentLines = isDragging ? alignmentLines : []
+    const visibleMeasurementLines = spacingHandlesActive && !isDragging ? [] : measurementLines
+
+    if (visibleAlignmentLines.length === 0 && visibleMeasurementLines.length === 0) return null
 
     return (
         <>
             {/* Alignment guide lines — magenta (drag only) */}
-            {alignmentLines.map((line, i) => {
+            {visibleAlignmentLines.map((line, i) => {
                 const isV = line.direction === 'vertical'
                 const length = line.end - line.start
                 if (length < 2) return null
@@ -477,7 +497,7 @@ export function MeasurementOverlay({
             })}
 
             {/* Measurement lines — red with distance labels (Alt, no drag) */}
-            {measurementLines.map((m, i) => {
+            {visibleMeasurementLines.map((m, i) => {
                 const isH = m.direction === 'horizontal'
                 const lineLength = isH
                     ? Math.abs(m.x2 - m.x1)
@@ -516,11 +536,10 @@ export function MeasurementOverlay({
                                     position: 'absolute',
                                     left: midX,
                                     top: midY,
-                                    transform: `translate(-50%, -50%) ${
-                                        lineLength < 36 
-                                            ? isH ? 'translateY(-16px)' : 'translateX(16px)' 
+                                    transform: `translate(-50%, -50%) ${lineLength < 36
+                                            ? isH ? 'translateY(-16px)' : 'translateX(16px)'
                                             : ''
-                                    }`,
+                                        }`,
                                     backgroundColor: color,
                                     color: '#ffffff',
                                     fontSize: 10,
