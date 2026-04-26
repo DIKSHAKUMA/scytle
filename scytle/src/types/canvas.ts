@@ -95,6 +95,24 @@ export const ShadowSchema = z.object({
     blendMode: BlendModeSchema.optional(),
 })
 
+export const NodeEffectSchema = z.discriminatedUnion('type', [
+    z.object({
+        type: z.enum(['drop-shadow', 'inner-shadow']),
+        color: z.string(),
+        x: z.number(),
+        y: z.number(),
+        blur: z.number(),
+        spread: z.number(),
+        visible: z.boolean().optional(),
+        blendMode: BlendModeSchema.optional(),
+    }),
+    z.object({
+        type: z.enum(['layer-blur', 'background-blur']),
+        radius: z.number(),
+        visible: z.boolean().optional(),
+    })
+])
+
 export const BorderSchema = z.object({
     color: z.string(),
     width: z.number(),
@@ -184,6 +202,7 @@ export type GradientFill = z.infer<typeof GradientFillSchema>
 export type GradientStop = z.infer<typeof GradientStopSchema>
 export type ImageFill = z.infer<typeof ImageFillSchema>
 export type Shadow = z.infer<typeof ShadowSchema>
+export type NodeEffect = z.infer<typeof NodeEffectSchema>
 export type Border = z.infer<typeof BorderSchema>
 export type Sizing = z.infer<typeof SizingSchema>
 export type Padding = z.infer<typeof PaddingSchema>
@@ -373,9 +392,13 @@ export interface BaseNodeProperties {
     borderRadius: BorderRadius
     fills: Fill[]
     border?: Border
+    strokes?: Border[]
     shadows: Shadow[]
+    effects?: NodeEffect[]
     /** Layer blur in px (CSS filter: blur). 0 = no blur. */
     layerBlur?: number
+    /** Background blur in px (CSS backdrop-filter: blur). 0 = no blur. */
+    backgroundBlur?: number
 
     // === SPACING (for HTML/CSS compatibility) ===
     /** Margin (CSS spacing outside element borders) - preserved from HTML parsing */

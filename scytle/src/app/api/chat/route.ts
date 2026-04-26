@@ -9,6 +9,12 @@
  *   - toUIMessageStreamResponse() streams back to useChat on client
  *   - stepCountIs(20) — generous headroom for full page generation
  *   - installProxyFixer() merges proxy multi-choice responses
+ *
+ * Credit system:
+ *   - Checks user credits before running AI
+ *   - Returns 402 if credits exhausted
+ *   - Deferred deduction: charges AFTER stream completes
+ *   - Cost = model_multiplier × Σ(action_weights)
  */
 
 import { streamText, stepCountIs, convertToModelMessages, type UIMessage } from 'ai'
@@ -16,6 +22,8 @@ import { resolveModel, installProxyFixer, DEFAULT_MODEL, MODELS } from '@/lib/ai
 import { buildSystemPrompt, type SystemPromptContext } from '@/lib/ai/prompts/system'
 import { ALL_TOOLS } from '@/lib/ai/tools'
 import { extractLastUserText, getToolRoutingMode } from '@/lib/ai/intent'
+import { getUserFromJWT } from '@/lib/appwrite-server'
+import { checkCredits, deductCredits, calculateCreditCost } from '@/lib/credits'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,6 +54,27 @@ export async function POST(req: Request) {
       )
     }
 
+    // ── Credit check ──────────────────────────────────────────
+    // Auth is passed via x-auth-jwt header from the client transport
+    const authHeader = req.headers.get('x-auth-jwt')
+    const user = authHeader ? await getUserFromJWT(`Bearer ${authHeader}`) : null
+
+    if (user) {
+      const creditCheck = await checkCredits(user.$id)
+      if (!creditCheck.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: creditCheck.reason,
+            code: 'CREDITS_EXHAUSTED',
+            remaining: 0,
+            limit: creditCheck.creditsLimit,
+            plan: creditCheck.plan,
+          }),
+          { status: 402, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     // Resolve model — assistant-ui sends config.modelName, fallback to model key
     const selectedModel = config?.modelName || modelKey || DEFAULT_MODEL
     const modelDef = MODELS.find(m => m.key === selectedModel)
@@ -73,7 +102,7 @@ export async function POST(req: Request) {
       lastUserText,
     })
 
-    const toolsForRequest =
+    const toolsForRequest: Record<string, any> =
       toolRoutingMode === 'force-edit'
         ? { editNode: ALL_TOOLS.editNode, searchImages: ALL_TOOLS.searchImages }
         : toolRoutingMode === 'force-add'
@@ -93,7 +122,7 @@ export async function POST(req: Request) {
     const provider = modelDef?.provider || 'proxy'
 
     // Provider-specific options: enable thinking/reasoning for each provider
-    let providerOptions: Record<string, unknown>
+    let providerOptions: any
     if (provider === 'proxy') {
       providerOptions = { openai: { reasoningEffort: 'high' } }
     } else if (provider === 'vertex-global') {
@@ -105,6 +134,9 @@ export async function POST(req: Request) {
       providerOptions = { vertex: { thinkingConfig: { thinkingBudget: 8192 } } }
     }
 
+    // ── Track tool calls for credit calculation ─────────────
+    const allToolCalls: string[] = []
+
     // Stream the response with tools + agent loop
     const result = streamText({
       model: resolvedModel,
@@ -115,6 +147,9 @@ export async function POST(req: Request) {
       toolChoice: 'auto',
       providerOptions,
       onStepFinish({ toolCalls }) {
+        for (const tc of toolCalls) {
+          allToolCalls.push(tc.toolName)
+        }
         if (toolCalls.length > 0) {
           console.log(
             `[chat] Step: ${toolCalls.length} tool call(s):`,
@@ -123,6 +158,32 @@ export async function POST(req: Request) {
         }
       },
     })
+
+    // ── Deferred credit deduction ────────────────────────────
+    // Deduct AFTER stream completes so we know actual tool calls.
+    // consumeStream() ensures the stream runs to completion server-side
+    // even if the client disconnects.
+    if (user) {
+      const creditMultiplier = modelDef?.creditMultiplier ?? 1
+      Promise.resolve(result.consumeStream()).then(() => {
+        const cost = calculateCreditCost(creditMultiplier, allToolCalls)
+        if (cost > 0) {
+          deductCredits(user.$id, cost).catch(err =>
+            console.error('[chat] Credit deduction failed:', err)
+          )
+        }
+        console.log(
+          `[chat] Credits: ${cost} (model=${selectedModel} ×${creditMultiplier}, tools=[${allToolCalls.join(',')}])`
+        )
+      }).catch(err => {
+        // Stream error — still try to deduct minimum if tools were called
+        if (allToolCalls.length > 0) {
+          const cost = calculateCreditCost(creditMultiplier, allToolCalls)
+          deductCredits(user.$id, cost).catch(() => {})
+        }
+        console.error('[chat] Stream consumption error:', err)
+      })
+    }
 
     // Stream back as UIMessage format for useChat on the client
     // sendReasoning: true streams thinking tokens to frontend

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore, useProjectStore } from '@/store'
 import { storage, BUCKETS } from '@/lib/appwrite'
+import { UpgradeModal } from '@/components/billing/upgrade-modal'
 
 const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -187,6 +188,12 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                                             Settings
                                         </Link>
                                     </DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                        <Link href="/settings/billing" className="cursor-pointer">
+                                            <CreditCard className="w-4 h-4 mr-2" />
+                                            Billing
+                                        </Link>
+                                    </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem
                                         onClick={() => logout()}
@@ -222,6 +229,9 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
 
             {/* Global Support Widget - Only visible outside of the project editor */}
             {!pathname.startsWith('/project') && <SupportWidget />}
+
+            {/* Global Upgrade Modal */}
+            <UpgradeModal />
         </div>
     )
 }

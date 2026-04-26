@@ -56,16 +56,12 @@ export { createAdminClient, createSessionClient }
 export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || 'scytle_db'
 
 export const COLLECTIONS = {
-    USERS: 'users',
     PROJECTS: 'projects',
-    PAGES: 'pages',
-    SECTIONS: 'sections',
-    STYLE_GUIDES: 'style_guides',
-    RESEARCH_DATA: 'research_data',
-    AI_CONVERSATIONS: 'ai_conversations',
     AI_THREADS: 'ai_threads',
     AI_MESSAGES: 'ai_messages',
     SHARES: 'shares',
+    SUPPORT_TICKETS: 'support_tickets',
+    USER_CREDITS: 'user_credits',
 } as const
 
 /**

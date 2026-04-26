@@ -15,6 +15,8 @@ export interface ModelDef {
   tier: 'pro' | 'standard' | 'lite'
   capabilities: string[]
   badge?: string
+  /** Credit multiplier — reflects relative API cost. Gemini=1×, Sonnet=2×, Opus=3× */
+  creditMultiplier: number
 }
 
 export const MODELS: ModelDef[] = [
@@ -26,6 +28,7 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'gemini-3.1-pro-preview-customtools',
     tier: 'pro',
     capabilities: ['thinking', 'vision', 'coding', 'long-context'],
+    creditMultiplier: 1,
   },
   {
     key: 'gemini-2.5-pro',
@@ -34,6 +37,7 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'gemini-2.5-pro',
     tier: 'pro',
     capabilities: ['thinking', 'vision', 'coding', 'long-context'],
+    creditMultiplier: 1,
   },
   // Claude via proxy
   {
@@ -43,6 +47,7 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'claude-sonnet-4.6',
     tier: 'standard',
     capabilities: ['thinking', 'vision', 'coding', 'fast'],
+    creditMultiplier: 2,
   },
   {
     key: 'claude-opus',
@@ -51,6 +56,7 @@ export const MODELS: ModelDef[] = [
     proxyModelId: 'claude-opus-4.6',
     tier: 'pro',
     capabilities: ['thinking', 'vision', 'coding'],
+    creditMultiplier: 3,
   },
 ]
 

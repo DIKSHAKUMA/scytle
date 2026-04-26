@@ -275,12 +275,6 @@ async function refreshThreadsFromServer(projectId: string): Promise<void> {
             title: t.title,
         }))
 
-        if (serverThreads.length === 0) {
-            // Try migration from old system
-            await migrateFromOldSystem(projectId, auth)
-            return
-        }
-
         // Server is truth — replace cache
         saveThreadsCache(projectId, serverThreads)
     } catch (e) {
@@ -334,86 +328,6 @@ async function refreshMessagesFromServer(
     } catch (e) {
         console.warn('Failed to refresh messages from server:', e)
         return null
-    }
-}
-
-// ── Migration from old AI_CONVERSATIONS ────────────────────
-
-async function migrateFromOldSystem(projectId: string, auth: string): Promise<void> {
-    const migrationKey = `scytle:${projectId}:migrated_v2`
-    if (localStorage.getItem(migrationKey)) return
-
-    try {
-        // Fetch old data
-        const res = await fetch(`/api/projects/${projectId}/chat`, {
-            headers: { Authorization: auth },
-        })
-        if (!res.ok) return
-
-        const old = await res.json()
-        const oldThreads: StoredThread[] = old.threads ?? []
-        const oldMessages: Record<string, StoredMessageRepo> = old.messages ?? {}
-
-        if (oldThreads.length === 0) {
-            // Also check localStorage for data that never made it to server
-            const localThreads = loadThreadsCache(projectId)
-            if (localThreads.length === 0) {
-                localStorage.setItem(migrationKey, Date.now().toString())
-                return
-            }
-            // Use local data for migration
-            for (const thread of localThreads) {
-                oldThreads.push(thread)
-            }
-            for (const thread of localThreads) {
-                const localRepo = loadMessagesCache(projectId, thread.remoteId)
-                if (localRepo.messages.length > 0) {
-                    oldMessages[thread.remoteId] = localRepo
-                }
-            }
-        }
-
-        // Migrate threads to new API
-        for (const thread of oldThreads) {
-            try {
-                await fetch(`/api/projects/${projectId}/threads`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: auth },
-                    body: JSON.stringify({
-                        threadId: thread.remoteId,
-                        status: thread.status,
-                        title: thread.title,
-                    }),
-                })
-            } catch {
-                // Continue migrating other threads
-            }
-        }
-
-        // Migrate messages
-        for (const [threadId, repo] of Object.entries(oldMessages)) {
-            if (repo.messages.length === 0) continue
-            try {
-                await fetch(`/api/projects/${projectId}/threads/${threadId}/messages`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: auth },
-                    body: JSON.stringify({
-                        batch: true,
-                        messages: repo.messages,
-                        headId: repo.headId,
-                    }),
-                })
-            } catch {
-                // Continue migrating other threads
-            }
-        }
-
-        // Update cache from newly migrated server data
-        await refreshThreadsFromServer(projectId)
-
-        localStorage.setItem(migrationKey, Date.now().toString())
-    } catch (e) {
-        console.warn('Migration from old system failed:', e)
     }
 }
 

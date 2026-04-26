@@ -14,6 +14,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
     const settingsNavigation = [
         { name: 'Profile', href: '/settings/profile', icon: User, protected: true },
+        { name: 'Billing', href: '/settings/billing', icon: CreditCard, protected: true },
     ].filter(item => !item.protected || !!user)
 
     return (

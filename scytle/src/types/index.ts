@@ -9,7 +9,7 @@ export const UserSchema = z.object({
     userId: z.string(),
     email: z.string().email(),
     name: z.string().min(1),
-    plan: z.enum(['free', 'maker', 'pro', 'agency']).default('free'),
+    plan: z.enum(['free', 'pro']).default('free'),
     createdAt: z.string().datetime(),
 })
 

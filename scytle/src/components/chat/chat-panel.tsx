@@ -23,14 +23,18 @@ import { useAuiState } from '@assistant-ui/store'
 import { Thread, type ThreadSelectedScope } from '@/components/assistant-ui/thread'
 import { ThreadList } from '@/components/assistant-ui/thread-list'
 import { Code2, Pencil, Check, Loader2, Search, Copy, ChevronDown } from 'lucide-react'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
+import { useCreditStore } from '@/store/credits-store'
+import { createJWT } from '@/lib/appwrite'
 
 import { findNodeById } from '@/types/canvas'
 import { nodeToHtml } from '@/lib/export'
 import { parseHtml } from '@/lib/parser'
 import { createProjectThreadAdapter } from '@/lib/chat-persistence'
 import { ChatSyncBridge } from '@/components/chat/chat-sync-bridge'
+import { UpgradeModal } from '@/components/billing/upgrade-modal'
 import type { ScytleNode, FrameNode } from '@/types/canvas'
 import type { SystemPromptContext } from '@/lib/ai/prompts/system'
 
@@ -511,13 +515,38 @@ export function ChatPanel() {
         return buildContext(s.nodes, s.selectedIds)
     }, [])
 
+    // JWT ref for auth headers — refreshed lazily
+    const jwtRef = useMemo(() => ({ current: '' as string, expiresAt: 0 }), [])
+
+    const getJWT = useCallback(async () => {
+        if (jwtRef.current && jwtRef.expiresAt > Date.now()) {
+            return jwtRef.current
+        }
+        try {
+            const jwt = await createJWT()
+            if (jwt) {
+                jwtRef.current = jwt.jwt
+                jwtRef.expiresAt = Date.now() + 14 * 60 * 1000 // 14 min
+            }
+            return jwtRef.current
+        } catch {
+            return ''
+        }
+    }, [jwtRef])
+
     // Transport created ONCE — stable reference across renders.
     const transport = useMemo(
         () => new AssistantChatTransport({
             api: '/api/chat',
             body: () => ({ context: getContext() }),
+            headers: async (): Promise<Record<string, string>> => {
+                const jwt = await getJWT()
+                // Optimistic credit deduction — runs once per message sent
+                useCreditStore.getState().incrementUsed()
+                return jwt ? { 'x-auth-jwt': jwt } : {}
+            },
         }),
-        [getContext]
+        [getContext, getJWT]
     )
 
     const handleClearSelection = useCallback(() => {
@@ -540,6 +569,17 @@ export function ChatPanel() {
 
     const runtime = useRemoteThreadListRuntime({ runtimeHook, adapter })
 
+    // Fetch credits on mount + periodic refresh to stay in sync
+    const { fetchCredits, creditsUsed, creditsLimit, plan, remaining, dailyUsed, dailyCap, openUpgradeModal } = useCreditStore()
+    useEffect(() => {
+        fetchCredits()
+        // Refresh credits every 10 seconds for real-time accuracy
+        const interval = setInterval(() => {
+            useCreditStore.getState().fetchCredits()
+        }, 10_000)
+        return () => clearInterval(interval)
+    }, [fetchCredits])
+
     return (
         <AssistantRuntimeProvider runtime={runtime}>
             {/* Cross-browser thread list sync via WebSocket */}
@@ -561,11 +601,95 @@ export function ChatPanel() {
                     />
                 </div>
 
-                {/* Thread pills — horizontal scroll at bottom */}
-                <div className="shrink-0 border-t border-border/30 px-2 py-1.5">
-                    <ThreadList />
+                {/* Thread pills and Credit indicator — bottom row */}
+                <div className="shrink-0 border-t border-border/30 px-2 py-1.5 flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                        <ThreadList />
+                    </div>
+                    
+                    {/* Credit indicator — compact trigger with popover */}
+                    <div className="shrink-0">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button className="flex items-center justify-center size-7 rounded-full border border-border/60 hover:bg-muted transition-colors relative group" aria-label="View credits">
+                                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-3.5">
+                                        <path d="M12 2.5L14.1 9.9L21.5 12L14.1 14.1L12 21.5L9.9 14.1L2.5 12L9.9 9.9L12 2.5Z" 
+                                              stroke="currentColor" 
+                                              strokeWidth="2" 
+                                              strokeLinecap="round" 
+                                              strokeLinejoin="round"
+                                              className={remaining <= 10 ? 'text-red-500' : remaining <= 30 ? 'text-amber-500' : 'text-foreground/70 group-hover:text-foreground transition-colors'} />
+                                        <path d="M12 7L13.5 10.5L17 12L13.5 13.5L12 17L10.5 13.5L7 12L10.5 10.5L12 7Z" 
+                                              fill="currentColor" 
+                                              className={remaining <= 10 ? 'text-red-500/50' : remaining <= 30 ? 'text-amber-500/50' : 'text-foreground/20 group-hover:text-foreground/40 transition-colors'} />
+                                    </svg>
+                                    
+                                    {/* Low credits alert dot */}
+                                    {remaining <= 30 && (
+                                        <span className={`absolute -top-0.5 -right-0.5 size-2 rounded-full border-2 border-background ${remaining <= 10 ? 'bg-red-500' : 'bg-amber-500'}`} />
+                                    )}
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent side="top" align="end" className="w-64 p-0">
+                                {/* Header */}
+                                <div className="px-4 pt-4 pb-3">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-sm font-medium">Scytle {plan === 'pro' ? 'Pro' : 'Free'}</span>
+                                        {plan === 'free' && (
+                                            <button
+                                                onClick={openUpgradeModal}
+                                                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                                            >
+                                                Upgrade
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Usage section */}
+                                    <div className="space-y-2">
+                                        <p className="text-xs text-muted-foreground">Credits usage</p>
+                                        <div className="flex items-baseline gap-1.5">
+                                            <span className="text-2xl font-semibold tabular-nums">
+                                                {creditsLimit > 0 ? Math.round((creditsUsed / creditsLimit) * 100) : 0}%
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">used</span>
+                                            <span className="text-xs text-muted-foreground ml-auto">Resets monthly</span>
+                                        </div>
+                                        {/* Progress bar */}
+                                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                    remaining <= 10
+                                                        ? 'bg-red-500'
+                                                        : remaining <= 30
+                                                            ? 'bg-amber-500'
+                                                            : 'bg-foreground/70'
+                                                }`}
+                                                style={{ width: `${Math.min(100, Math.max(1, (creditsUsed / creditsLimit) * 100))}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {creditsUsed} / {creditsLimit} credits used
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Daily stats — free plan only */}
+                                {plan === 'free' && dailyCap !== null && (
+                                    <div className="border-t px-4 py-3">
+                                        <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">Today</span>
+                                            <span className="tabular-nums">{dailyUsed} / {dailyCap} daily</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </PopoverContent>
+                        </Popover>
+                    </div>
                 </div>
             </div>
+            {/* Upgrade Modal — rendered here because project editor doesn't use AppShell */}
+            <UpgradeModal />
         </AssistantRuntimeProvider>
     )
 }
