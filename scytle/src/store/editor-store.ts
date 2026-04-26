@@ -5,6 +5,7 @@ import { current } from 'immer'
 import type { ScytleNode, FrameNode, CanvasTool, VectorNetwork, VectorVertex, VectorSegment, VectorNode } from '@/types/canvas'
 import { findNodeById, findParentOfNode, createFrame, deepCloneWithNewIds, getNodeCanvasPosition, findContainingFrame, getEffectiveNodeSize, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/types/canvas'
 import { canvasSync } from '@/lib/sync'
+import { resolveVectorStroke } from '@/lib/vector-stroke'
 
 // ============================================================
 // History constants
@@ -72,7 +73,7 @@ function _recomputeVectorBBox(node: VectorNode) {
         }
     }
 
-    const strokePad = (node.strokeWeight ?? 2) / 2
+    const strokePad = resolveVectorStroke(node).width / 2
     minX -= strokePad
     minY -= strokePad
     maxX += strokePad
@@ -2933,7 +2934,7 @@ export const useEditorStore = create<EditorState>()(
                                 }
 
                                 // Add padding for stroke width (half on each side for center-aligned stroke)
-                                const strokePad = ((node as VectorNode).strokeWeight ?? 2) / 2
+                                const strokePad = resolveVectorStroke(node as VectorNode).width / 2
                                 minX -= strokePad
                                 minY -= strokePad
                                 maxX += strokePad

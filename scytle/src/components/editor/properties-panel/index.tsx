@@ -21,6 +21,9 @@ import { TypographySection } from './typography-section'
 import { EffectsSection } from './effects-section'
 import { ExportSection } from './export-section'
 import { VectorSection } from './vector-section'
+import { ImageSection } from './image-section'
+import { getMultiSelectInspectorVisibility, getSingleInspectorVisibility } from './inspector-visibility'
+import { withVectorStrokeCompatibility } from '@/lib/vector-stroke'
 import { ColorInput, SectionHeader } from './inputs'
 import { Frame, Type, ImageIcon, FileText, Pen } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -108,6 +111,10 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
 
     const allText = selectedNodes.length > 0 && selectedNodes.every((n) => n.type === 'text')
     const allVectors = selectedNodes.length > 0 && selectedNodes.every((n) => n.type === 'vector')
+    const visibility = useMemo(
+        () => getMultiSelectInspectorVisibility(selectedNodes),
+        [selectedNodes]
+    )
 
     const applyBatch = useCallback((updater: (node: ScytleNode) => Record<string, unknown> | null) => {
         if (selectedNodes.length === 0) return
@@ -117,7 +124,7 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
             for (const node of selectedNodes) {
                 const updates = updater(node)
                 if (!updates) continue
-                updateNode(node.id, updates)
+                updateNode(node.id, withVectorStrokeCompatibility(node, updates))
             }
         } finally {
             endBatch()
@@ -169,7 +176,7 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
 
             <MarginSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
 
-            {isPrimaryFrame && (
+            {visibility.showLayout && isPrimaryFrame && (
                 <LayoutSection
                     node={primaryNode as FrameNode}
                     onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'frame')}
@@ -183,30 +190,40 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
                 onUpdate={(updates) => applySharedUpdate(updates)}
             />
 
-            <AppearanceSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            {visibility.showAppearance && (
+                <AppearanceSection
+                    node={primaryNode}
+                    onUpdate={(updates) => applySharedUpdate(updates)}
+                    showCornerRadius={visibility.showAppearanceCornerRadius}
+                />
+            )}
 
-            {allVectors ? (
+            {visibility.showVector && allVectors && (
                 <VectorSection
                     node={primaryNode as VectorNode}
                     onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'vector')}
                 />
-            ) : (
-                <>
-                    <FillSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
-                    <StrokeSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type !== 'vector')} />
-                </>
             )}
 
-            {allText && (
+            {visibility.showFill && (
+                <FillSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            )}
+            {visibility.showStroke && (
+                <StrokeSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            )}
+
+            {visibility.showTypography && allText && (
                 <TypographySection
                     node={primaryNode as TextNode}
                     onUpdate={(updates) => applySharedUpdate(updates, (node) => node.type === 'text')}
                 />
             )}
 
-            <EffectsSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            {visibility.showEffects && (
+                <EffectsSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            )}
 
-            <ExportSection node={primaryNode} />
+            {visibility.showExport && <ExportSection node={primaryNode} />}
 
             <div className="flex items-center justify-center py-4 border-b border-border/40">
                 <p className="text-[11px] text-muted-foreground/50 select-none">
@@ -257,7 +274,7 @@ export function PropertiesPanel() {
     const onUpdate = useCallback(
         (updates: Record<string, unknown>) => {
             if (!node) return
-            updateNode(node.id, updates)
+            updateNode(node.id, withVectorStrokeCompatibility(node, updates))
         },
         [node, updateNode]
     )
@@ -290,6 +307,8 @@ export function PropertiesPanel() {
     const isFrame = node.type === 'frame'
     const isText = node.type === 'text'
     const isVector = node.type === 'vector'
+    const isImage = node.type === 'image'
+    const visibility = getSingleInspectorVisibility(node)
 
     // Figma: vector nodes show "Vector" in edit mode, "Vector path" in select mode
     const vectorLabel = isVector
@@ -335,22 +354,29 @@ export function PropertiesPanel() {
             />
             <MarginSection node={node} onUpdate={onUpdate} />
 
-            {isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
+            {visibility.showLayout && isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
 
             <SizeSection key={node.id} node={node} parentNode={parentNode} onUpdate={onUpdate} />
 
-            {isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
-            {isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
+            {visibility.showTypography && isText && <TypographySection node={node as TextNode} onUpdate={onUpdate} />}
+            {visibility.showImage && isImage && <ImageSection node={node} onUpdate={onUpdate} />}
+            {visibility.showVector && isVector && <VectorSection node={node as VectorNode} onUpdate={onUpdate} />}
 
             {/* Appearance → Fill → Stroke → Effects (Figma order) */}
             {/* VectorSection handles fill + stroke for vectors — skip generic sections */}
-            <AppearanceSection node={node} onUpdate={onUpdate} />
-            {!isVector && <FillSection node={node} onUpdate={onUpdate} />}
-            {!isVector && <StrokeSection node={node} onUpdate={onUpdate} />}
-            <EffectsSection node={node} onUpdate={onUpdate} />
+            {visibility.showAppearance && (
+                <AppearanceSection
+                    node={node}
+                    onUpdate={onUpdate}
+                    showCornerRadius={visibility.showAppearanceCornerRadius}
+                />
+            )}
+            {visibility.showFill && <FillSection node={node} onUpdate={onUpdate} />}
+            {visibility.showStroke && <StrokeSection node={node} onUpdate={onUpdate} />}
+            {visibility.showEffects && <EffectsSection node={node} onUpdate={onUpdate} />}
 
             {/* Export section — Figma: always at the very bottom */}
-            <ExportSection node={node} />
+            {visibility.showExport && <ExportSection node={node} />}
 
             {/* Bottom spacer to prevent scroll cutoff */}
             <div className="h-8 shrink-0" />

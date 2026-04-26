@@ -3,6 +3,7 @@ import type { VectorNode } from '@/types/canvas'
 import { networkToSVGPath } from '@/lib/vector-utils'
 import { hexOpacityToRgba, normaliseHex, hexToHashHex } from '@/lib/color-utils'
 import { computeBaseStyles } from './render-utils'
+import { resolveVectorStroke } from '@/lib/vector-stroke'
 
 // ============================================================
 // Props
@@ -31,8 +32,8 @@ interface VectorRendererProps {
  * Fill:    Solid fills from node.fills[0] are mapped to the SVG fill attribute.
  *          Gradient / multi-fill support is a future phase.
  *
- * Stroke:  strokeColor, strokeWeight, strokeOpacity, strokeCap, strokeJoin
- *          are mapped directly to SVG stroke attributes.
+ * Stroke:  canonical stroke data (`strokes[]`/`border`) is preferred, with
+ *          legacy vector stroke field fallback for backward compatibility.
  */
 export const VectorRenderer = memo(function VectorRenderer({
     node,
@@ -87,18 +88,19 @@ export const VectorRenderer = memo(function VectorRenderer({
     }
 
     // ── Stroke ────────────────────────────────────────────────
-    const svgStroke = node.strokeVisible ? hexToHashHex(node.strokeColor) : 'none'
+    const stroke = resolveVectorStroke(node)
+    const svgStroke = stroke.visible ? hexToHashHex(stroke.color) : 'none'
 
     // StrokeCap: Figma NONE/LINE_ARROW/TRIANGLE_ARROW/etc. fall back to 'butt'
     const strokeLinecap: 'round' | 'square' | 'butt' =
-        node.strokeCap === 'ROUND' ? 'round' :
-            node.strokeCap === 'SQUARE' ? 'square' :
+        stroke.cap === 'ROUND' ? 'round' :
+            stroke.cap === 'SQUARE' ? 'square' :
                 'butt'
 
     // StrokeJoin: Figma ROUND/BEVEL/MITER map directly
     const strokeLinejoin: 'round' | 'bevel' | 'miter' =
-        node.strokeJoin === 'ROUND' ? 'round' :
-            node.strokeJoin === 'BEVEL' ? 'bevel' :
+        stroke.join === 'ROUND' ? 'round' :
+            stroke.join === 'BEVEL' ? 'bevel' :
                 'miter'
 
     // ── SVG viewBox ───────────────────────────────────────────
@@ -130,8 +132,8 @@ export const VectorRenderer = memo(function VectorRenderer({
                         fill={svgFill}
                         fillRule="nonzero"
                         stroke={svgStroke}
-                        strokeOpacity={node.strokeOpacity}
-                        strokeWidth={node.strokeWeight}
+                        strokeOpacity={stroke.opacity}
+                        strokeWidth={stroke.width}
                         strokeLinecap={strokeLinecap}
                         strokeLinejoin={strokeLinejoin}
                     />

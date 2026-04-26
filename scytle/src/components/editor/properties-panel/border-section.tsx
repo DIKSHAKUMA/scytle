@@ -13,6 +13,7 @@ import { useEditorStore } from '@/store/editor-store'
 interface SectionProps {
     node: ScytleNode
     onUpdate: (updates: Record<string, unknown>) => void
+    showCornerRadius?: boolean
 }
 
 /* ── Rounded-corner icon for the radius label ─────────────── */
@@ -39,7 +40,7 @@ function RadiusCornerIcon({ size = 12 }: { size?: number }) {
 
 /* ── Appearance Section — opacity + corner radius ─────────── */
 
-export function AppearanceSection({ node, onUpdate }: SectionProps) {
+export function AppearanceSection({ node, onUpdate, showCornerRadius = true }: SectionProps) {
     const radius = node.borderRadius
 
     const isUniformRadius = typeof radius === 'number'
@@ -93,46 +94,47 @@ export function AppearanceSection({ node, onUpdate }: SectionProps) {
                         />
                     </div>
 
-                    {/* Border radius */}
-                    <div className="flex items-center gap-1">
-                        <RadiusCornerIcon size={12} />
-                        <NumberInput
-                            value={uniformRadius}
-                            onChange={(v) => {
-                                if (perCorner) {
-                                    updateRadius({
-                                        topLeft: v,
-                                        topRight: v,
-                                        bottomLeft: v,
-                                        bottomRight: v,
-                                    })
-                                } else {
-                                    updateRadius(v)
-                                }
-                            }}
-                            min={0}
-                            step={1}
-                            className="flex-1"
-                        />
-                        <button
-                            className={cn(
-                                'p-1 rounded-sm transition-colors shrink-0',
-                                perCorner
-                                    ? 'text-foreground bg-muted/60'
-                                    : 'text-muted-foreground/40 hover:text-muted-foreground'
-                            )}
-                            onClick={() => {
-                                if (perCorner) updateRadius(uniformRadius)
-                                setPerCorner(!perCorner)
-                            }}
-                            title={perCorner ? 'Uniform corners' : 'Individual corners'}
-                        >
-                            <CornerUpRight size={12} />
-                        </button>
-                    </div>
+                    {showCornerRadius && (
+                        <div className="flex items-center gap-1">
+                            <RadiusCornerIcon size={12} />
+                            <NumberInput
+                                value={uniformRadius}
+                                onChange={(v) => {
+                                    if (perCorner) {
+                                        updateRadius({
+                                            topLeft: v,
+                                            topRight: v,
+                                            bottomLeft: v,
+                                            bottomRight: v,
+                                        })
+                                    } else {
+                                        updateRadius(v)
+                                    }
+                                }}
+                                min={0}
+                                step={1}
+                                className="flex-1"
+                            />
+                            <button
+                                className={cn(
+                                    'p-1 rounded-sm transition-colors shrink-0',
+                                    perCorner
+                                        ? 'text-foreground bg-muted/60'
+                                        : 'text-muted-foreground/40 hover:text-muted-foreground'
+                                )}
+                                onClick={() => {
+                                    if (perCorner) updateRadius(uniformRadius)
+                                    setPerCorner(!perCorner)
+                                }}
+                                title={perCorner ? 'Uniform corners' : 'Individual corners'}
+                            >
+                                <CornerUpRight size={12} />
+                            </button>
+                        </div>
+                    )}
                 </div>
 
-                {perCorner && (
+                {showCornerRadius && perCorner && (
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 mt-1.5">
                         <NumberInput
                             label="TL"
@@ -249,7 +251,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
                 <button
                     ref={setSwatchEl}
                     className={cn(
-                        'w-6 h-6 rounded-[4px] border shrink-0 ml-0.5 mr-1 transition-all',
+                        'w-6 h-6 rounded-md border shrink-0 ml-0.5 mr-1 transition-all',
                         'border-border/40 hover:border-border/80',
                         pickerOpen && 'ring-1 ring-primary/40',
                     )}
@@ -268,7 +270,7 @@ function StrokeRow({ border, onUpdate, onRemove, documentColors }: StrokeRowProp
 
                 <div className="w-px h-full bg-border/35 shrink-0" />
 
-                <div className="flex items-center w-[52px] shrink-0 pr-1">
+                <div className="flex items-center w-13 shrink-0 pr-1">
                     <InlinePercentInput
                         value={opacity}
                         onCommit={(nextOpacity) => onUpdate({ opacity: nextOpacity })}

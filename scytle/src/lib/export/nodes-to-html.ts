@@ -7,6 +7,7 @@
 import type { ScytleNode, FrameNode, TextNode, ImageNode, VectorNode, Fill, ImageFill } from '@/types/canvas'
 import { buildFrameClasses, buildTextClasses, buildImageClasses } from './class-builder'
 import { networkToSVGPath } from '@/lib/vector-utils'
+import { resolveVectorStroke } from '@/lib/vector-stroke'
 
 // ---- Public API ----
 
@@ -124,6 +125,7 @@ function vectorToHtml(node: VectorNode, indent: number): string {
     const pad = '  '.repeat(indent)
     const d = networkToSVGPath(node.vectorNetwork)
     if (!d) return ''
+    const stroke = resolveVectorStroke(node)
 
     // Build fill <path> elements
     const fillPaths = node.fills
@@ -131,8 +133,8 @@ function vectorToHtml(node: VectorNode, indent: number): string {
         .map((f) => `${pad}  <path d="${d}" fill="${fillToSVGAttr(f)}"${f.opacity != null && f.opacity < 1 ? ` fill-opacity="${f.opacity}"` : ''} />`)
 
     // Build stroke <path> element
-    const strokePath = node.strokeVisible
-        ? `${pad}  <path d="${d}" fill="none" stroke="${escapeAttr(node.strokeColor)}" stroke-width="${node.strokeWeight}"${node.strokeOpacity < 1 ? ` stroke-opacity="${node.strokeOpacity}"` : ''} stroke-linecap="${strokeCapToSVG(node.strokeCap)}" stroke-linejoin="${strokeJoinToSVG(node.strokeJoin)}" />`
+    const strokePath = stroke.visible
+        ? `${pad}  <path d="${d}" fill="none" stroke="${escapeAttr(stroke.color)}" stroke-width="${stroke.width}"${stroke.opacity < 1 ? ` stroke-opacity="${stroke.opacity}"` : ''} stroke-linecap="${strokeCapToSVG(stroke.cap)}" stroke-linejoin="${strokeJoinToSVG(stroke.join)}" />`
         : ''
 
     const style = `position:absolute;left:${node.x}px;top:${node.y}px;${node.opacity < 1 ? `opacity:${node.opacity};` : ''}overflow:visible;`
