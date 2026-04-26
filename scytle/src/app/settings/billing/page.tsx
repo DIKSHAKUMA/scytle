@@ -51,8 +51,8 @@ export default function BillingPage() {
                             </p>
                             <p className="text-[12px] text-muted-foreground mt-0.5">
                                 {plan === 'pro'
-                                    ? '300 credits/month · Unlimited projects'
-                                    : '50 credits/month · 3 projects · 5 credits/day'
+                                    ? `${creditsLimit} credits/month · Unlimited projects`
+                                    : `${creditsLimit} credits/month · 3 projects · ${dailyCap} credits/day`
                                 }
                             </p>
                         </div>
@@ -122,14 +122,14 @@ export default function BillingPage() {
                     <h3 className="text-[13px] font-medium text-foreground">Plan includes</h3>
                     <ul className="space-y-2">
                         {(plan === 'pro' ? [
-                            '300 AI credits per month',
+                            `${creditsLimit} AI credits per month`,
                             'Unlimited projects',
                             'No daily limit',
                             'All AI models',
                         ] : [
-                            '50 AI credits per month',
+                            `${creditsLimit} AI credits per month`,
                             '3 projects max',
-                            '5 credits per day',
+                            `${dailyCap} credits per day`,
                             'All AI models',
                         ]).map((feature) => (
                             <li key={feature} className="flex items-center gap-2 text-[13px] text-foreground/70">
@@ -147,7 +147,7 @@ export default function BillingPage() {
                         <div className="space-y-3">
                             <h3 className="text-[13px] font-medium text-foreground">Upgrade to Pro</h3>
                             <p className="text-[12px] text-muted-foreground">
-                                Get 6× more credits, unlimited projects, and no daily cap.
+                                Get 10× more credits, unlimited projects, and no daily cap.
                             </p>
                             <button
                                 onClick={openUpgradeModal}
