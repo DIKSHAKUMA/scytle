@@ -183,7 +183,7 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem asChild>
-                                        <Link href="/settings/profile" className="cursor-pointer">
+                                        <Link href="/settings" className="cursor-pointer">
                                             <Settings className="w-4 h-4 mr-2" />
                                             Settings
                                         </Link>

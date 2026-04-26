@@ -12,11 +12,9 @@ import {
     Edit,
     Copy,
     Loader2,
-    Sparkles,
     Search,
     ArrowRight,
     FileText,
-    LayoutTemplate,
     Import,
     Command,
 } from 'lucide-react'
@@ -91,11 +89,12 @@ function getGradient(index: number): string {
 
 export default function DashboardPage() {
     const router = useRouter()
-    const { user, setUser } = useAuthStore()
+    const { user, checkSession } = useAuthStore()
     const { projects, isLoading, fetchProjects, deleteProject, createProject } = useProjectStore()
 
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+    const [sessionResolved, setSessionResolved] = useState(false)
     const [authChecked, setAuthChecked] = useState(false)
     const [isAuthenticated, setIsAuthenticated] = useState(false)
     const [mounted, setMounted] = useState(false)
@@ -115,18 +114,37 @@ export default function DashboardPage() {
         }
     }, [createProject, projects, router, isCreating])
 
+    // Resolve session once before deciding whether to load dashboard or redirect.
+    useEffect(() => {
+        let cancelled = false
+
+        const resolveSession = async () => {
+            await checkSession()
+            if (!cancelled) {
+                setSessionResolved(true)
+            }
+        }
+
+        resolveSession()
+
+        return () => {
+            cancelled = true
+        }
+    }, [checkSession])
+
     // Fetch data when authenticated
     useEffect(() => {
+        if (!sessionResolved) return
+
         if (user) {
             setIsAuthenticated(true)
             setAuthChecked(true)
             fetchProjects()
-        } else if (!useAuthStore.getState().isLoading) {
-            // If checkSession finished and no user, redirect
+        } else {
             setAuthChecked(true)
-            router.push('/login?redirect=/dashboard')
+            router.replace('/login?redirect=/dashboard')
         }
-    }, [user, fetchProjects, router])
+    }, [sessionResolved, user, fetchProjects, router])
 
     // Staggered mount animation
     useEffect(() => {
@@ -223,20 +241,6 @@ export default function DashboardPage() {
                                 {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                                 New Project
                             </button>
-                            <button
-                                onClick={handleNewProject}
-                                disabled={isCreating}
-                                className="group inline-flex items-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/20 hover:shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                            >
-                                <Sparkles className="w-3.5 h-3.5 text-accent" />
-                                AI Generate
-                            </button>
-                            <Link href="/dashboard/templates">
-                                <button className="group inline-flex items-center gap-2.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/20 hover:shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
-                                    <LayoutTemplate className="w-3.5 h-3.5" />
-                                    Templates
-                                </button>
-                            </Link>
                         </div>
                     </div>
                 </div>
@@ -325,7 +329,7 @@ export default function DashboardPage() {
                                 Create your first project
                             </h3>
                             <p className="text-muted-foreground text-sm text-center max-w-xs mb-6 leading-relaxed">
-                                Describe your idea and let AI generate a complete sitemap, wireframes, and design for you.
+                                Start with a blank canvas and shape your sitemap, wireframes, and design.
                             </p>
                             <button
                                 onClick={handleNewProject}

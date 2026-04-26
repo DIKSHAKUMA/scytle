@@ -135,6 +135,11 @@ export const useAuthStore = create<AuthState>()(
                     state.isLoading = false
                     state.error = null
                 })
+
+                // Ensure explicit logout always lands on a public route.
+                if (typeof window !== 'undefined') {
+                    window.location.href = '/'
+                }
             },
 
             // OAuth login

@@ -1,12 +1,11 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { Camera, Trash2, Loader2, User } from 'lucide-react'
+import { Camera, Trash2, Loader2, Upload } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { storage, BUCKETS, account } from '@/lib/appwrite'
 import { useAuthStore } from '@/store'
-import { cn } from '@/lib/utils'
 
 export function AvatarUploader() {
     const { user, setUser } = useAuthStore()
@@ -89,53 +88,48 @@ export function AvatarUploader() {
     }
 
     return (
-        <div className="flex flex-col sm:flex-row items-center gap-6 p-6 rounded-2xl bg-muted/30 backdrop-blur-sm border border-border/40">
-            <div className="relative group">
-                <Avatar className="w-24 h-24 border-2 border-background shadow-xl">
-                    {avatarId ? (
-                        <AvatarImage src={getAvatarUrl(avatarId)} className="object-cover" />
-                    ) : null}
-                    <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-accent to-accent/70 text-white">
-                        {initials}
-                    </AvatarFallback>
-                </Avatar>
-                
-                {/* Upload Overlay */}
-                <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading || isDeleting}
-                    className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 rounded-full transition-all duration-200 backdrop-blur-[2px]"
-                >
-                    <Camera className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] font-medium uppercase tracking-wider">Update</span>
-                </button>
-
-                {/* Remove Action (Corner Button) */}
-                {avatarId && !isUploading && (
-                    <button
-                        onClick={handleDeleteAvatar}
-                        disabled={isDeleting}
-                        className="absolute -top-1 -right-1 p-1.5 bg-background border border-border shadow-sm rounded-full text-muted-foreground hover:text-destructive hover:border-destructive/30 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-                        title="Remove photo"
+        <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-8 flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-medium text-foreground">Avatar</h2>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                        This is your avatar. Click on the avatar to upload a custom one from your files.
+                    </p>
+                </div>
+                <div className="relative group shrink-0 rounded-full cursor-pointer lg:hover:opacity-90 transition-opacity" onClick={() => fileInputRef.current?.click()}>
+                    <Avatar className="h-20 w-20 border border-border shadow-sm">
+                        {avatarId ? <AvatarImage src={getAvatarUrl(avatarId)} className="object-cover" /> : null}
+                        <AvatarFallback className="text-xl font-medium bg-muted text-foreground">
+                            {initials}
+                        </AvatarFallback>
+                    </Avatar>
+                    <div
+                        className="absolute inset-0 flex items-center justify-center bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full focus:outline-none"
+                        title="Upload new avatar"
                     >
-                        {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                    </button>
-                )}
-
-                {isUploading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-full">
-                        <Loader2 className="w-6 h-6 animate-spin text-accent" />
+                        <Camera className="h-6 w-6" />
                     </div>
-                )}
+                    {isUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-full">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                    )}
+                </div>
             </div>
-
-            <div className="flex flex-col items-center sm:items-start gap-1">
-                <h3 className="font-display font-semibold text-lg leading-tight">Profile Photo</h3>
-                <p className="text-xs text-muted-foreground">
-                    {avatarId ? 'Click to change or use current' : 'No photo set. Click to upload.'}
-                </p>
+            <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">An avatar is optional but strongly recommended.</p>
+                <div className="flex items-center gap-3">
+                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isDeleting}>
+                        Upload new
+                    </Button>
+                    {avatarId && (
+                        <Button variant="outline" size="sm" onClick={handleDeleteAvatar} disabled={isDeleting || isUploading}>
+                            {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Remove
+                        </Button>
+                    )}
+                </div>
             </div>
-
             <input
                 type="file"
                 ref={fileInputRef}
@@ -143,6 +137,6 @@ export function AvatarUploader() {
                 accept="image/*"
                 onChange={handleFileChange}
             />
-        </div>
+        </section>
     )
 }
