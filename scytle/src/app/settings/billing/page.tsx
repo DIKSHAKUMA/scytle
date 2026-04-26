@@ -19,6 +19,23 @@ export default function BillingPage() {
 
     const usagePercent = creditsLimit > 0 ? (creditsUsed / creditsLimit) * 100 : 0
 
+    // Prevent hydration mismatch and avoid flashing the default "Free" state
+    if (!mounted) {
+        return (
+            <div className="space-y-8 pb-16 animate-pulse">
+                <div className="space-y-3">
+                    <div className="h-4 w-24 bg-muted rounded" />
+                    <div className="h-10 w-full max-w-sm bg-muted rounded-xl" />
+                </div>
+                <div className="h-px bg-border/40" />
+                <div className="space-y-4">
+                    <div className="h-4 w-16 bg-muted rounded" />
+                    <div className="h-24 w-full max-w-md bg-muted rounded-xl" />
+                </div>
+            </div>
+        )
+    }
+
     return (
         <>
             <UpgradeModal />
