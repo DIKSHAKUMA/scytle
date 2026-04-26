@@ -11,7 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAuthStore } from '@/store'
 import { toast } from 'sonner'
 
-export default function ResetPasswordPage() {
+import { Suspense } from 'react'
+
+function ResetPasswordForm() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const { completePasswordReset, isLoading, error, clearError } = useAuthStore()
@@ -178,5 +180,17 @@ export default function ResetPasswordPage() {
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+export default function ResetPasswordPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+        }>
+            <ResetPasswordForm />
+        </Suspense>
     )
 }

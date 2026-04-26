@@ -2,40 +2,31 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
     Zap,
-    LayoutDashboard,
-    FolderOpen,
+    FileText,
     Settings,
     LogOut,
     Plus,
-    User,
-    CreditCard,
-    HelpCircle,
     Loader2,
+    Menu,
+    X,
+    ChevronDown,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { SupportWidget } from '@/components/layout/support-widget'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore, useProjectStore } from '@/store'
 import { storage, BUCKETS } from '@/lib/appwrite'
 import { UpgradeModal } from '@/components/billing/upgrade-modal'
-
-const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Projects', href: '/dashboard/projects', icon: FolderOpen },
-]
 
 interface AppShellProps {
     children: React.ReactNode
@@ -48,13 +39,30 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
     const { user, logout, checkSession, isLoading: isAuthLoading } = useAuthStore()
     const { projects, createProject } = useProjectStore()
     const [isCreating, setIsCreating] = useState(false)
+    const [sidebarOpen, setSidebarOpen] = useState(false)
+    const sidebarRef = useRef<HTMLDivElement>(null)
 
-    // Verify session on mount
     useEffect(() => {
         if (!user) {
             checkSession()
         }
     }, [user, checkSession])
+
+    useEffect(() => {
+        setSidebarOpen(false)
+    }, [pathname])
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+                setSidebarOpen(false)
+            }
+        }
+        if (sidebarOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [sidebarOpen])
 
     const handleNewProject = useCallback(async () => {
         if (isCreating) return
@@ -81,7 +89,7 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
         .join('')
         .toUpperCase() || 'U'
 
-    const avatarId = user?.prefs?.avatarId as string | undefined
+    const avatarId = (user?.prefs as any)?.avatarId as string | undefined
     let avatarUrl: string | undefined = undefined
 
     if (avatarId) {
@@ -92,145 +100,176 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
         }
     }
 
-    return (
-        <div className="min-h-screen bg-background">
-            {/* Header */}
-            <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
-                <div className="container flex h-14 items-center">
-                    {/* Logo */}
-                    <Link href="/dashboard" className="flex items-center gap-2.5 mr-8 group">
-                        <div className="w-7 h-7 rounded-lg bg-foreground flex items-center justify-center group-hover:scale-105 transition-transform">
-                            <Zap className="w-3.5 h-3.5 text-background" strokeWidth={2.5} />
+    const isActive = (href: string) => {
+        if (href === '/dashboard') {
+            return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
+        }
+        return pathname.startsWith(href)
+    }
+
+    // Fix #5: prevent hard refresh when clicking already-active nav link
+    const handleNavClick = (e: React.MouseEvent, href: string) => {
+        if (pathname === href || (href === '/dashboard' && pathname.startsWith('/dashboard'))) {
+            e.preventDefault()
+        }
+    }
+
+    const SidebarContent = () => (
+        <div className="flex flex-col h-full">
+            {/* User Profile — top, minimal like Paper */}
+            <div className="px-3 pt-4 pb-3">
+                {user ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors text-left focus:outline-none">
+                                <Avatar className="w-6 h-6 shrink-0">
+                                    <AvatarImage src={avatarUrl} className="object-cover" />
+                                    <AvatarFallback className="text-[9px] font-semibold bg-muted text-muted-foreground">
+                                        {initials}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <span className="text-[13px] font-medium text-foreground truncate flex-1">
+                                    {user?.name || 'User'}
+                                </span>
+                                <ChevronDown className="w-3 h-3 text-muted-foreground/40 shrink-0" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        {/* Fix #4: avatar dropdown — just log out, no accent colors */}
+                        <DropdownMenuContent align="start" side="bottom" className="w-48" sideOffset={4}>
+                            <DropdownMenuItem
+                                onClick={() => logout()}
+                                className="cursor-pointer text-[13px]"
+                            >
+                                <LogOut className="w-3.5 h-3.5 mr-2" />
+                                Log out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : (
+                    <Link href="/dashboard" className="flex items-center gap-2.5 px-2 py-1.5">
+                        <div className="w-6 h-6 rounded-md bg-foreground flex items-center justify-center">
+                            <Zap className="w-3 h-3 text-background" strokeWidth={2.5} />
                         </div>
-                        <span className="font-display font-bold text-[17px] tracking-tight hidden sm:inline-block">
+                        <span className="font-display font-bold text-[15px] tracking-tight text-foreground">
                             Scytle
                         </span>
                     </Link>
+                )}
+            </div>
 
-                    {/* Navigation */}
-                    {!hideNav && (
-                        <nav className="flex items-center gap-0.5">
-                            {navigation.map((item) => {
-                                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                                return (
-                                    <Link
-                                        key={item.name}
-                                        href={item.href}
-                                        className={cn(
-                                            'inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-150',
-                                            isActive
-                                                ? 'text-foreground bg-muted/80'
-                                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                                        )}
-                                    >
-                                        <item.icon className="w-4 h-4" />
-                                        <span className="hidden sm:inline">{item.name}</span>
-                                    </Link>
-                                )
-                            })}
-                        </nav>
-                    )}
+            {/* Navigation — 2 items only */}
+            {!hideNav && (
+                <nav className="px-3 space-y-0.5">
+                    <Link
+                        href="/dashboard"
+                        onClick={(e) => handleNavClick(e, '/dashboard')}
+                        className={cn(
+                            'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors duration-75',
+                            isActive('/dashboard')
+                                ? 'bg-foreground/[0.06] text-foreground'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        )}
+                    >
+                        <FileText className={cn('w-4 h-4', isActive('/dashboard') ? 'text-foreground' : 'text-muted-foreground/60')} />
+                        Files
+                    </Link>
+                    <Link
+                        href="/settings/profile"
+                        onClick={(e) => handleNavClick(e, '/settings/profile')}
+                        className={cn(
+                            'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors duration-75',
+                            isActive('/settings')
+                                ? 'bg-foreground/[0.06] text-foreground'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        )}
+                    >
+                        <Settings className={cn('w-4 h-4', isActive('/settings') ? 'text-foreground' : 'text-muted-foreground/60')} />
+                        Settings
+                    </Link>
+                </nav>
+            )}
 
-                    {/* Spacer */}
+            <div className="flex-1" />
+
+            {!user && !isAuthLoading && (
+                <div className="px-3 pb-4 space-y-2">
+                    <Link
+                        href="/login"
+                        className="w-full inline-flex items-center justify-center h-9 px-4 rounded-lg border border-border text-sm font-medium hover:bg-muted/60 transition-colors"
+                    >
+                        Log In
+                    </Link>
+                    <Link
+                        href="/signup"
+                        className="w-full inline-flex items-center justify-center h-9 px-4 rounded-lg bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
+                    >
+                        Start for free
+                    </Link>
+                </div>
+            )}
+        </div>
+    )
+
+    return (
+        <div className="min-h-screen bg-background">
+            {/* Mobile Header */}
+            <header className="lg:hidden sticky top-0 z-50 w-full border-b border-border/60 bg-background/95 backdrop-blur-xl">
+                <div className="flex h-14 items-center px-4">
+                    <button
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        className="flex items-center justify-center w-9 h-9 rounded-md hover:bg-muted/60 transition-colors mr-3"
+                    >
+                        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                    </button>
+                    <Link href="/dashboard" className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-foreground flex items-center justify-center">
+                            <Zap className="w-3.5 h-3.5 text-background" strokeWidth={2.5} />
+                        </div>
+                        <span className="font-display font-bold text-[17px] tracking-tight">
+                            Scytle
+                        </span>
+                    </Link>
                     <div className="flex-1" />
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5">
-                        {user && (
-                            <button
-                                onClick={handleNewProject}
-                                disabled={isCreating}
-                                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
-                            >
-                                {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                                <span className="hidden sm:inline">New</span>
-                            </button>
-                        )}
-
-                        {/* User Menu / Login Buttons */}
-                        {isAuthLoading && !user ? (
-                            <div className="flex items-center justify-center w-8 h-8">
-                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/60" />
-                            </div>
-                        ) : user ? (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button className="flex items-center rounded-full p-0.5 hover:bg-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-ring/20">
-                                        <Avatar className="w-7 h-7">
-                                            <AvatarImage src={avatarUrl} className="object-cover" />
-                                            <AvatarFallback className="text-[11px] font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
-                                                {initials}
-                                            </AvatarFallback>
-                                        </Avatar>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
-                                    <DropdownMenuLabel className="pb-2">
-                                        <div className="flex items-center gap-3">
-                                            <Avatar className="w-8 h-8">
-                                                <AvatarImage src={avatarUrl} className="object-cover" />
-                                                <AvatarFallback className="text-xs font-semibold bg-gradient-to-br from-accent to-accent/80 text-white">
-                                                    {initials}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex flex-col text-left">
-                                                <span className="font-medium text-sm">{user?.name || 'User'}</span>
-                                                <span className="text-xs text-muted-foreground font-normal truncate max-w-[150px]">
-                                                    {user?.email}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem asChild>
-                                        <Link href="/settings" className="cursor-pointer">
-                                            <Settings className="w-4 h-4 mr-2" />
-                                            Settings
-                                        </Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem asChild>
-                                        <Link href="/settings/billing" className="cursor-pointer">
-                                            <CreditCard className="w-4 h-4 mr-2" />
-                                            Billing
-                                        </Link>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                        onClick={() => logout()}
-                                        className="text-destructive focus:text-destructive cursor-pointer"
-                                    >
-                                        <LogOut className="w-4 h-4 mr-2" />
-                                        Log out
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <Link href="/login">
-                                    <Button variant="ghost" size="sm" className="h-8 px-3 rounded-md text-xs font-semibold">
-                                        Log In
-                                    </Button>
-                                </Link>
-                                <Link href="/signup">
-                                    <Button size="sm" className="h-8 px-3 rounded-md text-xs font-semibold bg-foreground text-background hover:opacity-90 transition-opacity">
-                                        Start for free
-                                    </Button>
-                                </Link>
-                            </div>
-                        )}
-                    </div>
+                    {user && (
+                        <button
+                            onClick={handleNewProject}
+                            disabled={isCreating}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+                        >
+                            {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                            <span>New</span>
+                        </button>
+                    )}
                 </div>
             </header>
 
-            {/* Main content */}
-            <main className="flex-1">
-                {children}
-            </main>
+            {/* Mobile Sidebar Overlay */}
+            {sidebarOpen && (
+                <div className="fixed inset-0 z-40 lg:hidden">
+                    <div
+                        className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-in fade-in duration-200"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                    <div
+                        ref={sidebarRef}
+                        className="absolute left-0 top-0 bottom-0 w-[200px] bg-sidebar border-r border-sidebar-border shadow-xl animate-in slide-in-from-left duration-200"
+                    >
+                        <SidebarContent />
+                    </div>
+                </div>
+            )}
 
-            {/* Global Support Widget - Only visible outside of the project editor */}
+            <div className="flex">
+                <aside className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:w-[200px] lg:border-r lg:border-sidebar-border lg:bg-sidebar">
+                    <SidebarContent />
+                </aside>
+
+                <main className="flex-1 lg:pl-[200px] min-h-screen">
+                    {children}
+                </main>
+            </div>
+
             {!pathname.startsWith('/project') && <SupportWidget />}
-
-            {/* Global Upgrade Modal */}
             <UpgradeModal />
         </div>
     )

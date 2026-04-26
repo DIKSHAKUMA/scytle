@@ -6,8 +6,7 @@
 
 /* ============================================
    SCYTLE DESIGN SYSTEM
-   Inspired by Claude, OpenAI, Relume
-   Modern, warm, professional
+   Structure-first, warm, professional
    ============================================ */
 
 /** Viewport animation support (Houdini) */
@@ -104,6 +103,12 @@
 
   /* Radius */
   --radius: 0.75rem;
+
+  /* Motion timing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
 }
 
 /* Dark mode */
@@ -142,7 +147,7 @@
 }
 
 @theme inline {
-  /* Colors - using oklch directly */
+  /* Colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
@@ -179,7 +184,6 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  ;
 
   /* Fonts */
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -192,28 +196,26 @@
   --radius-lg: calc(var(--radius) + 0.25rem);
   --radius-xl: calc(var(--radius) + 0.5rem);
   --radius-2xl: calc(var(--radius) + 1rem);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  /* Shadows — tighter, more refined */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md: 0 2px 8px -2px rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  --shadow-lg: 0 8px 16px -4px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.04);
+  --shadow-xl: 0 16px 32px -8px rgb(0 0 0 / 0.1), 0 4px 8px -4px rgb(0 0 0 / 0.04);
 
   /* Animations */
   --animate-fade-in: fade-in 0.2s ease-out;
-  --animate-slide-up: slide-up 0.3s ease-out;
-  --animate-slide-down: slide-down 0.3s ease-out;
-  --animate-scale-in: scale-in 0.2s ease-out;
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --animate-slide-up: slide-up 0.25s var(--ease-out-expo);
+  --animate-slide-down: slide-down 0.25s var(--ease-out-expo);
+  --animate-scale-in: scale-in 0.15s ease-out;
 }
 
-/* Base Styles */
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
 * {
   border-color: var(--border);
 }
@@ -229,27 +231,27 @@ body {
 
 /* Selection */
 ::selection {
-  background: oklch(0.65 0.18 35 / 0.2);
+  background: oklch(0.65 0.18 35 / 0.15);
   color: var(--foreground);
 }
 
-/* Scrollbar */
+/* Scrollbar — thin and subtle */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--muted);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.55 0.02 260 / 0.3);
-  border-radius: 4px;
+  background: oklch(0.55 0.02 260 / 0.15);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.55 0.02 260 / 0.5);
+  background: oklch(0.55 0.02 260 / 0.3);
 }
 
 /* Hide scrollbar utility */
@@ -262,73 +264,52 @@ body {
   }
 }
 
-/* Animations */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
+/* ============================================
+   ANIMATIONS
+   ============================================ */
 
-  to {
-    opacity: 1;
-  }
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-/* Utility Classes */
+/* Sidebar slide-in (mobile) */
+@keyframes slide-in-from-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+/* Wireframe page staggered entry animation */
+@keyframes wireframe-page-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   UTILITIES
+   ============================================ */
+
 .text-balance {
   text-wrap: balance;
 }
 
 .animate-in {
   animation: var(--animate-fade-in);
-}
-
-/* Wireframe page staggered entry animation */
-@keyframes wireframe-page-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* Typography */
@@ -344,7 +325,7 @@ body {
   background-clip: text;
 }
 
-/* Container utilities */
+/* Container — kept for backward compatibility with non-redesigned pages */
 .container {
   width: 100%;
   max-width: 1280px;
@@ -377,15 +358,19 @@ body {
   background: linear-gradient(180deg, oklch(0.97 0.01 80) 0%, oklch(0.99 0.005 80) 100%);
 }
 
-/* Card hover effects */
+/* Card hover — subtle lift */
 .card-hover {
-  transition: all 0.2s ease;
+  transition: all var(--duration-normal) ease;
 }
 
 .card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px -8px oklch(0.18 0.02 260 / 0.12);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
+
+/* ============================================
+   BASE LAYER
+   ============================================ */
 
 @layer base {
   * {

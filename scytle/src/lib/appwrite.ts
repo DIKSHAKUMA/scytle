@@ -48,6 +48,7 @@ export const BUCKETS = {
     AVATARS: 'avatars',
     PROJECT_ASSETS: 'project_assets',
     EXPORTS: 'exports',
+    THUMBNAILS: 'thumbnails',
 } as const
 
 /**

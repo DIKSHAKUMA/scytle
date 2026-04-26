@@ -1,38 +1,31 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
     Plus,
-    FolderOpen,
-    Clock,
     MoreHorizontal,
     Trash2,
     Edit,
     Copy,
     Loader2,
     Search,
-    ArrowRight,
     FileText,
-    Import,
-    Command,
+    LayoutGrid,
+    List,
+    Archive,
+    LinkIcon,
+    Check,
+    X,
 } from 'lucide-react'
 
 import { AppShell } from '@/components/layout/app-shell'
-import { Button } from '@/components/ui/button'
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useProjectStore, useAuthStore } from '@/store'
 import type { Project } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
+import { getThumbnailUrl } from '@/lib/thumbnail'
 
-/** Generate a default project name like "Untitled Project 4" */
 function nextProjectName(projects: Project[]): string {
     const prefix = 'Untitled Project'
     const nums = projects
@@ -43,439 +36,433 @@ function nextProjectName(projects: Project[]): string {
     return `${prefix} ${next}`
 }
 
-type StatusFilter = 'all' | 'draft' | 'in-progress' | 'completed'
+type FileTab = 'all' | 'recents' | 'archived'
+type ViewMode = 'grid' | 'list'
 
-const STATUS_CONFIG = {
-    draft: {
-        label: 'Draft',
-        dot: 'bg-amber-400',
-        bg: 'bg-amber-50 dark:bg-amber-950/30',
-        text: 'text-amber-700 dark:text-amber-400',
-    },
-    'in-progress': {
-        label: 'In Progress',
-        dot: 'bg-blue-500',
-        bg: 'bg-blue-50 dark:bg-blue-950/30',
-        text: 'text-blue-700 dark:text-blue-400',
-    },
-    completed: {
-        label: 'Completed',
-        dot: 'bg-emerald-500',
-        bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-        text: 'text-emerald-700 dark:text-emerald-400',
-    },
-} as const
+/** Thumbnail component — tries to load the stored thumbnail image */
+function ProjectThumbnail({ projectId }: { projectId: string }) {
+    const [loaded, setLoaded] = useState(false)
+    const [error, setError] = useState(false)
+    const url = getThumbnailUrl(projectId)
 
-// Gradient patterns for project card thumbnails
-const CARD_GRADIENTS = [
-    'from-rose-100 via-pink-50 to-orange-50 dark:from-rose-950/40 dark:via-pink-950/20 dark:to-orange-950/20',
-    'from-violet-100 via-purple-50 to-indigo-50 dark:from-violet-950/40 dark:via-purple-950/20 dark:to-indigo-950/20',
-    'from-sky-100 via-cyan-50 to-teal-50 dark:from-sky-950/40 dark:via-cyan-950/20 dark:to-teal-950/20',
-    'from-amber-100 via-yellow-50 to-lime-50 dark:from-amber-950/40 dark:via-yellow-950/20 dark:to-lime-950/20',
-    'from-emerald-100 via-green-50 to-cyan-50 dark:from-emerald-950/40 dark:via-green-950/20 dark:to-cyan-950/20',
-    'from-fuchsia-100 via-pink-50 to-rose-50 dark:from-fuchsia-950/40 dark:via-pink-950/20 dark:to-rose-950/20',
-]
+    if (error || !url) return null
 
-function getGreeting(): string {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 18) return 'Good afternoon'
-    return 'Good evening'
+    return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+            src={url}
+            alt=""
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setLoaded(true)}
+            onError={() => setError(true)}
+            loading="lazy"
+        />
+    )
 }
 
-function getGradient(index: number): string {
-    return CARD_GRADIENTS[index % CARD_GRADIENTS.length]
-}
-
-export default function DashboardPage() {
+export default function FilesPage() {
     const router = useRouter()
     const { user, checkSession } = useAuthStore()
-    const { projects, isLoading, fetchProjects, deleteProject, createProject } = useProjectStore()
+    const { projects, isLoading, fetchProjects, deleteProject, createProject, updateProject } = useProjectStore()
 
+    const [activeTab, setActiveTab] = useState<FileTab>('all')
+    const [viewMode, setViewMode] = useState<ViewMode>('grid')
     const [searchQuery, setSearchQuery] = useState('')
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-    const [sessionResolved, setSessionResolved] = useState(false)
-    const [authChecked, setAuthChecked] = useState(false)
-    const [isAuthenticated, setIsAuthenticated] = useState(false)
-    const [mounted, setMounted] = useState(false)
+    const [authChecked, setAuthChecked] = useState(!!user)
     const [isCreating, setIsCreating] = useState(false)
 
-    // Create a blank project and navigate straight to the canvas
+    // Context menu
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; project: Project } | null>(null)
+
+    // Inline rename
+    const [renamingId, setRenamingId] = useState<string | null>(null)
+    const [renameValue, setRenameValue] = useState('')
+    const renameInputRef = useRef<HTMLInputElement>(null)
+
+    useEffect(() => {
+        if (!contextMenu) return
+        const close = () => setContextMenu(null)
+        document.addEventListener('click', close)
+        document.addEventListener('scroll', close, true)
+        return () => {
+            document.removeEventListener('click', close)
+            document.removeEventListener('scroll', close, true)
+        }
+    }, [contextMenu])
+
+    // Focus rename input when it appears
+    useEffect(() => {
+        if (renamingId && renameInputRef.current) {
+            renameInputRef.current.focus()
+            renameInputRef.current.select()
+        }
+    }, [renamingId])
+
     const handleNewProject = useCallback(async () => {
         if (isCreating) return
         setIsCreating(true)
         try {
             const project = await createProject({ name: nextProjectName(projects) })
-            if (project) {
-                router.push(`/project/${project.projectId}`)
-            }
+            if (project) router.push(`/project/${project.projectId}`)
         } finally {
             setIsCreating(false)
         }
     }, [createProject, projects, router, isCreating])
 
-    // Resolve session once before deciding whether to load dashboard or redirect.
+    // Auth — instant if user already exists in store
     useEffect(() => {
-        let cancelled = false
-
-        const resolveSession = async () => {
-            await checkSession()
-            if (!cancelled) {
-                setSessionResolved(true)
-            }
-        }
-
-        resolveSession()
-
-        return () => {
-            cancelled = true
-        }
-    }, [checkSession])
-
-    // Fetch data when authenticated
-    useEffect(() => {
-        if (!sessionResolved) return
-
         if (user) {
-            setIsAuthenticated(true)
             setAuthChecked(true)
             fetchProjects()
-        } else {
-            setAuthChecked(true)
-            router.replace('/login?redirect=/dashboard')
+            return
         }
-    }, [sessionResolved, user, fetchProjects, router])
-
-    // Staggered mount animation
-    useEffect(() => {
-        if (authChecked && isAuthenticated) {
-            const t = setTimeout(() => setMounted(true), 50)
-            return () => clearTimeout(t)
-        }
-    }, [authChecked, isAuthenticated])
-
-    // Keyboard shortcut for search
-    const searchInputRef = useCallback((node: HTMLInputElement | null) => {
-        if (!node) return
-        const handler = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-                e.preventDefault()
-                node.focus()
+        let cancelled = false
+        const resolve = async () => {
+            await checkSession()
+            if (!cancelled) {
+                setAuthChecked(true)
+                // Fetch projects now that we have a session
+                fetchProjects()
             }
         }
-        document.addEventListener('keydown', handler)
-        return () => document.removeEventListener('keydown', handler)
+        resolve()
+        return () => { cancelled = true }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Redirect if no user after auth check
+    useEffect(() => {
+        if (authChecked && !user) {
+            router.replace('/login?redirect=/dashboard')
+        }
+    }, [authChecked, user, router])
+
+    const filteredProjects = useMemo(() => {
+        const now = Date.now()
+        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+        let filtered = projects
+
+        switch (activeTab) {
+            case 'recents':
+                filtered = filtered.filter(
+                    p => p.status !== 'completed' && (now - new Date(p.updatedAt).getTime()) < thirtyDaysMs
+                )
+                break
+            case 'archived':
+                filtered = filtered.filter(p => p.status === 'completed')
+                break
+            default:
+                filtered = filtered.filter(p => p.status !== 'completed')
+                break
+        }
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase()
+            filtered = filtered.filter(
+                p => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q)
+            )
+        }
+
+        return [...filtered].sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        )
+    }, [projects, activeTab, searchQuery])
+
+    // Context actions
+    const handleContextAction = useCallback((action: string, project: Project) => {
+        setContextMenu(null)
+        switch (action) {
+            case 'rename':
+                setRenamingId(project.projectId)
+                setRenameValue(project.name)
+                break
+            case 'duplicate':
+                createProject({ name: `${project.name} (copy)`, description: project.description })
+                break
+            case 'copy-link':
+                navigator.clipboard.writeText(`${window.location.origin}/project/${project.projectId}`)
+                break
+            case 'archive':
+                updateProject(project.projectId, { status: 'completed' })
+                break
+            case 'unarchive':
+                updateProject(project.projectId, { status: 'draft' })
+                break
+            case 'delete':
+                deleteProject(project.projectId)
+                break
+        }
+    }, [createProject, updateProject, deleteProject])
+
+    const commitRename = useCallback(() => {
+        if (renamingId && renameValue.trim()) {
+            updateProject(renamingId, { name: renameValue.trim() })
+        }
+        setRenamingId(null)
+        setRenameValue('')
+    }, [renamingId, renameValue, updateProject])
+
+    const cancelRename = useCallback(() => {
+        setRenamingId(null)
+        setRenameValue('')
     }, [])
 
-    // Filter and search projects
-    const filteredProjects = useMemo(() => {
-        return projects.filter((project: Project) => {
-            const matchesSearch = searchQuery === '' ||
-                project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (project.description?.toLowerCase().includes(searchQuery.toLowerCase()))
-            const matchesStatus = statusFilter === 'all' || project.status === statusFilter
-            return matchesSearch && matchesStatus
-        })
-    }, [projects, searchQuery, statusFilter])
+    const openContextMenu = useCallback((e: React.MouseEvent, project: Project) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setContextMenu({ x: e.clientX, y: e.clientY, project })
+    }, [])
 
-    // Stats
-    const stats = useMemo(() => ({
-        total: projects.length,
-        draft: projects.filter((p: Project) => p.status === 'draft').length,
-        inProgress: projects.filter((p: Project) => p.status === 'in-progress').length,
-        completed: projects.filter((p: Project) => p.status === 'completed').length,
-    }), [projects])
-
-    const filterTabs: { key: StatusFilter; label: string; count: number }[] = [
-        { key: 'all', label: 'All', count: stats.total },
-        { key: 'draft', label: 'Drafts', count: stats.draft },
-        { key: 'in-progress', label: 'In Progress', count: stats.inProgress },
-        { key: 'completed', label: 'Completed', count: stats.completed },
-    ]
-
-    if (!authChecked || !isAuthenticated) {
+    if (!authChecked || !user) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <div className="flex flex-col items-center gap-3">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Loading...</span>
-                </div>
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
         )
     }
 
+    const tabs: { key: FileTab; label: string }[] = [
+        { key: 'all', label: 'All' },
+        { key: 'recents', label: 'Recents' },
+        { key: 'archived', label: 'Archived' },
+    ]
+
     return (
         <AppShell>
-            <div className="min-h-[calc(100vh-3.5rem)]">
-                {/* Hero Header */}
-                <div className="border-b bg-gradient-to-b from-muted/40 to-background">
-                    <div className="container pt-10 pb-8">
-                        <div
-                            className="transition-all duration-700 ease-out"
-                            style={{
-                                opacity: mounted ? 1 : 0,
-                                transform: mounted ? 'translateY(0)' : 'translateY(12px)',
-                            }}
-                        >
-                            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight text-foreground">
-                                {getGreeting()}, {user?.name?.split(' ')[0] || 'there'}
-                            </h1>
-                            <p className="text-muted-foreground mt-1.5 text-[15px]">
-                                Pick up where you left off, or start something new.
-                            </p>
-                        </div>
-
-                        {/* Quick Actions — compact pill-style row */}
-                        <div
-                            className="flex flex-wrap gap-2.5 mt-6 transition-all duration-700 ease-out delay-100"
-                            style={{
-                                opacity: mounted ? 1 : 0,
-                                transform: mounted ? 'translateY(0)' : 'translateY(12px)',
-                            }}
-                        >
+            <div className="min-h-screen">
+                {/* Header */}
+                <div className="px-8 lg:px-10 pt-8 pb-5">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-[22px] font-semibold tracking-tight text-foreground">
+                            Files
+                        </h1>
+                        <div className="flex items-center gap-3">
+                            <div className="hidden sm:flex items-center gap-0.5">
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setActiveTab(tab.key)}
+                                        className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-75 ${
+                                            activeTab === tab.key
+                                                ? 'bg-foreground/[0.07] text-foreground'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex items-center border border-border/40 rounded-md overflow-hidden">
+                                <button
+                                    onClick={() => setViewMode('grid')}
+                                    className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-foreground/[0.07] text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}`}
+                                >
+                                    <LayoutGrid className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-foreground/[0.07] text-foreground' : 'text-muted-foreground/50 hover:text-muted-foreground'}`}
+                                >
+                                    <List className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <div className="relative hidden sm:block">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
+                                <input
+                                    type="text"
+                                    placeholder="Search files"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-48 h-8 rounded-md border border-border/40 bg-transparent pl-8 pr-3 text-[13px] placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-ring/30 transition-all"
+                                />
+                            </div>
                             <button
                                 onClick={handleNewProject}
                                 disabled={isCreating}
-                                className="group inline-flex items-center gap-2.5 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                                className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-foreground text-background text-[13px] font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
                             >
-                                {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                New Project
+                                {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                New file
                             </button>
                         </div>
+                    </div>
+                    <div className="flex sm:hidden items-center gap-0.5 mt-4">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-75 ${activeTab === tab.key ? 'bg-foreground/[0.07] text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* Main Content */}
-                <div className="container py-8">
-                    {/* Toolbar: Filter Tabs + Search */}
-                    <div
-                        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 transition-all duration-700 ease-out delay-200"
-                        style={{
-                            opacity: mounted ? 1 : 0,
-                            transform: mounted ? 'translateY(0)' : 'translateY(8px)',
-                        }}
-                    >
-                        {/* Filter Tabs */}
-                        <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/60">
-                            {filterTabs.map(tab => (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => setStatusFilter(tab.key)}
-                                    className={`
-                                        relative px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200
-                                        ${statusFilter === tab.key
-                                            ? 'bg-card text-foreground shadow-sm'
-                                            : 'text-muted-foreground hover:text-foreground'
-                                        }
-                                    `}
-                                >
-                                    {tab.label}
-                                    {tab.count > 0 && (
-                                        <span className={`ml-1.5 text-xs tabular-nums ${
-                                            statusFilter === tab.key
-                                                ? 'text-foreground/60'
-                                                : 'text-muted-foreground/60'
-                                        }`}>
-                                            {tab.count}
-                                        </span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-
-                        {/* Search */}
-                        <div className="relative w-full sm:w-72">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                placeholder="Search projects..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full h-9 rounded-lg border border-border bg-card pl-9 pr-14 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring/40 transition-all"
-                            />
-                            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground/60">
-                                <Command className="w-2.5 h-2.5" />K
-                            </kbd>
-                        </div>
-                    </div>
-
-                    {/* Content */}
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-24">
-                            <div className="flex flex-col items-center gap-3">
-                                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                                <span className="text-sm text-muted-foreground">Loading projects...</span>
-                            </div>
-                        </div>
-                    ) : projects.length === 0 ? (
-                        /* Empty State */
-                        <div
-                            className="flex flex-col items-center justify-center py-24 transition-all duration-700 ease-out delay-300"
-                            style={{
-                                opacity: mounted ? 1 : 0,
-                                transform: mounted ? 'translateY(0)' : 'translateY(16px)',
-                            }}
-                        >
-                            <div className="relative mb-8">
-                                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-                                    <FileText className="w-10 h-10 text-muted-foreground/40" strokeWidth={1.5} />
-                                </div>
-                                <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-accent/10 flex items-center justify-center">
-                                    <Plus className="w-4 h-4 text-accent" />
-                                </div>
-                            </div>
-                            <h3 className="text-lg font-display font-semibold mb-1.5">
-                                Create your first project
-                            </h3>
-                            <p className="text-muted-foreground text-sm text-center max-w-xs mb-6 leading-relaxed">
-                                Start with a blank canvas and shape your sitemap, wireframes, and design.
-                            </p>
-                            <button
-                                onClick={handleNewProject}
-                                disabled={isCreating}
-                                className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-6 py-2.5 text-sm font-medium shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
-                            >
-                                {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                New Project
-                                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-                            </button>
+                {/* Content */}
+                <div className="px-8 lg:px-10 pb-10">
+                    {isLoading && projects.length === 0 ? (
+                        <div className="flex items-center justify-center py-32">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                         </div>
                     ) : filteredProjects.length === 0 ? (
-                        /* No Search Results */
-                        <div className="flex flex-col items-center justify-center py-20">
-                            <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-4">
-                                <Search className="w-7 h-7 text-muted-foreground/40" />
+                        <div className="flex flex-col items-center justify-center py-32">
+                            <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                                <FileText className="w-6 h-6 text-muted-foreground/30" strokeWidth={1.5} />
                             </div>
-                            <h3 className="text-base font-semibold mb-1">No results</h3>
-                            <p className="text-muted-foreground text-sm mb-4">
-                                No projects match &ldquo;{searchQuery || statusFilter}&rdquo;
+                            <p className="text-[14px] font-medium text-foreground mb-1">
+                                {searchQuery ? 'No results' : activeTab === 'archived' ? 'No archived files' : 'No files yet'}
                             </p>
-                            <button
-                                onClick={() => { setSearchQuery(''); setStatusFilter('all') }}
-                                className="text-sm text-accent font-medium hover:underline"
-                            >
-                                Clear filters
-                            </button>
+                            <p className="text-[13px] text-muted-foreground mb-5">
+                                {searchQuery ? `Nothing matches "${searchQuery}"` : activeTab === 'archived' ? 'Completed projects will appear here.' : 'Create your first file to get started.'}
+                            </p>
+                            {!searchQuery && activeTab !== 'archived' && (
+                                <button onClick={handleNewProject} disabled={isCreating} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-foreground text-background text-[13px] font-medium hover:opacity-90 disabled:opacity-60">
+                                    {isCreating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                    New file
+                                </button>
+                            )}
                         </div>
-                    ) : (
-                        /* Project Grid */
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                            {filteredProjects.map((project: Project, i: number) => {
-                                const status = STATUS_CONFIG[project.status]
-                                return (
+                    ) : viewMode === 'grid' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
+                            {filteredProjects.map((project) => (
+                                <div key={project.projectId} onContextMenu={(e) => openContextMenu(e, project)}>
                                     <Link
-                                        key={project.projectId}
                                         href={`/project/${project.projectId}`}
                                         className="group block"
+                                        onClick={(e) => { if (renamingId === project.projectId) e.preventDefault() }}
                                     >
-                                        <div
-                                            className="relative h-full rounded-xl border border-border/60 bg-card overflow-hidden transition-all duration-300 hover:border-border hover:shadow-lg hover:shadow-black/[0.03] dark:hover:shadow-black/20"
-                                            style={{
-                                                opacity: mounted ? 1 : 0,
-                                                transform: mounted ? 'translateY(0)' : 'translateY(16px)',
-                                                transitionDelay: `${300 + i * 60}ms`,
-                                                transitionDuration: '500ms',
-                                                transitionTimingFunction: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                                            }}
-                                        >
-                                            {/* Gradient Preview Area */}
-                                            <div className={`h-28 bg-gradient-to-br ${getGradient(i)} relative overflow-hidden`}>
-                                                {/* Decorative grid pattern */}
-                                                <div className="absolute inset-0 opacity-[0.15]" style={{
-                                                    backgroundImage: `linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(to right, var(--border) 1px, transparent 1px)`,
-                                                    backgroundSize: '24px 24px',
-                                                }} />
-                                                {/* Project icon */}
-                                                <div className="absolute bottom-3 left-4">
-                                                    <div className="w-10 h-10 rounded-lg bg-card/90 backdrop-blur-sm shadow-sm flex items-center justify-center border border-white/20 dark:border-white/10">
-                                                        <span className="text-base font-display font-bold text-foreground/80">
-                                                            {project.name.charAt(0).toUpperCase()}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                {/* Actions */}
-                                                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-                                                            <button className="w-7 h-7 rounded-md bg-card/90 backdrop-blur-sm shadow-sm flex items-center justify-center border border-white/20 dark:border-white/10 hover:bg-card transition-colors">
-                                                                <MoreHorizontal className="w-3.5 h-3.5 text-foreground/70" />
-                                                            </button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end" className="w-44">
-                                                            <DropdownMenuItem className="text-sm">
-                                                                <Edit className="w-3.5 h-3.5 mr-2" />
-                                                                Rename
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem className="text-sm">
-                                                                <Copy className="w-3.5 h-3.5 mr-2" />
-                                                                Duplicate
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onClick={(e) => {
-                                                                    e.preventDefault()
-                                                                    deleteProject(project.projectId)
-                                                                }}
-                                                                className="text-destructive focus:text-destructive text-sm"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5 mr-2" />
-                                                                Delete
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                        <div className="relative rounded-lg border border-border/40 bg-card overflow-hidden transition-all duration-150 hover:border-border/70 hover:shadow-sm">
+                                            {/* Thumbnail — clean neutral canvas, ready for real thumbnails */}
+                                            <div className="relative aspect-[4/3] bg-[#f8f8f8] dark:bg-[#1a1a1a] overflow-hidden border-b border-border/30">
+                                                {/* Thumbnail image — rendered if available */}
+                                                <ProjectThumbnail projectId={project.projectId} />
+                                                {/* 3-dot trigger */}
+                                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-75 z-10">
+                                                    <button
+                                                        onClick={(e) => openContextMenu(e, project)}
+                                                        className="w-6 h-6 rounded bg-white/80 dark:bg-black/50 backdrop-blur-sm flex items-center justify-center hover:bg-white dark:hover:bg-black/70 transition-colors"
+                                                    >
+                                                        <MoreHorizontal className="w-3.5 h-3.5 text-foreground/50" />
+                                                    </button>
                                                 </div>
                                             </div>
 
-                                            {/* Card Body */}
-                                            <div className="p-4">
-                                                <h3 className="font-semibold text-[15px] text-foreground line-clamp-1 group-hover:text-accent transition-colors duration-200">
-                                                    {project.name}
-                                                </h3>
-                                                <p className="text-sm text-muted-foreground/70 line-clamp-1 mt-0.5">
-                                                    {project.description || 'No description'}
-                                                </p>
-
-                                                {/* Footer */}
-                                                <div className="flex items-center justify-between mt-3.5 pt-3.5 border-t border-border/40">
-                                                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-                                                        {status.label}
+                                            {/* Footer */}
+                                            <div className="px-3 py-2.5">
+                                                {renamingId === project.projectId ? (
+                                                    <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                                                        <input
+                                                            ref={renameInputRef}
+                                                            type="text"
+                                                            value={renameValue}
+                                                            onChange={(e) => setRenameValue(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') commitRename()
+                                                                if (e.key === 'Escape') cancelRename()
+                                                            }}
+                                                            onBlur={commitRename}
+                                                            className="flex-1 text-[13px] font-medium bg-transparent border-b border-foreground/20 focus:border-foreground/50 outline-none py-0.5 text-foreground"
+                                                        />
                                                     </div>
-                                                    <div className="flex items-center gap-1 text-xs text-muted-foreground/50">
-                                                        <Clock className="w-3 h-3" />
-                                                        {formatRelativeTime(project.updatedAt)}
-                                                    </div>
-                                                </div>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-[13px] font-medium text-foreground truncate">
+                                                            {project.name}
+                                                        </p>
+                                                        <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+                                                            Edited {formatRelativeTime(project.updatedAt)}
+                                                        </p>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </Link>
-                                )
-                            })}
-
-                            {/* New Project Card */}
-                            <button onClick={handleNewProject} disabled={isCreating} className="group block text-left w-full">
-                                <div
-                                    className="h-full min-h-[232px] rounded-xl border border-dashed border-border/60 bg-muted/20 flex flex-col items-center justify-center gap-3 transition-all duration-300 hover:border-accent/40 hover:bg-accent/[0.03]"
-                                    style={{
-                                        opacity: mounted ? 1 : 0,
-                                        transform: mounted ? 'translateY(0)' : 'translateY(16px)',
-                                        transitionDelay: `${300 + filteredProjects.length * 60}ms`,
-                                        transitionDuration: '500ms',
-                                    }}
-                                >
-                                    <div className="w-10 h-10 rounded-xl bg-muted/60 flex items-center justify-center group-hover:bg-accent/10 group-hover:scale-110 transition-all duration-300">
-                                        {isCreating ? <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" /> : <Plus className="w-5 h-5 text-muted-foreground group-hover:text-accent transition-colors" />}
-                                    </div>
-                                    <span className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-                                        New Project
-                                    </span>
                                 </div>
-                            </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div>
+                            {filteredProjects.map((project) => (
+                                <div key={project.projectId} onContextMenu={(e) => openContextMenu(e, project)}>
+                                    <Link
+                                        href={`/project/${project.projectId}`}
+                                        className="group block"
+                                        onClick={(e) => { if (renamingId === project.projectId) e.preventDefault() }}
+                                    >
+                                        <div className="flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-muted/30 transition-colors duration-75">
+                                            <div className="flex-1 min-w-0">
+                                                {renamingId === project.projectId ? (
+                                                    <input
+                                                        ref={renameInputRef}
+                                                        type="text"
+                                                        value={renameValue}
+                                                        onChange={(e) => setRenameValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') commitRename()
+                                                            if (e.key === 'Escape') cancelRename()
+                                                        }}
+                                                        onBlur={commitRename}
+                                                        onClick={(e) => e.preventDefault()}
+                                                        className="w-full text-[13px] font-medium bg-transparent border-b border-foreground/20 focus:border-foreground/50 outline-none py-0.5 text-foreground"
+                                                    />
+                                                ) : (
+                                                    <p className="text-[13px] font-medium text-foreground truncate group-hover:text-accent transition-colors">
+                                                        {project.name}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <span className="text-[12px] text-muted-foreground/50 shrink-0">
+                                                Edited {formatRelativeTime(project.updatedAt)}
+                                            </span>
+                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                <button onClick={(e) => openContextMenu(e, project)} className="w-7 h-7 rounded-md hover:bg-muted/60 flex items-center justify-center">
+                                                    <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed z-50 min-w-[180px] rounded-lg border border-border/60 bg-popover shadow-lg py-1 animate-in fade-in scale-in duration-100"
+                    style={{
+                        left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 1000) - 200),
+                        top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 260),
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button onClick={() => handleContextAction('rename', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-foreground hover:bg-muted/50 transition-colors">
+                        <Edit className="w-3.5 h-3.5 text-muted-foreground" /> Rename
+                    </button>
+                    <button onClick={() => handleContextAction('duplicate', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-foreground hover:bg-muted/50 transition-colors">
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" /> Duplicate
+                    </button>
+                    <button onClick={() => handleContextAction('copy-link', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-foreground hover:bg-muted/50 transition-colors">
+                        <LinkIcon className="w-3.5 h-3.5 text-muted-foreground" /> Copy link
+                    </button>
+                    <div className="h-px bg-border/40 my-1" />
+                    {contextMenu.project.status === 'completed' ? (
+                        <button onClick={() => handleContextAction('unarchive', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-foreground hover:bg-muted/50 transition-colors">
+                            <Archive className="w-3.5 h-3.5 text-muted-foreground" /> Unarchive
+                        </button>
+                    ) : (
+                        <button onClick={() => handleContextAction('archive', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-foreground hover:bg-muted/50 transition-colors">
+                            <Archive className="w-3.5 h-3.5 text-muted-foreground" /> Archive
+                        </button>
+                    )}
+                    <div className="h-px bg-border/40 my-1" />
+                    <button onClick={() => handleContextAction('delete', contextMenu.project)} className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-destructive hover:bg-muted/50 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                </div>
+            )}
         </AppShell>
     )
 }

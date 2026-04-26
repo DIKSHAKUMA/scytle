@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useProjectStore, useAuthStore } from '@/store'
 import { useEditorStore } from '@/store/editor-store'
@@ -9,6 +9,7 @@ import { TopBar, LeftPanel, RightPanel, ZoomControls } from '@/components/worksp
 import { Loader2 } from 'lucide-react'
 import { canvasSync } from '@/lib/sync'
 import { createJWT } from '@/lib/appwrite'
+import { captureThumbnail } from '@/lib/thumbnail'
 import type { ProductType, AiModel } from '@/types'
 
 export default function ProjectEditorPage() {
@@ -74,6 +75,21 @@ function ProjectEditor() {
     // store the initial prompt so ChatPanel can pick it up and send it.
     // This replaces the old pipeline (plan-pages → generate-sections).
     const [initialPromptSent, setInitialPromptSent] = useState(false)
+
+    // Capture thumbnail periodically when editing (debounced)
+    // Subscribe to nodes explicitly so the effect re-runs when canvas changes
+    const nodes = useEditorStore((s) => s.nodes)
+    
+    useEffect(() => {
+        if (!canvasLoaded || nodes.length === 0) return
+
+        // Wait for 3 seconds of inactivity before capturing
+        const timeoutId = setTimeout(() => {
+            captureThumbnail(projectId).catch(() => {})
+        }, 3000)
+
+        return () => clearTimeout(timeoutId)
+    }, [projectId, canvasLoaded, nodes]) // Re-run when nodes change
 
     useEffect(() => {
         if (

@@ -1,81 +1,96 @@
 'use client'
 
 import React, { useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { SupportCard } from '@/components/settings/support-card'
+import { MessageSquare, BookOpen, Users, ExternalLink } from 'lucide-react'
 import { ContactDialog } from '@/components/settings/contact-dialog'
-import { cn } from '@/lib/utils'
+
+const supportOptions = [
+    {
+        icon: MessageSquare,
+        title: 'Get Support',
+        description: 'Have a question or found a bug? We\'ve got your back. We typically reply within 24 hours.',
+        actionText: 'Submit a Request',
+        color: 'hsl(200, 80%, 96%)',
+        iconColor: 'hsl(200, 60%, 55%)',
+    },
+    {
+        icon: BookOpen,
+        title: 'Resources & Docs',
+        description: 'Step-by-step tutorials, FAQs, and detailed documentation to help you get the most out of Scytle.',
+        actionText: 'Browse Resources',
+        color: 'hsl(40, 80%, 95%)',
+        iconColor: 'hsl(40, 70%, 50%)',
+        href: '#',
+    },
+    {
+        icon: Users,
+        title: 'Community',
+        description: 'Learn from fellow creators, showcase your work, give feedback, and see what others are building.',
+        actionText: 'Join Discord',
+        color: 'hsl(260, 80%, 96%)',
+        iconColor: 'hsl(260, 60%, 60%)',
+        href: 'https://discord.gg/scytle',
+    },
+]
 
 export default function SupportPage() {
     const [isContactOpen, setIsContactOpen] = useState(false)
 
     return (
-        <div className="pb-32">
-            {/* Relume Style Hero Header */}
-            <div className="max-w-4xl mx-auto text-center py-24 mb-12">
-                <h1 className="text-[60px] md:text-[80px] font-display font-bold tracking-tight text-black leading-[1.1] mb-8">
+        <div className="space-y-6 pb-16">
+            {/* Section Header */}
+            <div>
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
                     Help & Support
-                </h1>
-                <p className="text-[#4B5563] text-xl md:text-2xl font-medium max-w-2xl mx-auto leading-relaxed">
-                    We are here to help. Get community support, report bugs, get help with account 
-                    and billing issues or leave feedback.
-                </p>
-            </div>
-
-            {/* Relume Style 2-Column Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto px-4">
-                {/* Left Column: Stacked Cards */}
-                <div className="flex flex-col gap-8">
-                    <SupportCard 
-                        title="Get Support"
-                        description="Have a question or found a bug? We've got your back. We typically reply in 24 hours or less."
-                        actionText="Submit Request"
-                        onAction={() => setIsContactOpen(true)}
-                        variant="gray"
-                        className="flex-1"
-                    />
-                    
-                    <SupportCard 
-                        title="Resources"
-                        description="Get step-by-step tutorials on how to use Scytle AI, answers to FAQs, and detailed product documentation."
-                        actionText="Visit Resources"
-                        onAction={() => window.open('#', '_blank')}
-                        variant="gray"
-                        className="flex-1"
-                    />
-                </div>
-
-                {/* Right Column: Tall Community Card */}
-                <SupportCard 
-                    title="Community"
-                    description="Learn from fellow creators or showcase your work with our community. Showcase your project, give feedback and see what others are building."
-                    actionText="Join Our Community"
-                    onAction={() => window.open('https://discord.gg/scytle', '_blank')}
-                    variant="white"
-                    imageSrc="/images/community_mosaic.png"
-                    imageAlt="Scytle Community Members"
-                    className="h-full border border-border/60 shadow-sm"
-                />
-            </div>
-
-            {/* Final CTA Banner (Ultra-minimalist Relume Style) */}
-            <div className="mt-40 mb-10 max-w-7xl mx-auto px-4 text-center">
-                <h2 className="text-[56px] md:text-[80px] font-display font-bold text-black tracking-tight leading-[1] mb-8">
-                    Build faster.
                 </h2>
-                <p className="text-[#4B5563] text-xl font-medium max-w-lg mx-auto mb-10">
-                    Join thousands of designers generating production-ready UIs with Scytle.
+                <p className="text-muted-foreground mt-0.5 text-[13px]">
+                    Get help, browse resources, or connect with the community.
                 </p>
-                
-                <Link href="/dashboard">
-                    <Button 
-                        className="h-14 px-8 rounded-xl bg-black text-white hover:bg-black/80 text-[17px] font-bold transition-all hover:scale-105 active:scale-95"
-                    >
-                        Try Scytle for free
-                    </Button>
-                </Link>
+            </div>
+
+            {/* Support Cards */}
+            <div className="grid grid-cols-1 gap-3">
+                {supportOptions.map((option) => {
+                    const isContact = option.title === 'Get Support'
+                    const handleClick = () => {
+                        if (isContact) {
+                            setIsContactOpen(true)
+                        } else if (option.href) {
+                            window.open(option.href, '_blank')
+                        }
+                    }
+
+                    return (
+                        <button
+                            key={option.title}
+                            onClick={handleClick}
+                            className="group w-full text-left rounded-xl border border-border/50 bg-card p-5 hover:border-border hover:shadow-sm transition-all duration-150"
+                        >
+                            <div className="flex items-start gap-4">
+                                <div
+                                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{ backgroundColor: option.color, color: option.iconColor }}
+                                >
+                                    <option.icon className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h3 className="text-[14px] font-semibold text-foreground">
+                                            {option.title}
+                                        </h3>
+                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+                                    </div>
+                                    <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">
+                                        {option.description}
+                                    </p>
+                                    <span className="inline-flex items-center text-[13px] font-medium text-accent mt-3 group-hover:underline">
+                                        {option.actionText}
+                                    </span>
+                                </div>
+                            </div>
+                        </button>
+                    )
+                })}
             </div>
 
             {/* Contact Form Dialog */}

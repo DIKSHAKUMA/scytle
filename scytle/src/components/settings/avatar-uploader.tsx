@@ -23,7 +23,7 @@ export function AvatarUploader() {
         }
     }
 
-    const avatarId = user?.prefs?.avatarId as string | undefined
+    const avatarId = (user?.prefs as any)?.avatarId as string | undefined
     const initials = user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,12 +88,12 @@ export function AvatarUploader() {
     }
 
     return (
-        <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-            <div className="p-6 sm:p-8 flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
+        <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
+            <div className="p-5 flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between">
                 <div>
-                    <h2 className="text-lg font-medium text-foreground">Avatar</h2>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                        This is your avatar. Click on the avatar to upload a custom one from your files.
+                    <h3 className="text-[14px] font-semibold text-foreground">Avatar</h3>
+                    <p className="text-[13px] text-muted-foreground mt-0.5 max-w-sm">
+                        Click on the avatar to upload a custom one from your files.
                     </p>
                 </div>
                 <div className="relative group shrink-0 rounded-full cursor-pointer lg:hover:opacity-90 transition-opacity" onClick={() => fileInputRef.current?.click()}>
@@ -116,7 +116,7 @@ export function AvatarUploader() {
                     )}
                 </div>
             </div>
-            <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between">
+            <div className="px-5 py-3.5 bg-muted/30 border-t border-border/40 flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">An avatar is optional but strongly recommended.</p>
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isDeleting}>

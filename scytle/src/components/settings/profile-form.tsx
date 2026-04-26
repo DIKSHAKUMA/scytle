@@ -68,17 +68,17 @@ export function ProfileForm() {
     const [email, setEmail] = useState(() => user?.email || '')
     const [pendingEmail, setPendingEmail] = useState('')
     const [password, setPassword] = useState('')
-    const [role, setRole] = useState(() => getPreferenceString(user?.prefs?.role).trim())
-    const [bio, setBio] = useState(() => getPreferenceString(user?.prefs?.bio))
+    const [role, setRole] = useState(() => getPreferenceString((user?.prefs as any)?.role).trim())
+    const [bio, setBio] = useState(() => getPreferenceString((user?.prefs as any)?.bio))
 
     React.useEffect(() => {
         if (!user) return
 
         setName(user.name || '')
         setEmail(user.email || '')
-        setRole(getPreferenceString(user.prefs?.role).trim())
-        setBio(getPreferenceString(user.prefs?.bio))
-    }, [user?.$id, user?.name, user?.email, user?.prefs?.role, user?.prefs?.bio])
+        setRole(getPreferenceString((user.prefs as any)?.role).trim())
+        setBio(getPreferenceString((user.prefs as any)?.bio))
+    }, [user?.$id, user?.name, user?.email, (user?.prefs as any)?.role, (user?.prefs as any)?.bio])
 
     const normalizedName = normalize(name)
     const normalizedRole = normalize(role)
@@ -86,15 +86,15 @@ export function ProfileForm() {
 
     const hasChanges = useMemo(() => {
         const currentName = normalize(user?.name || '')
-        const currentRole = normalize(getPreferenceString(user?.prefs?.role))
-        const currentBio = normalize(getPreferenceString(user?.prefs?.bio))
+        const currentRole = normalize(getPreferenceString((user?.prefs as any)?.role))
+        const currentBio = normalize(getPreferenceString((user?.prefs as any)?.bio))
 
         return (
             normalizedName !== currentName ||
             normalizedRole !== currentRole ||
             normalizedBio !== currentBio
         )
-    }, [normalizedName, normalizedRole, normalizedBio, user?.name, user?.prefs?.role, user?.prefs?.bio])
+    }, [normalizedName, normalizedRole, normalizedBio, user?.name, (user?.prefs as any)?.role, (user?.prefs as any)?.bio])
 
     const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -246,13 +246,13 @@ export function ProfileForm() {
     }
 
     return (
-        <div className="space-y-8 pb-10">
+        <div className="space-y-6 pb-10">
             <form onSubmit={handleSaveProfile}>
-                <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-                    <div className="p-6 sm:p-8 space-y-6">
+                <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
+                    <div className="p-5 space-y-5">
                         <div>
-                            <h2 className="text-lg font-medium text-foreground">Personal Information</h2>
-                            <p className="text-sm text-muted-foreground mt-1">
+                            <h3 className="text-[14px] font-semibold text-foreground">Personal Information</h3>
+                            <p className="text-[13px] text-muted-foreground mt-0.5">
                                 Update your personal details and public profile.
                             </p>
                         </div>
@@ -313,7 +313,7 @@ export function ProfileForm() {
                         </div>
                     </div>
                     
-                    <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between">
+                    <div className="px-5 py-3.5 bg-muted/30 border-t border-border/40 flex items-center justify-between">
                         <p className="text-sm text-muted-foreground">Please use a maximum of 200 characters.</p>
                         <Button type="submit" disabled={isLoading || !hasChanges}>
                             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -323,11 +323,11 @@ export function ProfileForm() {
                 </section>
             </form>
 
-            <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-                <div className="p-6 sm:p-8 space-y-4">
+            <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
+                <div className="p-5 space-y-3">
                     <div>
-                        <h2 className="text-lg font-medium text-foreground">Email Address</h2>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <h3 className="text-[14px] font-semibold text-foreground">Email Address</h3>
+                        <p className="text-[13px] text-muted-foreground mt-0.5">
                             The email address associated with your account.
                         </p>
                     </div>
@@ -352,7 +352,7 @@ export function ProfileForm() {
                         </div>
                     </div>
                 </div>
-                <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex flex-wrap items-center justify-between gap-4">
+                <div className="px-5 py-3.5 bg-muted/30 border-t border-border/40 flex flex-wrap items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">We will email you to verify the change.</p>
                     <div className="flex flex-wrap items-center gap-2">
                         {!user?.emailVerification && (
@@ -368,11 +368,11 @@ export function ProfileForm() {
                 </div>
             </section>
 
-            <section className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden">
-                <div className="p-6 sm:p-8 space-y-4">
+            <section className="rounded-xl border border-border/50 bg-card overflow-hidden">
+                <div className="p-5 space-y-3">
                     <div>
-                        <h2 className="text-lg font-medium text-foreground">Password & Security</h2>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <h3 className="text-[14px] font-semibold text-foreground">Password & Security</h3>
+                        <p className="text-[13px] text-muted-foreground mt-0.5">
                             Secure your account by updating your password.
                         </p>
                     </div>
@@ -385,7 +385,7 @@ export function ProfileForm() {
                         />
                     </div>
                 </div>
-                <div className="px-6 py-4 bg-muted/40 border-t border-border/60 flex items-center justify-between gap-4">
+                <div className="px-5 py-3.5 bg-muted/30 border-t border-border/40 flex items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">A secure reset link will be sent to your inbox.</p>
                     <Button variant="outline" onClick={handleForgotPassword} disabled={isResetSending}>
                         {isResetSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <KeyRound className="w-4 h-4 mr-2" />}
