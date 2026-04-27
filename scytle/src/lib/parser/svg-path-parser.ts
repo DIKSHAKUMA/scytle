@@ -745,21 +745,87 @@ function parsePathData(d: string): ParsedPath {
     return { vertices, segments, closedLoops }
 }
 
-// ============================================================
-// Tokenizer
-// ============================================================
-
 /**
  * Tokenize SVG path data into commands and numbers.
+ * Context-aware to correctly handle elliptical arc flags (0 or 1 without spaces).
  */
 function tokenizePath(d: string): string[] {
     const tokens: string[] = []
-    // Regex matches commands (letters) and numbers (including negative and decimals)
-    const regex = /([MmLlHhVvCcSsQqTtAaZz])|(-?\d*\.?\d+(?:[eE][-+]?\d+)?)/g
-    let match
-    while ((match = regex.exec(d)) !== null) {
-        tokens.push(match[0])
+    let i = 0
+    let currentCommand = ''
+    let argsParsed = 0
+
+    function skipSpace() {
+        while (i < d.length) {
+            const c = d[i]
+            if (c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === ',') i++
+            else break
+        }
     }
+
+    while (i < d.length) {
+        skipSpace()
+        if (i >= d.length) break
+
+        const c = d[i]
+
+        // Command
+        if (/[MmLlHhVvCcSsQqTtAaZz]/.test(c)) {
+            tokens.push(c)
+            currentCommand = c.toUpperCase()
+            argsParsed = 0
+            i++
+            continue
+        }
+
+        // If currently parsing an Arc command, arguments 3 and 4 (0-indexed) are flags
+        if (currentCommand === 'A') {
+            const argIndex = argsParsed % 7
+            if (argIndex === 3 || argIndex === 4) {
+                if (c === '0' || c === '1') {
+                    tokens.push(c)
+                    argsParsed++
+                    i++
+                    continue
+                }
+            }
+        }
+
+        // Number
+        const start = i
+        if (d[i] === '+' || d[i] === '-') i++
+        
+        let hasDot = false
+        let hasE = false
+        
+        while (i < d.length) {
+            const char = d[i]
+            if (char >= '0' && char <= '9') {
+                i++
+            } else if (char === '.' && !hasDot && !hasE) {
+                hasDot = true
+                i++
+            } else if ((char === 'e' || char === 'E') && !hasE) {
+                hasE = true
+                i++
+                if (i < d.length && (d[i] === '+' || d[i] === '-')) {
+                    i++
+                }
+            } else {
+                break
+            }
+        }
+        
+        if (i === start || (i === start + 1 && (d[start] === '+' || d[start] === '-'))) {
+            // Invalid character
+            i++
+            continue
+        }
+
+        tokens.push(d.slice(start, i))
+        argsParsed++
+    }
+
     return tokens
 }
 

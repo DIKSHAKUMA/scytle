@@ -472,9 +472,17 @@ class CanvasSync {
           draft.activePageId = activePage?.id || ''
           draft.nodes = [...(activePage?.nodes || [])]
           draft.canvasColor = activePage?.canvasColor || '#F5F5F5'
-          draft.zoom = activePage?.zoom || 1
-          draft.panX = activePage?.panX || 0
-          draft.panY = activePage?.panY || 0
+          
+          const initialView = this.computeInitialView(
+            activePage?.nodes as ScytleNode[], 
+            activePage?.zoom || 1, 
+            activePage?.panX || 0, 
+            activePage?.panY || 0
+          )
+          
+          draft.zoom = initialView.zoom
+          draft.panX = initialView.panX
+          draft.panY = initialView.panY
           draft.hasEverHadNodes = pages.some((p) => p.nodes.length > 0)
           draft.selectedIds = []
           draft.hoveredId = null
@@ -641,9 +649,17 @@ class CanvasSync {
         draft.activePageId = activePage?.id || ''
         draft.nodes = [...(activePage?.nodes || [])]
         draft.canvasColor = activePage?.canvasColor || '#F5F5F5'
-        draft.zoom = activePage?.zoom || 1
-        draft.panX = activePage?.panX || 0
-        draft.panY = activePage?.panY || 0
+        
+        const initialView = this.computeInitialView(
+          activePage?.nodes, 
+          activePage?.zoom || 1, 
+          activePage?.panX || 0, 
+          activePage?.panY || 0
+        )
+        
+        draft.zoom = initialView.zoom
+        draft.panX = initialView.panX
+        draft.panY = initialView.panY
         draft.hasEverHadNodes = pages.some((p) => p.nodes.length > 0)
         draft.selectedIds = []
         draft.hoveredId = null
@@ -893,6 +909,37 @@ class CanvasSync {
       }
     }
     return null
+  }
+
+  /**
+   * Helper to compute the fit-to-screen zoom and pan on initial load.
+   * This ensures that when a user reloads the canvas, they see the entire design
+   * without it appearing glitched or "zoomed in very much".
+   */
+  private computeInitialView(nodes: ScytleNode[] | undefined, defaultZoom: number, defaultPanX: number, defaultPanY: number) {
+    if (!nodes || nodes.length === 0 || typeof window === 'undefined') {
+      return { zoom: defaultZoom || 1, panX: defaultPanX || 0, panY: defaultPanY || 0 }
+    }
+
+    const minX = Math.min(...nodes.map(n => n.x))
+    const maxX = Math.max(...nodes.map(n => n.x + n.width))
+    const minY = Math.min(...nodes.map(n => n.y))
+    const maxY = Math.max(...nodes.map(n => n.y + n.height))
+    const contentW = maxX - minX
+    const contentH = maxY - minY
+
+    const viewportW = window.innerWidth - 520
+    const viewportH = window.innerHeight - 48
+    const padding = 80
+    const zoomX = (viewportW - padding * 2) / contentW
+    const zoomY = (viewportH - padding * 2) / contentH
+    const fitZoom = Math.min(zoomX, zoomY, 1)
+
+    const finalZoom = Math.max(0.05, fitZoom)
+    const finalPanX = (viewportW / 2) - ((minX + contentW / 2) * finalZoom)
+    const finalPanY = (viewportH / 2) - ((minY + contentH / 2) * finalZoom)
+
+    return { zoom: finalZoom, panX: finalPanX, panY: finalPanY }
   }
 }
 

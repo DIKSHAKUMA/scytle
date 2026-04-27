@@ -45,31 +45,6 @@ function ProjectEditor() {
     const [authChecked, setAuthChecked] = useState(false)
     const [canvasLoaded, setCanvasLoaded] = useState(false)
 
-    // Helper: auto-zoom to fit all nodes on canvas
-    const zoomToFitAll = useCallback(() => {
-        const allNodes = useEditorStore.getState().nodes
-        if (allNodes.length === 0) return
-
-        const minX = Math.min(...allNodes.map(n => n.x))
-        const maxX = Math.max(...allNodes.map(n => n.x + n.width))
-        const minY = Math.min(...allNodes.map(n => n.y))
-        const maxY = Math.max(...allNodes.map(n => n.y + n.height))
-        const contentW = maxX - minX
-        const contentH = maxY - minY
-
-        const viewportW = window.innerWidth - 520
-        const viewportH = window.innerHeight - 48
-        const padding = 80
-        const zoomX = (viewportW - padding * 2) / contentW
-        const zoomY = (viewportH - padding * 2) / contentH
-        const fitZoom = Math.min(zoomX, zoomY, 1)
-        const centerX = (viewportW / 2) - ((minX + contentW / 2) * fitZoom)
-        const centerY = (viewportH / 2) - ((minY + contentH / 2) * fitZoom)
-
-        useEditorStore.getState().setZoom(Math.max(0.05, fitZoom))
-        useEditorStore.getState().setPan(centerX, centerY)
-    }, [])
-
     // ── Auto-generation via Chat ──────────────────────────────
     // When a new project lands with a description and empty canvas,
     // store the initial prompt so ChatPanel can pick it up and send it.
