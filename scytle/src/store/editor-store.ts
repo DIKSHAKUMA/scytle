@@ -361,6 +361,10 @@ interface EditorState {
     /** Which padding sides to visualize */
     paddingOverlayDirection: 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom' | null
 
+    // Margin drag active flag ----------------------------------
+    /** True while a margin handle is being dragged */
+    marginDragActive: boolean
+
     // Gap overlay ----------------------------------------------
     /** ID of the frame node whose gap is being visualized */
     gapOverlayNodeId: string | null
@@ -429,6 +433,7 @@ interface EditorState {
     setNodeResizeActive: (active: boolean) => void
 
     // Padding overlay actions ----------------------------------
+    setMarginDragActive: (active: boolean) => void
     setPaddingOverlay: (id: string | null, direction?: 'all' | 'horizontal' | 'vertical' | 'left' | 'right' | 'top' | 'bottom') => void
 
     // Gap overlay actions --------------------------------------
@@ -597,6 +602,7 @@ export const useEditorStore = create<EditorState>()(
             isNodeResizeActive: false,
             paddingOverlayNodeId: null,
             paddingOverlayDirection: null,
+            marginDragActive: false,
             gapOverlayNodeId: null,
             gapOverlayIndex: null,
             gridHighlightNodeId: null,
@@ -814,6 +820,13 @@ export const useEditorStore = create<EditorState>()(
                     },
                     false,
                     'setNodeResizeActive'
+                ),
+
+            setMarginDragActive: (active) =>
+                set(
+                    (state) => { state.marginDragActive = active },
+                    false,
+                    'setMarginDragActive'
                 ),
 
             setPaddingOverlay: (id, direction) =>

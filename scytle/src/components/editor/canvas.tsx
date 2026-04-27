@@ -13,7 +13,7 @@ import {
     shouldExitEnteredFrameOnCanvasClick,
 } from './canvas-parenting'
 import { NodeRenderer } from './node-renderer'
-import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones } from './selection-overlay'
+import { SelectionOverlay, HoverOverlay, DragInsertIndicator, PaddingOverlay, CanvasPaddingZones, CanvasGapZones, CanvasMarginZones } from './selection-overlay'
 import { MeasurementOverlay } from './measurement-overlay'
 import { GradientHandleOverlay } from './gradient-handle-overlay'
 import { ImageCropOverlay } from './image-crop-overlay'
@@ -1248,6 +1248,7 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             <PaddingOverlay viewportRef={viewportRef} />
             <CanvasPaddingZones viewportRef={viewportRef} />
             <CanvasGapZones viewportRef={viewportRef} />
+            <CanvasMarginZones viewportRef={viewportRef} />
             <GridOverlay viewportRef={viewportRef} />
             <SelectionOverlay viewportRef={viewportRef} />
 

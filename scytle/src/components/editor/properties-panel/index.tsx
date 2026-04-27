@@ -174,7 +174,7 @@ function MultiSelectSettings({ allNodes, selectedIds }: MultiSelectSettingsProps
                 hideAlignment
             />
 
-            <MarginSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} />
+            <MarginSection node={primaryNode} onUpdate={(updates) => applySharedUpdate(updates)} isInAutoLayoutParent={isInAutoLayoutParent} />
 
             {visibility.showLayout && isPrimaryFrame && (
                 <LayoutSection
@@ -352,7 +352,7 @@ export function PropertiesPanel() {
                 isAutoLayout={isAutoLayout}
                 isInAutoLayoutParent={isInAutoLayoutParent}
             />
-            <MarginSection node={node} onUpdate={onUpdate} />
+            <MarginSection node={node} onUpdate={onUpdate} isInAutoLayoutParent={isInAutoLayoutParent} />
 
             {visibility.showLayout && isFrame && <LayoutSection node={node as FrameNode} onUpdate={onUpdate} />}
 

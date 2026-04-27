@@ -329,7 +329,8 @@ export function MeasurementOverlay({
     const [measurementLines, setMeasurementLines] = useState<MeasurementLine[]>([])
     const [altHeld, setAltHeld] = useState(false)
     const rafRef = useRef<number>(0)
-    const spacingHandlesActive = paddingOverlayNodeId !== null || gapOverlayNodeId !== null
+    const marginDragActive = useEditorStore((s) => s.marginDragActive)
+    const spacingHandlesActive = paddingOverlayNodeId !== null || gapOverlayNodeId !== null || marginDragActive
 
     // Track Alt key state
     useEffect(() => {

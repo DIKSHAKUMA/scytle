@@ -16,7 +16,7 @@ import {
     FlipHorizontal,
     FlipVertical,
 } from 'lucide-react'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface PositionSectionProps {
@@ -657,18 +657,106 @@ export function PositionSection({
     )
 }
 
+/* ── Margin icons (exact same as padding icons for visual consistency) ── */
+
+function HorizontalMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="1" y1="2" x2="1" y2="10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="11" y1="2" x2="11" y2="10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function VerticalMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="2" y1="1" x2="10" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="2" y1="11" x2="10" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="6" y1="3.5" x2="6" y2="8.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function LeftMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="1" y1="2" x2="1" y2="10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function RightMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="11" y1="2" x2="11" y2="10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function TopMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="2" y1="1" x2="10" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="6" y1="3.5" x2="6" y2="8.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function BottomMarginIcon({ size = 12 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 12 12" fill="none" className="text-muted-foreground shrink-0">
+            <line x1="2" y1="11" x2="10" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="6" y1="3.5" x2="6" y2="8.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="1.5 1.5" />
+        </svg>
+    )
+}
+
+function IndividualMarginIcon({ expanded }: { expanded: boolean }) {
+    return (
+        <svg width={14} height={14} viewBox="0 0 14 14" fill="none" className="text-muted-foreground shrink-0">
+            {expanded ? (
+                <>
+                    <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                    <circle cx="4.5" cy="4.5" r="1" fill="currentColor" />
+                    <circle cx="9.5" cy="4.5" r="1" fill="currentColor" />
+                    <circle cx="4.5" cy="9.5" r="1" fill="currentColor" />
+                    <circle cx="9.5" cy="9.5" r="1" fill="currentColor" />
+                </>
+            ) : (
+                <>
+                    <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1" />
+                    <line x1="7" y1="3" x2="7" y2="11" stroke="currentColor" strokeWidth="0.8" strokeDasharray="1.5 1" />
+                    <line x1="3" y1="7" x2="11" y2="7" stroke="currentColor" strokeWidth="0.8" strokeDasharray="1.5 1" />
+                </>
+            )}
+        </svg>
+    )
+}
+
+
 /* ── Margin Section ────────────────────────────────────────── */
 
 interface MarginSectionProps {
     node: ScytleNode
     onUpdate: (updates: Record<string, unknown>) => void
+    /** Whether the node lives inside an auto-layout parent */
+    isInAutoLayoutParent?: boolean
 }
 
-export function MarginSection({ node, onUpdate }: MarginSectionProps) {
-    const m = node.margin
-    if (!m) return null
-    const hasMargin = m.top > 0 || m.right > 0 || m.bottom > 0 || m.left > 0
-    if (!hasMargin) return null
+export function MarginSection({ node, onUpdate, isInAutoLayoutParent }: MarginSectionProps) {
+    const m = node.margin ?? { top: 0, right: 0, bottom: 0, left: 0 }
+    const hasExistingMargin = !!node.margin
+
+    if (!hasExistingMargin && !isInAutoLayoutParent) return null
+
+    const hMixed = m.left !== m.right
+    const vMixed = m.top !== m.bottom
+    const [individualMode, setIndividualMode] = useState(false)
+    const showExpanded = individualMode || hMixed || vMixed
 
     const updateMargin = (partial: Partial<Padding>) => {
         onUpdate({ margin: { ...m, ...partial } })
@@ -676,36 +764,108 @@ export function MarginSection({ node, onUpdate }: MarginSectionProps) {
 
     return (
         <Section title="Margin">
-            <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-                <NumberInput
-                    label="T"
-                    value={m.top}
-                    onChange={(v) => updateMargin({ top: v })}
-                    min={0}
-                    step={1}
-                />
-                <NumberInput
-                    label="R"
-                    value={m.right}
-                    onChange={(v) => updateMargin({ right: v })}
-                    min={0}
-                    step={1}
-                />
-                <NumberInput
-                    label="B"
-                    value={m.bottom}
-                    onChange={(v) => updateMargin({ bottom: v })}
-                    min={0}
-                    step={1}
-                />
-                <NumberInput
-                    label="L"
-                    value={m.left}
-                    onChange={(v) => updateMargin({ left: v })}
-                    min={0}
-                    step={1}
-                />
+            <div className="flex items-start gap-1">
+                <div className="flex-1 space-y-1">
+                    {showExpanded ? (
+                        <>
+                            <div className="flex gap-1">
+                                <div className="flex items-center gap-0.5 flex-1">
+                                    <span className="flex items-center" title="Left margin">
+                                        <LeftMarginIcon />
+                                    </span>
+                                    <NumberInput
+                                        value={m.left}
+                                        onChange={(v) => updateMargin({ left: v })}
+                                        step={1} className="flex-1"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-0.5 flex-1">
+                                    <span className="flex items-center" title="Top margin">
+                                        <TopMarginIcon />
+                                    </span>
+                                    <NumberInput
+                                        value={m.top}
+                                        onChange={(v) => updateMargin({ top: v })}
+                                        step={1} className="flex-1"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-1">
+                                <div className="flex items-center gap-0.5 flex-1">
+                                    <span className="flex items-center" title="Right margin">
+                                        <RightMarginIcon />
+                                    </span>
+                                    <NumberInput
+                                        value={m.right}
+                                        onChange={(v) => updateMargin({ right: v })}
+                                        step={1} className="flex-1"
+                                    />
+                                </div>
+                                <div className="flex items-center gap-0.5 flex-1">
+                                    <span className="flex items-center" title="Bottom margin">
+                                        <BottomMarginIcon />
+                                    </span>
+                                    <NumberInput
+                                        value={m.bottom}
+                                        onChange={(v) => updateMargin({ bottom: v })}
+                                        step={1} className="flex-1"
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex gap-1">
+                            <div className="flex items-center gap-0.5 flex-1">
+                                <span className="flex items-center" title="Horizontal margin">
+                                    <HorizontalMarginIcon />
+                                </span>
+                                <NumberInput
+                                    value={m.left}
+                                    onChange={(v) => updateMargin({ left: v, right: v })}
+                                    step={1} className="flex-1"
+                                />
+                            </div>
+                            <div className="flex items-center gap-0.5 flex-1">
+                                <span className="flex items-center" title="Vertical margin">
+                                    <VerticalMarginIcon />
+                                </span>
+                                <NumberInput
+                                    value={m.top}
+                                    onChange={(v) => updateMargin({ top: v, bottom: v })}
+                                    step={1} className="flex-1"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Individual toggle button */}
+                <button
+                    className={cn(
+                        'w-7 h-7 flex items-center justify-center rounded-sm transition-colors shrink-0',
+                        showExpanded
+                            ? 'bg-muted text-foreground'
+                            : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/40'
+                    )}
+                    onClick={() => {
+                        if (showExpanded) {
+                            if (hMixed || vMixed) {
+                                updateMargin({
+                                    left: m.left, right: m.left,
+                                    top: m.top, bottom: m.top,
+                                })
+                            }
+                            setIndividualMode(false)
+                        } else {
+                            setIndividualMode(true)
+                        }
+                    }}
+                    title={showExpanded ? 'Uniform margin' : 'Individual margin'}
+                >
+                    <IndividualMarginIcon expanded={showExpanded} />
+                </button>
             </div>
         </Section>
     )
 }
+

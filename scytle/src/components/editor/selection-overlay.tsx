@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import type { ScytleNode } from '@/types/canvas'
-import { findNodeById } from '@/types/canvas'
+import { findNodeById, findParentOfNode } from '@/types/canvas'
 import type { InsertIndicator } from './hooks/use-node-drag'
 import { gapFromMeasuredPx, isAutoGapLayout, toFixedGapLayout } from './layout-gap-utils'
 
@@ -1216,8 +1216,8 @@ function InlineValueInput({
     x: number
     y: number
     value: number
-    color: 'blue' | 'pink'
-    side?: PaddingSide | 'gap-row' | 'gap-col'
+    color: 'blue' | 'pink' | 'orange'
+    side?: PaddingSide | 'gap-row' | 'gap-col' | 'margin-top' | 'margin-right' | 'margin-bottom' | 'margin-left'
     onSubmit: (v: number) => void
     onClose: () => void
 }) {
@@ -1259,9 +1259,10 @@ function InlineValueInput({
         }
     }
 
-    const iconColor = color === 'blue' ? '#3b82f6' : '#ec4899'
-    const isHorizontalSide = side === 'left' || side === 'right'
+    const iconColor = color === 'blue' ? '#3b82f6' : color === 'orange' ? '#f97316' : '#ec4899'
+    const isHorizontalSide = side === 'left' || side === 'right' || side === 'margin-left' || side === 'margin-right'
     const isGap = side === 'gap-row' || side === 'gap-col'
+    const isMargin = side?.startsWith('margin-')
 
     return (
         <div
@@ -1286,7 +1287,16 @@ function InlineValueInput({
                     whiteSpace: 'nowrap',
                 }}
             >
-                {isGap ? (
+                {isMargin ? (
+                    <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                        <rect x="2" y="2" width="6" height="6" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
+                        {isHorizontalSide ? (
+                            <line x1={side === 'margin-left' ? 2 : 8} y1="5" x2={side === 'margin-left' ? 0 : 10} y2="5" stroke={iconColor} strokeWidth="1.2" />
+                        ) : (
+                            <line x1="5" y1={side === 'margin-top' ? 2 : 8} x2="5" y2={side === 'margin-top' ? 0 : 10} stroke={iconColor} strokeWidth="1.2" />
+                        )}
+                    </svg>
+                ) : isGap ? (
                     <svg width={12} height={10} viewBox="0 0 12 10" fill="none">
                         <rect x="0" y="1" width="4" height="8" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
                         <rect x="8" y="1" width="4" height="8" rx="1" stroke={iconColor} strokeWidth="1" fill="none" />
@@ -1490,13 +1500,29 @@ export function CanvasGapZones({
 
             const MIN_GAP_HIT = 6
 
+            // Get current zoom for margin-to-screen conversion
+            const currentZoom = useEditorStore.getState().zoom
+
             for (let i = 0; i < children.length - 1; i++) {
                 const childRect = childRects[i]
                 const nextChildRect = childRects[i + 1]
 
+                // Subtract child margins from measured space so the gap zone
+                // only covers the true flex gap, not margin space.
+                // getBoundingClientRect excludes CSS margins, so the physical
+                // distance between two children = marginBottom + gap + marginTop.
+                const childNode = children[i]
+                const nextChildNode = children[i + 1]
+
                 if (currentIsColumn) {
-                    const gapTop = childRect.bottom - viewportRect.top
-                    const gapBottom = nextChildRect.top - viewportRect.top
+                    const childMb = (childNode.margin?.bottom || 0) * currentZoom
+                    const nextChildMt = (nextChildNode.margin?.top || 0) * currentZoom
+
+                    const rawTop = childRect.bottom - viewportRect.top
+                    const rawBottom = nextChildRect.top - viewportRect.top
+                    // Shrink the zone by removing margin space
+                    const gapTop = rawTop + childMb
+                    const gapBottom = rawBottom - nextChildMt
                     const gapHeight = gapBottom - gapTop
 
                     if (gapHeight >= 0) {
@@ -1526,8 +1552,14 @@ export function CanvasGapZones({
                         })
                     }
                 } else {
-                    const gapLeft = childRect.right - viewportRect.left
-                    const gapRight = nextChildRect.left - viewportRect.left
+                    const childMr = (childNode.margin?.right || 0) * currentZoom
+                    const nextChildMl = (nextChildNode.margin?.left || 0) * currentZoom
+
+                    const rawLeft = childRect.right - viewportRect.left
+                    const rawRight = nextChildRect.left - viewportRect.left
+                    // Shrink the zone by removing margin space
+                    const gapLeft = rawLeft + childMr
+                    const gapRight = rawRight - nextChildMl
                     const gapWidth = gapRight - gapLeft
 
                     if (gapWidth >= 0) {
@@ -1994,6 +2026,384 @@ export function CanvasGapZones({
         </>
     )
 }
+
+// ============================================================
+// CanvasMarginZones — orange hatch overlay for child margins.
+// Triggers when a CHILD node with margins is selected (not
+// the parent frame). Supports hover, drag-to-resize, and
+// click-to-edit inline input — mirrors CanvasPaddingZones.
+// ============================================================
+
+const ORANGE_HATCH = HATCH_BG('rgba(249, 115, 22, 0.15)')
+const ORANGE_COLOR = '#f97316'
+
+type MarginSide = 'top' | 'right' | 'bottom' | 'left'
+const ALL_MARGIN_SIDES: MarginSide[] = ['top', 'right', 'bottom', 'left']
+const MARGIN_DRAG_DEAD_ZONE = 3
+
+export function CanvasMarginZones({
+    viewportRef,
+}: {
+    viewportRef: React.RefObject<HTMLDivElement | null>
+}) {
+    const selectedIds = useEditorStore((s) => s.selectedIds)
+    const isNodeResizeActive = useEditorStore((s) => s.isNodeResizeActive)
+    const nodes = useEditorStore((s) => s.nodes)
+    const zoom = useEditorStore((s) => s.zoom)
+    const updateNode = useEditorStore((s) => s.updateNode)
+    const beginBatch = useEditorStore((s) => s.beginBatch)
+    const endBatch = useEditorStore((s) => s.endBatch)
+    const setMarginDragActive = useEditorStore((s) => s.setMarginDragActive)
+
+    const [rect, setRect] = useState<ScreenRect | null>(null)
+    const [hoveredSide, setHoveredSide] = useState<MarginSide | null>(null)
+    const [handleHoveredSide, setHandleHoveredSide] = useState<MarginSide | null>(null)
+    const [inlineInput, setInlineInput] = useState<{
+        side: MarginSide
+        x: number; y: number; value: number
+    } | null>(null)
+    const [dragCursor, setDragCursor] = useState<{ x: number; y: number; value: number } | null>(null)
+    const dragCursorRaf = useRef<number>(0)
+    const rafRef = useRef<number>(0)
+    const dragRef = useRef<{
+        side: MarginSide
+        startMargin: { top: number; right: number; bottom: number; left: number }
+        startPos: number
+        nodeId: string
+    } | null>(null)
+
+    // Trigger on single selected node that has margin data
+    // (even if all zeros — keeps handles visible so user can drag to add margin)
+    const targetNode = selectedIds.length === 1
+        ? (() => {
+            const n = findNodeById(nodes, selectedIds[0])
+            if (!n) return null
+            // Show if node has margin data OR is inside an auto-layout parent
+            if (n.margin) return n
+            // Check if inside auto-layout parent
+            const parentResult = findParentOfNode(nodes, n.id)
+            if (parentResult?.parent && parentResult.parent.layout.mode !== 'none') return n
+            return null
+        })()
+        : null
+
+    const nodeId = targetNode?.id ?? null
+    const nodeMargin = targetNode?.margin ?? (targetNode ? { top: 0, right: 0, bottom: 0, left: 0 } : null)
+
+    const rectRef = useRef<ScreenRect | null>(null)
+    const isMountedRef = useRef(true)
+
+    useEffect(() => {
+        isMountedRef.current = true
+        if (isNodeResizeActive) {
+            rectRef.current = null
+            return () => { isMountedRef.current = false; cancelAnimationFrame(rafRef.current) }
+        }
+
+        const loop = () => {
+            if (!isMountedRef.current) return
+            const viewport = viewportRef.current
+            if (!viewport || !nodeId) {
+                if (rectRef.current !== null) { rectRef.current = null; setRect(null) }
+                return
+            }
+            const newRect = getNodeScreenRect(nodeId, viewport)
+            const prev = rectRef.current
+            const changed = !prev || !newRect ||
+                Math.abs(prev.x - newRect.x) > 0.1 || Math.abs(prev.y - newRect.y) > 0.1 ||
+                Math.abs(prev.width - newRect.width) > 0.1 || Math.abs(prev.height - newRect.height) > 0.1
+            if (changed && isMountedRef.current) { rectRef.current = newRect; setRect(newRect) }
+            if (isMountedRef.current) rafRef.current = requestAnimationFrame(loop)
+        }
+
+        if (nodeId) {
+            rafRef.current = requestAnimationFrame(loop)
+        } else if (rectRef.current !== null) {
+            rectRef.current = null; setRect(null)
+        }
+        return () => { isMountedRef.current = false; cancelAnimationFrame(rafRef.current) }
+    }, [nodeId, isNodeResizeActive, viewportRef])
+
+    useEffect(() => { setInlineInput(null); setHoveredSide(null); setHandleHoveredSide(null) }, [nodeId])
+
+    const marginZoomRef = useRef(zoom)
+    marginZoomRef.current = zoom
+    const marginRectRef = useRef(rect)
+    marginRectRef.current = rect
+    const nodeMarginRef = useRef(nodeMargin)
+    nodeMarginRef.current = nodeMargin
+
+    const pointerSessionCleanupRef = useRef<(() => void) | null>(null)
+
+    const handlePointerDown = useCallback((side: MarginSide, e: React.PointerEvent) => {
+        if (!nodeId || !nodeMargin || !rect) return
+        e.preventDefault(); e.stopPropagation()
+        setInlineInput(null)
+
+        // Abort any stale pointer session before starting a new one
+        pointerSessionCleanupRef.current?.()
+        pointerSessionCleanupRef.current = null
+
+        const target = e.currentTarget as HTMLElement
+        target.setPointerCapture(e.pointerId)
+        const pointerId = e.pointerId
+        const isHorizontal = side === 'left' || side === 'right'
+        const startClientX = e.clientX
+        const startClientY = e.clientY
+        const startPos = isHorizontal ? e.clientX : e.clientY
+        let dragging = false
+        const startMargin = { ...nodeMargin }
+
+        const handleMove = (ev: PointerEvent) => {
+            const dist = Math.hypot(ev.clientX - startClientX, ev.clientY - startClientY)
+            if (!dragging && dist > MARGIN_DRAG_DEAD_ZONE) {
+                dragging = true
+                dragRef.current = { side, startMargin, startPos, nodeId }
+                beginBatch()
+                setMarginDragActive(true)
+            }
+            if (!dragging) return
+
+            const currentPos = isHorizontal ? ev.clientX : ev.clientY
+            const invert = side === 'left' || side === 'top' ? -1 : 1
+            const delta = (currentPos - startPos) * invert / marginZoomRef.current
+            const newValue = Math.round(startMargin[side] + delta)
+            const currentNode = findNodeById(useEditorStore.getState().nodes, nodeId)
+            if (!currentNode) return
+            const newMargin = { ...(currentNode.margin || { top: 0, right: 0, bottom: 0, left: 0 }) }
+
+            // Alt = mirror to opposite side, Alt+Shift = all 4 sides
+            const dragMode = getPaddingDragMode(ev.altKey, ev.shiftKey)
+            const targetSides = getPaddingSidesForMode(side as PaddingSide, dragMode) as MarginSide[]
+            for (const s of targetSides) {
+                newMargin[s] = newValue
+            }
+
+            updateNode(nodeId, { margin: newMargin })
+
+            const viewportRect = viewportRef.current?.getBoundingClientRect()
+            if (viewportRect) {
+                cancelAnimationFrame(dragCursorRaf.current)
+                const d = { x: ev.clientX - viewportRect.left, y: ev.clientY - viewportRect.top, value: newValue }
+                dragCursorRaf.current = requestAnimationFrame(() => setDragCursor(d))
+            }
+        }
+
+        const handleUp = () => {
+            pointerSessionCleanupRef.current?.()
+            pointerSessionCleanupRef.current = null
+            try { target.releasePointerCapture(pointerId) } catch { /* already released */ }
+
+            if (dragging) {
+                dragRef.current = null; endBatch()
+                setMarginDragActive(false)
+                cancelAnimationFrame(dragCursorRaf.current); setDragCursor(null)
+                setHoveredSide(null); setHandleHoveredSide(null)
+            } else {
+                // Click → open inline input
+                const cr = marginRectRef.current; const cm = nodeMarginRef.current; const cz = marginZoomRef.current
+                if (!cr || !cm) return
+                const mp = { top: cm.top * cz, right: cm.right * cz, bottom: cm.bottom * cz, left: cm.left * cz }
+                let x: number, y: number
+                switch (side) {
+                    case 'top': x = cr.x + cr.width / 2; y = cr.y - Math.max(Math.abs(mp.top), MIN_HIT) / 2; break
+                    case 'bottom': x = cr.x + cr.width / 2; y = cr.y + cr.height + Math.max(Math.abs(mp.bottom), MIN_HIT) / 2; break
+                    case 'left': x = cr.x - Math.max(Math.abs(mp.left), MIN_HIT) / 2; y = cr.y + cr.height / 2; break
+                    case 'right': x = cr.x + cr.width + Math.max(Math.abs(mp.right), MIN_HIT) / 2; y = cr.y + cr.height / 2; break
+                }
+                setInlineInput({ side, x, y, value: cm[side] })
+                setHoveredSide(null)
+            }
+        }
+
+        const cleanupSession = () => {
+            window.removeEventListener('pointermove', handleMove)
+            window.removeEventListener('pointerup', handleUp)
+            window.removeEventListener('pointercancel', handleUp)
+        }
+        pointerSessionCleanupRef.current = cleanupSession
+
+        // Use window listeners so drag continues even if the handle element re-renders
+        window.addEventListener('pointermove', handleMove)
+        window.addEventListener('pointerup', handleUp)
+        window.addEventListener('pointercancel', handleUp)
+    }, [nodeId, nodeMargin, rect, beginBatch, endBatch, updateNode, viewportRef])
+
+    const handleInlineSubmit = useCallback((value: number) => {
+        if (!nodeId || !inlineInput) return
+        const currentNode = findNodeById(useEditorStore.getState().nodes, nodeId)
+        if (!currentNode) return
+        const newMargin = { ...(currentNode.margin || { top: 0, right: 0, bottom: 0, left: 0 }) }
+        newMargin[inlineInput.side] = value
+        updateNode(nodeId, { margin: newMargin })
+        setInlineInput(null)
+    }, [nodeId, inlineInput, updateNode])
+
+    if (isNodeResizeActive || !rect || !nodeMargin || !nodeId) return null
+
+    const mt = nodeMargin.top * zoom
+    const mr = nodeMargin.right * zoom
+    const mb = nodeMargin.bottom * zoom
+    const ml = nodeMargin.left * zoom
+    const MIN_HIT = 6
+
+    // Always show all 4 side zones (even at 0 or negative) so handles stay interactive.
+    // For negative margins, the zone flips to the other side of the edge.
+    const computeZoneStyle = (side: MarginSide): React.CSSProperties => {
+        const marginPxMap = { top: mt, right: mr, bottom: mb, left: ml }
+        const mPx = marginPxMap[side]
+        const absPx = Math.abs(mPx)
+        const zoneSize = Math.max(absPx, MIN_HIT)
+
+        switch (side) {
+            case 'top': return {
+                left: rect.x, width: rect.width, height: zoneSize,
+                top: mPx >= 0 ? rect.y - zoneSize : rect.y,
+            }
+            case 'bottom': return {
+                left: rect.x, width: rect.width, height: zoneSize,
+                top: mPx >= 0 ? rect.y + rect.height : rect.y + rect.height - zoneSize,
+            }
+            case 'left': return {
+                top: rect.y, height: rect.height, width: zoneSize,
+                left: mPx >= 0 ? rect.x - zoneSize : rect.x,
+            }
+            case 'right': return {
+                top: rect.y, height: rect.height, width: zoneSize,
+                left: mPx >= 0 ? rect.x + rect.width : rect.x + rect.width - zoneSize,
+            }
+        }
+    }
+
+    const allSides: MarginSide[] = ['top', 'right', 'bottom', 'left']
+    const zones = allSides.map(side => ({ side, style: computeZoneStyle(side) }))
+
+    const getCenterHandle = (side: MarginSide): { x: number; y: number; isVertical: boolean } => {
+        const s = zones.find(z => z.side === side)!.style
+        const zx = (s.left as number) ?? 0
+        const zy = (s.top as number) ?? 0
+        const zw = (s.width as number) ?? 0
+        const zh = (s.height as number) ?? 0
+        switch (side) {
+            case 'top': return { x: zx + zw / 2, y: zy + zh / 2, isVertical: false }
+            case 'bottom': return { x: zx + zw / 2, y: zy + zh / 2, isVertical: false }
+            case 'left': return { x: zx + zw / 2, y: zy + zh / 2, isVertical: true }
+            case 'right': return { x: zx + zw / 2, y: zy + zh / 2, isVertical: true }
+        }
+    }
+
+    return (
+        <>
+            {zones.map(({ side, style }) => (
+                <div key={`mhover-${side}`}
+                    style={{ position: 'absolute', ...style, zIndex: 999, pointerEvents: 'auto', cursor: 'default' }}
+                    onMouseEnter={() => { if (!dragRef.current) setHoveredSide(side) }}
+                    onMouseLeave={() => { if (!dragRef.current) setTimeout(() => setHoveredSide((p) => p === side ? null : p), 50) }}
+                />
+            ))}
+
+            {hoveredSide && !inlineInput && (() => {
+                const zone = zones.find(z => z.side === hoveredSide)
+                if (!zone) return null
+                return (
+                    <div key={`mvis-${hoveredSide}`} className="pointer-events-none"
+                        style={{ position: 'absolute', ...zone.style, background: ORANGE_HATCH, zIndex: 998 }}
+                    />
+                )
+            })()}
+
+            {zones.map(({ side }) => {
+                const handle = getCenterHandle(side)
+                const isHovered = hoveredSide === side
+                const isOnHandle = handleHoveredSide === side
+                const isH = side === 'left' || side === 'right'
+                const hitW = isH ? CENTER_HANDLE_HIT_DEPTH : CENTER_HANDLE_HIT_WIDTH
+                const hitH = isH ? CENTER_HANDLE_HIT_WIDTH : CENTER_HANDLE_HIT_DEPTH
+
+                return (
+                    <div key={`mhandle-${side}`}>
+                        <div
+                            style={{
+                                position: 'absolute', left: handle.x - hitW / 2, top: handle.y - hitH / 2,
+                                width: hitW, height: hitH, zIndex: 1003,
+                                cursor: isH ? 'ew-resize' : 'ns-resize', pointerEvents: 'auto',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                            onMouseEnter={() => { if (!dragRef.current) { setHoveredSide(side); setHandleHoveredSide(side) }}}
+                            onMouseLeave={() => { setHandleHoveredSide((p) => p === side ? null : p) }}
+                            onPointerDown={(e) => handlePointerDown(side, e)}
+                        >
+                            <div style={{
+                                width: handle.isVertical ? CENTER_HANDLE_THICKNESS : CENTER_HANDLE_LENGTH,
+                                height: handle.isVertical ? CENTER_HANDLE_LENGTH : CENTER_HANDLE_THICKNESS,
+                                backgroundColor: isHovered ? ORANGE_COLOR : 'rgba(249, 115, 22, 0.5)',
+                                borderRadius: 1, transition: 'background-color 0.1s',
+                            }} />
+                        </div>
+
+                        {isOnHandle && !dragCursor && !inlineInput && (
+                            <div className="pointer-events-none" style={{
+                                position: 'absolute', left: handle.x, top: handle.y,
+                                transform: side === 'left' ? 'translate(-100%, -50%) translate(-8px, 0)' :
+                                    side === 'right' ? 'translate(0%, -50%) translate(8px, 0)' :
+                                    side === 'top' ? 'translate(-50%, -100%) translate(0, -8px)' :
+                                    'translate(-50%, 0%) translate(0, 8px)',
+                                zIndex: 2000, whiteSpace: 'nowrap',
+                            }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: 4,
+                                    background: '#1e1e2e', padding: '3px 8px', borderRadius: 4,
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                }}>
+                                    <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                                        <rect x="2" y="2" width="6" height="6" rx="1" stroke={ORANGE_COLOR} strokeWidth="1" fill="none" />
+                                        {isH ? (
+                                            <line x1={side === 'left' ? 2 : 8} y1="5" x2={side === 'left' ? 0 : 10} y2="5" stroke={ORANGE_COLOR} strokeWidth="1.2" />
+                                        ) : (
+                                            <line x1="5" y1={side === 'top' ? 2 : 8} x2="5" y2={side === 'top' ? 0 : 10} stroke={ORANGE_COLOR} strokeWidth="1.2" />
+                                        )}
+                                    </svg>
+                                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 600, fontFamily: 'system-ui' }}>
+                                        {nodeMargin[side]}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+
+            {dragCursor && (
+                <div className="pointer-events-none" style={{
+                    position: 'absolute', left: dragCursor.x, top: dragCursor.y,
+                    transform: 'translate(-50%, -100%) translate(0, -12px)', zIndex: 2000,
+                }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        background: '#1e1e2e', padding: '3px 8px', borderRadius: 4,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    }}>
+                        <svg width={10} height={10} viewBox="0 0 10 10" fill="none">
+                            <rect x="2" y="2" width="6" height="6" rx="1" stroke={ORANGE_COLOR} strokeWidth="1" fill="none" />
+                        </svg>
+                        <span style={{ color: '#e0e0e0', fontSize: 11, fontWeight: 600, fontFamily: 'system-ui' }}>
+                            {dragCursor.value}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {inlineInput && (
+                <InlineValueInput
+                    x={inlineInput.x} y={inlineInput.y} value={inlineInput.value}
+                    color="orange" side={`margin-${inlineInput.side}` as const}
+                    onSubmit={handleInlineSubmit} onClose={() => setInlineInput(null)}
+                />
+            )}
+        </>
+    )
+}
+
 
 // ============================================================
 // DragInsertIndicator — blue line showing reorder insertion point
