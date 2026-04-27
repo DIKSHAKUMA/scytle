@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Image from 'next/image'
+import NextImage from 'next/image'
 import Link from 'next/link'
 import {
     ArrowLeft, ArrowUp, Zap, Sparkles, Globe, Smartphone,
-    Paperclip, Map, Image, X, Check, FileText
+    Paperclip, Map, Image as ImageIcon, X, Check, FileText
 } from 'lucide-react'
 
 const suggestions = [
@@ -65,7 +65,7 @@ export default function NewProjectDemoPage() {
                 <div className="flex-1" />
                 <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded bg-foreground flex items-center justify-center overflow-hidden">
-                        <Image src="/Icon.svg" alt="Scytle" width={24} height={24} />
+                        <NextImage src="/Icon.svg" alt="Scytle" width={24} height={24} />
                     </div>
                     <span className="font-display font-bold text-sm tracking-tight">Scytle</span>
                 </div>
@@ -134,7 +134,7 @@ export default function NewProjectDemoPage() {
                             <div className="px-5 pb-2 flex flex-wrap gap-2">
                                 {attachments.map((name, i) => (
                                     <div key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 text-xs text-muted-foreground border border-border/40">
-                                        <Image className="w-3 h-3" />
+                                        <ImageIcon className="w-3 h-3" />
                                         {name}
                                         <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-foreground">
                                             <X className="w-3 h-3" />
@@ -160,7 +160,7 @@ export default function NewProjectDemoPage() {
                                     {showAttachMenu && (
                                         <div className="absolute bottom-full left-0 mb-2 w-48 bg-card border border-border rounded-xl shadow-lg p-1.5 z-10">
                                             <button onClick={() => addMockAttachment('screenshot.png')} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
-                                                <Image className="w-4 h-4" /> Reference Image
+                                                <ImageIcon className="w-4 h-4" /> Reference Image
                                             </button>
                                             <button onClick={() => addMockAttachment('requirements.pdf')} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
                                                 <FileText className="w-4 h-4" /> Document

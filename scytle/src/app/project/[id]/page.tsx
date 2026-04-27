@@ -51,20 +51,42 @@ function ProjectEditor() {
     // This replaces the old pipeline (plan-pages → generate-sections).
     const [initialPromptSent, setInitialPromptSent] = useState(false)
 
-    // Capture thumbnail periodically when editing (debounced)
-    // Subscribe to nodes explicitly so the effect re-runs when canvas changes
-    const nodes = useEditorStore((s) => s.nodes)
-    
+    // ── Thumbnail capture ──────────────────────────────────
+    // Uses an interval + dirty flag instead of a per-change debounce.
+    // The old approach subscribed to the full nodes array, causing
+    // the timeout to reset on every property change and never fire.
+    const captureNeededRef = useRef(false)
+
+    // Lightweight selector: only re-renders when node count changes
+    const nodeCount = useEditorStore((s) => s.nodes.length)
+
+    // Mark dirty whenever the node structure changes
     useEffect(() => {
-        if (!canvasLoaded || nodes.length === 0) return
+        if (canvasLoaded && nodeCount > 0) {
+            captureNeededRef.current = true
+        }
+    }, [canvasLoaded, nodeCount])
 
-        // Wait for 3 seconds of inactivity before capturing
-        const timeoutId = setTimeout(() => {
-            captureThumbnail(projectId).catch(() => {})
-        }, 3000)
+    // Periodic capture check (every 10s) + guaranteed capture on unmount
+    useEffect(() => {
+        if (!canvasLoaded) return
 
-        return () => clearTimeout(timeoutId)
-    }, [projectId, canvasLoaded, nodes]) // Re-run when nodes change
+        const interval = setInterval(() => {
+            if (captureNeededRef.current) {
+                captureNeededRef.current = false
+                captureThumbnail(projectId).catch(() => {})
+            }
+        }, 10_000)
+
+        return () => {
+            clearInterval(interval)
+            // Fire on unmount (in-app route change) — DOM is still
+            // available during React cleanup so html-to-image works.
+            if (useEditorStore.getState().nodes.length > 0) {
+                captureThumbnail(projectId).catch(() => {})
+            }
+        }
+    }, [projectId, canvasLoaded])
 
     useEffect(() => {
         if (

@@ -43,7 +43,14 @@ type ViewMode = 'grid' | 'list'
 function ProjectThumbnail({ projectId }: { projectId: string }) {
     const [loaded, setLoaded] = useState(false)
     const [error, setError] = useState(false)
-    const url = getThumbnailUrl(projectId)
+
+    // Cache-bust: generate a unique timestamp per mount so the browser
+    // always fetches the latest thumbnail when arriving at the dashboard.
+    const [cacheBuster] = useState(() => Date.now())
+    const baseUrl = getThumbnailUrl(projectId)
+    const url = baseUrl
+        ? `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_t=${cacheBuster}`
+        : undefined
 
     if (error || !url) return null
 
