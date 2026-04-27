@@ -210,6 +210,39 @@ export const TextRenderer = memo(function TextRenderer({
     // Use the semantic HTML tag if specified, otherwise <p>
     const tag = node.htmlTag || 'p'
 
+    let content: React.ReactNode = node.characters
+    if (node.segments && node.segments.length > 0 && !isEditing) {
+        const result: React.ReactNode[] = []
+        let lastIndex = 0
+        const sortedSegments = [...node.segments].sort((a, b) => a.start - b.start)
+        
+        sortedSegments.forEach((seg, i) => {
+            if (seg.start > lastIndex) {
+                result.push(node.characters.slice(lastIndex, seg.start))
+            }
+            
+            const segStyle: CSSProperties = {}
+            if (seg.fills && seg.fills[0] && seg.fills[0].type === 'solid') {
+                segStyle.color = seg.fills[0].color
+                segStyle.opacity = seg.fills[0].opacity ?? 1
+            }
+            if (seg.fontStyle) segStyle.fontStyle = seg.fontStyle
+            if (seg.fontWeight) segStyle.fontWeight = seg.fontWeight
+            if (seg.fontFamily) segStyle.fontFamily = `"${seg.fontFamily}", sans-serif`
+            if (seg.fontSize) segStyle.fontSize = `calc(${seg.fontSize}px * var(--z, 1))`
+            if (seg.textDecoration) segStyle.textDecoration = seg.textDecoration
+            
+            result.push(
+                createElement('span', { key: i, style: segStyle }, node.characters.slice(seg.start, seg.end))
+            )
+            lastIndex = seg.end
+        })
+        if (lastIndex < node.characters.length) {
+            result.push(node.characters.slice(lastIndex))
+        }
+        content = result
+    }
+
     return createElement(tag, {
         'data-node-id': node.id,
         'data-gen-state': revealState,
@@ -224,5 +257,5 @@ export const TextRenderer = memo(function TextRenderer({
                 onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
             }
             : {}),
-    }, node.characters)
+    }, content)
 })

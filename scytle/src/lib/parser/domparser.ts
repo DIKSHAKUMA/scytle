@@ -104,9 +104,11 @@ interface InheritedStyles {
     textAlign?: string   // CSS `text-align` — inherited by default
     fontSize?: string    // CSS `font-size` — inherited
     fontWeight?: string  // CSS `font-weight` — inherited
+    fontStyle?: string   // CSS `font-style` — inherited
     fontFamily?: string  // CSS `font-family` — inherited
     lineHeight?: string  // CSS `line-height` — inherited
     letterSpacing?: string // CSS `letter-spacing` — inherited
+    textDecoration?: string // CSS `text-decoration` — affects children visually
 }
 
 // ═══════════════════════════════════════════════════
@@ -153,9 +155,11 @@ function mergeInherited(cs: CSSStyleDeclaration, parent?: InheritedStyles): Inhe
         textAlign: cs.textAlign || parent?.textAlign,
         fontSize: cs.fontSize || parent?.fontSize,
         fontWeight: cs.fontWeight || parent?.fontWeight,
+        fontStyle: cs.fontStyle || parent?.fontStyle,
         fontFamily: cs.fontFamily || parent?.fontFamily,
         lineHeight: cs.lineHeight || parent?.lineHeight,
         letterSpacing: cs.letterSpacing || parent?.letterSpacing,
+        textDecoration: cs.textDecorationLine || cs.textDecoration || parent?.textDecoration,
     }
 }
 
@@ -348,7 +352,7 @@ function buildTextNode(
     parentWidth: number,
     inherited?: InheritedStyles,
 ): TextNode {
-    const text = extractTextContent(el)
+    const { text, segments } = extractRichTextContent(el, cs, inherited)
     // Use inherited color if element doesn't have explicit color
     const effectiveColor = eff(cs.color, inherited?.color)
     const colorHex = rgbToHex(effectiveColor)
@@ -359,6 +363,9 @@ function buildTextNode(
     const fontFamily = extractPrimaryFont(eff(cs.fontFamily, inherited?.fontFamily))
     const fontSize = parseFloat(eff(cs.fontSize, inherited?.fontSize)) || 16
     const fontWeight = parseInt(eff(cs.fontWeight, inherited?.fontWeight)) || 400
+    const fontStyle = eff(cs.fontStyle, inherited?.fontStyle) === 'italic' ? 'italic' : undefined
+    const textDecoration = parseTextDecoration(cs.textDecorationLine || cs.textDecoration || inherited?.textDecoration || '')
+    
     const effectiveTextAlign = eff(cs.textAlign, inherited?.textAlign)
     const effectiveLineHeight = eff(cs.lineHeight, inherited?.lineHeight)
     const effectiveLetterSpacing = eff(cs.letterSpacing, inherited?.letterSpacing)
@@ -376,11 +383,12 @@ function buildTextNode(
         width: Math.max(w, 1),
         height: Math.max(h, 1),
         characters: text,
+        segments: segments.length > 0 ? segments : undefined,
         htmlTag,
         fontSize,
         fontWeight,
         fontFamily,
-        fontStyle: cs.fontStyle === 'italic' ? 'italic' : undefined,
+        fontStyle,
         lineHeight: !effectiveLineHeight || effectiveLineHeight === 'normal'
             ? 'auto'
             : parseFloat(effectiveLineHeight),
@@ -389,7 +397,7 @@ function buildTextNode(
             : parseFloat(effectiveLetterSpacing),
         textAlign: mapTextAlign(effectiveTextAlign),
         textTransform: mapTextTransform(cs.textTransform),
-        textDecoration: parseTextDecoration(cs.textDecorationLine || cs.textDecoration),
+        textDecoration,
         color,
         autoResize: inferAutoResize(tag, cs),
         ...(cs.textOverflow === 'ellipsis' ? {
@@ -2648,6 +2656,120 @@ function extractTextContent(el: HTMLElement): string {
     }
 
     return text.replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim()
+}
+
+import type { TextSegment } from '@/types/canvas'
+
+function extractRichTextContent(el: HTMLElement, baseCs: CSSStyleDeclaration, baseInh?: InheritedStyles): { text: string, segments: TextSegment[] } {
+    let text = ''
+    const segments: TextSegment[] = []
+    
+    // We establish the baseline styles for the TextNode itself
+    const baseline = mergeInherited(baseCs, baseInh)
+    const preserveWhitespace = baseCs.whiteSpace === 'pre' || baseCs.whiteSpace === 'pre-wrap'
+
+    function walk(node: Node, currentInh: InheritedStyles) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            let raw = node.textContent || ''
+            if (!raw) return
+
+            if (!preserveWhitespace) {
+                // Collapse whitespace but preserve newlines
+                raw = raw.replace(/[^\S\n]+/g, ' ')
+            }
+
+            if (!raw) return
+            
+            const start = text.length
+            text += raw
+            const end = text.length
+
+            // If this text has styling that differs from the baseline, create a segment
+            const seg: any = { start, end }
+            let hasDiff = false
+
+            if (currentInh.color && currentInh.color !== baseline.color) {
+                const hex = rgbToHex(currentInh.color)
+                const alpha = rgbToOpacity(currentInh.color)
+                const color = alpha < 1 && hex !== 'transparent'
+                    ? `${hex}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`
+                    : hex
+                seg.fills = [buildTextSolidFillFromColor(color)]
+                hasDiff = true
+            }
+            if (currentInh.fontFamily && currentInh.fontFamily !== baseline.fontFamily) {
+                seg.fontFamily = extractPrimaryFont(currentInh.fontFamily)
+                hasDiff = true
+            }
+            if (currentInh.fontSize && currentInh.fontSize !== baseline.fontSize) {
+                seg.fontSize = parseFloat(currentInh.fontSize)
+                hasDiff = true
+            }
+            if (currentInh.fontWeight && currentInh.fontWeight !== baseline.fontWeight) {
+                seg.fontWeight = parseInt(currentInh.fontWeight)
+                hasDiff = true
+            }
+            if (currentInh.fontStyle && currentInh.fontStyle !== baseline.fontStyle) {
+                seg.fontStyle = currentInh.fontStyle === 'italic' ? 'italic' : 'normal'
+                hasDiff = true
+            }
+            if (currentInh.textDecoration && currentInh.textDecoration !== baseline.textDecoration) {
+                seg.textDecoration = parseTextDecoration(currentInh.textDecoration)
+                hasDiff = true
+            }
+            if (currentInh.letterSpacing && currentInh.letterSpacing !== baseline.letterSpacing) {
+                seg.letterSpacing = currentInh.letterSpacing === 'normal' ? 0 : parseFloat(currentInh.letterSpacing)
+                hasDiff = true
+            }
+
+            if (hasDiff) {
+                segments.push(seg as TextSegment)
+            }
+        } else if (node.nodeName === 'BR') {
+            text += '\n'
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const childEl = node as HTMLElement
+            const childTag = childEl.tagName.toLowerCase()
+            const childStyle = childEl.style
+            const display = childStyle.display
+            
+            if (INLINE_TAGS.has(childTag) || display === 'inline' || display === 'inline-block' || !display) {
+                // Merge styles for this inline element
+                const mergedInh = mergeInherited(childStyle, currentInh)
+                for (const child of childEl.childNodes) {
+                    walk(child, mergedInh)
+                }
+            }
+        }
+    }
+
+    for (const child of el.childNodes) {
+        walk(child, baseline)
+    }
+
+    if (!preserveWhitespace) {
+        // We trim the final text for leading/trailing whitespace
+        const originalText = text
+        text = text.trim()
+        const trimStart = originalText.length - originalText.trimStart().length
+        
+        // Adjust segment indices
+        if (trimStart > 0 || text.length !== originalText.length) {
+            for (let i = segments.length - 1; i >= 0; i--) {
+                const seg = segments[i]
+                seg.start -= trimStart
+                seg.end -= trimStart
+                // Clamp to bounds
+                seg.start = Math.max(0, Math.min(seg.start, text.length))
+                seg.end = Math.max(0, Math.min(seg.end, text.length))
+                if (seg.start === seg.end) {
+                    segments.splice(i, 1) // Remove empty segments
+                }
+            }
+        }
+    }
+
+    return { text, segments }
 }
 
 function isTextOnlyElement(el: HTMLElement, tag: string): boolean {

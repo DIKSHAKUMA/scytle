@@ -191,6 +191,19 @@ export const BorderRadiusSchema = z.union([
     }),
 ])
 
+export const TextSegmentSchema = z.object({
+    start: z.number(),
+    end: z.number(),
+    fills: z.array(FillSchema).optional(),
+    fontFamily: z.string().optional(),
+    fontWeight: z.number().optional(),
+    fontStyle: z.enum(['normal', 'italic']).optional(),
+    fontSize: z.number().optional(),
+    textDecoration: z.enum(['none', 'underline', 'line-through']).optional(),
+    letterSpacing: z.number().optional(),
+    lineHeight: z.union([z.number(), z.literal('auto')]).optional(),
+})
+
 // ============================================================
 // TypeScript Types from Zod Schemas
 // ============================================================
@@ -208,6 +221,7 @@ export type Sizing = z.infer<typeof SizingSchema>
 export type Padding = z.infer<typeof PaddingSchema>
 export type Layout = z.infer<typeof LayoutSchema>
 export type BorderRadius = z.infer<typeof BorderRadiusSchema>
+export type TextSegment = z.infer<typeof TextSegmentSchema>
 
 // ============================================================
 // Vector / Pen Tool Primitives
@@ -471,6 +485,7 @@ export interface FrameNode extends BaseNodeProperties {
 export interface TextNode extends BaseNodeProperties {
     type: 'text'
     characters: string
+    segments?: TextSegment[]
     fontFamily: string
     fontWeight: number
     fontStyle?: 'normal' | 'italic'
