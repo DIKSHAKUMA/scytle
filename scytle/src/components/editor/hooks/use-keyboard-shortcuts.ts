@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useEditorStore } from '@/store/editor-store'
+import { useGenerationStore } from '@/store/generation-store'
 import type { CanvasTool } from '@/types/canvas'
 import { findNodeById, findParentOfNode } from '@/types/canvas'
 import type { FrameNode } from '@/types/canvas'
@@ -87,6 +88,20 @@ export function useKeyboardShortcuts() {
             const shift = e.shiftKey
             const key = e.key.toLowerCase()
             const store = useEditorStore.getState()
+
+            // ── Generation lock gate ─────────────────────────────────────
+            // When AI generation is in progress, block ALL mutating actions.
+            // Allow: zoom (⌘+/−/0), pan (space), view tool switch (V/H), Escape.
+            const isGenLocked = useGenerationStore.getState().isLocked
+            if (isGenLocked) {
+                // Whitelist non-mutating shortcuts
+                const isZoom = meta && (key === '=' || key === '+' || key === '-' || key === '0')
+                const isEscape = key === 'escape'
+                const isZoomToFit = shift && (key === '1' || key === '2')
+                if (!isZoom && !isEscape && !isZoomToFit) {
+                    return
+                }
+            }
 
             // ⌘/Ctrl hold → bend tool in vector edit mode
             if ((key === 'meta' || key === 'control') && store.vectorEditNodeId && store.vectorEditTool !== 'bend') {

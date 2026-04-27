@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useEditorStore } from '@/store/editor-store'
+import { useGenerationStore } from '@/store/generation-store'
 import { cn } from '@/lib/utils'
 import { MIN_ZOOM, MAX_ZOOM, findNodeById, findParentOfNode, createFrame, createText, getNodeCanvasPosition } from '@/types/canvas'
 import type { ScytleNode } from '@/types/canvas'
@@ -26,6 +27,7 @@ import { PenOverlay } from './pen-overlay'
 import { VectorEditToolbar } from './vector-edit-toolbar'
 import { AnchorPointOverlay } from './anchor-point-overlay'
 import { GridOverlay } from './grid-overlay'
+import { GenerationOverlay } from './generation-overlay'
 
 import type { HandleDirection } from './hooks/use-node-resize'
 
@@ -642,6 +644,13 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
                 return
             }
 
+            // ── Generation lock gate ──────────────────────────────
+            // Block all mutating pointer interactions during AI generation.
+            // Pan/zoom (above) is still allowed.
+            if (useGenerationStore.getState().isLocked) {
+                return
+            }
+
             // ── Frame tool → start drawing ────────────────────────
             if (activeTool === 'frame') {
                 lastTapRef.current = null
@@ -893,6 +902,9 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
     const handleContextMenu = useCallback(
         (e: React.MouseEvent<HTMLDivElement>) => {
             e.preventDefault()
+
+            // Block context menu during AI generation
+            if (useGenerationStore.getState().isLocked) return
 
             const pos = screenToCanvas(e.clientX, e.clientY)
             const store = useEditorStore.getState()
@@ -1409,6 +1421,8 @@ export function EditorCanvas({ showToolbar = true }: { showToolbar?: boolean } =
             {/* Vector edit mode toolbar — bottom center, above main toolbar */}
             <VectorEditToolbar />
 
+            {/* AI Generation overlay — lock indicator + pointer blocker */}
+            <GenerationOverlay />
 
         </div>
     )

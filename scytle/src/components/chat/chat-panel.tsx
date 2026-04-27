@@ -8,6 +8,12 @@
  *   → AssistantRuntimeProvider provides runtime to Thread
  *   → Thread handles all UI (messages, composer, reasoning, tools)
  *   → makeAssistantToolUI registers tool side-effects + visual cards
+ *
+ * Generation lifecycle:
+ *   Tool results → enqueueToolResult (serialized)
+ *   → applyToolResult adds nodes to tree (hidden via gen-node-hidden class)
+ *   → generation-store reveal queue drains nodes one-by-one with fade-in animation
+ *   → Canvas interactions are locked until all reveals complete
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
@@ -27,6 +33,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { useEditorStore } from '@/store/editor-store'
 import { useStyleGuideStore } from '@/store'
 import { useCreditStore } from '@/store/credits-store'
+import { useGenerationStore, collectRevealOrder } from '@/store/generation-store'
 import { createJWT } from '@/lib/appwrite'
 
 import { findNodeById } from '@/types/canvas'
@@ -57,6 +64,8 @@ function enqueueToolResult(toolName: string, result: any): void {
 /** Reset when starting a new conversation / thread */
 export function resetActivePageFrame() {
     _activePageFrameId = null
+    // Also reset generation lifecycle for new conversations
+    useGenerationStore.getState().reset()
 }
 
 function createPageFrame(
@@ -207,85 +216,115 @@ function markToolApplied(toolCallId: string): boolean {
 async function applyToolResult(toolName: string, result: any): Promise<void> {
     if (!result) return
 
-    switch (toolName) {
-        // updateTheme removed — AI generates HTML with inline colors/fonts directly
+    // Track apply count for generation lock
+    const genStore = useGenerationStore.getState()
+    genStore.incrementPendingApply()
 
-        case 'generateSection': {
-            const { html, sectionType, newPage, pageName, width, parentNodeId } = result
-            if (!html) return
-            const frameWidth = typeof width === 'number' && width > 0 ? width : 1440
-            try {
-                const sgState = useStyleGuideStore.getState()
-                const fonts = extractChatFonts(html, sgState)
-                const parsed = await parseHtml(html, sectionType || 'Section', {
-                    rootWidth: frameWidth,
-                    fonts,
-                })
-                const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
-                const editorStore = useEditorStore.getState()
+    try {
+        switch (toolName) {
+            // updateTheme removed — AI generates HTML with inline colors/fonts directly
 
-                // Enforce width and sizing so sections fill the parent frame
-                newNode.width = frameWidth
-                newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
+            case 'generateSection': {
+                const { html, sectionType, newPage, pageName, width, parentNodeId } = result
+                if (!html) return
+                const frameWidth = typeof width === 'number' && width > 0 ? width : 1440
+                try {
+                    const sgState = useStyleGuideStore.getState()
+                    const fonts = extractChatFonts(html, sgState)
+                    const parsed = await parseHtml(html, sectionType || 'Section', {
+                        rootWidth: frameWidth,
+                        fonts,
+                    })
+                    const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
+                    const editorStore = useEditorStore.getState()
 
-                // If AI explicitly requests a new page, or no page frame exists yet,
-                // create a new page frame. This enables multi-page designs
-                // (e.g., Home page + Pricing page as separate frames on canvas).
-                const needsNewPage = newPage === true ||
-                    !_activePageFrameId ||
-                    !findNodeById(editorStore.nodes as ScytleNode[], _activePageFrameId)
+                    // Enforce width and sizing so sections fill the parent frame
+                    newNode.width = frameWidth
+                    newNode.sizing = { horizontal: 'fill', vertical: 'hug' }
 
-                if (needsNewPage) {
-                    const pageFrame = createPageFrame(
-                        editorStore.nodes as ScytleNode[],
-                        frameWidth,
-                        pageName || sectionType || 'Page',
-                    )
-                    editorStore.addNode(pageFrame)
-                    _activePageFrameId = pageFrame.id
-                }
+                    // If AI explicitly requests a new page, or no page frame exists yet,
+                    // create a new page frame. This enables multi-page designs
+                    // (e.g., Home page + Pricing page as separate frames on canvas).
+                    const needsNewPage = newPage === true ||
+                        !_activePageFrameId ||
+                        !findNodeById(editorStore.nodes as ScytleNode[], _activePageFrameId)
 
-                // If parentNodeId is a valid existing node (not "root"), use it directly
-                let targetParent = _activePageFrameId
-                if (parentNodeId && parentNodeId !== 'root') {
-                    const parentExists = findNodeById(editorStore.nodes as ScytleNode[], parentNodeId)
-                    if (parentExists) {
-                        targetParent = parentNodeId
+                    if (needsNewPage) {
+                        const pageFrame = createPageFrame(
+                            editorStore.nodes as ScytleNode[],
+                            frameWidth,
+                            pageName || sectionType || 'Page',
+                        )
+                        editorStore.addNode(pageFrame)
+                        _activePageFrameId = pageFrame.id
+
+                        // Set the page frame as active for glow effect
+                        useGenerationStore.getState().setActiveGeneratingFrameId(pageFrame.id)
+
+                        // Enqueue the page frame for reveal (structural — instant)
+                        useGenerationStore.getState().enqueueRevealBatch([{
+                            id: `reveal-${pageFrame.id}`,
+                            nodeId: pageFrame.id,
+                            isStructural: true,
+                        }])
+                    } else if (_activePageFrameId) {
+                        // Existing page frame — set glow
+                        useGenerationStore.getState().setActiveGeneratingFrameId(_activePageFrameId)
                     }
+
+                    // If parentNodeId is a valid existing node (not "root"), use it directly
+                    let targetParent = _activePageFrameId
+                    if (parentNodeId && parentNodeId !== 'root') {
+                        const parentExists = findNodeById(editorStore.nodes as ScytleNode[], parentNodeId)
+                        if (parentExists) {
+                            targetParent = parentNodeId
+                        }
+                    }
+
+                    editorStore.addNode(newNode, targetParent ?? undefined)
+
+                    // Collect ALL descendant nodes for per-child progressive reveal
+                    const revealItems = collectRevealOrder(newNode)
+                    useGenerationStore.getState().enqueueRevealBatch(revealItems)
+                } catch (e) {
+                    console.error('Failed to parse section HTML:', e)
                 }
-
-                editorStore.addNode(newNode, targetParent ?? undefined)
-            } catch (e) {
-                console.error('Failed to parse section HTML:', e)
+                break
             }
-            break
-        }
 
-        case 'editNode': {
-            const { nodeId, html } = result
-            if (!html || !nodeId) return
-            try {
-                const sgState = useStyleGuideStore.getState()
-                const editorStore = useEditorStore.getState()
-                const existingNode = findNodeById(editorStore.nodes as ScytleNode[], nodeId)
-                if (!existingNode) return
-                const fonts = extractChatFonts(html, sgState)
-                const parsed = await parseHtml(html, existingNode.name, {
-                    rootWidth: existingNode.width,
-                    fonts,
-                })
-                const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
-                newNode.x = existingNode.x
-                newNode.y = existingNode.y
-                newNode.width = existingNode.width
-                newNode.height = existingNode.height
-                newNode.id = existingNode.id
-                editorStore.replaceNode(nodeId, newNode)
-            } catch (e) {
-                console.error('Failed to edit node:', e)
+            case 'editNode': {
+                const { nodeId, html } = result
+                if (!html || !nodeId) return
+                try {
+                    const sgState = useStyleGuideStore.getState()
+                    const editorStore = useEditorStore.getState()
+                    const existingNode = findNodeById(editorStore.nodes as ScytleNode[], nodeId)
+                    if (!existingNode) return
+                    const fonts = extractChatFonts(html, sgState)
+                    const parsed = await parseHtml(html, existingNode.name, {
+                        rootWidth: existingNode.width,
+                        fonts,
+                    })
+                    const newNode: ScytleNode = parsed.children.length === 1 ? parsed.children[0] : parsed
+                    newNode.x = existingNode.x
+                    newNode.y = existingNode.y
+                    newNode.width = existingNode.width
+                    newNode.height = existingNode.height
+                    newNode.id = existingNode.id
+                    editorStore.replaceNode(nodeId, newNode)
+
+                    // Collect ALL descendant nodes for per-child progressive reveal
+                    const revealItems = collectRevealOrder(newNode)
+                    useGenerationStore.getState().enqueueRevealBatch(revealItems)
+                } catch (e) {
+                    console.error('Failed to edit node:', e)
+                }
+                break
             }
-            break
         }
+    } finally {
+        // Always decrement — prevents stuck lock on errors
+        useGenerationStore.getState().decrementPendingApply()
     }
 }
 
@@ -311,6 +350,10 @@ const GenerateSectionToolUI = makeAssistantToolUI({
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 enqueueToolResult('generateSection', result)
+            }
+            // Track thread running state — when tool transitions to running, thread is active
+            if (status.type === 'running') {
+                useGenerationStore.getState().setThreadRunning(true)
             }
         }, [status.type, result, toolCallId])
 
@@ -373,6 +416,10 @@ const EditNodeToolUI = makeAssistantToolUI({
         useEffect(() => {
             if (status.type === 'complete' && result && !markToolApplied(toolCallId)) {
                 enqueueToolResult('editNode', result)
+            }
+            // Track thread running state
+            if (status.type === 'running') {
+                useGenerationStore.getState().setThreadRunning(true)
             }
         }, [status.type, result, toolCallId])
 
@@ -463,6 +510,20 @@ function useChatThreadRuntime(transport: AssistantChatTransport<any>) {
     const runtime = useAISDKRuntime(chat)
     // Wire runtime back to transport so modelContext flows into requests
     transport.setRuntime(runtime)
+
+    // ── Track thread running state for generation lock ──────────
+    // useChat's `status` transitions: 'submitted' → 'streaming' → 'ready'
+    // We mark the generation thread as running when streaming starts,
+    // and stopped when it reaches 'ready' or 'error'.
+    useEffect(() => {
+        const chatStatus = chat.status
+        if (chatStatus === 'streaming' || chatStatus === 'submitted') {
+            useGenerationStore.getState().setThreadRunning(true)
+        } else if (chatStatus === 'ready' || chatStatus === 'error') {
+            useGenerationStore.getState().setThreadRunning(false)
+        }
+    }, [chat.status])
+
     return runtime
 }
 

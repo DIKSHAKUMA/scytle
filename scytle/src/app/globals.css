@@ -300,6 +300,62 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* AI generation — node reveal animation */
+@keyframes node-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* AI generation — per-frame glow pulse (applied to active generating frame) */
+@keyframes gen-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px oklch(0.65 0.18 35 / 0.2), 0 0 12px oklch(0.65 0.18 35 / 0.06);
+  }
+  50% {
+    box-shadow: 0 0 0 2px oklch(0.65 0.18 35 / 0.4), 0 0 24px oklch(0.65 0.18 35 / 0.12);
+  }
+}
+
+/* Node hidden while waiting in reveal queue — data attribute selector */
+[data-gen-state="hidden"] {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Node reveal animation (leaf/visual nodes) — data attribute selector */
+[data-gen-state="revealing"] {
+  animation: node-reveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Node fully revealed — data attribute selector */
+[data-gen-state="revealed"] {
+  /* opacity returns to node's own value (no override needed) */
+}
+
+/* Active generating frame — subtle pulsing glow border */
+.gen-frame-active {
+  animation: gen-glow-pulse 2s ease-in-out infinite;
+}
+
+/* Reduced motion: instant reveal for all nodes */
+@media (prefers-reduced-motion: reduce) {
+  [data-gen-state="revealing"] {
+    animation: none;
+    opacity: 1 !important;
+    transform: none;
+  }
+  .gen-frame-active {
+    animation: none;
+    box-shadow: 0 0 0 2px oklch(0.65 0.18 35 / 0.3);
+  }
+}
+
 /* ============================================
    UTILITIES
    ============================================ */

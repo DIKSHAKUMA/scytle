@@ -4,6 +4,7 @@ import { FrameRenderer } from './frame-renderer'
 import { TextRenderer } from './text-renderer'
 import { ImageRenderer } from './image-renderer'
 import { VectorRenderer } from './vector-renderer'
+import { useGenerationStore, type RevealState } from '@/store/generation-store'
 
 // ============================================================
 // Props
@@ -24,6 +25,11 @@ export interface NodeRendererProps {
 // ============================================================
 // NodeRenderer — dispatches to type-specific renderer
 // ============================================================
+//
+// v3: NO wrapper div. Reveal state is passed as a `revealState`
+// prop to each renderer, which applies it as a `data-gen-state`
+// attribute on its root element. CSS attribute selectors handle
+// the animation. This prevents layout breakage from extra divs.
 
 export const NodeRenderer = memo(function NodeRenderer({
     node,
@@ -34,56 +40,56 @@ export const NodeRenderer = memo(function NodeRenderer({
 }: NodeRendererProps) {
     if (!node.visible) return null
 
-    let element: React.ReactElement | null = null
+    // ── AI Generation reveal state ────────────────────────────
+    const nodeRevealStates = useGenerationStore((s) => s.nodeRevealStates)
+    const revealState: RevealState | undefined = nodeRevealStates.get(node.id)
 
     switch (node.type) {
         case 'frame':
-            element = (
+            return (
                 <FrameRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
                     zIndex={zIndex}
+                    revealState={revealState}
                 />
             )
-            break
         case 'text':
-            element = (
+            return (
                 <TextRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
                     zIndex={zIndex}
+                    revealState={revealState}
                 />
             )
-            break
         case 'image':
-            element = (
+            return (
                 <ImageRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
                     zIndex={zIndex}
+                    revealState={revealState}
                 />
             )
-            break
         case 'vector':
-            element = (
+            return (
                 <VectorRenderer
                     node={node}
                     isTopLevel={isTopLevel}
                     parentDirection={parentDirection}
                     parentLayoutMode={parentLayoutMode}
                     zIndex={zIndex}
+                    revealState={revealState}
                 />
             )
-            break
         default:
             return null
     }
-
-    return element
 })

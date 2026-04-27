@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import { ImageIcon } from 'lucide-react'
 import type { ImageNode } from '@/types/canvas'
 import { computeBaseStyles } from './render-utils'
+import type { RevealState } from '@/store/generation-store'
 
 // ============================================================
 // Props
@@ -14,6 +15,8 @@ interface ImageRendererProps {
     parentLayoutMode?: 'flex' | 'grid' | 'none'
     /** Explicit z-index override (reverse canvas stacking) */
     zIndex?: number
+    /** AI generation reveal state — applied as data-gen-state attribute */
+    revealState?: RevealState
 }
 
 // ============================================================
@@ -26,6 +29,7 @@ export const ImageRenderer = memo(function ImageRenderer({
     parentDirection,
     parentLayoutMode,
     zIndex,
+    revealState,
 }: ImageRendererProps) {
     const baseStyle = computeBaseStyles(node, isTopLevel, parentDirection, parentLayoutMode, zIndex)
 
@@ -41,7 +45,7 @@ export const ImageRenderer = memo(function ImageRenderer({
         }
 
         return (
-            <div data-node-id={node.id} style={placeholderStyle}>
+            <div data-node-id={node.id} data-gen-state={revealState} style={placeholderStyle}>
                 <div
                     style={{
                         display: 'flex',
@@ -83,6 +87,7 @@ export const ImageRenderer = memo(function ImageRenderer({
     return (
         <img
             data-node-id={node.id}
+            data-gen-state={revealState}
             src={node.src}
             alt={node.alt}
             style={imgStyle}

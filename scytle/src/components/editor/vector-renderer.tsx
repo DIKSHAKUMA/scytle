@@ -4,6 +4,7 @@ import { networkToSVGPath } from '@/lib/vector-utils'
 import { hexOpacityToRgba, normaliseHex, hexToHashHex } from '@/lib/color-utils'
 import { computeBaseStyles } from './render-utils'
 import { resolveVectorStroke } from '@/lib/vector-stroke'
+import type { RevealState } from '@/store/generation-store'
 
 // ============================================================
 // Props
@@ -16,6 +17,8 @@ interface VectorRendererProps {
     parentLayoutMode?: 'flex' | 'grid' | 'none'
     /** Explicit z-index override (reverse canvas stacking) */
     zIndex?: number
+    /** AI generation reveal state — applied as data-gen-state attribute */
+    revealState?: RevealState
 }
 
 // ============================================================
@@ -41,6 +44,7 @@ export const VectorRenderer = memo(function VectorRenderer({
     parentDirection,
     parentLayoutMode,
     zIndex,
+    revealState,
 }: VectorRendererProps) {
     // ── Wrapper styles — use computeBaseStyles for correct layout participation ──
     // computeBaseStyles handles: position, sizing (fixed/fill/hug), opacity,
@@ -111,6 +115,7 @@ export const VectorRenderer = memo(function VectorRenderer({
     return (
         <div
             data-node-id={node.id}
+            data-gen-state={revealState}
             style={wrapStyle}
         >
             <svg

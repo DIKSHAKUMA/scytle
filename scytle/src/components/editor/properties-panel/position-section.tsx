@@ -578,6 +578,7 @@ export function PositionSection({
                             max={colCount}
                             step={1}
                             className="flex-1"
+                            labelWidth="w-6"
                         />
                         <NumberInput
                             label="Span"
@@ -587,6 +588,7 @@ export function PositionSection({
                             max={Math.max(1, colCount - colStart + 1)}
                             step={1}
                             className="flex-1"
+                            labelWidth="w-8"
                         />
                     </div>
 
@@ -599,6 +601,7 @@ export function PositionSection({
                             max={rowCount ?? 999}
                             step={1}
                             className="flex-1"
+                            labelWidth="w-6"
                         />
                         <NumberInput
                             label="Span"
@@ -608,6 +611,7 @@ export function PositionSection({
                             max={rowCount ? Math.max(1, rowCount - rowStart + 1) : 999}
                             step={1}
                             className="flex-1"
+                            labelWidth="w-8"
                         />
                     </div>
                 </div>

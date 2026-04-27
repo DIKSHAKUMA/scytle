@@ -4,6 +4,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { computeBaseStyles } from './render-utils'
 import { loadFont, isFontLoaded } from '@/lib/fonts/google-fonts'
 import { getTextPaintStyle, getTextPreviewColor } from '@/lib/text-paint'
+import type { RevealState } from '@/store/generation-store'
 
 // ============================================================
 // Props
@@ -16,6 +17,8 @@ interface TextRendererProps {
     parentLayoutMode?: 'flex' | 'grid' | 'none'
     /** Explicit z-index override (reverse canvas stacking) */
     zIndex?: number
+    /** AI generation reveal state — applied as data-gen-state attribute */
+    revealState?: RevealState
 }
 
 // ============================================================
@@ -28,6 +31,7 @@ export const TextRenderer = memo(function TextRenderer({
     parentDirection,
     parentLayoutMode,
     zIndex,
+    revealState,
 }: TextRendererProps) {
     // ── Inline editing state ──────────────────────────────────
     const editingNodeId = useEditorStore((s) => s.editingNodeId)
@@ -208,6 +212,7 @@ export const TextRenderer = memo(function TextRenderer({
 
     return createElement(tag, {
         'data-node-id': node.id,
+        'data-gen-state': revealState,
         style,
         ...(isEditing
             ? {

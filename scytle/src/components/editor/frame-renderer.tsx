@@ -2,6 +2,7 @@ import { memo, type CSSProperties } from 'react'
 import type { FrameNode } from '@/types/canvas'
 import { computeBaseStyles, computeFrameLayoutStyles } from './render-utils'
 import { NodeRenderer } from './node-renderer'
+import { useGenerationStore, type RevealState } from '@/store/generation-store'
 
 // ============================================================
 // Props
@@ -14,6 +15,8 @@ interface FrameRendererProps {
     parentLayoutMode?: 'flex' | 'grid' | 'none'
     /** Explicit z-index override (reverse canvas stacking) */
     zIndex?: number
+    /** AI generation reveal state — applied as data-gen-state attribute */
+    revealState?: RevealState
 }
 
 function applySyntheticNegativeGap(node: FrameNode): FrameNode['children'] {
@@ -57,6 +60,7 @@ export const FrameRenderer = memo(function FrameRenderer({
     parentDirection,
     parentLayoutMode,
     zIndex,
+    revealState,
 }: FrameRendererProps) {
     // Merge base styles (position, sizing, visuals) with frame layout styles
     const style: CSSProperties = {
@@ -83,8 +87,20 @@ export const FrameRenderer = memo(function FrameRenderer({
 
     const renderedChildren = applySyntheticNegativeGap(node)
 
+    // ── Active generating frame glow ──────────────────────────
+    const activeGeneratingFrameId = useGenerationStore((s) => s.activeGeneratingFrameId)
+    const isActiveGenFrame = isTopLevel && activeGeneratingFrameId === node.id
+
+    // Build className — gen-frame-active for glow effect
+    const className = isActiveGenFrame ? 'gen-frame-active' : undefined
+
     return (
-        <div data-node-id={node.id} style={style}>
+        <div
+            data-node-id={node.id}
+            data-gen-state={revealState}
+            style={style}
+            className={className}
+        >
             {renderedChildren.map((child, index) => (
                 <NodeRenderer
                     key={child.id}
