@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowRight, Zap, Sparkles, Layers, Code, Rocket, Check, Play, Star } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -236,8 +237,8 @@ export default function LandingPage() {
             {/* Brand */}
             <div className="max-w-xs">
               <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center">
-                  <Zap className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
+                  <Image src="/Icon.svg" alt="Scytle" width={32} height={32} />
                 </div>
                 <span className="font-display font-bold text-lg">Scytle</span>
               </Link>

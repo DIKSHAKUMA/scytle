@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import {
     MessageSquare, Paintbrush, FileText, Layers, Undo2, Redo2,
-    Share2, Download, Zap, Plus, ChevronRight, ChevronDown,
+    Share2, Download, Plus, ChevronRight, ChevronDown,
     Eye, EyeOff, Lock, Unlock, Trash2, GripVertical, Sparkles,
     Paperclip, ArrowUp, MousePointer, Hand, Type, Square, ImageIcon,
     ZoomIn, ZoomOut, Minus, Check, ArrowLeft, Search,
@@ -150,8 +151,8 @@ export default function WorkspaceDemoPage() {
                     <ArrowLeft className="w-4 h-4" />
                 </Link>
                 <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-linear-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                        <Zap className="w-3 h-3 text-white" />
+                    <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden">
+                        <Image src="/Icon.svg" alt="Scytle" width={20} height={20} className="dark:invert" />
                     </div>
                     <span className="font-display font-semibold text-sm">FreelanceHub</span>
                     <span className="text-xs text-muted-foreground/50 bg-muted px-1.5 py-0.5 rounded">Web App</span>

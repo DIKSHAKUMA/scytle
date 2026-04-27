@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useEditorStore } from '@/store/editor-store'
 import { useProjectStore } from '@/store/project-store'
+import Image from 'next/image'
 import type { CanvasTool } from '@/types/canvas'
 import {
     ArrowLeft,
@@ -112,8 +113,8 @@ export function TopBar({ projectName, projectId }: TopBarProps) {
                 onDoubleClick={() => !isEditingTitle && setIsEditingTitle(true)}
             >
                 {/* Project Icon */}
-                <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 bg-foreground/5 dark:bg-foreground/10 border border-border/40">
-                    <Zap className="w-3 h-3 text-foreground/70" />
+                <div className="w-5 h-5 flex items-center justify-center shrink-0 overflow-hidden">
+                    <Image src="/Icon.svg" alt="Scytle" width={20} height={20} />
                 </div>
 
                 {isEditingTitle ? (

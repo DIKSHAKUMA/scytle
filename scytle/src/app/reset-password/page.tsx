@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Loader2, Lock, ArrowLeft, Zap, CheckCircle, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -72,8 +73,8 @@ function ResetPasswordForm() {
             <Card className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500 shadow-2xl border-border/40 backdrop-blur-xl bg-background/80">
                 <CardHeader className="text-center space-y-2">
                     <Link href="/" className="inline-flex items-center justify-center gap-2 mb-4">
-                        <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-                            <Zap className="w-5 h-5 text-white" />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
+                            <Image src="/Icon.svg" alt="Scytle" width={40} height={40} />
                         </div>
                         <span className="font-display font-semibold text-xl">Scytle</span>
                     </Link>

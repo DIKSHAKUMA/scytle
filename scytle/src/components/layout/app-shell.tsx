@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import {
     Zap,
     FileText,
@@ -147,8 +148,8 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                     </DropdownMenu>
                 ) : (
                     <Link href="/dashboard" className="flex items-center gap-2.5 px-2 py-1.5">
-                        <div className="w-6 h-6 rounded-md bg-foreground flex items-center justify-center">
-                            <Zap className="w-3 h-3 text-background" strokeWidth={2.5} />
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center overflow-hidden">
+                            <Image src="/Icon.svg" alt="Scytle" width={24} height={24} />
                         </div>
                         <span className="font-display font-bold text-[15px] tracking-tight text-foreground">
                             Scytle
@@ -222,8 +223,8 @@ export function AppShell({ children, hideNav = false }: AppShellProps) {
                         {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                     </button>
                     <Link href="/dashboard" className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-foreground flex items-center justify-center">
-                            <Zap className="w-3.5 h-3.5 text-background" strokeWidth={2.5} />
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center overflow-hidden">
+                            <Image src="/Icon.svg" alt="Scytle" width={28} height={28} />
                         </div>
                         <span className="font-display font-bold text-[17px] tracking-tight">
                             Scytle

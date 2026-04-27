@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Zap, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import Image from 'next/image'
 
 import {
     Navbar,
@@ -63,8 +64,8 @@ export function LandingHeader() {
                         href="/"
                         className="relative z-20 mr-4 flex items-center gap-2 px-2 py-1"
                     >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent/70 shadow-md shadow-accent/20">
-                            <Zap className="h-4 w-4 text-white" />
+                        <div className="flex h-8 w-8 items-center justify-center">
+                            <Image src="/Icon.svg" alt="Scytle Icon" width={32} height={32} />
                         </div>
                         <span className="font-display text-lg font-bold tracking-tight text-foreground">
                             Scytle
@@ -154,8 +155,8 @@ export function LandingHeader() {
                             href="/"
                             className="relative z-20 flex items-center gap-2 px-2 py-1"
                         >
-                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent/70 shadow-md shadow-accent/20">
-                                <Zap className="h-4 w-4 text-white" />
+                            <div className="flex h-8 w-8 items-center justify-center">
+                                <Image src="/Icon.svg" alt="Scytle Icon" width={32} height={32} />
                             </div>
                             <span className="font-display text-lg font-bold tracking-tight text-foreground">
                                 Scytle

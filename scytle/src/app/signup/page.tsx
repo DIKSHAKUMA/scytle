@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Loader2, Mail, Lock, User, ArrowRight, Github, Zap, Check } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -63,8 +64,8 @@ export default function SignupPage() {
             <Card className="w-full max-w-md border-border/50 shadow-xl shadow-primary/5 bg-card/80 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <CardHeader className="text-center space-y-2 pb-2">
                     <Link href="/" className="inline-flex items-center justify-center gap-2.5 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-accent/80 flex items-center justify-center shadow-lg shadow-accent/20">
-                            <Zap className="w-5 h-5 text-white" />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
+                            <Image src="/Icon.svg" alt="Scytle" width={40} height={40} />
                         </div>
                         <span className="font-display font-bold text-2xl tracking-tight">Scytle</span>
                     </Link>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { ArrowRight, Zap, Sparkles, Layout, Paintbrush, Code, MousePointer } from 'lucide-react'
 
 const steps = [
@@ -32,8 +33,8 @@ export default function FlowDemoPage() {
                 </Link>
                 <div className="flex-1" />
                 <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-md bg-foreground flex items-center justify-center">
-                        <Zap className="w-3 h-3 text-background" strokeWidth={2.5} />
+                    <div className="w-6 h-6 rounded bg-foreground flex items-center justify-center overflow-hidden">
+                        <Image src="/Icon.svg" alt="Scytle" width={24} height={24} />
                     </div>
                     <span className="font-display font-bold text-sm tracking-tight">Scytle</span>
                     <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Demo Flow</span>
