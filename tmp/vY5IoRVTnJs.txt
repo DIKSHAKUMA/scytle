@@ -1,0 +1,63 @@
+Hey everyone, I'm Rodrigo. I'm a product manager at
+Figma, and I work on agents. Hi, my name is Tammy. I'm a product designer at Figma,
+and I also work on agents. And today we are so excited to
+introduce to you the new agent in Figma. Let's jump into a few examples of how
+you can put the Figma agent to work. First up, there are some tasks that
+just take forever and feel so tedious and takes you out of your flow. Imagine having to make an edit that
+repeats throughout your design, like a component that needs to be
+swapped out or a padding change. And then imagine you've got the
+same work across 30 screens. Or scenarios where you want to
+populate a large number of frames with realistic content, user
+reviews, profile pictures, imagery. That's exactly the stuff
+the agent can help you with. In fact, we used our own agent
+to iterate on its design. For example, when making one change
+to the prompt box, I asked the agent to apply that edit to all screens in
+the flow, saving me 15 to 30 minutes. You don't have to wait
+or go grab a coffee. I mean, you can if you want, but
+instead you can just run lots of explorations in parallel on the canvas. You can select a single
+node, have it focus on that. You can select many parent frames or
+just have it explore the whole canvas. The agent works right in front of you
+so you can tweak its outputs as you go, we've heard from people who maintain
+design libraries that the agent can help a lot with complex but repetitive tasks,
+things that would accelerate the team a lot, but it's sometimes hard to find
+time for, things like consistent naming conventions, updating old off-brand
+tokens, and creating usage guidelines. And there's a lot more to come here. So let's talk about how you can combine
+AI generation with direct manipulation. AI makes it fast and easy to generate
+a jumping off point, whether you're creating a new screen from scratch
+or making edits to an existing one. Good design means trying lots
+of different approaches before settling on the best option. You can collaborate with the Figma
+agent to do more explorations faster. So you can take an existing
+design and remix it. You can try out different layouts to get
+a feel for the most elegant information architecture, and you can try out
+wilder or more provocative directions for inspiration or entertainment. I never do that. Now, in practice, we don't think
+designers should generate a one-shot screen and call it a day. And while the agent can riff the
+results sometimes spark an idea that you can adjust, tweak, and refine
+with the full power of your mouse and Figma's direct manipulation. It's Figma layers all the way down. You can generate screens from
+scratch that use your attached design libraries, have the agent choose the
+proper components and tokens based on context, or tell it exactly which
+ones to use by @ mentioning them. And the agent can use many other Figma
+tools and context as well, including image editing, image generation, and even
+educational product information, so we can all finally learn how to use auto layout. Anyways, design is a team sport. When you build in isolation,
+you skip the internal feedback loops that product teams rely on. Crit, design files covered
+with comments, philosophical discussions, practical discussions. It really is a critical
+part of the process. There's really nothing quite like multiple
+teammates working on a design together at the same time in the same file, or
+seeing the multiple options laid out side by side so you can check if a flow
+hangs together from a bird's-eye view. A collaborative work can sometimes
+involve a lot of people and threads, so we spent some time how to make
+the agent helpful in these scenarios. If your design files are anything
+like ours, it's not unusual to end up with a file that has 50, 100 comments,
+maybe more, and it can be tough to read through and consider each one,
+no matter how insightful they are. But the agent can help here. It can summarize comments
+by topic or theme. It could break comments down and
+explain them if maybe they're not super clear first time. And of course, it can take a
+first stab at addressing either individual comments or whole themes. There's so much more you can
+do with the Figma agent, and we can't wait for you to try it out. We've barely scratched the surface here. And there's a lot more
+to come, and quickly. We're working to give the agent even
+more context from attachments, other tools, the internet, as well as giving
+users a way to customize its behavior. So starting today, the agent's rolling
+out gradually so we can make sure the experience is stable and high quality So stress test it, try new things,
+adapt it to your workflow, break it, and then tell us all about
+it so we can make it better. We'd love to hear your thoughts. We really can't wait for
+you to get your hands on it. And if we don't see you
+before, see you at Config.
